@@ -5,7 +5,7 @@ use deadline_config::config_file;
 use super::config::CliError;
 
 #[derive(Subcommand)]
-pub enum AuthAction {
+pub(crate) enum AuthAction {
     /// Log in via Deadline Cloud Monitor
     Login,
     /// Log out of Deadline Cloud Monitor
@@ -21,7 +21,7 @@ pub enum AuthAction {
     },
 }
 
-pub fn run(action: AuthAction) -> Result<(), CliError> {
+pub(crate) fn run(action: AuthAction) -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(e.to_string()))?
         .block_on(run_async(action))

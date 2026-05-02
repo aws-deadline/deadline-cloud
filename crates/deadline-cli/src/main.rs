@@ -111,7 +111,7 @@ enum Commands {
 
 fn resolve_log_level(cli_level: Option<&str>) -> String {
     if let Some(level) = cli_level {
-        return level.to_string();
+        return level.to_owned();
     }
 
     // Read from config
@@ -123,10 +123,9 @@ fn resolve_log_level(cli_level: Option<&str>) -> String {
         config_level
     } else {
         eprintln!(
-            "Log Level '{}' not in {:?}. Defaulting to WARNING",
-            config_level, VALID_LOG_LEVELS
+            "Log Level '{config_level}' not in {VALID_LOG_LEVELS:?}. Defaulting to WARNING"
         );
-        "WARNING".to_string()
+        "WARNING".to_owned()
     }
 }
 
@@ -147,7 +146,7 @@ fn init_logging(level: &str) {
 }
 
 /// Map parsed command to its dot-separated path for user-agent tracking.
-/// E.g. Commands::Farm { List { .. } } → "deadline.farm.list"
+/// E.g. `Commands::Farm` { List { .. } } → "deadline.farm.list"
 fn command_name(cmd: &Commands) -> String {
     let (group, action) = match cmd {
         Commands::Config { action } => ("config", match action {
@@ -218,46 +217,6 @@ fn command_name(cmd: &Commands) -> String {
         format!("deadline.{group}")
     } else {
         format!("deadline.{group}.{action}")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Commands with positional args must still produce only the command path,
-    // not include arg values. This is the case the argv-based approach got wrong.
-    #[test]
-    fn command_name_config_set_excludes_positional_args() {
-        let cmd = Commands::Config {
-            action: commands::config::ConfigAction::Set {
-                setting_name: "defaults.farm_id".into(),
-                value: "farm-abc".into(),
-            },
-        };
-        assert_eq!(command_name(&cmd), "deadline.config.set");
-    }
-
-    #[test]
-    fn command_name_farm_list_simple() {
-        let cmd = Commands::Farm {
-            action: commands::farm::FarmAction::List { profile: None },
-        };
-        assert_eq!(command_name(&cmd), "deadline.farm.list");
-    }
-
-    #[test]
-    fn command_name_queue_export_credentials_uses_kebab_case() {
-        let cmd = Commands::Queue {
-            action: commands::queue::QueueAction::ExportCredentials {
-                profile: None,
-                farm_id: None,
-                queue_id: None,
-                mode: "USER".into(),
-                output_format: "credentials_process".into(),
-            },
-        };
-        assert_eq!(command_name(&cmd), "deadline.queue.export-credentials");
     }
 }
 
@@ -345,18 +304,15 @@ fn main() {
             Commands::McpServer => commands::mcp::run(),
         };
         if let Err(e) = result {
-            match e {
-                commands::config::CliError::ExitCode { code, ref message } => {
-                    if !message.is_empty() {
-                        println!("{message}");
-                    }
-                    exit_code = code;
+            if let commands::config::CliError::ExitCode { code, ref message } = e {
+                if !message.is_empty() {
+                    println!("{message}");
                 }
-                _ => {
-                    // Known operation/config errors: print message to stdout (matching Python CLI)
-                    println!("{e}");
-                    exit_code = 1;
-                }
+                exit_code = code;
+            } else {
+                // Known operation/config errors: print message to stdout (matching Python CLI)
+                println!("{e}");
+                exit_code = 1;
             }
         }
     }
@@ -366,5 +322,45 @@ fn main() {
     // we must call process::exit since main() returns ().
     if exit_code != 0 {
         std::process::exit(exit_code);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Commands with positional args must still produce only the command path,
+    // not include arg values. This is the case the argv-based approach got wrong.
+    #[test]
+    fn command_name_config_set_excludes_positional_args() {
+        let cmd = Commands::Config {
+            action: commands::config::ConfigAction::Set {
+                setting_name: "defaults.farm_id".into(),
+                value: "farm-abc".into(),
+            },
+        };
+        assert_eq!(command_name(&cmd), "deadline.config.set");
+    }
+
+    #[test]
+    fn command_name_farm_list_simple() {
+        let cmd = Commands::Farm {
+            action: commands::farm::FarmAction::List { profile: None },
+        };
+        assert_eq!(command_name(&cmd), "deadline.farm.list");
+    }
+
+    #[test]
+    fn command_name_queue_export_credentials_uses_kebab_case() {
+        let cmd = Commands::Queue {
+            action: commands::queue::QueueAction::ExportCredentials {
+                profile: None,
+                farm_id: None,
+                queue_id: None,
+                mode: "USER".into(),
+                output_format: "credentials_process".into(),
+            },
+        };
+        assert_eq!(command_name(&cmd), "deadline.queue.export-credentials");
     }
 }

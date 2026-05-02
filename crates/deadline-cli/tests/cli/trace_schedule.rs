@@ -299,7 +299,7 @@ async fn trace_schedule_chrome_trace_file_written() {
     assert!(trace["traceEvents"].is_array());
     assert_eq!(trace["otherData"]["jobId"], JOB);
     assert_eq!(trace["otherData"]["farmId"], FARM);
-    assert!(trace["traceEvents"].as_array().unwrap().len() > 0);
+    assert!(!trace["traceEvents"].as_array().unwrap().is_empty());
 }
 
 // --- Warning: terminal batch error warns but continues ---

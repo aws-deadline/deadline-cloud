@@ -122,7 +122,7 @@ pub struct AssetManifest {
 /// Sort key for canonical path ordering per RFC 8785: UTF-16 BE bytes.
 fn utf16_be_sort_key(s: &str) -> Vec<u8> {
     s.encode_utf16()
-        .flat_map(|c| c.to_be_bytes())
+        .flat_map(u16::to_be_bytes)
         .collect()
 }
 
@@ -249,9 +249,7 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
         .as_str()
         .ok_or_else(|| JobAttachmentsError::ManifestDecode("hashAlg must be a string".into()))?;
     if hash_alg_str != "xxh128" {
-        return Err(JobAttachmentsError::ManifestDecode(format!(
-            "hashAlg must be one of {{\"xxh128\"}}"
-        )));
+        return Err(JobAttachmentsError::ManifestDecode("hashAlg must be one of {\"xxh128\"}".to_owned()));
     }
     let hash_alg: HashAlgorithm = hash_alg_str.parse()?;
 
@@ -304,8 +302,8 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
             .ok_or_else(|| JobAttachmentsError::ManifestDecode("mtime must be an integer".into()))?;
 
         paths.push(ManifestPath {
-            path: path.to_string(),
-            hash: hash.to_string(),
+            path: path.to_owned(),
+            hash: hash.to_owned(),
             size,
             mtime,
         });

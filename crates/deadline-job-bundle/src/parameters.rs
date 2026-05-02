@@ -270,8 +270,7 @@ pub fn validate_user_interface_file_filter(
             )))?;
             for (i, pat) in arr.iter().enumerate() {
                 let s = pat.as_str().ok_or_else(|| op_err(format!(
-                    "Job parameter \"{parameter_name}\" got \"{}\" for {field_path} -> \"patterns\" [{i}] but expected str",
-                    pat
+                    "Job parameter \"{parameter_name}\" got \"{pat}\" for {field_path} -> \"patterns\" [{i}] but expected str"
                 )))?;
                 if s.is_empty() || s.len() > 20 {
                     return Err(op_err(format!(
@@ -348,21 +347,21 @@ pub fn validate_job_parameter_value(
     };
 
     // Constraint checks
-    if let Some(min_len) = param.get("minLength").and_then(|v| v.as_i64())
+    if let Some(min_len) = param.get("minLength").and_then(serde_json::Value::as_i64)
         && let Some(s) = coerced.as_str()
             && (s.len() as i64) < min_len {
                 return Err(op_err(format!(
                     "Job parameter '{name}' value {coerced:?} is shorter than minLength {min_len}."
                 )));
             }
-    if let Some(max_len) = param.get("maxLength").and_then(|v| v.as_i64())
+    if let Some(max_len) = param.get("maxLength").and_then(serde_json::Value::as_i64)
         && let Some(s) = coerced.as_str()
             && (s.len() as i64) > max_len {
                 return Err(op_err(format!(
                     "Job parameter '{name}' value {coerced:?} is longer than maxLength {max_len}."
                 )));
             }
-    if let Some(min_val) = param.get("minValue").and_then(|v| v.as_f64())
+    if let Some(min_val) = param.get("minValue").and_then(serde_json::Value::as_f64)
         && let Some(n) = coerced.as_f64()
             && n < min_val {
                 return Err(op_err(format!(
@@ -370,7 +369,7 @@ pub fn validate_job_parameter_value(
                     param["minValue"]
                 )));
             }
-    if let Some(max_val) = param.get("maxValue").and_then(|v| v.as_f64())
+    if let Some(max_val) = param.get("maxValue").and_then(serde_json::Value::as_f64)
         && let Some(n) = coerced.as_f64()
             && n > max_val {
                 return Err(op_err(format!(
@@ -419,7 +418,7 @@ pub fn read_job_bundle_parameters(
             ))
         })?;
         for def in arr {
-            let name = def["name"].as_str().unwrap_or("").to_string();
+            let name = def["name"].as_str().unwrap_or("").to_owned();
             params.insert(name, def.clone());
         }
     }
@@ -428,7 +427,7 @@ pub fn read_job_bundle_parameters(
     if let Some(pv) = &param_values
         && let Some(arr) = pv.get("parameterValues").and_then(|v: &serde_json::Value| v.as_array()) {
             for entry in arr {
-                let name = entry["name"].as_str().unwrap_or("").to_string();
+                let name = entry["name"].as_str().unwrap_or("").to_owned();
                 if let Some(existing) = params.get_mut(&name) {
                     existing.as_object_mut().unwrap().insert("value".into(), entry["value"].clone());
                 } else {
@@ -438,7 +437,7 @@ pub fn read_job_bundle_parameters(
         }
 
     // Resolve PATH defaults
-    for (name, param) in params.iter_mut() {
+    for (name, param) in &mut params {
         let is_path = param.get("type").and_then(|v| v.as_str()) == Some("PATH");
         let has_value = param.get("value").is_some();
         let has_allowed = param.get("allowedValues").is_some();
@@ -494,7 +493,7 @@ pub fn read_job_bundle_parameters(
             .and_then(|ui| ui.get("control"))
             .and_then(|c| c.as_str()) == Some("HIDDEN");
         if is_hidden && p.get("value").is_none() && p.get("default").is_none() {
-            invalid.push(p["name"].as_str().unwrap_or("").to_string());
+            invalid.push(p["name"].as_str().unwrap_or("").to_owned());
         }
     }
     if !invalid.is_empty() {
@@ -520,7 +519,7 @@ pub fn apply_job_parameters(
 ) -> Result<(), DeadlineError> {
     let param_dict: HashMap<String, serde_json::Value> = job_params.iter()
         .filter_map(|p| {
-            let name = p["name"].as_str()?.to_string();
+            let name = p["name"].as_str()?.to_owned();
             let value = p.get("value")?.clone();
             Some((name, value))
         })
@@ -528,10 +527,10 @@ pub fn apply_job_parameters(
 
     for param in parameters.iter_mut() {
         let ptype = match param.get("type").and_then(|v| v.as_str()) {
-            Some(t) => t.to_string(),
+            Some(t) => t.to_owned(),
             None => continue,
         };
-        let name = param["name"].as_str().unwrap_or("").to_string();
+        let name = param["name"].as_str().unwrap_or("").to_owned();
 
         let param_value = if let Some(v) = param_dict.get(&name) {
             if ptype == "PATH" && param.get("allowedValues").is_none() {
@@ -547,12 +546,12 @@ pub fn apply_job_parameters(
                 abs_str
             } else {
                 param.as_object_mut().unwrap().insert("value".into(), v.clone());
-                v.as_str().unwrap_or("").to_string()
+                v.as_str().unwrap_or("").to_owned()
             }
         } else {
             let v = param.get("value").or_else(|| param.get("default"));
             match v.and_then(|v| v.as_str()) {
-                Some(s) => s.to_string(),
+                Some(s) => s.to_owned(),
                 None => return Err(op_err(format!(
                     "Job Template for job bundle {job_bundle_dir}:\nNo parameter value provided for Job Template parameter {name}, and it has no default value."
                 ))),
@@ -598,20 +597,20 @@ pub fn merge_queue_job_parameters(
     queue_id: Option<&str>,
 ) -> Result<Vec<serde_json::Value>, DeadlineError> {
     let mut collected: serde_json::Map<String, serde_json::Value> = queue_params.iter()
-        .filter_map(|p| Some((p["name"].as_str()?.to_string(), p.clone())))
+        .filter_map(|p| Some((p["name"].as_str()?.to_owned(), p.clone())))
         .collect();
 
     let mut mismatches: Vec<(String, Vec<String>)> = Vec::new();
 
     for jp in job_params {
-        let name = jp["name"].as_str().unwrap_or("").to_string();
+        let name = jp["name"].as_str().unwrap_or("").to_owned();
         if let Some(existing) = collected.get_mut(&name) {
             // Copy value if present
             if let Some(v) = jp.get("value") {
                 existing.as_object_mut().unwrap().insert("value".into(), v.clone());
                 // Value-only parameter — nothing more to merge
                 let keys: HashSet<&str> = jp.as_object()
-                    .map(|o| o.keys().map(|k| k.as_str()).collect())
+                    .map(|o| o.keys().map(String::as_str).collect())
                     .unwrap_or_default();
                 if keys == ["name", "value"].into_iter().collect() {
                     continue;
@@ -628,7 +627,7 @@ pub fn merge_queue_job_parameters(
             }
         } else {
             let keys: HashSet<&str> = jp.as_object()
-                .map(|o| o.keys().map(|k| k.as_str()).collect())
+                .map(|o| o.keys().map(String::as_str).collect())
                 .unwrap_or_default();
             if keys == ["name", "value"].into_iter().collect() && !name.contains(':') {
                 return Err(op_err(format!(
@@ -643,7 +642,7 @@ pub fn merge_queue_job_parameters(
         let lines: Vec<String> = mismatches.iter()
             .map(|(n, d)| format!("\t{n}: differences for fields \"{d:?}\""))
             .collect();
-        let queue_str = queue_id.map(|id| format!("queue ({id})")).unwrap_or_else(|| "queue".into());
+        let queue_str = queue_id.map_or_else(|| "queue".into(), |id| format!("queue ({id})"));
         return Err(op_err(format!(
             "The target {queue_str} and job bundle have conflicting parameter definitions:\n\n{}",
             lines.join("\n")
@@ -662,7 +661,7 @@ pub fn get_ui_control_for_parameter_definition(
     let has_allowed = param.get("allowedValues").is_some();
 
     let control = if let Some(c) = explicit {
-        c.to_string()
+        c.to_owned()
     } else if has_allowed {
         "DROPDOWN_LIST".into()
     } else {

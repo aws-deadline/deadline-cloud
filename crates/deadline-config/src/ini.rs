@@ -8,7 +8,7 @@ use std::fmt;
 
 /// An INI config: a map of section names → (key → value).
 /// Section names are case-sensitive. Keys are case-insensitive
-/// (lowercased on storage and lookup, matching Python's ConfigParser).
+/// (lowercased on storage and lookup, matching Python's `ConfigParser`).
 /// Insertion order is preserved for both sections and keys.
 #[derive(Debug, Clone, Default)]
 pub struct IniConfig {
@@ -21,7 +21,7 @@ impl IniConfig {
     }
 
     /// Parse INI text. Returns an error if a key appears before any section header.
-    /// Supports `=` and `:` as key-value delimiters (matching Python's ConfigParser).
+    /// Supports `=` and `:` as key-value delimiters (matching Python's `ConfigParser`).
     /// Supports multiline values via leading whitespace continuation lines.
     pub fn parse(text: &str) -> Result<Self, IniParseError> {
         let mut sections: IndexMap<String, IndexMap<String, String>> = IndexMap::new();
@@ -31,22 +31,20 @@ impl IniConfig {
 
         for (line_num, raw_line) in text.lines().enumerate() {
             // Check for continuation line (leading whitespace) before trimming
-            if let Some((ref sec, ref key)) = last_key {
-                if !raw_line.is_empty()
+            if let Some((ref sec, ref key)) = last_key
+                && !raw_line.is_empty()
                     && (raw_line.starts_with(' ') || raw_line.starts_with('\t'))
                 {
                     let continuation = raw_line.trim();
                     if !continuation.is_empty() {
-                        if let Some(section_map) = sections.get_mut(sec) {
-                            if let Some(val) = section_map.get_mut(key) {
+                        if let Some(section_map) = sections.get_mut(sec)
+                            && let Some(val) = section_map.get_mut(key) {
                                 val.push('\n');
                                 val.push_str(continuation);
                             }
-                        }
                         continue;
                     }
                 }
-            }
 
             let line = raw_line.trim();
 
@@ -58,7 +56,7 @@ impl IniConfig {
             if line.starts_with('[') {
                 if let Some(end) = line.find(']') {
                     let name = line[1..end].to_string();
-                    sections.entry(name.clone()).or_insert_with(IndexMap::new);
+                    sections.entry(name.clone()).or_default();
                     current_section = Some(name);
                     last_key = None;
                 } else {
@@ -75,7 +73,7 @@ impl IniConfig {
 
             if let Some(pos) = delim_pos {
                 let key = line[..pos].trim().to_lowercase();
-                let value = line[pos + 1..].trim().to_string();
+                let value = line[pos + 1..].trim().to_owned();
 
                 match &current_section {
                     Some(section) => {
@@ -102,16 +100,16 @@ impl IniConfig {
         self.sections
             .get(section)
             .and_then(|s| s.get(&key.to_lowercase()))
-            .map(|v| v.as_str())
+            .map(String::as_str)
     }
 
     /// Set a value in a section, creating the section if needed.
     /// Existing keys update in-place; new keys append to end.
     pub fn set(&mut self, section: &str, key: &str, value: &str) {
         self.sections
-            .entry(section.to_string())
+            .entry(section.to_owned())
             .or_default()
-            .insert(key.to_lowercase(), value.to_string());
+            .insert(key.to_lowercase(), value.to_owned());
     }
 
     /// Check if a section exists.
@@ -121,7 +119,7 @@ impl IniConfig {
 
     /// Iterate over all section names.
     pub fn sections(&self) -> impl Iterator<Item = &str> {
-        self.sections.keys().map(|s| s.as_str())
+        self.sections.keys().map(String::as_str)
     }
 
     /// Iterate over all sections with their key-value maps.
@@ -265,7 +263,7 @@ mod tests {
         let output = ini.to_string();
         let section_positions: Vec<usize> = ["[zebra]", "[alpha]", "[middle]"]
             .iter()
-            .map(|s| output.find(s).expect(&format!("{s} not found")))
+            .map(|s| output.find(s).unwrap_or_else(|| panic!("{s} not found")))
             .collect();
         assert!(section_positions[0] < section_positions[1], "zebra should come before alpha");
         assert!(section_positions[1] < section_positions[2], "alpha should come before middle");
@@ -278,7 +276,7 @@ mod tests {
         let output = ini.to_string();
         let key_positions: Vec<usize> = ["zebra = 1", "alpha = 2", "middle = 3"]
             .iter()
-            .map(|s| output.find(s).expect(&format!("{s} not found")))
+            .map(|s| output.find(s).unwrap_or_else(|| panic!("{s} not found")))
             .collect();
         assert!(key_positions[0] < key_positions[1], "zebra should come before alpha");
         assert!(key_positions[1] < key_positions[2], "alpha should come before middle");
@@ -292,7 +290,7 @@ mod tests {
         let output = ini.to_string();
         let positions: Vec<usize> = ["zebra = 1", "middle = updated", "alpha = 3"]
             .iter()
-            .map(|s| output.find(s).expect(&format!("{s} not found")))
+            .map(|s| output.find(s).unwrap_or_else(|| panic!("{s} not found")))
             .collect();
         assert!(positions[0] < positions[1] && positions[1] < positions[2]);
     }
@@ -334,7 +332,7 @@ mod tests {
         let text = "[section]\nfirst = a\n  b\nsecond = c\n";
         let ini = IniConfig::parse(text).unwrap();
         let first = ini.get("section", "first").unwrap();
-        assert!(first.contains("a") && first.contains("b"));
+        assert!(first.contains('a') && first.contains('b'));
         assert_eq!(ini.get("section", "second"), Some("c"));
     }
 }

@@ -116,7 +116,7 @@ const TEMP_DOWNLOAD_ADDED_CHARS: usize = 20;
 const WINDOWS_MAX_PATH_LENGTH: usize = 260;
 
 /// Returns a long-path-compatible version of the given path.
-/// On Windows, prepends `\\?\` when the path length approaches MAX_PATH
+/// On Windows, prepends `\\?\` when the path length approaches `MAX_PATH`
 /// and the registry long-path setting is not enabled.
 /// On non-Windows, returns the path unchanged.
 #[cfg(not(windows))]
@@ -293,7 +293,7 @@ impl JobAttachmentS3Settings {
         join_s3_paths(&[farm_id, queue_id, "Inputs", &guid])
     }
 
-    /// Builds the partial S3 prefix for output manifests with task_id.
+    /// Builds the partial S3 prefix for output manifests with `task_id`.
     /// Pattern: `farm/queue/job/step/task/{iso_time}_{session_action_id}`
     pub fn partial_session_action_manifest_prefix(
         farm_id: &str,
@@ -309,7 +309,7 @@ impl JobAttachmentS3Settings {
         join_s3_paths(&[farm_id, queue_id, job_id, step_id, task_id, &last_segment])
     }
 
-    /// Builds the partial S3 prefix for output manifests without task_id (task chunking).
+    /// Builds the partial S3 prefix for output manifests without `task_id` (task chunking).
     /// Pattern: `farm/queue/job/step/{iso_time}_{session_action_id}`
     pub fn partial_session_action_manifest_prefix_without_task(
         farm_id: &str,
@@ -450,7 +450,7 @@ impl Attachments {
             JobAttachmentsFileSystem::Virtual => "VIRTUAL",
         };
         serde_json::json!({
-            "manifests": self.manifests.iter().map(|m| m.to_json()).collect::<Vec<_>>(),
+            "manifests": self.manifests.iter().map(ManifestProperties::to_json).collect::<Vec<_>>(),
             "fileSystem": fs_str,
         })
     }
@@ -526,11 +526,11 @@ pub struct StorageProfile {
 }
 
 impl StorageProfile {
-    /// Parse from the raw JSON returned by GetStorageProfileForQueue.
+    /// Parse from the raw JSON returned by `GetStorageProfileForQueue`.
     pub fn from_json(v: &serde_json::Value) -> Option<Self> {
         Some(StorageProfile {
-            storage_profile_id: v.get("storageProfileId")?.as_str()?.to_string(),
-            display_name: v.get("displayName")?.as_str()?.to_string(),
+            storage_profile_id: v.get("storageProfileId")?.as_str()?.to_owned(),
+            display_name: v.get("displayName")?.as_str()?.to_owned(),
             os_family: v.get("osFamily")?.as_str()?.parse().ok()?,
             file_system_locations: v
                 .get("fileSystemLocations")
@@ -539,8 +539,8 @@ impl StorageProfile {
                     arr.iter()
                         .filter_map(|loc| {
                             Some(FileSystemLocation {
-                                name: loc.get("name")?.as_str()?.to_string(),
-                                path: loc.get("path")?.as_str()?.to_string(),
+                                name: loc.get("name")?.as_str()?.to_owned(),
+                                path: loc.get("path")?.as_str()?.to_owned(),
                                 location_type: match loc.get("type")?.as_str()? {
                                     "LOCAL" => FileSystemLocationType::Local,
                                     "SHARED" => FileSystemLocationType::Shared,
@@ -663,7 +663,7 @@ mod tests {
     fn s3_settings_full_cas_prefix_empty_root_errors() {
         let s = JobAttachmentS3Settings {
             s3_bucket_name: "bucket".into(),
-            root_prefix: "".into(),
+            root_prefix: String::new(),
         };
         let err = s.full_cas_prefix().unwrap_err();
         assert!(err.to_string().contains("Missing S3 root prefix"));
@@ -1054,7 +1054,7 @@ mod tests {
     fn get_long_path_compatible_short_path_unchanged() {
         use std::path::PathBuf;
         let short = PathBuf::from("/tmp/short/path.txt");
-        let result = super::get_long_path_compatible_path(&short);
+        let result = get_long_path_compatible_path(&short);
         assert_eq!(result, short);
     }
 
@@ -1064,7 +1064,7 @@ mod tests {
         // 300-char path — on non-Windows, should be returned as-is
         let long_name = "a".repeat(280);
         let long_path = PathBuf::from(format!("/tmp/{long_name}"));
-        let result = super::get_long_path_compatible_path(&long_path);
+        let result = get_long_path_compatible_path(&long_path);
         // On non-Windows, always returns unchanged
         #[cfg(not(windows))]
         assert_eq!(result, long_path);

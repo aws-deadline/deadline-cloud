@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline manifest` subcommands.
 //!
 //! These test the CLI binary as a subprocess, exercising the full stack:
-//! CLI arg parsing → manifest_ops → diff → hashing → file I/O.
+//! CLI arg parsing → `manifest_ops` → diff → hashing → file I/O.
 
 use deadline_test_server::TestHarness;
 use insta_cmd::assert_cmd_snapshot;
@@ -33,8 +33,8 @@ async fn manifest_snapshot_creates_manifest_file() {
     // Should have created a .manifest file in the root dir
     let manifests: Vec<_> = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "manifest"))
+        .filter_map(std::result::Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .collect();
     assert_eq!(manifests.len(), 1, "Expected one manifest file");
 
@@ -70,14 +70,14 @@ async fn manifest_snapshot_writes_to_destination() {
     // Manifest should be in dest, not root
     let in_dest: Vec<_> = fs::read_dir(dest.path())
         .unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "manifest"))
+        .filter_map(std::result::Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .collect();
     assert_eq!(in_dest.len(), 1);
     let in_root: Vec<_> = fs::read_dir(root.path())
         .unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "manifest"))
+        .filter_map(std::result::Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .collect();
     assert_eq!(in_root.len(), 0);
 }
@@ -104,7 +104,7 @@ async fn manifest_snapshot_uses_provided_name() {
     assert!(output.status.success());
     let manifests: Vec<_> = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             name.starts_with("my-snapshot-") && name.ends_with(".manifest")
@@ -137,8 +137,8 @@ async fn manifest_snapshot_include_exclude_filters() {
     assert!(output.status.success());
     let manifest_file = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(|e| e.ok())
-        .find(|e| e.path().extension().map_or(false, |ext| ext == "manifest"))
+        .filter_map(std::result::Result::ok)
+        .find(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .expect("manifest file should exist");
     let contents = fs::read_to_string(manifest_file.path()).unwrap();
     assert!(contents.contains("keep.exr"));
@@ -178,8 +178,8 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
 
     let manifest_file = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(|e| e.ok())
-        .find(|e| e.path().extension().map_or(false, |ext| ext == "manifest"))
+        .filter_map(std::result::Result::ok)
+        .find(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .expect("manifest should exist");
 
     // Modify: change content (different size triggers fast diff)
@@ -212,9 +212,9 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
     let deleted: Vec<&str> = json["deleted"].as_array().unwrap()
         .iter().filter_map(|v| v.as_str()).collect();
 
-    assert!(new_files.iter().any(|f| *f == "added.txt"), "new: {new_files:?}");
-    assert!(modified.iter().any(|f| *f == "will_modify.txt"), "modified: {modified:?}");
-    assert!(deleted.iter().any(|f| *f == "will_delete.txt"), "deleted: {deleted:?}");
+    assert!(new_files.contains(&"added.txt"), "new: {new_files:?}");
+    assert!(modified.contains(&"will_modify.txt"), "modified: {modified:?}");
+    assert!(deleted.contains(&"will_delete.txt"), "deleted: {deleted:?}");
     // original.txt should not appear in any diff list
     assert!(!new_files.contains(&"original.txt"));
     assert!(!modified.contains(&"original.txt"));
@@ -246,8 +246,8 @@ async fn manifest_snapshot_diff_only_includes_changed_files() {
 
     let first_manifest = fs::read_dir(dest.path())
         .unwrap()
-        .filter_map(|e| e.ok())
-        .find(|e| e.path().extension().map_or(false, |ext| ext == "manifest"))
+        .filter_map(std::result::Result::ok)
+        .find(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .expect("first manifest should exist");
 
     // Modify one file (different size)
@@ -269,7 +269,7 @@ async fn manifest_snapshot_diff_only_includes_changed_files() {
     // Find the diff manifest
     let diff_manifest = fs::read_dir(dest.path())
         .unwrap()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .find(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             name.starts_with("diff-snap-") && name.ends_with(".manifest")
@@ -599,8 +599,8 @@ async fn manifest_diff_root_optional() {
     // Find the manifest file
     let manifest_file = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(|e| e.ok())
-        .find(|e| e.path().extension().map_or(false, |ext| ext == "manifest"))
+        .filter_map(std::result::Result::ok)
+        .find(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .expect("manifest file should exist")
         .path();
 

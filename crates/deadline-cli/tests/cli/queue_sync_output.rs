@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline queue sync-output`.
 //!
 //! Tests exercise the full orchestration through the CLI binary:
-//! SearchJobs → GetJob → ListSessions → ListSessionActions → S3 download.
+//! `SearchJobs` → `GetJob` → `ListSessions` → `ListSessionActions` → S3 download.
 
 use deadline_test_server::deadline_api::{errors, jobs, queues, queue_resources, sessions, s3, sts, telemetry};
 use deadline_test_server::TestHarness;
@@ -467,8 +467,8 @@ async fn sync_output_dry_run_does_not_save_checkpoint() {
 
     // Verify no checkpoint file was created
     let entries: Vec<_> = fs::read_dir(checkpoint_dir.path()).unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+        .filter_map(std::result::Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
         .collect();
     assert!(entries.is_empty(), "dry-run should not save checkpoint file");
 }
@@ -874,10 +874,10 @@ async fn sync_output_storage_profile_path_mapping_rules_printed() {
     ).await;
 
     // Job submitted from a macOS machine with different storage profile
-    let mut job = active_job("job-map", "Mapped Job", 1, 1);
+    let job = active_job("job-map", "Mapped Job", 1, 1);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
 
-    let mut job_detail = job_detail_with_attachments("job-map", Some("sp-macos-456"));
+    let job_detail = job_detail_with_attachments("job-map", Some("sp-macos-456"));
     jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-map", &[]).await;
 
@@ -1023,9 +1023,9 @@ async fn sync_output_downloads_files_to_disk() {
 // Job discovery must paginate beyond 100 jobs
 // =====================================================================
 
-/// When SearchJobs returns totalResults > len(jobs), the CLI
+/// When `SearchJobs` returns totalResults > len(jobs), the CLI
 /// must paginate using createdAt thresholding to discover all jobs.
-/// The current code calls search_jobs_with_filters once with page_size=100
+/// The current code calls `search_jobs_with_filters` once with `page_size=100`
 /// and silently drops any jobs beyond the first page.
 #[tokio::test]
 async fn sync_output_paginates_beyond_100_jobs() {

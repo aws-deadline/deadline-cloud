@@ -1,11 +1,11 @@
-//! Level 1 tests for manifest_ops module (batch 9e-1).
+//! Level 1 tests for `manifest_ops` module (batch 9e-1).
 
 use deadline_job_attachments::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
 };
 use deadline_job_attachments::manifest_ops::{
     glob_files, manifest_diff, manifest_merge, manifest_snapshot, resolve_glob_config,
-    write_manifest, GlobConfig, ManifestDiffResult,
+    write_manifest, GlobConfig,
 };
 use std::fs;
 use tempfile::TempDir;

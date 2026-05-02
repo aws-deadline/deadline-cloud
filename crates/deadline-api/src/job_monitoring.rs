@@ -10,7 +10,7 @@ pub struct FailedTask {
     pub step_id: String,
     pub task_id: String,
     pub step_name: String,
-    pub parameters: serde_json::Value,
+    pub parameters: Value,
     pub session_id: Option<String>,
 }
 
@@ -96,9 +96,9 @@ async fn collect_failed_tasks(
                     };
 
                     failed_tasks.push(FailedTask {
-                        step_id: step_id.to_string(),
-                        task_id: task.task_id().to_string(),
-                        step_name: step_name.to_string(),
+                        step_id: step_id.to_owned(),
+                        task_id: task.task_id().to_owned(),
+                        step_name: step_name.to_owned(),
                         parameters,
                         session_id,
                     });
@@ -134,7 +134,7 @@ pub async fn wait_for_job_completion(
 
         let job = client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
             .send().await.map_err(crate::client::deadline_error)?;
-        let status = job.task_run_status.as_ref().map(|s| s.as_str()).unwrap_or("");
+        let status = job.task_run_status.as_ref().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
 
         if let Some(cb) = status_callback {
             cb(status, elapsed, timeout);
@@ -145,13 +145,13 @@ pub async fn wait_for_job_completion(
 
         if TERMINAL_STATES.contains(&status) {
             let elapsed_time = start.elapsed().as_secs_f64();
-            let failed_tasks = if status != "SUCCEEDED" {
-                collect_failed_tasks(farm_id, queue_id, job_id, config).await?
-            } else {
+            let failed_tasks = if status == "SUCCEEDED" {
                 Vec::new()
+            } else {
+                collect_failed_tasks(farm_id, queue_id, job_id, config).await?
             };
             return Ok(JobCompletionResult {
-                status: status.to_string(),
+                status: status.to_owned(),
                 failed_tasks,
                 elapsed_time,
             });

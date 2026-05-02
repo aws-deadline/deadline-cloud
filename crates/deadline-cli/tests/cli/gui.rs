@@ -3,7 +3,7 @@
 //! These commands spawn a Python subprocess to run Qt dialogs. The tests
 //! cover the Rust side of the pipeline: arg parsing, validation, Python
 //! discovery, and error paths. They do NOT test the actual GUI rendering
-//! because that requires a display server (X11/Wayland/macOS WindowServer)
+//! because that requires a display server (X11/Wayland/macOS `WindowServer`)
 //! and PySide6 installed — conditions not guaranteed in CI.
 //!
 //! The Python GUI code itself is tested separately by ~228 pytest-qt tests
@@ -14,7 +14,7 @@
 //! - `--submitter-info` field validation (unknown fields, missing required)
 //! - `--output` case insensitivity, `--install-gui` flag acceptance
 //! - `--submitter-name` deprecation warning
-//! - Python-not-found error path (DEADLINE_PYTHON → nonexistent path)
+//! - Python-not-found error path (`DEADLINE_PYTHON` → nonexistent path)
 //! - Missing required args (no dir + no --browse)
 
 use deadline_test_server::TestHarness;
@@ -59,7 +59,7 @@ async fn bundle_gui_submit_output_case_insensitive() {
     cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");
     cmd.env("PATH", "");
     // Should fail with exit code 1 (Python-not-found), NOT exit code 2 (clap arg error)
-    let output = std::process::Command::from(cmd).output().unwrap();
+    let output = cmd.output().unwrap();
     assert_eq!(
         output.status.code(),
         Some(1),
@@ -103,7 +103,7 @@ async fn bundle_gui_submit_submitter_info_key_value_accepted() {
     cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");
     cmd.env("PATH", "");
     // Should fail with exit code 1 (Python-not-found), NOT exit code 2 (arg error)
-    let output = std::process::Command::from(cmd).output().unwrap();
+    let output = cmd.output().unwrap();
     assert_eq!(
         output.status.code(),
         Some(1),
@@ -124,7 +124,7 @@ async fn bundle_gui_submit_submitter_info_json_accepted() {
     cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");
     cmd.env("PATH", "");
     // Should fail with exit code 1 (Python-not-found), NOT exit code 2 (arg error)
-    let output = std::process::Command::from(cmd).output().unwrap();
+    let output = cmd.output().unwrap();
     assert_eq!(
         output.status.code(),
         Some(1),
@@ -174,7 +174,7 @@ async fn config_gui_install_gui_flag_accepted() {
     cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");
     cmd.env("PATH", "");
     // Should fail with exit code 1 (Python-not-found), NOT exit code 2 (unknown flag)
-    let output = std::process::Command::from(cmd).output().unwrap();
+    let output = cmd.output().unwrap();
     assert_eq!(
         output.status.code(),
         Some(1),

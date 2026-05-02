@@ -39,7 +39,7 @@ fn create_file(dir: &TempDir, name: &str, content: &[u8]) -> String {
 fn fast_diff_new_file_detected() {
     let dir = TempDir::new().unwrap();
     let f1 = create_file(&dir, "new_file.txt", b"hello");
-    let manifest = make_manifest(&[]);
+    let _manifest = make_manifest(&[]);
     // Empty manifest, one file on disk → file is New
     // fast_diff needs a non-empty manifest to work; use one with a different file
     let manifest = make_manifest(&[("other.txt", "aa".repeat(16).as_str(), 5, 1000000)]);

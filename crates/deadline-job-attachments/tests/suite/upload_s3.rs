@@ -20,7 +20,7 @@ use deadline_job_attachments::upload::{
 };
 use tempfile::TempDir;
 use wiremock::matchers::{method, path_regex, header_exists};
-use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // --- Multipart POST responder ---
 // Returns CreateMultipartUpload response for ?uploads, and
@@ -122,7 +122,7 @@ async fn build_uploader_low_threshold(server: &MockServer) -> S3UploadContext {
 /// 9MB — just over the 8MB threshold when multiplier=1.
 const LARGE_FILE_SIZE: usize = 9 * 1024 * 1024;
 
-/// Mount S3 HeadObject returning 200 (object exists).
+/// Mount S3 `HeadObject` returning 200 (object exists).
 async fn mock_s3_head_object_exists(server: &MockServer) {
     Mock::given(method("HEAD"))
         .respond_with(ResponseTemplate::new(200))
@@ -130,7 +130,7 @@ async fn mock_s3_head_object_exists(server: &MockServer) {
         .await;
 }
 
-/// Mount S3 HeadObject returning 404 (object does not exist).
+/// Mount S3 `HeadObject` returning 404 (object does not exist).
 async fn mock_s3_head_object_not_found(server: &MockServer) {
     Mock::given(method("HEAD"))
         .respond_with(ResponseTemplate::new(404))
@@ -138,7 +138,7 @@ async fn mock_s3_head_object_not_found(server: &MockServer) {
         .await;
 }
 
-/// Mount S3 PutObject returning 200 (upload success).
+/// Mount S3 `PutObject` returning 200 (upload success).
 async fn mock_s3_put_object_success(server: &MockServer) {
     Mock::given(method("PUT"))
         .respond_with(ResponseTemplate::new(200))
@@ -462,7 +462,7 @@ async fn snapshot_assets_copies_files_to_local_dir() {
         outputs: vec![],
     }];
 
-    let (stats, attachments) = snapshot_assets(
+    let (_stats, attachments) = snapshot_assets(
         "farm-1",
         "queue-1",
         &s3_settings,
@@ -484,7 +484,7 @@ async fn snapshot_assets_copies_files_to_local_dir() {
 // =====================================================================
 #[tokio::test]
 async fn snapshot_assets_missing_farm_id_errors() {
-    let dir = TempDir::new().unwrap();
+    let _dir = TempDir::new().unwrap();
     let snapshot_dir = TempDir::new().unwrap();
     let s3_settings = test_s3_settings();
 
@@ -624,7 +624,7 @@ async fn upload_input_files_cached_file_skipped_without_s3_call() {
     {
         let cache = S3CheckCache::new(cache_dir.path().to_str().unwrap()).unwrap();
         let hash = &manifest.paths[0].hash;
-        let cache_key = format!("test-bucket/root-prefix/Data/{}.xxh128", hash);
+        let cache_key = format!("test-bucket/root-prefix/Data/{hash}.xxh128");
         cache.put_entry(&deadline_job_attachments::caches::S3CheckCacheEntry {
             s3_key: cache_key,
             last_seen_time: format!(
@@ -1226,7 +1226,7 @@ async fn upload_input_files_small_file_uses_put_object_not_multipart() {
 
     let dir = TempDir::new().unwrap();
     // 100 bytes — well below 8MB threshold
-    std::fs::write(dir.path().join("small.txt"), &[0x41u8; 100]).unwrap();
+    std::fs::write(dir.path().join("small.txt"), [0x41u8; 100]).unwrap();
     let hash = deadline_job_attachments::asset_manifests::hash_file(
         &dir.path().join("small.txt"), HashAlgorithm::Xxh128,
     ).unwrap();

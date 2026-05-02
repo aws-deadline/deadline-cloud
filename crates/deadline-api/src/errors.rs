@@ -13,7 +13,7 @@ pub enum DeadlineError {
     OperationCanceled(String),
     /// Operation timed out (default: "Operation timed out").
     OperationTimedOut(String),
-    /// CreateJob waiter was interrupted (default: "Operation canceled while waiting for CreateJob to finish").
+    /// `CreateJob` waiter was interrupted (default: "Operation canceled while waiting for `CreateJob` to finish").
     CreateJobWaiterCanceled(String),
     /// User explicitly requested cancellation (default: "Operation canceled by user").
     UserInitiatedCancel(String),

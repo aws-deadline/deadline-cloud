@@ -19,7 +19,7 @@ pub async fn mock_get_fleet(server: &MockServer, farm_id: &str, fleet: Value) {
         .await;
 }
 
-/// Mock ListQueueFleetAssociations.
+/// Mock `ListQueueFleetAssociations`.
 /// API: GET /2023-10-12/farms/{farmId}/queue-fleet-associations?queueId={queueId}
 pub async fn mock_list_queue_fleet_associations(
     server: &MockServer,
@@ -37,7 +37,7 @@ pub async fn mock_list_queue_fleet_associations(
         .await;
 }
 
-/// Mount an AssumeFleetRoleForRead response.
+/// Mount an `AssumeFleetRoleForRead` response.
 /// API: GET /2023-10-12/farms/{farmId}/fleets/{fleetId}/read-roles
 /// Response: { "credentials": { "accessKeyId", "secretAccessKey", "sessionToken", "expiration" } }
 pub async fn mock_assume_fleet_role_for_read(
@@ -55,7 +55,7 @@ pub async fn mock_assume_fleet_role_for_read(
         .await;
 }
 
-/// Mount an error response for AssumeFleetRoleForRead.
+/// Mount an error response for `AssumeFleetRoleForRead`.
 pub async fn mock_assume_fleet_role_for_read_error(
     server: &MockServer,
     farm_id: &str,
@@ -76,7 +76,7 @@ pub async fn mock_assume_fleet_role_for_read_error(
         .await;
 }
 
-/// Mount a ListFleets response that requires a specific principalId query param.
+/// Mount a `ListFleets` response that requires a specific principalId query param.
 pub async fn mock_list_fleets_with_principal_id(
     server: &MockServer,
     farm_id: &str,

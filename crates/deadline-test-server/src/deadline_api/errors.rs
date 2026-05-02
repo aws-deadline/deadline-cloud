@@ -2,7 +2,7 @@ use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount an AccessDeniedException for ListFarms.
+/// Mount an `AccessDeniedException` for `ListFarms`.
 pub async fn mock_list_farms_access_denied(server: &MockServer) {
     Mock::given(method("GET"))
         .and(path("/2023-10-12/farms"))
@@ -15,7 +15,7 @@ pub async fn mock_list_farms_access_denied(server: &MockServer) {
         .await;
 }
 
-/// Mount a ResourceNotFoundException for GetFarm.
+/// Mount a `ResourceNotFoundException` for `GetFarm`.
 pub async fn mock_get_farm_not_found(server: &MockServer, farm_id: &str) {
     Mock::given(method("GET"))
         .and(path(format!("/2023-10-12/farms/{farm_id}")))
@@ -28,7 +28,7 @@ pub async fn mock_get_farm_not_found(server: &MockServer, farm_id: &str) {
         .await;
 }
 
-/// Mount an AccessDeniedException for GetQueue.
+/// Mount an `AccessDeniedException` for `GetQueue`.
 pub async fn mock_get_queue_access_denied(
     server: &MockServer,
     farm_id: &str,
@@ -47,7 +47,7 @@ pub async fn mock_get_queue_access_denied(
         .await;
 }
 
-/// Mount a ResourceNotFoundException for GetJob.
+/// Mount a `ResourceNotFoundException` for `GetJob`.
 pub async fn mock_get_job_not_found(
     server: &MockServer,
     farm_id: &str,
@@ -67,7 +67,7 @@ pub async fn mock_get_job_not_found(
         .await;
 }
 
-/// Mount an AccessDeniedException for SearchWorkers.
+/// Mount an `AccessDeniedException` for `SearchWorkers`.
 pub async fn mock_search_workers_access_denied(server: &MockServer, farm_id: &str) {
     Mock::given(method("POST"))
         .and(path(format!(
@@ -82,7 +82,7 @@ pub async fn mock_search_workers_access_denied(server: &MockServer, farm_id: &st
         .await;
 }
 
-/// Mount a ResourceNotFoundException for GetWorker.
+/// Mount a `ResourceNotFoundException` for `GetWorker`.
 pub async fn mock_get_worker_not_found(
     server: &MockServer,
     farm_id: &str,
@@ -102,7 +102,7 @@ pub async fn mock_get_worker_not_found(
         .await;
 }
 
-/// Mount an AccessDeniedException for SearchJobs.
+/// Mount an `AccessDeniedException` for `SearchJobs`.
 pub async fn mock_search_jobs_access_denied(server: &MockServer, farm_id: &str) {
     Mock::given(method("POST"))
         .and(path(format!("/2023-10-12/farms/{farm_id}/search/jobs")))
@@ -115,7 +115,7 @@ pub async fn mock_search_jobs_access_denied(server: &MockServer, farm_id: &str) 
         .await;
 }
 
-/// Mount a ResourceNotFoundException for GetFleet.
+/// Mount a `ResourceNotFoundException` for `GetFleet`.
 pub async fn mock_get_fleet_not_found(
     server: &MockServer,
     farm_id: &str,
@@ -134,7 +134,7 @@ pub async fn mock_get_fleet_not_found(
         .await;
 }
 
-/// Mount a ResourceNotFoundException for GetStorageProfileForQueue.
+/// Mount a `ResourceNotFoundException` for `GetStorageProfileForQueue`.
 pub async fn mock_get_storage_profile_not_found(
     server: &MockServer,
     farm_id: &str,

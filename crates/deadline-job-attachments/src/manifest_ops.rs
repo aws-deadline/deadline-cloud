@@ -70,7 +70,7 @@ pub struct ManifestDownloadEntry {
     pub local_manifest_path: String,
 }
 
-/// Response from manifest_download.
+/// Response from `manifest_download`.
 #[derive(Debug, Clone, Serialize)]
 pub struct ManifestDownloadResponse {
     pub downloaded: Vec<ManifestDownloadEntry>,
@@ -81,7 +81,7 @@ pub struct ManifestDownloadResponse {
 /// Resolve glob configuration from CLI arguments.
 ///
 /// If include/exclude are non-empty, they take precedence. Otherwise
-/// parse include_exclude_config as a file path or JSON string. Falls
+/// parse `include_exclude_config` as a file path or JSON string. Falls
 /// back to default (all files).
 pub fn resolve_glob_config(
     include: &[String],
@@ -102,7 +102,7 @@ pub fn resolve_glob_config(
     if let Some(config_input) = include_exclude_config {
         let json_str = match std::fs::read_to_string(config_input) {
             Ok(contents) => contents,
-            Err(_) => config_input.to_string(),
+            Err(_) => config_input.to_owned(),
         };
 
         let parsed: serde_json::Value = serde_json::from_str(&json_str).map_err(|_| {
@@ -113,13 +113,11 @@ pub fn resolve_glob_config(
 
         let include = parsed
             .get("include")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
+            .and_then(|v| v.as_array()).map_or_else(|| vec!["**/*".into()], |arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str().map(String::from))
                     .collect()
-            })
-            .unwrap_or_else(|| vec!["**/*".into()]);
+            });
 
         let exclude = parsed
             .get("exclude")
@@ -149,8 +147,8 @@ pub fn glob_files(root: &str, config: &GlobConfig) -> Result<Vec<String>, JobAtt
         for entry in glob::glob(&full_pattern).map_err(|e| {
             JobAttachmentsError::AssetSync(format!("Invalid glob pattern: {e}"))
         })? {
-            if let Ok(path) = entry {
-                if path.is_file() {
+            if let Ok(path) = entry
+                && path.is_file() {
                     // Use absolute instead of canonicalize to avoid /private symlink resolution on macOS
                     let normalized = std::path::absolute(&path)
                         .unwrap_or(path)
@@ -158,7 +156,6 @@ pub fn glob_files(root: &str, config: &GlobConfig) -> Result<Vec<String>, JobAtt
                         .into_owned();
                     matched.insert(normalized);
                 }
-            }
         }
     }
 
@@ -188,15 +185,12 @@ pub fn write_manifest(
     let root_hash = hash_data(root.as_bytes(), HashAlgorithm::Xxh128);
     let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
 
-    let manifest_name = match name {
-        Some(n) => n.to_string(),
-        None => {
-            let derived = root.replace('/', "_").replace('\\', "_").replace(':', "_");
-            if derived.starts_with('_') {
-                derived[1..].to_string()
-            } else {
-                derived
-            }
+    let manifest_name = if let Some(n) = name { n.to_owned() } else {
+        let derived = root.replace(['/', '\\', ':'], "_");
+        if derived.starts_with('_') {
+            derived[1..].to_string()
+        } else {
+            derived
         }
     };
 
@@ -315,7 +309,7 @@ pub fn manifest_snapshot(
         Some(manifest) => {
             let path = write_manifest(root, &manifest, destination, name)?;
             Ok(Some(ManifestSnapshot {
-                root: root.to_string(),
+                root: root.to_owned(),
                 manifest: path,
             }))
         }
@@ -393,7 +387,7 @@ pub fn manifest_merge(
         Some(manifest) => {
             let path = write_manifest(root, &manifest, destination, name)?;
             Ok(Some(ManifestMergeResult {
-                manifest_root: root.to_string(),
+                manifest_root: root.to_owned(),
                 local_manifest_path: path,
             }))
         }
@@ -409,7 +403,7 @@ fn build_single_group(root: &str, files: &[String]) -> AssetRootGroup {
     }
     AssetRootGroup {
         file_system_location_name: None,
-        root_path: root.to_string(),
+        root_path: root.to_owned(),
         inputs,
         outputs: std::collections::BTreeSet::new(),
         references: std::collections::BTreeSet::new(),
@@ -451,20 +445,20 @@ pub async fn manifest_upload(
 
     let mut metadata = HashMap::new();
     metadata.insert(
-        "file-system-location-name".to_string(),
-        manifest_file.to_string(),
+        "file-system-location-name".to_owned(),
+        manifest_file.to_owned(),
     );
 
-    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_string(), None)?;
+    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_owned(), None)?;
     ctx.upload_bytes_to_s3(&contents, s3_bucket_name, &manifest_s3_key, Some(metadata))
         .await
 }
 
 /// Download and merge manifests for a job from S3, write to disk.
 ///
-/// `job_attachments` is the `attachments` field from the GetJob API
+/// `job_attachments` is the `attachments` field from the `GetJob` API
 /// response (or empty map if the job has no attachments). The CLI layer
-/// is responsible for calling GetJob and passing this in.
+/// is responsible for calling `GetJob` and passing this in.
 pub async fn manifest_download(
     download_dir: &str,
     farm_id: &str,
@@ -486,8 +480,8 @@ pub async fn manifest_download(
     let mut manifests_by_root: HashMap<String, Vec<AssetManifest>> = HashMap::new();
 
     // Download input manifests
-    if download_input {
-        if let Some(manifest_list) = job_attachments
+    if download_input
+        && let Some(manifest_list) = job_attachments
             .get("manifests")
             .and_then(|v| v.as_array())
         {
@@ -515,7 +509,7 @@ pub async fn manifest_download(
                 .await?;
 
                 manifests_by_root
-                    .entry(root_path.to_string())
+                    .entry(root_path.to_owned())
                     .or_default()
                     .push(manifest);
             }
@@ -525,7 +519,6 @@ pub async fn manifest_download(
         // Deferred: requires Deadline API client for ListStepDependencies.
         // Will be wired in batch 9e-3 when the CLI has access to the
         // Deadline client.
-    }
 
     // Download output manifests
     if download_output {

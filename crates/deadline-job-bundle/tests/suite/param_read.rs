@@ -1,10 +1,10 @@
-//! : Job bundle — parameters: read_job_bundle_parameters (cases 66-80)
+//! : Job bundle — parameters: `read_job_bundle_parameters` (cases 66-80)
 
 use deadline_job_bundle::parameters::read_job_bundle_parameters;
 use std::fs;
 use tempfile::TempDir;
 
-/// Helper: create a bundle dir with a template and optional parameter_values.
+/// Helper: create a bundle dir with a template and optional `parameter_values`.
 fn make_bundle(
     template: &serde_json::Value,
     param_values: Option<&serde_json::Value>,

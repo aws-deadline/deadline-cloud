@@ -19,7 +19,7 @@ use crate::progress_tracker::{
     DownloadSummaryStatistics, ProgressReportMetadata, ProgressStatus, ProgressTracker,
 };
 
-/// Shared state for CreateCopy collision tracking across concurrent downloads.
+/// Shared state for `CreateCopy` collision tracking across concurrent downloads.
 /// Maps local file path string → highest copy number used.
 pub type CollisionState = Arc<Mutex<HashMap<String, i32>>>;
 
@@ -142,7 +142,7 @@ fn s3_download_error(
         },
         _ => JobAttachmentsError::S3BotoCore {
             action: "downloading file".into(),
-            details: raw.to_string(),
+            details: raw.to_owned(),
         },
     }
 }
@@ -186,8 +186,7 @@ async fn s3_stream_to_file(
         Err(sdk_err) => {
             let status = sdk_err
                 .raw_response()
-                .map(|r| r.status().as_u16())
-                .unwrap_or(0);
+                .map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
             use aws_sdk_s3::error::ProvideErrorMetadata;
@@ -210,7 +209,7 @@ fn get_new_copy_file_path(
 ) -> PathBuf {
     let mut state = collision_state.lock().expect("collision mutex poisoned");
     let key = local_file_path.to_string_lossy().to_string();
-    let num = state.entry(key.clone()).or_insert(0);
+    let num = state.entry(key).or_insert(0);
 
     let stem = local_file_path
         .file_stem()
@@ -669,8 +668,7 @@ async fn list_manifest_keys_from_s3(
         let resp = req.send().await.map_err(|sdk_err| {
             let status = sdk_err
                 .raw_response()
-                .map(|r| r.status().as_u16())
-                .unwrap_or(0);
+                .map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
             match status {
@@ -703,11 +701,11 @@ async fn list_manifest_keys_from_s3(
         }
         for obj in contents {
             if let Some(key) = obj.key() {
-                all_keys.push(key.to_string());
+                all_keys.push(key.to_owned());
             }
         }
         if resp.is_truncated() == Some(true) {
-            continuation_token = resp.next_continuation_token().map(|s| s.to_string());
+            continuation_token = resp.next_continuation_token().map(ToOwned::to_owned);
         } else {
             break;
         }
@@ -759,7 +757,7 @@ fn select_latest_manifests_per_task(keys: &[String]) -> Vec<String> {
             .iter()
             .filter_map(|f| f.split('/').nth(folder_depth))
             .collect();
-        subfolders.sort();
+        subfolders.sort_unstable();
         subfolders.dedup();
 
         if let Some(latest) = subfolders.last() {
@@ -792,8 +790,7 @@ pub async fn download_manifest_from_s3(
         .map_err(|sdk_err| {
             let status = sdk_err
                 .raw_response()
-                .map(|r| r.status().as_u16())
-                .unwrap_or(0);
+                .map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
             JobAttachmentsError::S3Client {
@@ -811,14 +808,14 @@ pub async fn download_manifest_from_s3(
         .and_then(|dt| {
             let epoch_secs = dt.secs();
             let nanos = dt.subsec_nanos();
-            chrono::DateTime::from_timestamp(epoch_secs, nanos as u32)
+            DateTime::from_timestamp(epoch_secs, nanos)
         })
         .unwrap_or_else(Utc::now);
 
     // Extract asset root from metadata
     let metadata: HashMap<String, String> = result
         .metadata()
-        .map(|m| m.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect())
+        .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
         .unwrap_or_default();
     let asset_root = get_asset_root_from_metadata(&metadata);
 
@@ -968,7 +965,7 @@ impl OutputDownloader {
         }
         if let Some(manifests) = self.outputs_by_root.remove(original_root) {
             self.outputs_by_root
-                .entry(new_root.to_string())
+                .entry(new_root.to_owned())
                 .or_default()
                 .extend(manifests);
         }

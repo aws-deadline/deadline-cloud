@@ -11,7 +11,7 @@ static OPENJD_IDENT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").unwrap());
 
 #[derive(Subcommand)]
-pub enum BundleAction {
+pub(crate) enum BundleAction {
     /// Submit an Open Job Description job bundle to a Deadline Cloud queue
     Submit {
         /// Path to the job bundle directory
@@ -83,7 +83,7 @@ pub enum BundleAction {
         no_force_s3_check: bool,
 
         /// EXPERIMENTAL — Save a debug snapshot instead of submitting.
-        /// Generates a directory (or .zip) with CreateJob args and scripts.
+        /// Generates a directory (or .zip) with `CreateJob` args and scripts.
         #[arg(long = "save-debug-snapshot")]
         save_debug_snapshot: Option<String>,
 
@@ -110,7 +110,7 @@ pub enum BundleAction {
         #[arg(long)]
         install_gui: bool,
 
-        /// [DEPRECATED] Use --submitter-info submitter_name=<name> instead
+        /// [DEPRECATED] Use --submitter-info `submitter_name`=<name> instead
         #[arg(long)]
         submitter_name: Option<String>,
 
@@ -150,7 +150,7 @@ fn parse_parameters(raw: &[String]) -> Result<Vec<serde_json::Value>, CliError> 
     Ok(result)
 }
 
-pub fn run(action: BundleAction) -> Result<(), CliError> {
+pub(crate) fn run(action: BundleAction) -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(e.to_string()))?
         .block_on(run_async(action))
@@ -278,7 +278,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 upload_progress_callback: Some(Box::new(move |meta| {
                     upload_progress.lock().unwrap().callback(meta.progress as u64)
                 })),
-                continue_callback: Some(Box::new(|| crate::common::should_continue())),
+                continue_callback: Some(Box::new(crate::common::should_continue)),
                 interactive_confirmation_callback: Some(Box::new(|msg, _default| {
                     println!("{msg}");
                     crate::common::should_continue()
@@ -321,22 +321,19 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     println!("Saved job debug snapshot:");
                     println!("    {snap_path}");
                 }
-            } else if json_output {
-                if let Some(ref id) = job_id {
+            } else if json_output
+                && let Some(ref id) = job_id {
                     println!("{}", serde_json::json!({"jobId": id}));
                 }
-            }
 
             // Update defaults.job_id only when no CLI overrides were provided
             if profile.is_none()
                 && farm_id.is_none()
                 && queue_id.is_none()
                 && storage_profile_id.is_none()
-            {
-                if let Some(ref id) = job_id {
+                && let Some(ref id) = job_id {
                     let _ = config_file::set_setting_to_disk("defaults.job_id", id);
                 }
-            }
 
             Ok(())
         }
@@ -439,7 +436,7 @@ fn validate_submitter_info(
                 merged.insert(k.clone(), v.clone());
             }
         } else if let Some((key, value)) = val.split_once('=') {
-            merged.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+            merged.insert(key.to_owned(), serde_json::Value::String(value.to_owned()));
         } else {
             return Err(CliError::Operation(format!(
                 "--submitter-info '{val}' not formatted correctly. \
@@ -451,7 +448,7 @@ fn validate_submitter_info(
     // Apply deprecated --submitter-name (takes precedence)
     if let Some(name) = deprecated_name {
         eprintln!("DeprecationWarning: The option --submitter-name is deprecated. Use --submitter-info instead.");
-        merged.insert("submitter_name".to_string(), serde_json::Value::String(name.to_string()));
+        merged.insert("submitter_name".to_owned(), serde_json::Value::String(name.to_owned()));
     }
 
     // Validate field names

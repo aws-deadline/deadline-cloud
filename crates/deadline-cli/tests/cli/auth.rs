@@ -1,13 +1,13 @@
 //! Level 2 tests for `deadline auth` subcommands.
 
 use deadline_test_server::TestHarness;
-use deadline_test_server::deadline_api::{errors, farms, sts};
+use deadline_test_server::deadline_api::farms;
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
 
 /// Set up a fake DCM environment in the harness temp dir:
-/// - AWS config with a DCM profile (has monitor_id)
+/// - AWS config with a DCM profile (has `monitor_id`)
 /// - Deadline config pointing to the DCM profile and fake monitor binary
 /// - A fake monitor shell script at the given path
 fn setup_dcm_env(harness: &TestHarness, monitor_script: &str) {

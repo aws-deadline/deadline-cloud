@@ -18,7 +18,7 @@ use crate::asset_manifests::{hash_data, AssetManifest, HashAlgorithm, ManifestPa
 use crate::errors::JobAttachmentsError;
 use crate::path_mapping::PathMappingRuleApplier;
 
-/// Upper bound for SearchJobs eventual consistency, in seconds.
+/// Upper bound for `SearchJobs` eventual consistency, in seconds.
 pub const EVENTUAL_CONSISTENCY_MAX_SECONDS: i64 = 120;
 
 fn default_eventual_consistency() -> i64 {
@@ -198,7 +198,7 @@ pub fn add_output_manifests_from_s3(
         .filter_map(|&idx| {
             session_action_list[idx]["sessionActionId"]
                 .as_str()
-                .map(|id| (id.to_string(), idx))
+                .map(|id| (id.to_owned(), idx))
         })
         .collect();
 
@@ -211,7 +211,7 @@ pub fn add_output_manifests_from_s3(
         let sa_id = re
             .captures(key)
             .and_then(|c| c.get(1))
-            .map(|m| m.as_str().to_string())
+            .map(|m| m.as_str().to_owned())
             .ok_or_else(|| {
                 JobAttachmentsError::AssetSync(format!(
                     "Job attachments manifest key for job {job_name} ({job_id}) lacks a session action id"
@@ -232,13 +232,11 @@ pub fn add_output_manifests_from_s3(
             })?;
 
         // If this session action is in our list, set the manifest path
-        if let Some(&sa_idx) = sa_by_id.get(&sa_id) {
-            if let Some(arr) = session_action_list[sa_idx]["manifests"].as_array_mut() {
-                if manifest_index < arr.len() {
+        if let Some(&sa_idx) = sa_by_id.get(&sa_id)
+            && let Some(arr) = session_action_list[sa_idx]["manifests"].as_array_mut()
+                && manifest_index < arr.len() {
                     arr[manifest_index] = json!({"outputManifestPath": key});
                 }
-            }
-        }
     }
 
     Ok(())
@@ -340,7 +338,7 @@ mod tests {
     #[test]
     fn job_construct_with_all_fields() {
         let ts = utc(2024, 6, 15, 10, 30, 0);
-        let indexes = HashMap::from([("session-1".to_string(), 5i64)]);
+        let indexes = HashMap::from([("session-1".to_owned(), 5i64)]);
         let job = IncrementalDownloadJob::new(
             sample_job_dict(),
             Some(ts),
@@ -365,7 +363,7 @@ mod tests {
     #[test]
     fn job_round_trip_serde() {
         let ts = utc(2024, 6, 15, 10, 30, 0);
-        let indexes = HashMap::from([("session-1".to_string(), 5i64)]);
+        let indexes = HashMap::from([("session-1".to_owned(), 5i64)]);
         let original = IncrementalDownloadJob::new(
             sample_job_dict(),
             Some(ts),
@@ -425,7 +423,7 @@ mod tests {
     fn state_construct_required_fields_only() {
         let ts = utc(2024, 6, 15, 10, 0, 0);
         let state = IncrementalDownloadState::new(
-            Some("sp-123".to_string()),
+            Some("sp-123".to_owned()),
             ts,
             None,
             None,
@@ -442,7 +440,7 @@ mod tests {
         let completed = utc(2024, 6, 15, 11, 0, 0);
         let job = IncrementalDownloadJob::new(sample_job_dict(), None, None);
         let state = IncrementalDownloadState::new(
-            Some("sp-123".to_string()),
+            Some("sp-123".to_owned()),
             started,
             Some(completed),
             Some(vec![job]),
@@ -468,10 +466,10 @@ mod tests {
         let job = IncrementalDownloadJob::new(
             sample_job_dict(),
             Some(utc(2024, 6, 15, 10, 30, 0)),
-            Some(HashMap::from([("s-1".to_string(), 3i64)])),
+            Some(HashMap::from([("s-1".to_owned(), 3i64)])),
         );
         let original = IncrementalDownloadState::new(
-            Some("sp-123".to_string()),
+            Some("sp-123".to_owned()),
             started,
             Some(completed),
             Some(vec![job]),
@@ -504,10 +502,10 @@ mod tests {
         let job2 = IncrementalDownloadJob::new(
             json!({"jobId": "job-2", "name": "Job 2", "taskRunStatusCounts": {"SUCCEEDED": 2}}),
             Some(utc(2024, 6, 15, 10, 30, 0)),
-            Some(HashMap::from([("s-1".to_string(), 1i64)])),
+            Some(HashMap::from([("s-1".to_owned(), 1i64)])),
         );
         let state = IncrementalDownloadState::new(
-            Some("sp-1".to_string()),
+            Some("sp-1".to_owned()),
             started,
             None,
             Some(vec![job1, job2]),
@@ -530,13 +528,13 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("checkpoint.json");
         let state = IncrementalDownloadState::new(
-            Some("sp-1".to_string()),
+            Some("sp-1".to_owned()),
             utc(2024, 6, 15, 10, 0, 0),
             Some(utc(2024, 6, 15, 11, 0, 0)),
             Some(vec![IncrementalDownloadJob::new(
                 sample_job_dict(),
                 Some(utc(2024, 6, 15, 10, 30, 0)),
-                Some(HashMap::from([("s-1".to_string(), 5i64)])),
+                Some(HashMap::from([("s-1".to_owned(), 5i64)])),
             )]),
             None,
         );
@@ -564,21 +562,21 @@ mod tests {
         let path = tmp.path().join("checkpoint.json");
 
         let state1 = IncrementalDownloadState::new(
-            Some("sp-1".to_string()),
+            Some("sp-1".to_owned()),
             utc(2024, 6, 15, 10, 0, 0),
             None, None, None,
         );
         state1.save_file(&path).unwrap();
 
         let state2 = IncrementalDownloadState::new(
-            Some("sp-2".to_string()),
+            Some("sp-2".to_owned()),
             utc(2024, 6, 16, 10, 0, 0),
             None, None, None,
         );
         state2.save_file(&path).unwrap();
 
         let loaded = IncrementalDownloadState::from_file(&path).unwrap();
-        assert_eq!(loaded.local_storage_profile_id, Some("sp-2".to_string()));
+        assert_eq!(loaded.local_storage_profile_id, Some("sp-2".to_owned()));
 
         // No temp files left behind
         let dir_entries: Vec<_> = fs::read_dir(tmp.path()).unwrap().collect();
@@ -684,7 +682,7 @@ mod tests {
     fn add_manifests_key_missing_session_action_id_returns_error() {
         // key lacks session action ID
         let job = sample_job_with_attachments();
-        let keys = vec!["prefix/Manifests/no-session-action-id/hash/manifest.json".to_string()];
+        let keys = vec!["prefix/Manifests/no-session-action-id/hash/manifest.json".to_owned()];
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
         let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
         let err = add_output_manifests_from_s3("farm-1", &queue, &job, &keys, &mut actions).unwrap_err();
@@ -696,7 +694,7 @@ mod tests {
         // key doesn't contain any root path hash
         let job = sample_job_with_attachments();
         let keys = vec![
-            "prefix/Manifests/sessionaction-abc-0/wronghash/manifest.json".to_string(),
+            "prefix/Manifests/sessionaction-abc-0/wronghash/manifest.json".to_owned(),
         ];
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
         let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
@@ -751,9 +749,9 @@ mod tests {
         use crate::models::PathMappingRule;
         let applier = PathMappingRuleApplier::new(vec![
             PathMappingRule {
-                source_path_format: "posix".to_string(),
-                source_path: "/mnt/shared".to_string(),
-                destination_path: "/local/mapped".to_string(),
+                source_path_format: "posix".to_owned(),
+                source_path: "/mnt/shared".to_owned(),
+                destination_path: "/local/mapped".to_owned(),
             },
         ]).unwrap();
         let mut manifest = make_manifest(vec![("subdir/file.txt", "aaa", 100)]);
@@ -782,9 +780,9 @@ mod tests {
         use crate::models::PathMappingRule;
         let applier = PathMappingRuleApplier::new(vec![
             PathMappingRule {
-                source_path_format: "windows".to_string(),
-                source_path: "C:\\shared".to_string(),
-                destination_path: "/local/mapped".to_string(),
+                source_path_format: "windows".to_owned(),
+                source_path: "C:\\shared".to_owned(),
+                destination_path: "/local/mapped".to_owned(),
             },
         ]).unwrap();
         let mut manifest = make_manifest(vec![("subdir\\file.txt", "aaa", 100)]);
@@ -801,12 +799,12 @@ mod tests {
         use crate::models::PathMappingRule;
         let applier = PathMappingRuleApplier::new(vec![
             PathMappingRule {
-                source_path_format: "posix".to_string(),
-                source_path: "/mnt/shared".to_string(),
-                destination_path: "/local/mapped".to_string(),
+                source_path_format: "posix".to_owned(),
+                source_path: "/mnt/shared".to_owned(),
+                destination_path: "/local/mapped".to_owned(),
             },
         ]).unwrap();
-        let mut manifest = make_manifest(vec![
+        let _manifest = make_manifest(vec![
             ("subdir/file.txt", "aaa", 100),
             ("other/file.txt", "bbb", 200),
         ]);

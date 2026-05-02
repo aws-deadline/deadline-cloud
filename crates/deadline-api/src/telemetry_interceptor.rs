@@ -1,6 +1,6 @@
 //! Telemetry interceptor — installed on the Deadline SDK client at
 //! construction time. Reads the SDK's own `Metadata` entry from the
-//! ConfigBag to determine the operation name. Emits one latency event
+//! `ConfigBag` to determine the operation name. Emits one latency event
 //! per logical operation.
 
 use crate::client::pascal_to_snake;
@@ -62,9 +62,7 @@ impl Intercept for TelemetryInterceptor {
         let start = self.start.lock().unwrap().take();
         if let Some(start) = start {
             let name = cfg
-                .load::<Metadata>()
-                .map(|m| pascal_to_snake(m.name()))
-                .unwrap_or_else(|| "unknown".to_string());
+                .load::<Metadata>().map_or_else(|| "unknown".to_owned(), |m| pascal_to_snake(m.name()));
             if let Some(ref tc) = *self.telemetry.lock().unwrap() {
                 telemetry::record_latency(tc, &name, start);
             }

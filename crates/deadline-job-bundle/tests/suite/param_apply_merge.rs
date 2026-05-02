@@ -422,7 +422,7 @@ fn param_diff_type_differs() {
     let a = serde_json::json!({"name": "P", "type": "STRING"});
     let b = serde_json::json!({"name": "P", "type": "INT"});
     let diff = parameter_definition_difference(&a, &b, false);
-    assert!(diff.contains(&"type".to_string()));
+    assert!(diff.contains(&"type".to_owned()));
 }
 
 // .116: Parameters differ in allowedValues (compared as sets)
@@ -431,7 +431,7 @@ fn param_diff_allowed_values_as_sets() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "allowedValues": ["a", "b"]});
     let b = serde_json::json!({"name": "P", "type": "STRING", "allowedValues": ["b", "c"]});
     let diff = parameter_definition_difference(&a, &b, false);
-    assert!(diff.contains(&"allowedValues".to_string()));
+    assert!(diff.contains(&"allowedValues".to_owned()));
 }
 
 // .116b: Same allowedValues in different order → no difference
@@ -440,7 +440,7 @@ fn param_diff_allowed_values_same_set_no_diff() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "allowedValues": ["b", "a"]});
     let b = serde_json::json!({"name": "P", "type": "STRING", "allowedValues": ["a", "b"]});
     let diff = parameter_definition_difference(&a, &b, false);
-    assert!(!diff.contains(&"allowedValues".to_string()));
+    assert!(!diff.contains(&"allowedValues".to_owned()));
 }
 
 // .117: ignore_missing=true and one parameter lacks a field → not reported
@@ -449,7 +449,7 @@ fn param_diff_ignore_missing_skips_absent_field() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "minLength": 5});
     let b = serde_json::json!({"name": "P", "type": "STRING"});
     let diff = parameter_definition_difference(&a, &b, true);
-    assert!(!diff.contains(&"minLength".to_string()));
+    assert!(!diff.contains(&"minLength".to_owned()));
 }
 
 // .118: ignore_missing=false and one parameter lacks a field → reported
@@ -458,5 +458,5 @@ fn param_diff_no_ignore_missing_reports_absent_field() {
     let a = serde_json::json!({"name": "P", "type": "STRING", "minLength": 5});
     let b = serde_json::json!({"name": "P", "type": "STRING"});
     let diff = parameter_definition_difference(&a, &b, false);
-    assert!(diff.contains(&"minLength".to_string()));
+    assert!(diff.contains(&"minLength".to_owned()));
 }

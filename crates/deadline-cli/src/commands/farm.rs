@@ -6,7 +6,7 @@ use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
 
 #[derive(Subcommand)]
-pub enum FarmAction {
+pub(crate) enum FarmAction {
     /// List available farms
     List {
         #[arg(long)] profile: Option<String>,
@@ -18,7 +18,7 @@ pub enum FarmAction {
     },
 }
 
-pub fn run(action: FarmAction) -> Result<(), CliError> {
+pub(crate) fn run(action: FarmAction) -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(e.to_string()))?
         .block_on(run_async(action))
@@ -45,7 +45,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
                         .iter()
-                        .flat_map(|p| p.farms())
+                        .flat_map(aws_sdk_deadline::operation::list_farms::ListFarmsOutput::farms)
                         .map(|f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
                         .collect();
                     println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));

@@ -15,9 +15,6 @@ use deadline_job_attachments::download::{
     merge_asset_manifests,
 };
 use deadline_job_attachments::models::{FileConflictResolution, JobAttachmentS3Settings};
-use deadline_job_attachments::progress_tracker::{
-    ProgressReportMetadata, ProgressStatus, ProgressTracker,
-};
 use tempfile::TempDir;
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -86,7 +83,7 @@ fn make_manifest_no_files(entries: &[(&str, &str, i64)]) -> AssetManifest {
     .unwrap()
 }
 
-/// Mount S3 GetObject returning file content.
+/// Mount S3 `GetObject` returning file content.
 async fn mock_s3_get_object(server: &MockServer, body: &[u8]) {
     Mock::given(method("GET"))
         .respond_with(
@@ -106,7 +103,7 @@ fn merge_single_manifest_returns_same() {
     let manifest = make_manifest_no_files(&[
         ("file1.txt", "aabbccdd11223344aabbccdd11223344", 100),
     ]);
-    let result = merge_asset_manifests(&[manifest.clone()]).unwrap();
+    let result = merge_asset_manifests(&[manifest]).unwrap();
     assert!(result.is_some());
     let merged = result.unwrap();
     assert_eq!(merged.paths.len(), 1);
@@ -569,7 +566,7 @@ async fn download_files_from_manifests_single_manifest_downloads_all() {
     let server = MockServer::start().await;
     let s3_client = build_s3_client(&server).await;
     let download_dir = TempDir::new().unwrap();
-    let root = download_dir.path().to_str().unwrap().to_string();
+    let root = download_dir.path().to_str().unwrap().to_owned();
 
     mock_s3_get_object(&server, b"file content").await;
 
@@ -613,8 +610,8 @@ async fn download_files_from_manifests_multiple_roots() {
     ]);
 
     let mut manifests_by_root = HashMap::new();
-    manifests_by_root.insert(root1.path().to_str().unwrap().to_string(), m1);
-    manifests_by_root.insert(root2.path().to_str().unwrap().to_string(), m2);
+    manifests_by_root.insert(root1.path().to_str().unwrap().to_owned(), m1);
+    manifests_by_root.insert(root2.path().to_str().unwrap().to_owned(), m2);
 
     let stats = download_files_from_manifests(
         "test-bucket",
@@ -638,7 +635,7 @@ async fn download_files_from_manifests_callback_cancel_returns_error() {
     let server = MockServer::start().await;
     let s3_client = build_s3_client(&server).await;
     let download_dir = TempDir::new().unwrap();
-    let root = download_dir.path().to_str().unwrap().to_string();
+    let root = download_dir.path().to_str().unwrap().to_owned();
 
     mock_s3_get_object(&server, b"data").await;
 
@@ -675,7 +672,7 @@ async fn download_files_from_manifests_skip_existing_tracks_skipped() {
     let server = MockServer::start().await;
     let s3_client = build_s3_client(&server).await;
     let download_dir = TempDir::new().unwrap();
-    let root = download_dir.path().to_str().unwrap().to_string();
+    let root = download_dir.path().to_str().unwrap().to_owned();
 
     // Pre-create the file
     fs::write(download_dir.path().join("existing.txt"), b"old").unwrap();
@@ -779,7 +776,7 @@ async fn download_rejects_path_traversal_in_manifest() {
     let server = MockServer::start().await;
     let s3_client = build_s3_client(&server).await;
     let download_dir = TempDir::new().unwrap();
-    let root = download_dir.path().to_str().unwrap().to_string();
+    let root = download_dir.path().to_str().unwrap().to_owned();
 
     // Manifest with a path traversal attack
     let evil_manifest = make_manifest_no_files(&[
@@ -815,7 +812,7 @@ async fn download_rejects_path_traversal_in_manifest() {
 // download_manifest_from_s3 must return S3 LastModified
 // =====================================================================
 
-/// download_manifest_from_s3 returns the S3 LastModified timestamp
+/// `download_manifest_from_s3` returns the S3 `LastModified` timestamp
 /// alongside the asset root and manifest. The caller uses this to sort
 /// manifests chronologically before merging (older first, newer wins).
 #[tokio::test]
@@ -845,7 +842,7 @@ async fn download_manifest_from_s3_returns_last_modified() {
         &s3_client, "test-bucket", "manifest-key", "123456789012",
     ).await.unwrap();
 
-    assert_eq!(asset_root, Some("/mnt/shared".to_string()));
+    assert_eq!(asset_root, Some("/mnt/shared".to_owned()));
     assert_eq!(manifest.paths.len(), 1);
     // The LastModified should be 2024-06-15T14:30:00Z
     assert_eq!(
@@ -854,8 +851,8 @@ async fn download_manifest_from_s3_returns_last_modified() {
     );
 }
 
-/// get_output_manifests_by_asset_root sorts manifests by
-/// LastModified before merging, so newer files overwrite older ones.
+/// `get_output_manifests_by_asset_root` sorts manifests by
+/// `LastModified` before merging, so newer files overwrite older ones.
 /// This is tested at Level 2 via the CLI (job download-output), but
 /// we add a Level 1 test for precision on the merge ordering.
 #[tokio::test]

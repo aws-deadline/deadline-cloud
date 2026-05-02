@@ -82,7 +82,7 @@ impl WithPrincipalId for aws_sdk_deadline::operation::list_fleets::builders::Lis
     }
 }
 
-/// Apply the DCM user's principal_id to a list builder if the user is DCM.
+/// Apply the DCM user's `principal_id` to a list builder if the user is DCM.
 pub fn apply_dcm_principal<B: WithPrincipalId>(
     builder: B,
     config: Option<&deadline_config::ini::IniConfig>,
@@ -94,7 +94,7 @@ pub fn apply_dcm_principal<B: WithPrincipalId>(
     }
 }
 
-/// Convert PascalCase SDK operation name to snake_case for telemetry.
+/// Convert `PascalCase` SDK operation name to `snake_case` for telemetry.
 pub fn pascal_to_snake(s: &str) -> String {
     let mut result = String::with_capacity(s.len() + 4);
     for (i, c) in s.chars().enumerate() {

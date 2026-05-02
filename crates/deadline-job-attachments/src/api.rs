@@ -94,18 +94,15 @@ pub fn process_path_mapping(
             let source_path_format = item
                 .get("source_path_format")
                 .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+                .unwrap_or("").to_owned();
             let source_path = item
                 .get("source_path")
                 .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+                .unwrap_or("").to_owned();
             let destination_path = item
                 .get("destination_path")
                 .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+                .unwrap_or("").to_owned();
             rules.push(PathMappingRule {
                 source_path_format,
                 source_path,
@@ -162,15 +159,13 @@ pub async fn attachment_download(
             .find(|rule| {
                 let hashed = rule.get_hashed_source_path(manifest.hash_alg);
                 file_name.contains(&hashed)
-            })
-            .map(|rule| rule.destination_path.clone())
-            .unwrap_or_else(|| {
+            }).map_or_else(|| {
                 let cwd = std::env::current_dir()
                     .unwrap_or_default()
                     .to_string_lossy()
                     .into_owned();
                 format!("{cwd}/{file_name}")
-            });
+            }, |rule| rule.destination_path.clone());
 
         if manifests_by_root.contains_key(&destination) {
             return Err(JobAttachmentsError::AssetSync(format!(
@@ -221,7 +216,7 @@ pub async fn attachment_upload(
     let s3_settings = JobAttachmentS3Settings::from_s3_root_uri(s3_root_uri)?;
     let cas_prefix = s3_settings.full_cas_prefix()?;
 
-    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_string(), config)?;
+    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_owned(), config)?;
 
     let mut result = Vec::new();
 
@@ -250,16 +245,16 @@ pub async fn attachment_upload(
         let mut metadata = HashMap::new();
         // Try ASCII first, fall back to JSON-encoded
         if rule.source_path.is_ascii() {
-            metadata.insert("asset-root".to_string(), rule.source_path.clone());
+            metadata.insert("asset-root".to_owned(), rule.source_path.clone());
         } else {
             let json_encoded =
                 serde_json::to_string(&rule.source_path).unwrap_or_default();
-            metadata.insert("asset-root-json".to_string(), json_encoded.clone());
-            metadata.insert("asset-root".to_string(), json_encoded);
+            metadata.insert("asset-root-json".to_owned(), json_encoded.clone());
+            metadata.insert("asset-root".to_owned(), json_encoded);
         }
         if !rule.source_path_format.is_empty() {
             metadata.insert(
-                "file-system-location-name".to_string(),
+                "file-system-location-name".to_owned(),
                 rule.source_path_format.clone(),
             );
         }

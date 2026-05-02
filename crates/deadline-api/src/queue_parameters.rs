@@ -31,7 +31,7 @@ pub async fn get_queue_parameter_definitions(
                 .send().await
                 .map_err(crate::client::deadline_error)?;
             let priority = full.priority();
-            let template = full.template().to_string();
+            let template = full.template().to_owned();
             full_envs.push((priority, template));
         }
     }
@@ -62,7 +62,7 @@ pub async fn get_queue_parameter_definitions(
             let needs_group_label = param.get("userInterface")
                 .and_then(|ui| ui.get("groupLabel"))
                 .and_then(|g| g.as_str())
-                .is_none_or(|s| s.is_empty());
+                .is_none_or(str::is_empty);
 
             if needs_group_label {
                 let control = if param.get("userInterface").and_then(|ui| ui.get("control")).is_none() {
@@ -78,7 +78,7 @@ pub async fn get_queue_parameter_definitions(
                 ui["groupLabel"] = Value::String(format!("Queue Environment: {env_name}"));
             }
 
-            let name = param["name"].as_str().unwrap_or("").to_string();
+            let name = param["name"].as_str().unwrap_or("").to_owned();
             if let Some(existing) = params.get(&name) {
                 let diffs = parameter_definition_difference(existing, &param);
                 if !diffs.is_empty() {
@@ -131,7 +131,7 @@ fn validate_job_parameter(param: &Value, type_required: bool, default_required: 
 
 fn get_ui_control(param: &Value) -> Result<String, DeadlineError> {
     if let Some(ctrl) = param.get("userInterface").and_then(|ui| ui.get("control")).and_then(|c| c.as_str()) {
-        return Ok(ctrl.to_string());
+        return Ok(ctrl.to_owned());
     }
     let param_type = param["type"].as_str().unwrap_or("");
     if param.get("allowedValues").is_some() {
@@ -169,10 +169,10 @@ fn parameter_definition_difference(lhs: &Value, rhs: &Value) -> Vec<String> {
         let set_a: std::collections::HashSet<&Value> = a.iter().collect();
         let set_b: std::collections::HashSet<&Value> = b.iter().collect();
         if set_a != set_b {
-            diffs.push("allowedValues".to_string());
+            diffs.push("allowedValues".to_owned());
         }
     } else if lhs.get("allowedValues") != rhs.get("allowedValues") {
-        diffs.push("allowedValues".to_string());
+        diffs.push("allowedValues".to_owned());
     }
     diffs
 }

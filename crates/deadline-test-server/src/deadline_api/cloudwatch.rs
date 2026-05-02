@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 use wiremock::matchers::{method, header};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount a CloudWatch GetLogEvents response.
-/// CloudWatch uses JSON-RPC: POST / with X-Amz-Target header.
+/// Mount a `CloudWatch` `GetLogEvents` response.
+/// `CloudWatch` uses JSON-RPC: POST / with X-Amz-Target header.
 pub async fn mock_get_log_events(
     server: &MockServer,
     events: &[Value],
@@ -22,7 +22,7 @@ pub async fn mock_get_log_events(
         .await;
 }
 
-/// Mount a CloudWatch GetLogEvents ResourceNotFoundException.
+/// Mount a `CloudWatch` `GetLogEvents` `ResourceNotFoundException`.
 pub async fn mock_get_log_events_not_found(server: &MockServer) {
     Mock::given(method("POST"))
         .and(header("x-amz-target", "Logs_20140328.GetLogEvents"))
@@ -35,7 +35,7 @@ pub async fn mock_get_log_events_not_found(server: &MockServer) {
         .await;
 }
 
-/// Mount a CloudWatch GetLogEvents AccessDeniedException.
+/// Mount a `CloudWatch` `GetLogEvents` `AccessDeniedException`.
 pub async fn mock_get_log_events_access_denied(server: &MockServer) {
     Mock::given(method("POST"))
         .and(header("x-amz-target", "Logs_20140328.GetLogEvents"))

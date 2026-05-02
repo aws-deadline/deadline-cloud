@@ -43,7 +43,7 @@ pub fn human_readable_file_size(size_in_bytes: u64) -> String {
 #[derive(Debug)]
 struct NumberedPath {
     path: String,
-    /// The three parts: (prefix, number_str, extension). None if not numbered.
+    /// The three parts: (prefix, `number_str`, extension). None if not numbered.
     parts: Option<(String, String, String)>,
     /// Grouping key — the path with the number replaced by `#`.
     grouping: String,
@@ -69,7 +69,7 @@ impl NumberedPath {
             let number = num_str.parse::<i64>().ok();
             let grouping = format!("{prefix}#.{ext}");
             Self {
-                path: path.to_string(),
+                path: path.to_owned(),
                 parts: Some((prefix, num_str, ext)),
                 grouping,
                 padding_min,
@@ -78,8 +78,8 @@ impl NumberedPath {
             }
         } else {
             Self {
-                grouping: path.to_string(),
-                path: path.to_string(),
+                grouping: path.to_owned(),
+                path: path.to_owned(),
                 parts: None,
                 padding_min: -1,
                 padding_max: -1,
@@ -89,7 +89,7 @@ impl NumberedPath {
     }
 }
 
-/// Parse a path into (prefix, number_string, extension) if it contains a trailing number.
+/// Parse a path into (prefix, `number_string`, extension) if it contains a trailing number.
 /// Matches the regex: `^(.*\D|)(\d+)(\.[^/\\]+)?$`
 fn parse_numbered_path(path: &str) -> Option<(String, String, String)> {
     // Find the extension: last '.' that isn't preceded by '/' or '\'
@@ -109,8 +109,7 @@ fn parse_numbered_path(path: &str) -> Option<(String, String, String)> {
     let digit_start = base
         .bytes()
         .rposition(|b| !b.is_ascii_digit())
-        .map(|pos| pos + 1)
-        .unwrap_or(0);
+        .map_or(0, |pos| pos + 1);
 
     if digit_start >= base.len() {
         // No digits found
@@ -124,7 +123,7 @@ fn parse_numbered_path(path: &str) -> Option<(String, String, String)> {
         return None;
     }
 
-    Some((prefix.to_string(), num_str.to_string(), ext.to_string()))
+    Some((prefix.to_owned(), num_str.to_owned(), ext.to_owned()))
 }
 
 /// Divide a group of numbered paths with the same grouping key into
@@ -147,7 +146,7 @@ fn divide_numbered_path_group(group: &mut Vec<NumberedPath>) -> BTreeMap<String,
         let pattern = if padding > 1 {
             format!("%0{padding}d")
         } else {
-            "%d".to_string()
+            "%d".to_owned()
         };
 
         let (consistent, remaining): (Vec<_>, Vec<_>) = group
@@ -262,14 +261,13 @@ pub fn summarize_path_list(
     for path in paths {
         let p = std::path::Path::new(path);
         let dir = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
-        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string());
+        let name = p.file_name().map_or_else(|| path.to_string(), |n| n.to_string_lossy().to_string());
         by_dir.entry(dir.clone()).or_default().push(name.clone());
-        if let Some(sizes) = total_size_by_path {
-            if let Some(&size) = sizes.get(*path) {
+        if let Some(sizes) = total_size_by_path
+            && let Some(&size) = sizes.get(*path) {
                 *dir_sizes.entry(dir.clone()).or_default() += size;
                 file_sizes.insert(format!("{dir}/{name}"), size);
             }
-        }
     }
 
     // Sort directories: by size descending if sizes provided, otherwise by file count descending
@@ -277,7 +275,7 @@ pub fn summarize_path_list(
     if total_size_by_path.is_some() {
         dir_order.sort_by(|a, b| dir_sizes.get(b).unwrap_or(&0).cmp(dir_sizes.get(a).unwrap_or(&0)));
     } else {
-        dir_order.sort_by(|a, b| by_dir.get(b).map(|v| v.len()).unwrap_or(0).cmp(&by_dir.get(a).map(|v| v.len()).unwrap_or(0)));
+        dir_order.sort_by(|a, b| by_dir.get(b).map_or(0, Vec::len).cmp(&by_dir.get(a).map_or(0, Vec::len)));
     }
 
     let mut lines = Vec::new();
@@ -289,7 +287,7 @@ pub fn summarize_path_list(
         let file_word = if total == 1 { "file" } else { "files" };
 
         // Summarize the files within this directory by sequence
-        let file_refs: Vec<&str> = files.iter().map(|s| s.as_str()).collect();
+        let file_refs: Vec<&str> = files.iter().map(String::as_str).collect();
         let summaries = summarize_paths_by_sequence(&file_refs);
 
         let size_suffix = if let Some(&dir_size) = dir_sizes.get(dir) {

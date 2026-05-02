@@ -37,7 +37,7 @@ pub async fn mock_list_sessions(
         .await;
 }
 
-/// Mount a paginated ListSessions response (2 pages).
+/// Mount a paginated `ListSessions` response (2 pages).
 pub async fn mock_list_sessions_paginated(
     server: &MockServer,
     farm_id: &str,
@@ -91,7 +91,7 @@ pub async fn mock_list_steps(
         .await;
 }
 
-/// Mount a paginated ListSteps response (2 pages).
+/// Mount a paginated `ListSteps` response (2 pages).
 pub async fn mock_list_steps_paginated(
     server: &MockServer,
     farm_id: &str,
@@ -146,7 +146,7 @@ pub async fn mock_list_tasks(
         .await;
 }
 
-/// Mount a paginated ListTasks response (2 pages).
+/// Mount a paginated `ListTasks` response (2 pages).
 pub async fn mock_list_tasks_paginated(
     server: &MockServer,
     farm_id: &str,
@@ -183,7 +183,7 @@ pub async fn mock_list_tasks_paginated(
         .await;
 }
 
-/// Mount an UpdateTask response (PATCH). Used by `deadline job requeue-tasks`.
+/// Mount an `UpdateTask` response (PATCH). Used by `deadline job requeue-tasks`.
 pub async fn mock_update_task(
     server: &MockServer,
     farm_id: &str,
@@ -261,7 +261,7 @@ pub async fn mock_list_session_actions(
         .await;
 }
 
-/// Mount a BatchGetStep response (POST). Returns steps and errors arrays.
+/// Mount a `BatchGetStep` response (POST). Returns steps and errors arrays.
 pub async fn mock_batch_get_steps(
     server: &MockServer,
     steps: &[Value],
@@ -279,7 +279,7 @@ pub async fn mock_batch_get_steps(
         .await;
 }
 
-/// Mount a BatchGetTask response (POST). Returns tasks and errors arrays.
+/// Mount a `BatchGetTask` response (POST). Returns tasks and errors arrays.
 pub async fn mock_batch_get_tasks(
     server: &MockServer,
     tasks: &[Value],

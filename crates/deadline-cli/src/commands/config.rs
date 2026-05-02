@@ -1,16 +1,15 @@
 use deadline_config::config_file;
-use textwrap;
 use crate::common::json_with_spaces;
 
 /// CLI-specific error type that distinguishes known operation errors
 /// from unexpected errors for the error handler in main.rs.
 #[derive(Debug, thiserror::Error)]
 #[allow(dead_code)]
-pub enum CliError {
+pub(crate) enum CliError {
     #[error("{0}")]
     Operation(String),
     #[error("{0}")]
-    Config(#[from] deadline_config::config_file::ConfigError),
+    Config(#[from] config_file::ConfigError),
     /// Exit with a specific code after printing output normally.
     /// The message (if any) has already been printed by the command.
     #[error("{message}")]
@@ -29,7 +28,7 @@ impl From<crate::common::CliConfigError> for CliError {
 }
 
 #[derive(clap::Subcommand)]
-pub enum ConfigAction {
+pub(crate) enum ConfigAction {
     /// Show all workstation configuration settings and current values
     Show {
         #[arg(long, default_value = "verbose")]
@@ -57,12 +56,12 @@ pub enum ConfigAction {
 }
 
 #[derive(Clone, clap::ValueEnum)]
-pub enum OutputFormat {
+pub(crate) enum OutputFormat {
     Verbose,
     Json,
 }
 
-pub fn run(action: ConfigAction) -> Result<(), CliError> {
+pub(crate) fn run(action: ConfigAction) -> Result<(), CliError> {
     match action {
         ConfigAction::Show { output } => show(output),
         ConfigAction::Get { setting_name } => get(&setting_name),

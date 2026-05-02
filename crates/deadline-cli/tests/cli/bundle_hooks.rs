@@ -41,7 +41,7 @@ steps:
           command: echo
           args: ['hello']
 ").unwrap();
-    dir.to_str().unwrap().to_string()
+    dir.to_str().unwrap().to_owned()
 }
 
 /// Create a bundle with hooks.yaml containing a noop pre-submission hook.
@@ -82,7 +82,7 @@ fn create_env_hooks_dir(harness: &TestHarness, name: &str) -> String {
         dir.join("hooks.yaml"),
         "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 0\"]\n",
     ).unwrap();
-    dir.to_str().unwrap().to_string()
+    dir.to_str().unwrap().to_owned()
 }
 
 /// Create a bundle with a post-submission hook that writes a marker file.
@@ -94,7 +94,7 @@ fn create_bundle_with_post_hook(harness: &TestHarness, name: &str) -> (String, S
         std::path::Path::new(&dir).join("hooks.yaml"),
         format!("postSubmission:\n  - command: sh\n    args: [\"-c\", \"touch '{marker_escaped}'\"]\n"),
     ).unwrap();
-    (dir, marker.to_str().unwrap().to_string())
+    (dir, marker.to_str().unwrap().to_owned())
 }
 
 /// Mock the standard APIs for a no-attachment submission.

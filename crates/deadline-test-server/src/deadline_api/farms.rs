@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount a ListFarms response returning the given farms (single page).
+/// Mount a `ListFarms` response returning the given farms (single page).
 pub async fn mock_list_farms(server: &MockServer, farms: &[Value]) {
     Mock::given(method("GET"))
         .and(path("/2023-10-12/farms"))
@@ -13,7 +13,7 @@ pub async fn mock_list_farms(server: &MockServer, farms: &[Value]) {
         .await;
 }
 
-/// Mount a paginated ListFarms response.
+/// Mount a paginated `ListFarms` response.
 pub async fn mock_list_farms_paginated(
     server: &MockServer,
     page1: &[Value],
@@ -41,7 +41,7 @@ pub async fn mock_list_farms_paginated(
         .await;
 }
 
-/// Mount a GetFarm response with all fields.
+/// Mount a `GetFarm` response with all fields.
 pub async fn mock_get_farm(server: &MockServer, farm: Value) {
     let farm_id = farm["farmId"].as_str().unwrap_or("farm-mock");
     Mock::given(method("GET"))
@@ -51,7 +51,7 @@ pub async fn mock_get_farm(server: &MockServer, farm: Value) {
         .await;
 }
 
-/// Mount a ListFarms response that requires a specific principalId query param.
+/// Mount a `ListFarms` response that requires a specific principalId query param.
 pub async fn mock_list_farms_with_principal_id(
     server: &MockServer,
     principal_id: &str,

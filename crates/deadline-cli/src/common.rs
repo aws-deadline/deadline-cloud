@@ -23,7 +23,7 @@ static RE_BLANK_LINES: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
 
 /// Strip markdown syntax for clean terminal display.
-pub fn strip_markdown_for_terminal(text: &str) -> String {
+pub(crate) fn strip_markdown_for_terminal(text: &str) -> String {
     let text = RE_REF_DEF.replace_all(text, "");
     let text = RE_INLINE_LINK.replace_all(&text, "$1 ($2)");
     let text = RE_REF_LINK.replace_all(&text, "$1");
@@ -31,7 +31,7 @@ pub fn strip_markdown_for_terminal(text: &str) -> String {
     let text = RE_BOLD_UNDER.replace_all(&text, "$1");
     let text = RE_ITALIC.replace_all(&text, "$pre$inner");
     let text = RE_BLANK_LINES.replace_all(&text, "\n\n");
-    text.trim().to_string()
+    text.trim().to_owned()
 }
 
 // ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ pub fn strip_markdown_for_terminal(text: &str) -> String {
 
 /// CLI flag values that override config settings.
 #[derive(Default)]
-pub struct CliOptions {
+pub(crate) struct CliOptions {
     pub profile: Option<String>,
     pub farm_id: Option<String>,
     pub queue_id: Option<String>,
@@ -52,7 +52,7 @@ pub struct CliOptions {
 
 /// Error from `apply_cli_options_to_config`.
 #[derive(Debug)]
-pub enum CliConfigError {
+pub(crate) enum CliConfigError {
     /// A config operation failed.
     Operation(String),
     /// A required option is missing (should exit code 2).
@@ -60,7 +60,7 @@ pub enum CliConfigError {
 }
 
 /// Apply CLI flag overrides to a config and validate required options.
-pub fn apply_cli_options_to_config(
+pub(crate) fn apply_cli_options_to_config(
     config: &mut deadline_config::ini::IniConfig,
     options: &CliOptions,
     required: &[&str],
@@ -125,7 +125,7 @@ pub fn apply_cli_options_to_config(
 /// Serialize a JSON value with spaces after `:` and `,` to match Python's
 /// `json.dumps()` default format. `serde_json`'s compact format omits spaces;
 /// `to_string_pretty` adds newlines. This produces single-line spaced JSON.
-pub fn json_with_spaces(value: &serde_json::Value) -> String {
+pub(crate) fn json_with_spaces(value: &serde_json::Value) -> String {
     let compact = serde_json::to_string(value).unwrap_or_else(|_| format!("{value}"));
     // Insert space after : and , that aren't inside strings.
     let mut result = String::with_capacity(compact.len() * 2);
@@ -149,8 +149,8 @@ pub fn json_with_spaces(value: &serde_json::Value) -> String {
 // ---------------------------------------------------------------------------
 
 /// Regex matching a bare YAML 1.1 boolean as a mapping value or sequence item.
-/// serde_yaml follows YAML 1.2 (only true/false are booleans), so it leaves
-/// ON/OFF/YES/NO etc. unquoted. Downstream YAML 1.1 parsers (PyYAML) would
+/// `serde_yaml` follows YAML 1.2 (only true/false are booleans), so it leaves
+/// ON/OFF/YES/NO etc. unquoted. Downstream YAML 1.1 parsers (`PyYAML`) would
 /// interpret them as booleans, corrupting data.
 static YAML_11_BOOL_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)(: |^[ \t]*- )(y|Y|yes|Yes|YES|n|N|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF)$").unwrap()
@@ -160,7 +160,7 @@ static YAML_11_BOOL_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// Multi-line strings that don't end with \n get one appended so YAML
 /// uses |-style block scalars. Strings matching YAML 1.1 boolean literals
 /// are single-quoted to prevent misinterpretation by YAML 1.1 parsers.
-pub fn cli_object_repr(obj: &serde_json::Value) -> String {
+pub(crate) fn cli_object_repr(obj: &serde_json::Value) -> String {
     let fixed = fix_multiline_strings(obj);
     let yaml = serde_yaml::to_string(&fixed).unwrap_or_else(|_| format!("{obj}"));
     YAML_11_BOOL_RE.replace_all(&yaml, "$1'$2'").into_owned()
@@ -196,7 +196,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 static CONTINUE_OPERATION: AtomicBool = AtomicBool::new(true);
 
 /// Install the SIGINT handler. Safe to call multiple times.
-pub fn install_sigint_handler() {
+pub(crate) fn install_sigint_handler() {
     unsafe {
         libc::signal(libc::SIGINT, sigint_handler as *const () as usize);
     }
@@ -207,7 +207,7 @@ extern "C" fn sigint_handler(_sig: libc::c_int) {
 }
 
 /// Check whether the operation should continue (no SIGINT received).
-pub fn should_continue() -> bool {
+pub(crate) fn should_continue() -> bool {
     CONTINUE_OPERATION.load(Ordering::SeqCst)
 }
 
@@ -225,23 +225,23 @@ use indicatif::{ProgressBar, ProgressStyle};
 
 /// Manages a progress bar lifecycle: created on first callback, updated
 /// incrementally, closed at 100% or on SIGINT.
-pub struct ProgressBarManager {
+pub(crate) struct ProgressBarManager {
     length: u64,
     label: String,
     bar: Option<ProgressBar>,
 }
 
 impl ProgressBarManager {
-    pub fn new(length: u64, label: &str) -> Self {
+    pub(crate) fn new(length: u64, label: &str) -> Self {
         Self {
             length,
-            label: label.to_string(),
+            label: label.to_owned(),
             bar: None,
         }
     }
 
     /// Update progress. Returns whether the operation should continue.
-    pub fn callback(&mut self, progress: u64) -> bool {
+    pub(crate) fn callback(&mut self, progress: u64) -> bool {
         if self.bar.is_none() {
             let bar = ProgressBar::new(self.length);
             bar.set_style(
@@ -278,7 +278,7 @@ impl ProgressBarManager {
 use chrono::{DateTime, FixedOffset, Local, Utc};
 
 /// Timestamp display format.
-pub enum TimestampFormat {
+pub(crate) enum TimestampFormat {
     /// ISO 8601 in UTC
     Utc,
     /// ISO 8601 in local timezone
@@ -289,12 +289,12 @@ pub enum TimestampFormat {
 
 impl TimestampFormat {
     /// Create a formatter, validating that the reference time has a timezone.
-    pub fn new_relative(reference: DateTime<FixedOffset>) -> Self {
+    pub(crate) fn new_relative(reference: DateTime<FixedOffset>) -> Self {
         Self::Relative { reference }
     }
 
     /// Format a timezone-aware timestamp.
-    pub fn format(&self, ts: &DateTime<FixedOffset>) -> String {
+    pub(crate) fn format(&self, ts: &DateTime<FixedOffset>) -> String {
         match self {
             Self::Utc => ts.with_timezone(&Utc).to_rfc3339(),
             Self::Local => ts.with_timezone(&Local).to_rfc3339(),
@@ -306,7 +306,7 @@ impl TimestampFormat {
     }
 }
 
-/// Format a chrono::TimeDelta like Python's str(timedelta).
+/// Format a `chrono::TimeDelta` like Python's str(timedelta).
 fn format_timedelta(d: chrono::TimeDelta) -> String {
     let total_secs = d.num_seconds();
     let nanos = d.subsec_nanos();
@@ -329,16 +329,15 @@ fn format_timedelta(d: chrono::TimeDelta) -> String {
 // ---------------------------------------------------------------------------
 
 /// Expand leading `~` to the user's home directory.
-pub fn expand_tilde(path: &str) -> std::path::PathBuf {
-    if path.starts_with("~/") || path == "~" {
-        if let Ok(home) = std::env::var("HOME") {
+pub(crate) fn expand_tilde(path: &str) -> std::path::PathBuf {
+    if (path.starts_with("~/") || path == "~")
+        && let Ok(home) = std::env::var("HOME") {
             return std::path::PathBuf::from(home).join(&path[2..]);
         }
         #[cfg(windows)]
         if let Ok(profile) = std::env::var("USERPROFILE") {
             return std::path::PathBuf::from(profile).join(&path[2..]);
         }
-    }
     std::path::PathBuf::from(path)
 }
 

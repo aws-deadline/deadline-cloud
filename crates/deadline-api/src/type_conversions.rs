@@ -208,7 +208,7 @@ fn customer_managed_worker_capabilities_to_value(
         obj.insert("memoryMiB".into(), memory_mib_range_to_value(m));
     }
     if w.accelerator_types.is_some() {
-        let types: Vec<&str> = w.accelerator_types().iter().map(|t| t.as_str()).collect();
+        let types: Vec<&str> = w.accelerator_types().iter().map(aws_sdk_deadline::types::AcceleratorType::as_str).collect();
         obj.insert("acceleratorTypes".into(), json!(types));
     }
     if let Some(c) = w.accelerator_count() {
@@ -411,7 +411,7 @@ pub fn step_required_capabilities_to_value(c: &StepRequiredCapabilities) -> Valu
     json!({"attributes": attributes, "amounts": amounts})
 }
 
-/// Convert GetStorageProfileForQueueOutput to Value matching the API JSON shape.
+/// Convert `GetStorageProfileForQueueOutput` to Value matching the API JSON shape.
 pub fn storage_profile_output_to_value(output: &GetStorageProfileForQueueOutput) -> Value {
     let mut m = Map::new();
     m.insert("storageProfileId".into(), json!(output.storage_profile_id()));
@@ -814,8 +814,8 @@ mod tests {
                         .memory_mib(MemoryMiBRange::builder().min(4096).max(32768).build().unwrap())
                         .os_family(ServiceManagedFleetOperatingSystemFamily::Linux)
                         .cpu_architecture_type(CpuArchitectureType::X8664)
-                        .allowed_instance_types("m5.large".to_string())
-                        .allowed_instance_types("m5.xlarge".to_string())
+                        .allowed_instance_types("m5.large".to_owned())
+                        .allowed_instance_types("m5.xlarge".to_owned())
                         .build()
                         .unwrap()
                 )
@@ -865,7 +865,7 @@ mod tests {
             .attributes(
                 StepAttributeCapability::builder()
                     .name("attr.worker.os.family")
-                    .any_of("linux".to_string())
+                    .any_of("linux".to_owned())
                     .build()
                     .unwrap(),
             )

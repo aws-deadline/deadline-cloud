@@ -16,7 +16,7 @@ async fn mcp_client(harness: &TestHarness) -> rmcp::service::RunningService<rmcp
     let bin = assert_cmd::cargo::cargo_bin("deadline");
     let ep = harness.endpoint_url();
     let config_path = harness.config_path.clone();
-    let home = harness.config_dir.path().to_str().unwrap().to_string();
+    let home = harness.config_dir.path().to_str().unwrap().to_owned();
 
     let transport = TokioChildProcess::new(Command::new(&bin).configure(move |cmd| {
         cmd.arg("mcp-server");
@@ -70,7 +70,7 @@ async fn mcp_server_lists_all_expected_tools() {
         "deadline_submit_job", "deadline_download_job_output",
         "deadline_get_session_and_worker_logs",
     ];
-    expected.sort();
+    expected.sort_unstable();
 
     assert_eq!(tool_names, expected);
     client.cancel().await.unwrap();
@@ -326,7 +326,7 @@ async fn mcp_search_jobs_with_status_filter() {
 
     let mut args = serde_json::Map::new();
     args.insert("farm_id".into(), Value::String("farm-aaa".into()));
-    args.insert("queue_ids".into(), serde_json::json!(["queue-bbb"]).into());
+    args.insert("queue_ids".into(), serde_json::json!(["queue-bbb"]));
     args.insert("task_run_status".into(), Value::String("FAILED".into()));
 
     let result = client
@@ -398,7 +398,7 @@ async fn mcp_submit_job_path_is_file_returns_error() {
     let client = mcp_client(&harness).await;
 
     let mut args = serde_json::Map::new();
-    args.insert("job_bundle_dir".into(), Value::String(harness.config_path.clone().into()));
+    args.insert("job_bundle_dir".into(), Value::String(harness.config_path.clone()));
 
     let result = client
         .call_tool(CallToolRequestParams::new("deadline_submit_job").with_arguments(args))
@@ -418,7 +418,7 @@ async fn mcp_submit_job_params_not_array_returns_error() {
     let harness = TestHarness::new().await;
     let client = mcp_client(&harness).await;
 
-    let dir = harness.config_dir.path().to_str().unwrap().to_string();
+    let dir = harness.config_dir.path().to_str().unwrap().to_owned();
     let mut args = serde_json::Map::new();
     args.insert("job_bundle_dir".into(), Value::String(dir));
     args.insert("job_parameters".into(), Value::String(r#"{"not": "array"}"#.into()));
@@ -441,7 +441,7 @@ async fn mcp_submit_job_no_farm_id_returns_error() {
     let harness = TestHarness::new().await;
     let client = mcp_client(&harness).await;
 
-    let dir = harness.config_dir.path().to_str().unwrap().to_string();
+    let dir = harness.config_dir.path().to_str().unwrap().to_owned();
     let mut args = serde_json::Map::new();
     args.insert("job_bundle_dir".into(), Value::String(dir));
 
@@ -463,7 +463,7 @@ async fn mcp_submit_job_no_queue_id_returns_error() {
     let harness = TestHarness::new().await;
     let client = mcp_client(&harness).await;
 
-    let dir = harness.config_dir.path().to_str().unwrap().to_string();
+    let dir = harness.config_dir.path().to_str().unwrap().to_owned();
     let mut args = serde_json::Map::new();
     args.insert("job_bundle_dir".into(), Value::String(dir));
     args.insert("farm_id".into(), Value::String("farm-aaa".into()));
@@ -719,7 +719,7 @@ async fn mcp_submit_job_params_invalid_json_returns_error() {
     let harness = TestHarness::new().await;
     let client = mcp_client(&harness).await;
 
-    let dir = harness.config_dir.path().to_str().unwrap().to_string();
+    let dir = harness.config_dir.path().to_str().unwrap().to_owned();
     let mut args = serde_json::Map::new();
     args.insert("job_bundle_dir".into(), Value::String(dir));
     args.insert("job_parameters".into(), Value::String("not valid json".into()));

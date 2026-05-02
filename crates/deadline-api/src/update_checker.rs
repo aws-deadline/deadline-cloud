@@ -110,7 +110,7 @@ pub fn safe_check_for_updates(
 ) -> UpdateCheckResult {
     let base = || UpdateCheckResult {
         status: UpdateCheckStatus::Success,
-        current_version: current_version.to_string(),
+        current_version: current_version.to_owned(),
         update_available: false,
         latest_version: None,
         download_url: None,
@@ -182,7 +182,7 @@ pub fn safe_check_for_updates(
         Err(e) => {
             return UpdateCheckResult {
                 status: UpdateCheckStatus::InvalidVersion,
-                latest_version: Some(latest_str.to_string()),
+                latest_version: Some(latest_str.to_owned()),
                 error_message: Some(format!("Invalid version: {e}")),
                 ..base()
             };
@@ -194,7 +194,7 @@ pub fn safe_check_for_updates(
         Err(e) => {
             return UpdateCheckResult {
                 status: UpdateCheckStatus::InvalidVersion,
-                latest_version: Some(latest_str.to_string()),
+                latest_version: Some(latest_str.to_owned()),
                 error_message: Some(format!("Invalid version: {e}")),
                 ..base()
             };
@@ -211,9 +211,9 @@ pub fn safe_check_for_updates(
 
     UpdateCheckResult {
         status: UpdateCheckStatus::Success,
-        current_version: current_version.to_string(),
+        current_version: current_version.to_owned(),
         update_available,
-        latest_version: Some(latest_str.to_string()),
+        latest_version: Some(latest_str.to_owned()),
         download_url,
         error_message: None,
     }
@@ -383,7 +383,7 @@ mod tests {
             .respond_with(
                 ResponseTemplate::new(200)
                     .set_body_json(sample_manifest())
-                    .set_delay(std::time::Duration::from_secs(30)),
+                    .set_delay(Duration::from_secs(30)),
             )
             .mount(&server)
             .await;
@@ -517,7 +517,7 @@ mod tests {
         let url = manifest_url(&server);
 
         // Create a config with notification disabled
-        let config = deadline_config::ini::IniConfig::parse(
+        let config = IniConfig::parse(
             "[settings]\nsubmitter_update_notification = false\n",
         )
         .unwrap();

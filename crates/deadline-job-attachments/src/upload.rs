@@ -115,7 +115,7 @@ pub fn prepare_paths_for_upload(
     }
 
     if !missing_inputs.is_empty() || !misconfigured_dirs.is_empty() {
-        let mut msg = "Job submission contains missing input files or directories specified as files. All inputs must exist and be classified properly.".to_string();
+        let mut msg = "Job submission contains missing input files or directories specified as files. All inputs must exist and be classified properly.".to_owned();
         if !missing_inputs.is_empty() {
             let list: Vec<String> = missing_inputs.iter().map(|p| p.display().to_string()).collect();
             msg.push_str(&format!("\nMissing input files:\n\t{}", list.join("\n\t")));
@@ -197,20 +197,19 @@ fn find_group_key(
     // Find most specific LOCAL location match
     let mut best_match: Option<(&str, &str)> = None;
     for &(loc_path, loc_name) in local_locations {
-        if is_relative_to(abs_path, loc_path) {
-            if best_match.is_none() || loc_path.len() > best_match.unwrap().0.len() {
+        if is_relative_to(abs_path, loc_path)
+            && (best_match.is_none() || loc_path.len() > best_match.unwrap().0.len()) {
                 best_match = Some((loc_path, loc_name));
             }
-        }
     }
 
     if let Some((loc_path, loc_name)) = best_match {
         // Ensure group exists for this local location
         if !groupings.iter().any(|(k, _)| k == loc_path) {
             groupings.push((
-                loc_path.to_string(),
+                loc_path.to_owned(),
                 AssetRootGroup {
-                    file_system_location_name: Some(loc_name.to_string()),
+                    file_system_location_name: Some(loc_name.to_owned()),
                     root_path: String::new(),
                     inputs: BTreeSet::new(),
                     outputs: BTreeSet::new(),
@@ -218,7 +217,7 @@ fn find_group_key(
                 },
             ));
         }
-        loc_path.to_string()
+        loc_path.to_owned()
     } else {
         // Use top-level directory component as key
         let top = top_directory(abs_path);
@@ -285,18 +284,17 @@ fn hash_with_cache(
     mtime_str: &str,
     was_cached: &mut bool,
 ) -> Result<String, JobAttachmentsError> {
-    if let Some(entry) = cache.get_entry(full_path, hash_alg, 0, -1) {
-        if entry.last_modified_time == mtime_str {
+    if let Some(entry) = cache.get_entry(full_path, hash_alg, 0, -1)
+        && entry.last_modified_time == mtime_str {
             *was_cached = true;
             return Ok(entry.file_hash);
         }
-    }
     let h = hash_file(file_path, hash_alg)?;
     cache.put_entry(&HashCacheEntry {
-        file_path: full_path.to_string(),
+        file_path: full_path.to_owned(),
         hash_algorithm: hash_alg,
         file_hash: h.clone(),
-        last_modified_time: mtime_str.to_string(),
+        last_modified_time: mtime_str.to_owned(),
         range_start: 0,
         range_end: -1,
     });
@@ -309,7 +307,7 @@ pub fn hash_assets_and_create_manifest(
     total_input_bytes: u64,
     hash_cache_dir: Option<&str>,
     on_preparing_to_submit: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
-) -> Result<(crate::progress_tracker::SummaryStatistics, Vec<AssetRootManifest>), JobAttachmentsError> {
+) -> Result<(SummaryStatistics, Vec<AssetRootManifest>), JobAttachmentsError> {
     let start = std::time::Instant::now();
 
     let progress_tracker = ProgressTracker::new(
@@ -320,13 +318,15 @@ pub fn hash_assets_and_create_manifest(
     );
 
     let cache_dir = hash_cache_dir
-        .map(|s| s.to_string())
-        .or_else(|| crate::caches::default_cache_dir());
+        .map(ToOwned::to_owned)
+        .or_else(crate::caches::default_cache_dir);
 
     let mut asset_root_manifests = Vec::new();
 
     for group in asset_groups {
-        let asset_manifest = if !group.inputs.is_empty() {
+        let asset_manifest = if group.inputs.is_empty() {
+            None
+        } else {
             let cache = cache_dir
                 .as_deref()
                 .map(HashCache::new)
@@ -414,8 +414,6 @@ pub fn hash_assets_and_create_manifest(
                 total_size,
                 paths,
             )?)
-        } else {
-            None
         };
 
         asset_root_manifests.push(AssetRootManifest {
@@ -505,13 +503,13 @@ fn s3_upload_error(
         },
         _ => JobAttachmentsError::S3BotoCore {
             action: action.into(),
-            details: raw.to_string(),
+            details: raw.to_owned(),
         },
     }
 }
 
 /// Context for performing S3 uploads: holds a configured S3 client,
-/// the caller's account ID (for ExpectedBucketOwner), and computed
+/// the caller's account ID (for `ExpectedBucketOwner`), and computed
 /// config values (file size threshold, worker count).
 pub struct S3UploadContext {
     s3_client: aws_sdk_s3::Client,
@@ -538,7 +536,7 @@ impl S3UploadContext {
         })
     }
 
-    /// Check whether an object already exists in S3 via HeadObject.
+    /// Check whether an object already exists in S3 via `HeadObject`.
     pub async fn file_already_uploaded(
         &self,
         bucket: &str,
@@ -549,8 +547,7 @@ impl S3UploadContext {
             Err(sdk_err) => {
                 // Extract HTTP status from the raw response if available
                 let status = sdk_err.raw_response()
-                    .map(|r| r.status().as_u16())
-                    .unwrap_or(0);
+                    .map_or(0, |r| r.status().as_u16());
 
                 if status == 404 {
                     return Ok(false);
@@ -583,7 +580,7 @@ impl S3UploadContext {
 
     /// Upload a single file to S3. Silently skips directories, non-existent
     /// files, and symlinks. Files larger than `small_file_threshold` use
-    /// multipart upload; smaller files use single PutObject.
+    /// multipart upload; smaller files use single `PutObject`.
     pub async fn upload_file_to_s3(
         &self,
         local_path: &Path,
@@ -641,8 +638,7 @@ impl S3UploadContext {
             }
             Err(sdk_err) => {
                 let status_code = sdk_err.raw_response()
-                    .map(|r| r.status().as_u16())
-                    .unwrap_or(0);
+                    .map_or(0, |r| r.status().as_u16());
                 let service_err = sdk_err.into_service_error();
                 let raw = format!("{service_err}");
                 let msg = service_err.message().unwrap_or_default();
@@ -682,14 +678,14 @@ impl S3UploadContext {
             .await
             .map_err(|sdk_err| {
                 let status_code = sdk_err.raw_response()
-                    .map(|r| r.status().as_u16()).unwrap_or(0);
+                    .map_or(0, |r| r.status().as_u16());
                 let service_err = sdk_err.into_service_error();
                 let msg = service_err.message().unwrap_or_default();
                 s3_upload_error(status_code, &format!("{service_err} {msg}"),
                     "initiating multipart upload", s3_bucket, s3_upload_key)
             })?;
 
-        let upload_id = create_resp.upload_id().unwrap_or_default().to_string();
+        let upload_id = create_resp.upload_id().unwrap_or_default().to_owned();
 
         // Read file and split into chunks
         let file_bytes = std::fs::read(local_path).map_err(|e| {
@@ -724,7 +720,7 @@ impl S3UploadContext {
                         .await
                         .map_err(|sdk_err| {
                             let status_code = sdk_err.raw_response()
-                                .map(|r| r.status().as_u16()).unwrap_or(0);
+                                .map_or(0, |r| r.status().as_u16());
                             let service_err = sdk_err.into_service_error();
                             let msg = service_err.message().unwrap_or_default();
                             s3_upload_error(status_code, &format!("{service_err} {msg}"),
@@ -744,7 +740,7 @@ impl S3UploadContext {
         match part_results {
             Ok(mut parts) => {
                 // Parts must be sorted by part number for CompleteMultipartUpload
-                parts.sort_by_key(|p| p.part_number());
+                parts.sort_by_key(CompletedPart::part_number);
 
                 self.s3_client
                     .complete_multipart_upload()
@@ -761,7 +757,7 @@ impl S3UploadContext {
                     .await
                     .map_err(|sdk_err| {
                         let status_code = sdk_err.raw_response()
-                            .map(|r| r.status().as_u16()).unwrap_or(0);
+                            .map_or(0, |r| r.status().as_u16());
                         let service_err = sdk_err.into_service_error();
                         let msg = service_err.message().unwrap_or_default();
                         s3_upload_error(status_code, &format!("{service_err} {msg}"),
@@ -788,7 +784,7 @@ impl S3UploadContext {
         }
     }
 
-    /// Upload raw bytes to S3 (used for manifest files). Includes ExpectedBucketOwner.
+    /// Upload raw bytes to S3 (used for manifest files). Includes `ExpectedBucketOwner`.
     pub async fn upload_bytes_to_s3(
         &self,
         bytes: &[u8],
@@ -813,8 +809,7 @@ impl S3UploadContext {
 
         req.send().await.map_err(|sdk_err| {
             let status_code = sdk_err.raw_response()
-                .map(|r| r.status().as_u16())
-                .unwrap_or(0);
+                .map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
             let msg = service_err.message().unwrap_or_default();
@@ -834,7 +829,7 @@ impl S3UploadContext {
         s3_bucket: &str,
     ) -> bool {
         let cache_dir = s3_check_cache_dir
-            .map(|s| s.to_string())
+            .map(ToOwned::to_owned)
             .or_else(crate::caches::default_cache_dir);
         let cache = match cache_dir.as_deref().map(S3CheckCache::new) {
             Some(Ok(c)) => c,
@@ -865,7 +860,7 @@ impl S3UploadContext {
 
         let mut sampled = Vec::new();
         for key in &s3_keys {
-            let cache_key = format!("{}/{}", s3_bucket, key);
+            let cache_key = format!("{s3_bucket}/{key}");
             if cache.get_entry(&cache_key).is_some() {
                 sampled.push(key.clone());
                 if sampled.len() >= 30 {
@@ -886,10 +881,10 @@ impl S3UploadContext {
     /// Reset the S3 check cache by removing the database file.
     pub fn reset_s3_check_cache(&self, s3_check_cache_dir: Option<&str>) {
         let cache_dir = s3_check_cache_dir
-            .map(|s| s.to_string())
+            .map(ToOwned::to_owned)
             .or_else(crate::caches::default_cache_dir);
         if let Some(dir) = cache_dir {
-            let db_path = std::path::Path::new(&dir).join("s3_check_cache.db");
+            let db_path = Path::new(&dir).join("s3_check_cache.db");
             if db_path.exists() {
                 log::debug!("Deleting s3_check_cache.db due to integrity mismatch");
                 let _ = std::fs::remove_file(db_path);
@@ -910,7 +905,7 @@ impl S3UploadContext {
         force_s3_check: Option<bool>,
     ) -> Result<(), JobAttachmentsError> {
         let cache_dir = s3_check_cache_dir
-            .map(|s| s.to_string())
+            .map(ToOwned::to_owned)
             .or_else(crate::caches::default_cache_dir);
         let cache = cache_dir.as_deref().map(S3CheckCache::new).transpose()?;
 
@@ -978,19 +973,17 @@ impl S3UploadContext {
     ) -> Result<(), JobAttachmentsError> {
         let local_path = source_root.join(&file.path);
         let s3_key = format!("{}/{}.{}", s3_cas_prefix, file.hash, "xxh128");
-        let cache_key = format!("{}/{}", s3_bucket, s3_key);
+        let cache_key = format!("{s3_bucket}/{s3_key}");
 
         // Check cache unless force
-        if !force {
-            if let Some(c) = cache {
-                if c.get_entry(&cache_key).is_some() {
+        if !force
+            && let Some(c) = cache
+                && c.get_entry(&cache_key).is_some() {
                     if let Some(tracker) = progress_tracker {
                         tracker.increase_skipped(1, file.size as u64);
                     }
                     return Ok(());
                 }
-            }
-        }
 
         // HeadObject check
         if self.file_already_uploaded(s3_bucket, &s3_key).await? {
@@ -1032,7 +1025,7 @@ fn current_timestamp() -> String {
     )
 }
 
-/// Orchestrate uploading all manifests to S3. Builds ManifestProperties
+/// Orchestrate uploading all manifests to S3. Builds `ManifestProperties`
 /// and Attachments from the results.
 pub async fn upload_assets(
     farm_id: &str,
@@ -1111,8 +1104,8 @@ pub async fn upload_assets(
 
             // Verify S3 check cache integrity before uploading files.
             // Skip when force_s3_check is True — we'll HEAD every file anyway.
-            if force_s3_check != Some(true) {
-                if !ctx.verify_hash_cache_integrity(
+            if force_s3_check != Some(true)
+                && !ctx.verify_hash_cache_integrity(
                     s3_check_cache_dir,
                     manifest,
                     &cas_prefix,
@@ -1120,7 +1113,6 @@ pub async fn upload_assets(
                 ).await {
                     ctx.reset_s3_check_cache(s3_check_cache_dir);
                 }
-            }
 
             // Upload input files
             ctx.upload_input_files(
@@ -1494,7 +1486,7 @@ mod tests {
     #[test]
     fn prepare_paths_empty_strings_filtered() {
         let result = prepare_paths_for_upload(
-            &["".into(), "".into()],
+            &[String::new(), String::new()],
             &[],
             &[],
             None,

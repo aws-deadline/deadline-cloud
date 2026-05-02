@@ -15,7 +15,7 @@ use super::config::CliError;
 /// 2. `_internal/Python` relative to the binary (installer layout)
 /// 3. `python3` on PATH
 /// 4. `python` on PATH
-pub fn find_python() -> Result<PathBuf, CliError> {
+pub(crate) fn find_python() -> Result<PathBuf, CliError> {
     // 1. Explicit env var
     if let Ok(p) = std::env::var("DEADLINE_PYTHON") {
         let path = PathBuf::from(&p);
@@ -28,14 +28,13 @@ pub fn find_python() -> Result<PathBuf, CliError> {
     }
 
     // 2. Bundled Python next to the binary (installer layout)
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent() {
             let bundled = exe_dir.join("_internal").join("Python");
             if bundled.exists() {
                 return Ok(bundled);
             }
         }
-    }
 
     // 3. System Python on PATH
     if let Ok(p) = which("python3") {
@@ -54,7 +53,7 @@ pub fn find_python() -> Result<PathBuf, CliError> {
 }
 
 /// Launch the Python GUI entry point and return its stdout.
-pub fn launch_gui(
+pub(crate) fn launch_gui(
     python: &PathBuf,
     command: &str,
     params_json: &str,
@@ -77,9 +76,9 @@ pub fn launch_gui(
     if !output.status.success() {
         let code = output.status.code().unwrap_or(1);
         let msg = if !stderr.is_empty() {
-            stderr.trim().to_string()
+            stderr.trim().to_owned()
         } else if !stdout.is_empty() {
-            stdout.trim().to_string()
+            stdout.trim().to_owned()
         } else {
             format!("Python GUI process exited with code {code}")
         };

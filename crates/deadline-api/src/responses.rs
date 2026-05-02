@@ -1,9 +1,9 @@
 //! Response structs for typed SDK output → serializable JSON.
 //!
 //! Each struct maps 1:1 to a Get API output. Uses `#[serde(rename_all = "camelCase")]`
-//! for Python/JSON compatibility. DateTime fields are pre-formatted as strings.
+//! for Python/JSON compatibility. `DateTime` fields are pre-formatted as strings.
 //!
-//! Complex nested SDK types (FleetConfiguration, JobRunAsUser, etc.) don't
+//! Complex nested SDK types (`FleetConfiguration`, `JobRunAsUser`, etc.) don't
 //! implement Serialize. These are converted to `serde_json::Value` by walking
 //! typed SDK accessors via helpers in `type_conversions.rs`.
 
@@ -26,7 +26,7 @@ use aws_sdk_deadline::operation::get_worker::GetWorkerOutput;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-/// Format an AWS SDK DateTime to match Python's display format.
+/// Format an AWS SDK `DateTime` to match Python's display format.
 /// Input: ISO 8601 (e.g. "2024-12-18T00:37:38Z" or "2024-12-18T00:37:38.624Z")
 /// Output: "2024-12-18 00:37:38+00:00" or "2024-12-18 00:37:38.624+00:00"
 pub fn format_datetime(dt: &aws_smithy_types::DateTime) -> String {
@@ -40,7 +40,7 @@ pub fn format_datetime(dt: &aws_smithy_types::DateTime) -> String {
 // FarmResponse
 // ---------------------------------------------------------------------------
 
-/// Response struct for GetFarm API output.
+/// Response struct for `GetFarm` API output.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FarmResponse {
@@ -79,9 +79,9 @@ impl From<GetFarmOutput> for FarmResponse {
 // QueueResponse
 // ---------------------------------------------------------------------------
 
-/// Response struct for GetQueue API output.
+/// Response struct for `GetQueue` API output.
 /// Complex nested fields (jobAttachmentSettings, jobRunAsUser, schedulingConfiguration)
-/// are converted from typed SDK output via type_conversions.rs helpers.
+/// are converted from typed SDK output via `type_conversions.rs` helpers.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueResponse {
@@ -122,9 +122,9 @@ impl From<GetQueueOutput> for QueueResponse {
             farm_id: o.farm_id,
             queue_id: o.queue_id,
             display_name: o.display_name,
-            status: o.status.as_str().to_string(),
-            default_budget_action: o.default_budget_action.as_str().to_string(),
-            blocked_reason: o.blocked_reason.map(|r| r.as_str().to_string()),
+            status: o.status.as_str().to_owned(),
+            default_budget_action: o.default_budget_action.as_str().to_owned(),
+            blocked_reason: o.blocked_reason.map(|r| r.as_str().to_owned()),
             created_at: format_datetime(&o.created_at),
             created_by: o.created_by,
             updated_at: o.updated_at.as_ref().map(format_datetime),
@@ -144,9 +144,9 @@ impl From<GetQueueOutput> for QueueResponse {
 // FleetResponse
 // ---------------------------------------------------------------------------
 
-/// Response struct for GetFleet API output.
+/// Response struct for `GetFleet` API output.
 /// Complex nested fields (configuration, hostConfiguration, capabilities)
-/// are converted from typed SDK output via type_conversions.rs helpers.
+/// are converted from typed SDK output via `type_conversions.rs` helpers.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FleetResponse {
@@ -186,9 +186,9 @@ impl From<GetFleetOutput> for FleetResponse {
             fleet_id: o.fleet_id,
             farm_id: o.farm_id,
             display_name: o.display_name,
-            status: o.status.as_str().to_string(),
+            status: o.status.as_str().to_owned(),
             status_message: o.status_message,
-            auto_scaling_status: o.auto_scaling_status.map(|s| s.as_str().to_string()),
+            auto_scaling_status: o.auto_scaling_status.map(|s| s.as_str().to_owned()),
             target_worker_count: o.target_worker_count,
             worker_count: o.worker_count,
             min_worker_count: o.min_worker_count,
@@ -234,9 +234,9 @@ impl From<GetFleetOutput> for FleetResponse {
 // JobResponse
 // ---------------------------------------------------------------------------
 
-/// Response struct for GetJob API output.
+/// Response struct for `GetJob` API output.
 /// Complex nested fields (taskRunStatusCounts, parameters, attachments)
-/// are converted from typed SDK output via type_conversions.rs helpers.
+/// are converted from typed SDK output via `type_conversions.rs` helpers.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobResponse {
@@ -285,7 +285,7 @@ impl From<GetJobOutput> for JobResponse {
     fn from(o: GetJobOutput) -> Self {
         let task_run_status_counts = o.task_run_status_counts.as_ref().map(|m| {
             let mut pairs: Vec<_> = m.iter()
-                .map(|(k, v)| (k.as_str().to_string(), json!(v)))
+                .map(|(k, v)| (k.as_str().to_owned(), json!(v)))
                 .collect();
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
             let obj: Map<String, Value> = pairs.into_iter().collect();
@@ -302,7 +302,7 @@ impl From<GetJobOutput> for JobResponse {
         Self {
             job_id: o.job_id,
             name: o.name,
-            lifecycle_status: o.lifecycle_status.as_str().to_string(),
+            lifecycle_status: o.lifecycle_status.as_str().to_owned(),
             lifecycle_status_message: o.lifecycle_status_message,
             priority: o.priority,
             created_at: format_datetime(&o.created_at),
@@ -311,8 +311,8 @@ impl From<GetJobOutput> for JobResponse {
             updated_by: o.updated_by,
             started_at: o.started_at.as_ref().map(format_datetime),
             ended_at: o.ended_at.as_ref().map(format_datetime),
-            task_run_status: o.task_run_status.map(|s| s.as_str().to_string()),
-            target_task_run_status: o.target_task_run_status.map(|s| s.as_str().to_string()),
+            task_run_status: o.task_run_status.map(|s| s.as_str().to_owned()),
+            target_task_run_status: o.target_task_run_status.map(|s| s.as_str().to_owned()),
             task_run_status_counts,
             task_failure_retry_count: o.task_failure_retry_count,
             storage_profile_id: o.storage_profile_id,
@@ -331,7 +331,7 @@ impl From<GetJobOutput> for JobResponse {
 // StepResponse
 // ---------------------------------------------------------------------------
 
-/// Response struct for GetStep API output.
+/// Response struct for `GetStep` API output.
 /// Complex nested fields (taskRunStatusCounts, dependencyCounts,
 /// requiredCapabilities, parameterSpace) are converted from typed SDK output.
 #[derive(Debug, Serialize)]
@@ -372,7 +372,7 @@ impl From<GetStepOutput> for StepResponse {
     fn from(o: GetStepOutput) -> Self {
         let task_run_status_counts = {
             let mut pairs: Vec<_> = o.task_run_status_counts.iter()
-                .map(|(k, v)| (k.as_str().to_string(), json!(v)))
+                .map(|(k, v)| (k.as_str().to_owned(), json!(v)))
                 .collect();
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
             let obj: Map<String, Value> = pairs.into_iter().collect();
@@ -381,12 +381,12 @@ impl From<GetStepOutput> for StepResponse {
         Self {
             step_id: o.step_id,
             name: o.name,
-            lifecycle_status: o.lifecycle_status.as_str().to_string(),
+            lifecycle_status: o.lifecycle_status.as_str().to_owned(),
             lifecycle_status_message: o.lifecycle_status_message,
-            task_run_status: o.task_run_status.as_str().to_string(),
+            task_run_status: o.task_run_status.as_str().to_owned(),
             task_run_status_counts,
             task_failure_retry_count: o.task_failure_retry_count,
-            target_task_run_status: o.target_task_run_status.map(|s| s.as_str().to_string()),
+            target_task_run_status: o.target_task_run_status.map(|s| s.as_str().to_owned()),
             created_at: format_datetime(&o.created_at),
             created_by: o.created_by,
             updated_at: o.updated_at.as_ref().map(format_datetime),
@@ -405,7 +405,7 @@ impl From<GetStepOutput> for StepResponse {
 // TaskResponse
 // ---------------------------------------------------------------------------
 
-/// Response struct for GetTask API output.
+/// Response struct for `GetTask` API output.
 /// Complex nested field (parameters) is stored as raw JSON.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -444,8 +444,8 @@ impl From<GetTaskOutput> for TaskResponse {
             task_id: o.task_id,
             created_at: format_datetime(&o.created_at),
             created_by: o.created_by,
-            run_status: o.run_status.as_str().to_string(),
-            target_run_status: o.target_run_status.map(|s| s.as_str().to_string()),
+            run_status: o.run_status.as_str().to_owned(),
+            target_run_status: o.target_run_status.map(|s| s.as_str().to_owned()),
             failure_retry_count: o.failure_retry_count,
             started_at: o.started_at.as_ref().map(format_datetime),
             ended_at: o.ended_at.as_ref().map(format_datetime),
@@ -461,7 +461,7 @@ impl From<GetTaskOutput> for TaskResponse {
 // SessionResponse
 // ---------------------------------------------------------------------------
 
-/// Response struct for GetSession API output.
+/// Response struct for `GetSession` API output.
 /// Complex nested fields (log, hostProperties, workerLog) are stored as raw JSON.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -494,9 +494,9 @@ impl From<GetSessionOutput> for SessionResponse {
             fleet_id: o.fleet_id,
             worker_id: o.worker_id,
             started_at: format_datetime(&o.started_at),
-            lifecycle_status: o.lifecycle_status.as_str().to_string(),
+            lifecycle_status: o.lifecycle_status.as_str().to_owned(),
             ended_at: o.ended_at.as_ref().map(format_datetime),
-            target_lifecycle_status: o.target_lifecycle_status.map(|s| s.as_str().to_string()),
+            target_lifecycle_status: o.target_lifecycle_status.map(|s| s.as_str().to_owned()),
             updated_at: o.updated_at.as_ref().map(format_datetime),
             updated_by: o.updated_by,
             log: o.log.as_ref().and_then(|l| {
@@ -514,7 +514,7 @@ impl From<GetSessionOutput> for SessionResponse {
 // WorkerResponse
 // ---------------------------------------------------------------------------
 
-/// Response struct for GetWorker API output.
+/// Response struct for `GetWorker` API output.
 /// Complex nested fields (hostProperties, log) are stored as raw JSON.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -541,7 +541,7 @@ impl From<GetWorkerOutput> for WorkerResponse {
             farm_id: o.farm_id,
             fleet_id: o.fleet_id,
             worker_id: o.worker_id,
-            status: o.status.as_str().to_string(),
+            status: o.status.as_str().to_owned(),
             created_at: format_datetime(&o.created_at),
             created_by: o.created_by,
             updated_at: o.updated_at.as_ref().map(format_datetime),
@@ -747,7 +747,7 @@ mod tests {
             job_id: "job-aaa".into(),
             name: "Job".into(),
             lifecycle_status: "CREATE_COMPLETE".into(),
-            lifecycle_status_message: "".into(),
+            lifecycle_status_message: String::new(),
             priority: 50,
             created_at: "2024-01-01 00:00:00+00:00".into(),
             created_by: "user".into(),
@@ -786,7 +786,7 @@ mod tests {
             job_id: "job-aaa".into(),
             name: "Job".into(),
             lifecycle_status: "CREATE_COMPLETE".into(),
-            lifecycle_status_message: "".into(),
+            lifecycle_status_message: String::new(),
             priority: 50,
             created_at: "2024-01-01 00:00:00+00:00".into(),
             created_by: "user".into(),

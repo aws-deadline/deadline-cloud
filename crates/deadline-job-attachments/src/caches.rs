@@ -24,8 +24,8 @@ pub fn default_cache_dir() -> Option<String> {
 /// Number of retry attempts for database lock contention.
 const RETRY_ATTEMPTS: usize = 3;
 
-/// Opens a SQLite database, sets WAL journal mode, and creates the table if missing.
-/// Retries up to RETRY_ATTEMPTS times with jittered delay on lock contention.
+/// Opens a `SQLite` database, sets WAL journal mode, and creates the table if missing.
+/// Retries up to `RETRY_ATTEMPTS` times with jittered delay on lock contention.
 fn open_db(db_path: &str, table_name: &str, create_query: &str) -> Result<Connection, JobAttachmentsError> {
     let mut last_err = None;
     for attempt in 0..RETRY_ATTEMPTS {
@@ -64,13 +64,13 @@ fn rand_jitter() -> f64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos();
-    (nanos % 1000) as f64 / 1000.0
+    f64::from(nanos % 1000) / 1000.0
 }
 
 // --- HashCacheEntry ---
 
 /// An entry in the hash cache. Represents either a whole-file hash
-/// (range_start=0, range_end=-1) or a byte-range hash.
+/// (`range_start=0`, range_end=-1) or a byte-range hash.
 /// Compatible with Python's `hashesV4` table — `last_modified_time` is a string
 /// in `str(datetime.fromtimestamp(st_mtime))` format.
 #[derive(Debug, Clone)]
@@ -84,7 +84,7 @@ pub struct HashCacheEntry {
 }
 
 impl HashCacheEntry {
-    /// Whole-file hash entry (range_start=0, range_end=-1).
+    /// Whole-file hash entry (`range_start=0`, range_end=-1).
     pub fn whole_file(
         file_path: String,
         hash_algorithm: HashAlgorithm,
@@ -283,15 +283,12 @@ impl S3CheckCache {
             .ok()?;
 
         // Check expiry
-        let last_seen: f64 = match entry.last_seen_time.parse() {
-            Ok(v) => v,
-            Err(_) => {
-                log::warn!(
-                    "Timestamp for S3 key {} is not valid. Ignoring.",
-                    entry.s3_key
-                );
-                return None;
-            }
+        let last_seen: f64 = if let Ok(v) = entry.last_seen_time.parse() { v } else {
+            log::warn!(
+                "Timestamp for S3 key {} is not valid. Ignoring.",
+                entry.s3_key
+            );
+            return None;
         };
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -469,7 +466,7 @@ mod tests {
     // === : Hash cache V4 compatibility ===
 
     /// Simulate a Python-written V4 entry and verify Rust can read it.
-    /// Python stores: file_path as BLOB (utf-8 encoded), last_modified_time as
+    /// Python stores: `file_path` as BLOB (utf-8 encoded), `last_modified_time` as
     /// text in `str(datetime.fromtimestamp(st_mtime))` format.
     #[test]
     fn hash_cache_v4_interop_python_written_entry_readable() {

@@ -1,7 +1,7 @@
 //! Submission hooks for job bundles.
 //!
 //! Pre/post-submission hook framework: external scripts run during
-//! `bundle submit`. Pre-hooks can modify the CreateJob payload (JSON
+//! `bundle submit`. Pre-hooks can modify the `CreateJob` payload (JSON
 //! in/out via stdin/stdout), post-hooks run after job creation
 //! (failures only warn).
 
@@ -32,15 +32,15 @@ pub struct HookDefinition {
 impl HookDefinition {
     pub fn from_dict(data: &Value) -> Self {
         Self {
-            command: data["command"].as_str().unwrap_or("").to_string(),
+            command: data["command"].as_str().unwrap_or("").to_owned(),
             args: data.get("args")
                 .and_then(|a| a.as_array())
                 .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                 .unwrap_or_default(),
-            timeout: data.get("timeout").and_then(|v| v.as_u64()).unwrap_or(60),
+            timeout: data.get("timeout").and_then(Value::as_u64).unwrap_or(60),
             env: data.get("env")
                 .and_then(|e| e.as_object())
-                .map(|m| m.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect())
+                .map(|m| m.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_owned())).collect())
                 .unwrap_or_default(),
         }
     }
@@ -62,7 +62,7 @@ impl HookConfiguration {
                 .unwrap_or_default()
         };
         Self {
-            version: data.get("version").and_then(|v| v.as_str()).unwrap_or("1.0").to_string(),
+            version: data.get("version").and_then(|v| v.as_str()).unwrap_or("1.0").to_owned(),
             pre_submission: parse_hooks("preSubmission"),
             post_submission: parse_hooks("postSubmission"),
         }
@@ -174,22 +174,20 @@ fn validate_hook(hook: &Value, index: usize, key: &str) -> Result<(), DeadlineEr
         Some(c) if !c.is_string() => return Err(op_err(format!("Hook {index} in '{key}' 'command' must be a string"))),
         _ => {}
     }
-    if let Some(a) = hook.get("args") {
-        if !a.is_array() {
+    if let Some(a) = hook.get("args")
+        && !a.is_array() {
             return Err(op_err(format!("Hook {index} in '{key}' 'args' must be a list")));
         }
-    }
     if let Some(t) = hook.get("timeout") {
-        let valid = t.as_i64().map_or(false, |v| v > 0);
+        let valid = t.as_i64().is_some_and(|v| v > 0);
         if !valid {
             return Err(op_err(format!("Hook {index} in '{key}' 'timeout' must be a positive integer")));
         }
     }
-    if let Some(e) = hook.get("env") {
-        if !e.is_object() {
+    if let Some(e) = hook.get("env")
+        && !e.is_object() {
             return Err(op_err(format!("Hook {index} in '{key}' 'env' must be an object")));
         }
-    }
     Ok(())
 }
 
@@ -206,13 +204,12 @@ pub fn validate_modified_payload(payload: &Value, hook_name: &str) -> Result<(),
                 return Err(op_err(format!("Hook '{hook_name}' 'assetReferences' must be an object")));
             }
             for field in &["inputFilenames", "inputDirectories", "outputDirectories", "referencedPaths"] {
-                if let Some(v) = refs.get(*field) {
-                    if !v.is_array() {
+                if let Some(v) = refs.get(*field)
+                    && !v.is_array() {
                         return Err(op_err(format!(
                             "Hook '{hook_name}' 'assetReferences.{field}' must be a list"
                         )));
                     }
-                }
             }
         }
     }
@@ -279,7 +276,7 @@ impl HookManager {
     pub fn new(job_bundle_dir: &str, print_callback: Box<dyn Fn(&str) + Send>) -> Self {
         let script_resolve_dir = get_script_resolve_dir(job_bundle_dir);
         Self {
-            job_bundle_dir: job_bundle_dir.to_string(),
+            job_bundle_dir: job_bundle_dir.to_owned(),
             hooks: None,
             script_resolve_dir,
             print_callback,
@@ -391,21 +388,20 @@ fn format_hook_name(hook: &HookDefinition) -> String {
 
 fn get_script_resolve_dir(job_bundle_dir: &str) -> String {
     let origin_file = Path::new(job_bundle_dir).join(".hooks_origin");
-    if origin_file.is_file() {
-        if let Ok(content) = std::fs::read_to_string(&origin_file) {
-            let origin = content.trim().to_string();
+    if origin_file.is_file()
+        && let Ok(content) = std::fs::read_to_string(&origin_file) {
+            let origin = content.trim().to_owned();
             if Path::new(&origin).is_dir() {
                 return origin;
             }
         }
-    }
-    job_bundle_dir.to_string()
+    job_bundle_dir.to_owned()
 }
 
 fn resolve_command(command: &str, script_dir: &str) -> Result<String, DeadlineError> {
     if Path::new(command).is_absolute() {
         if Path::new(command).is_file() {
-            return Ok(command.to_string());
+            return Ok(command.to_owned());
         }
         return Err(op_err(format!("Hook command not found: {command}")));
     }
@@ -537,7 +533,7 @@ fn capitalize(s: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::io::Write;
+    
     use tempfile::TempDir;
 
     // ---------------------------------------------------------------
@@ -566,7 +562,7 @@ mod tests {
         assert_eq!(hook.command, "python");
         assert_eq!(hook.args, vec!["-c", "print('hello')"]);
         assert_eq!(hook.timeout, 30);
-        assert_eq!(hook.env.get("FOO").unwrap(), "bar");
+        assert_eq!(&hook.env["FOO"], "bar");
     }
 
     #[test]
@@ -923,7 +919,7 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        script.to_str().unwrap().to_string()
+        script.to_str().unwrap().to_owned()
     }
 
     fn write_hooks_yaml(dir: &Path, content: &str) {
@@ -955,7 +951,7 @@ mod tests {
         ));
         let messages: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
         let msgs = messages.clone();
-        let mut mgr = HookManager::new(dir_str, Box::new(move |s| msgs.lock().unwrap().push(s.to_string())));
+        let mut mgr = HookManager::new(dir_str, Box::new(move |s| msgs.lock().unwrap().push(s.to_owned())));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         let result = mgr.execute_pre_submission_hooks(&mut meta, json!({"priority": 50})).unwrap();
@@ -1028,8 +1024,7 @@ mod tests {
         let output_file = dir.path().join("output.txt");
         let escaped = output_file.to_str().unwrap().replace('\\', "\\\\");
         write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: python3\n    args: [\"-c\", \"import sys,json; d=json.load(sys.stdin); open('{}', 'w').write(d['jobName'])\"]\n",
-            escaped
+            "preSubmission:\n  - command: python3\n    args: [\"-c\", \"import sys,json; d=json.load(sys.stdin); open('{escaped}', 'w').write(d['jobName'])\"]\n"
         ));
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
@@ -1054,7 +1049,7 @@ mod tests {
         let mut meta = make_metadata_for_dir(dir_str);
         meta.job_name = "MyTestJob".into();
         mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap();
-        let content = std::fs::read_to_string(&output_file).unwrap().trim().to_string();
+        let content = std::fs::read_to_string(&output_file).unwrap().trim().to_owned();
         assert_eq!(content, "MyTestJob");
     }
 
@@ -1071,7 +1066,7 @@ mod tests {
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap();
-        let content = std::fs::read_to_string(&output_file).unwrap().trim().to_string();
+        let content = std::fs::read_to_string(&output_file).unwrap().trim().to_owned();
         assert_eq!(content, "custom_value");
     }
 

@@ -1,6 +1,6 @@
 //! Level 2 tests for `deadline job download-output`.
 //!
-//! Test spec reference: specs/test_specs/cli.md, Section 44, cases 10-16.
+//! Test spec reference: `specs/test_specs/cli.md`, Section 44, cases 10-16.
 //! Additional edge cases derived from Python source study.
 
 use deadline_test_server::deadline_api::{errors, jobs, queues, s3, sts};
@@ -486,7 +486,7 @@ async fn job_download_output_explicit_conflict_resolution_skips_prompt() {
 // --yes flag defaults to CREATE_COPY without prompt
 // ---------------------------------------------------------------------------
 
-/// With --yes and no --conflict-resolution, should default to CREATE_COPY
+/// With --yes and no --conflict-resolution, should default to `CREATE_COPY`
 /// without showing any conflict prompt.
 #[tokio::test]
 async fn job_download_output_yes_flag_defaults_to_create_copy() {
@@ -577,7 +577,7 @@ async fn job_download_output_cross_os_root_prompts_for_new_path() {
     );
 }
 
-/// When auto_accept is false and roots are listed, user can select 'y' to proceed.
+/// When `auto_accept` is false and roots are listed, user can select 'y' to proceed.
 #[tokio::test]
 async fn job_download_output_root_editing_loop_accepts_y_to_proceed() {
     let harness = TestHarness::new().await;
@@ -606,7 +606,7 @@ async fn job_download_output_root_editing_loop_accepts_y_to_proceed() {
     );
 }
 
-/// When auto_accept is false and user enters 'n', download should be canceled.
+/// When `auto_accept` is false and user enters 'n', download should be canceled.
 #[tokio::test]
 async fn job_download_output_root_editing_loop_n_cancels() {
     let harness = TestHarness::new().await;
@@ -635,7 +635,7 @@ async fn job_download_output_root_editing_loop_n_cancels() {
 }
 
 
-/// When auto_accept is false and user selects an index to edit, then 'y' to
+/// When `auto_accept` is false and user selects an index to edit, then 'y' to
 /// proceed, the download should use the new root path.
 #[tokio::test]
 async fn job_download_output_root_editing_select_index_then_proceed() {
@@ -700,7 +700,7 @@ async fn job_download_output_json_mode_cross_os_root_emits_json() {
         "messageType": "pathConfirm",
         "value": [new_root.to_string_lossy()]
     });
-    let stdin_input = format!("{}\n", json_response);
+    let stdin_input = format!("{json_response}\n");
 
     let output = harness.cli(&[
         "job", "download-output",
@@ -723,7 +723,7 @@ async fn job_download_output_json_mode_cross_os_root_emits_json() {
     );
 }
 
-/// With --yes, the root editing loop should be skipped (auto_accept),
+/// With --yes, the root editing loop should be skipped (`auto_accept`),
 /// but cross-OS mismatch prompts should still appear.
 #[tokio::test]
 async fn job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt() {

@@ -1,7 +1,7 @@
 //! : Job bundle — parameter validation (cases 1-48)
 //!
-//! Tests for validate_job_parameter, validate_user_interface_spec,
-//! and validate_user_interface_file_filter.
+//! Tests for `validate_job_parameter`, `validate_user_interface_spec`,
+//! and `validate_user_interface_file_filter`.
 
 use deadline_job_bundle::parameters::{
     validate_job_parameter, validate_user_interface_file_filter, validate_user_interface_spec,

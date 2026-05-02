@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount a SearchWorkers response (POST).
-/// Python CLI uses SearchWorkers, not ListWorkers.
+/// Mount a `SearchWorkers` response (POST).
+/// Python CLI uses `SearchWorkers`, not `ListWorkers`.
 pub async fn mock_search_workers(
     server: &MockServer,
     farm_id: &str,
@@ -22,7 +22,7 @@ pub async fn mock_search_workers(
         .await;
 }
 
-/// Mount a GetWorker response.
+/// Mount a `GetWorker` response.
 pub async fn mock_get_worker(server: &MockServer, farm_id: &str, fleet_id: &str, worker: Value) {
     let worker_id = worker["workerId"].as_str().unwrap_or("worker-mock");
     Mock::given(method("GET"))

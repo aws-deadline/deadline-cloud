@@ -47,11 +47,10 @@ fn expand_tilde(path: &str) -> PathBuf {
         if let Some(home) = home_dir() {
             return home.join(rest);
         }
-    } else if path == "~" {
-        if let Some(home) = home_dir() {
+    } else if path == "~"
+        && let Some(home) = home_dir() {
             return home;
         }
-    }
     PathBuf::from(path)
 }
 
@@ -97,11 +96,10 @@ pub fn read_config() -> Result<IniConfig, ConfigError> {
 /// Write the config atomically to a specific path: write to a temp file, then rename.
 /// Creates parent directories if needed. On POSIX, sets file permissions to 0o600.
 pub fn write_config_to(config: &IniConfig, path: &Path) -> Result<(), ConfigError> {
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
+    if let Some(parent) = path.parent()
+        && !parent.exists() {
             fs::create_dir_all(parent)?;
         }
-    }
 
     // Temp file in the same directory ensures atomic rename works
     let parent = path.parent().unwrap_or(Path::new("."));
@@ -144,15 +142,13 @@ fn get_section_prefixes(setting_def: &SettingDef, config: &IniConfig) -> Vec<Str
             let dep_prefixes = get_section_prefixes(dep_def, config);
 
             let dep_full_section = if dep_prefixes.is_empty() {
-                dep_section_part.to_string()
+                dep_section_part.to_owned()
             } else {
                 format!("{} {}", dep_prefixes.join(" "), dep_section_part)
             };
 
             let dep_value = config
-                .get(&dep_full_section, dep_key)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| resolve_default(dep_def, config));
+                .get(&dep_full_section, dep_key).map_or_else(|| resolve_default(dep_def, config), ToOwned::to_owned);
 
             let formatted = dep_section_format.replace("{}", &dep_value);
 
@@ -169,10 +165,10 @@ fn resolve_default(setting_def: &SettingDef, config: &IniConfig) -> String {
     let default = setting_def.default;
     if default.contains('{') {
         let profile = get_setting("defaults.aws_profile_name", config)
-            .unwrap_or_else(|_| "(default)".to_string());
+            .unwrap_or_else(|_| "(default)".to_owned());
         default.replace("{aws_profile_name}", &profile)
     } else {
-        default.to_string()
+        default.to_owned()
     }
 }
 
@@ -181,7 +177,7 @@ fn full_section_name(setting_name: &str, setting_def: &SettingDef, config: &IniC
     let section_part = setting_name.split('.').next().unwrap();
     let prefixes = get_section_prefixes(setting_def, config);
     if prefixes.is_empty() {
-        section_part.to_string()
+        section_part.to_owned()
     } else {
         format!("{} {}", prefixes.join(" "), section_part)
     }
@@ -215,7 +211,7 @@ pub fn get_setting(
     let section = full_section_name(setting_name, setting_def, config);
 
     match config.get(&section, key) {
-        Some(value) => Ok(value.to_string()),
+        Some(value) => Ok(value.to_owned()),
         None => Ok(resolve_default(setting_def, config)),
     }
 }
@@ -324,12 +320,12 @@ pub fn get_best_profile_for_farm(
                 let profile_queue =
                     get_setting("defaults.queue_id", &scratch).unwrap_or_default();
                 if profile_queue == qid {
-                    return profile.to_string();
+                    return profile.to_owned();
                 }
             }
             // Priority 3: first farm-only match
             if first_farm_match.is_none() {
-                first_farm_match = Some(profile.to_string());
+                first_farm_match = Some(profile.to_owned());
             }
         }
     }
@@ -366,8 +362,7 @@ pub fn setting_names() -> impl Iterator<Item = &'static str> {
 /// Get the description for a setting.
 pub fn setting_description(setting_name: &str) -> &'static str {
     find_setting(setting_name)
-        .map(|d| d.description)
-        .unwrap_or("")
+        .map_or("", |d| d.description)
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +390,7 @@ mod tests {
         let result = str2bool(input);
         match expected {
             Ok(val) => assert_eq!(result.unwrap(), val),
-            Err(_) => unreachable!(),
+            Err(()) => unreachable!(),
         }
     }
 
@@ -479,7 +474,7 @@ mod tests {
     fn read_config_from_valid_ini() {
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("config");
-        std::fs::write(&path, "[defaults]\naws_profile_name = test\n").unwrap();
+        fs::write(&path, "[defaults]\naws_profile_name = test\n").unwrap();
 
         let config = read_config_from(&path).unwrap();
         assert_eq!(config.get("defaults", "aws_profile_name"), Some("test"));
@@ -498,7 +493,7 @@ mod tests {
     fn read_config_from_empty_file_returns_empty() {
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("config");
-        std::fs::write(&path, "").unwrap();
+        fs::write(&path, "").unwrap();
 
         let config = read_config_from(&path).unwrap();
         assert_eq!(config.get("defaults", "aws_profile_name"), None);
@@ -508,7 +503,7 @@ mod tests {
     fn read_config_from_malformed_ini_returns_error() {
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("config");
-        std::fs::write(&path, "key_without_section = bad\n").unwrap();
+        fs::write(&path, "key_without_section = bad\n").unwrap();
 
         assert!(read_config_from(&path).is_err());
     }
@@ -523,7 +518,7 @@ mod tests {
         config.set("defaults", "aws_profile_name", "test");
         write_config_to(&config, &path).unwrap();
 
-        let content = std::fs::read_to_string(&path).unwrap();
+        let content = fs::read_to_string(&path).unwrap();
         assert!(content.contains("aws_profile_name = test"));
     }
 
@@ -562,7 +557,7 @@ mod tests {
         let config = IniConfig::new();
         write_config_to(&config, &path).unwrap();
 
-        let perms = std::fs::metadata(&path).unwrap().permissions();
+        let perms = fs::metadata(&path).unwrap().permissions();
         assert_eq!(perms.mode() & 0o777, 0o600);
     }
 
@@ -1007,7 +1002,7 @@ mod tests {
     }
 
     /// Saves and restores an env var when dropped, preventing test interference.
-    /// Only needed for the get_config_file_path tests that genuinely test env var behavior.
+    /// Only needed for the `get_config_file_path` tests that genuinely test env var behavior.
     struct EnvGuard {
         key: String,
         original: Option<String>,
@@ -1017,7 +1012,7 @@ mod tests {
         fn new(key: &str) -> Self {
             let original = std::env::var(key).ok();
             Self {
-                key: key.to_string(),
+                key: key.to_owned(),
                 original,
             }
         }

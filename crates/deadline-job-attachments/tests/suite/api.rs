@@ -103,7 +103,7 @@ fn read_manifests_one_invalid_path_errors() {
     );
     let bad = dir.path().join("nonexistent.manifest").to_string_lossy().into_owned();
 
-    let err = read_manifests(&[p1, bad.clone()]).unwrap_err();
+    let err = read_manifests(&[p1, bad]).unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("not valid"), "expected 'not valid' in: {msg}");
     assert!(msg.contains("nonexistent.manifest"), "expected bad path in: {msg}");
@@ -112,8 +112,8 @@ fn read_manifests_one_invalid_path_errors() {
 // All paths invalid → error listing all
 #[test]
 fn read_manifests_all_invalid_paths_errors() {
-    let bad1 = "/tmp/no_such_1.manifest".to_string();
-    let bad2 = "/tmp/no_such_2.manifest".to_string();
+    let bad1 = "/tmp/no_such_1.manifest".to_owned();
+    let bad2 = "/tmp/no_such_2.manifest".to_owned();
 
     let err = read_manifests(&[bad1, bad2]).unwrap_err();
     let msg = err.to_string();
@@ -219,7 +219,7 @@ fn process_path_mapping_invalid_root_dir_errors() {
         None,
         &[
             dir.path().to_string_lossy().into_owned(),
-            "/nonexistent/dir".to_string(),
+            "/nonexistent/dir".to_owned(),
         ],
     )
     .unwrap_err();
@@ -408,7 +408,7 @@ async fn attachment_download_invalid_manifest_path_errors() {
     let s3_client = build_s3_client(&server).await;
 
     let err = attachment_download(
-        &["/nonexistent/manifest.file".to_string()],
+        &["/nonexistent/manifest.file".to_owned()],
         "s3://test-bucket/root-prefix",
         &s3_client,
         "123456789012",
@@ -697,11 +697,11 @@ async fn attachment_upload_invalid_manifest_path_errors() {
     let s3_client = build_s3_client(&server).await;
 
     let err = attachment_upload(
-        &["/nonexistent/manifest.file".to_string()],
+        &["/nonexistent/manifest.file".to_owned()],
         "s3://test-bucket/root-prefix",
         &s3_client,
         "123456789012",
-        &["/tmp".to_string()],
+        &["/tmp".to_owned()],
         None,
         None,
         None,
@@ -770,7 +770,7 @@ async fn attachment_upload_invalid_root_dir_errors() {
         "s3://test-bucket/root-prefix",
         &s3_client,
         "123456789012",
-        &["/nonexistent/root/dir".to_string()],
+        &["/nonexistent/root/dir".to_owned()],
         None,
         None,
         None,

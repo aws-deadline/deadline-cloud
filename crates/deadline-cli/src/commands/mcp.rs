@@ -147,7 +147,7 @@ struct GetSessionAndWorkerLogsParams {
 // --- Server ---
 
 #[derive(Clone)]
-pub struct DeadlineServer;
+pub(crate) struct DeadlineServer;
 
 #[tool_router]
 impl DeadlineServer {
@@ -159,9 +159,9 @@ impl DeadlineServer {
         let resp = deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
         match resp {
             Ok(pages) => {
-                let farms: Vec<serde_json::Value> = pages
+                let farms: Vec<Value> = pages
                     .iter()
-                    .flat_map(|p| p.farms())
+                    .flat_map(aws_sdk_deadline::operation::list_farms::ListFarmsOutput::farms)
                     .map(|f| json!({"farmId": f.farm_id(), "displayName": f.display_name(), "createdAt": f.created_at().to_string(), "createdBy": f.created_by()}))
                     .collect();
                 ok_result(json!({"farms": farms}))
@@ -178,9 +178,9 @@ impl DeadlineServer {
         let resp = deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
         match resp {
             Ok(pages) => {
-                let queues: Vec<serde_json::Value> = pages
+                let queues: Vec<Value> = pages
                     .iter()
-                    .flat_map(|p| p.queues())
+                    .flat_map(aws_sdk_deadline::operation::list_queues::ListQueuesOutput::queues)
                     .map(|q| json!({"queueId": q.queue_id(), "displayName": q.display_name(), "status": q.status().as_str(), "createdAt": q.created_at().to_string(), "createdBy": q.created_by()}))
                     .collect();
                 ok_result(json!({"queues": queues}))
@@ -196,9 +196,9 @@ impl DeadlineServer {
         let builder = deadline_api::client::apply_dcm_principal(dl.list_jobs().farm_id(&p.farm_id).queue_id(&p.queue_id), None);
         match deadline_api::client::collect_paginated(builder.into_paginator().send()).await {
             Ok(pages) => {
-                let jobs: Vec<serde_json::Value> = pages.iter()
-                    .flat_map(|p| p.jobs())
-                    .map(|j| json!({"jobId": j.job_id(), "name": j.name(), "taskRunStatus": j.task_run_status().map(|s| s.as_str()), "lifecycleStatus": j.lifecycle_status().as_str(), "createdAt": j.created_at().to_string()}))
+                let jobs: Vec<Value> = pages.iter()
+                    .flat_map(aws_sdk_deadline::operation::list_jobs::ListJobsOutput::jobs)
+                    .map(|j| json!({"jobId": j.job_id(), "name": j.name(), "taskRunStatus": j.task_run_status().map(aws_sdk_deadline::types::TaskRunStatus::as_str), "lifecycleStatus": j.lifecycle_status().as_str(), "createdAt": j.created_at().to_string()}))
                     .collect();
                 ok_result(json!({"jobs": jobs}))
             }
@@ -214,9 +214,9 @@ impl DeadlineServer {
         let resp = deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
         match resp {
             Ok(pages) => {
-                let fleets: Vec<serde_json::Value> = pages
+                let fleets: Vec<Value> = pages
                     .iter()
-                    .flat_map(|p| p.fleets())
+                    .flat_map(aws_sdk_deadline::operation::list_fleets::ListFleetsOutput::fleets)
                     .map(|f| json!({"fleetId": f.fleet_id(), "displayName": f.display_name(), "status": f.status().as_str(), "createdAt": f.created_at().to_string(), "createdBy": f.created_by()}))
                     .collect();
                 ok_result(json!({"fleets": fleets}))
@@ -235,7 +235,7 @@ impl DeadlineServer {
         ).await {
             Ok(pages) => {
                 let profiles: Vec<Value> = pages.iter()
-                    .flat_map(|p| p.storage_profiles())
+                    .flat_map(aws_sdk_deadline::operation::list_storage_profiles_for_queue::ListStorageProfilesForQueueOutput::storage_profiles)
                     .map(|sp| json!({
                         "storageProfileId": sp.storage_profile_id(),
                         "displayName": sp.display_name(),
@@ -316,8 +316,8 @@ impl DeadlineServer {
                 .into_paginator().send()
         ).await {
             Ok(pages) => {
-                let sessions: Vec<serde_json::Value> = pages.iter()
-                    .flat_map(|pg| pg.sessions())
+                let sessions: Vec<Value> = pages.iter()
+                    .flat_map(aws_sdk_deadline::operation::list_sessions::ListSessionsOutput::sessions)
                     .map(|s| json!({"sessionId": s.session_id(), "fleetId": s.fleet_id(), "workerId": s.worker_id(), "startedAt": s.started_at().to_string(), "lifecycleStatus": s.lifecycle_status().as_str()}))
                     .collect();
                 ok_result(json!({"sessions": sessions}))
@@ -335,8 +335,8 @@ impl DeadlineServer {
                 .into_paginator().send()
         ).await {
             Ok(pages) => {
-                let steps: Vec<serde_json::Value> = pages.iter()
-                    .flat_map(|pg| pg.steps())
+                let steps: Vec<Value> = pages.iter()
+                    .flat_map(aws_sdk_deadline::operation::list_steps::ListStepsOutput::steps)
                     .map(|s| json!({"stepId": s.step_id(), "name": s.name(), "lifecycleStatus": s.lifecycle_status().as_str(), "createdAt": s.created_at.to_string()}))
                     .collect();
                 ok_result(json!({"steps": steps}))
@@ -354,8 +354,8 @@ impl DeadlineServer {
                 .into_paginator().send()
         ).await {
             Ok(pages) => {
-                let tasks: Vec<serde_json::Value> = pages.iter()
-                    .flat_map(|pg| pg.tasks())
+                let tasks: Vec<Value> = pages.iter()
+                    .flat_map(aws_sdk_deadline::operation::list_tasks::ListTasksOutput::tasks)
                     .map(|t| json!({"taskId": t.task_id(), "runStatus": t.run_status().as_str(), "createdAt": t.created_at.to_string(), "createdBy": t.created_by()}))
                     .collect();
                 ok_result(json!({"tasks": tasks}))
@@ -380,7 +380,7 @@ impl DeadlineServer {
         let filter_expr = if filters.is_empty() { None }
         else { Some(json!({"filters": filters, "operator": "AND"})) };
 
-        let filter = filter_expr.as_ref().map(|f| deadline_api::api::build_filter_expressions(f));
+        let filter = filter_expr.as_ref().map(deadline_api::api::build_filter_expressions);
         let filter = match filter {
             Some(Ok(f)) => Some(f),
             Some(Err(e)) => return error_json("DeadlineError", &e.to_string()),
@@ -410,8 +410,8 @@ impl DeadlineServer {
 
         match req.send().await {
             Ok(output) => {
-                let jobs: Vec<serde_json::Value> = output.jobs().iter()
-                    .map(|j| json!({"jobId": j.job_id(), "name": j.name(), "taskRunStatus": j.task_run_status().map(|s| s.as_str()), "createdAt": j.created_at().map(|d| d.to_string()), "createdBy": j.created_by()}))
+                let jobs: Vec<Value> = output.jobs().iter()
+                    .map(|j| json!({"jobId": j.job_id(), "name": j.name(), "taskRunStatus": j.task_run_status().map(aws_sdk_deadline::types::TaskRunStatus::as_str), "createdAt": j.created_at().map(ToString::to_string), "createdBy": j.created_by()}))
                     .collect();
                 ok_result(json!({"jobs": jobs, "totalResults": output.total_results()}))
             }
@@ -485,7 +485,7 @@ impl DeadlineServer {
         let max_workers = p.max_worker_count;
         let fs_type = p.job_attachments_file_system;
         let require_paths = p.require_paths_exist.unwrap_or(false);
-        let submitter = p.submitter_name.unwrap_or_else(|| "MCP".to_string());
+        let submitter = p.submitter_name.unwrap_or_else(|| "MCP".to_owned());
 
         let handle = tokio::runtime::Handle::current();
         let result = std::thread::spawn(move || {
@@ -629,11 +629,11 @@ impl DeadlineServer {
 
         let worker_id = {
             let wid = session.worker_id();
-            if wid.is_empty() { None } else { Some(wid.to_string()) }
+            if wid.is_empty() { None } else { Some(wid.to_owned()) }
         };
         let fleet_id = {
             let fid = session.fleet_id();
-            if fid.is_empty() { None } else { Some(fid.to_string()) }
+            if fid.is_empty() { None } else { Some(fid.to_owned()) }
         };
 
         let host_props = session.host_properties()
@@ -704,7 +704,7 @@ impl ServerHandler for DeadlineServer {
     }
 }
 
-pub fn run() -> Result<(), CliError> {
+pub(crate) fn run() -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(format!("Failed to start async runtime: {e}")))?
         .block_on(async {

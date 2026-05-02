@@ -1,6 +1,6 @@
 //! Telemetry client — background event sender for Deadline Cloud.
 //!
-//! Matches Python's `_telemetry.py`: std::thread + std::sync::mpsc + ureq.
+//! Matches Python's `_telemetry.py`: `std::thread` + `std::sync::mpsc` + ureq.
 //! No async, no tokio — just a background OS thread doing blocking HTTP.
 //!
 //! ## Convenience helpers
@@ -65,7 +65,7 @@ impl TelemetryClient {
         if package_name != "deadline-cloud-library" {
             common_details.insert(
                 "deadline-cloud-version".into(),
-                Value::String(env!("CARGO_PKG_VERSION").to_string()),
+                Value::String(env!("CARGO_PKG_VERSION").to_owned()),
             );
         }
 
@@ -109,13 +109,13 @@ impl TelemetryClient {
         );
 
         if let Some(uid) = user_id {
-            self.system_metadata.insert("user_id".into(), Value::String(uid.to_string()));
+            self.system_metadata.insert("user_id".into(), Value::String(uid.to_owned()));
         }
         if let Some(mid) = monitor_id {
-            self.system_metadata.insert("monitor_id".into(), Value::String(mid.to_string()));
+            self.system_metadata.insert("monitor_id".into(), Value::String(mid.to_owned()));
         }
         if let Some(aid) = account_id {
-            self.common_details.insert("accountId".into(), Value::String(aid.to_string()));
+            self.common_details.insert("accountId".into(), Value::String(aid.to_owned()));
         }
 
         let (tx, rx) = mpsc::sync_channel::<TelemetryEvent>(MAX_QUEUE_SIZE);
@@ -154,7 +154,7 @@ impl TelemetryClient {
         );
         if let Some(ref tx) = self.sender {
             let _ = tx.try_send(TelemetryEvent {
-                event_type: event_type.to_string(),
+                event_type: event_type.to_owned(),
                 event_details,
             });
         }
@@ -222,7 +222,7 @@ fn send_with_retry(endpoint: &str, body: &Value) -> Result<(), String> {
             .send(body_str.as_bytes())
         {
             Ok(_) => return Ok(()),
-            Err(ureq::Error::StatusCode(429)) | Err(ureq::Error::StatusCode(500)) => {
+            Err(ureq::Error::StatusCode(429 | 500)) => {
                 if attempt + 1 >= MAX_RETRY_ATTEMPTS {
                     return Err("Max retries reached sending telemetry".into());
                 }
@@ -238,10 +238,10 @@ fn send_with_retry(endpoint: &str, body: &Value) -> Result<(), String> {
 fn rand_backoff(attempt: u32) -> f64 {
     let max = MAX_BACKOFF_SECONDS.min(BASE_TIME * 2.0_f64.powi(attempt as i32));
     // Simple pseudo-random: use thread ID + time as seed
-    let nanos = std::time::SystemTime::now()
+    let nanos = f64::from(std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .subsec_nanos() as f64;
+        .subsec_nanos());
     (nanos % 1000.0) / 1000.0 * max
 }
 
@@ -254,12 +254,12 @@ pub fn truncate_version(ver: &str) -> String {
     ver.splitn(4, '.').take(3).collect::<Vec<_>>().join(".")
 }
 
-/// Insert prefix after "https://": "https://example.com" → "https://management.example.com"
+/// Insert prefix after "<https://">: "<https://example.com>" → "<https://management.example.com>"
 pub fn prefix_endpoint(endpoint: &str, prefix: &str) -> String {
     if let Some(rest) = endpoint.strip_prefix("https://") {
         format!("https://{prefix}{rest}")
     } else {
-        endpoint.to_string()
+        endpoint.to_owned()
     }
 }
 
@@ -279,11 +279,10 @@ pub fn resolve_opt_out(config: Option<&IniConfig>) -> bool {
 
 /// Validate existing identifier or generate a new UUID4.
 pub fn validate_or_generate_identifier(existing: Option<&str>) -> String {
-    if let Some(id) = existing {
-        if Uuid::parse_str(id).is_ok() {
-            return id.to_string();
+    if let Some(id) = existing
+        && Uuid::parse_str(id).is_ok() {
+            return id.to_owned();
         }
-    }
     Uuid::new_v4().to_string()
 }
 
@@ -311,6 +310,70 @@ fn build_system_metadata(package_name: &str, package_ver: &str) -> HashMap<Strin
         .into(),
     ));
     m
+}
+
+// ---------------------------------------------------------------------------
+// Convenience helpers for API-layer telemetry
+// ---------------------------------------------------------------------------
+
+/// Resolve AWS account ID from STS `GetCallerIdentity` with a 2s timeout.
+/// Returns None on any failure (best-effort, matches Python).
+pub async fn resolve_account_id(sdk_config: &aws_config::SdkConfig) -> Option<String> {
+    let sts = aws_sdk_sts::Client::new(sdk_config);
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        sts.get_caller_identity().send(),
+    ).await.ok()?.ok()?;
+    result.account().map(String::from)
+}
+
+/// Create a `TelemetryClient` initialized from `AWS_ENDPOINT_URL_DEADLINE`.
+pub fn create_telemetry(config: Option<&IniConfig>) -> TelemetryClient {
+    create_telemetry_with_metadata(config, None, None, None)
+}
+
+/// Create a `TelemetryClient` with optional DCM metadata and account ID.
+/// Callers in `deadline-api` pass `user_id` and `monitor_id` from
+/// `auth::get_user_and_identity_store_id()` and `auth::get_monitor_id()`,
+/// and `account_id` from STS `GetCallerIdentity`.
+pub fn create_telemetry_with_metadata(
+    config: Option<&IniConfig>,
+    user_id: Option<&str>,
+    monitor_id: Option<&str>,
+    account_id: Option<&str>,
+) -> TelemetryClient {
+    let mut client = TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config);
+    if let Ok(ep) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
+        client.initialize_with_metadata(&ep, user_id, monitor_id, account_id);
+    }
+    client
+}
+
+/// Record a latency event matching Python's @`record_function_latency_telemetry_event`.
+pub fn record_latency(client: &TelemetryClient, function_call: &str, start: std::time::Instant) {
+    let mut details = HashMap::new();
+    details.insert("latency".into(), serde_json::json!(start.elapsed().as_nanos() as u64));
+    details.insert("function_call".into(), serde_json::json!(function_call));
+    client.record_event("com.amazon.rum.deadline.latency", details, false);
+}
+
+/// Run a sync function with latency telemetry. Uses the provided `TelemetryClient`
+/// or creates an ephemeral one. Matches Python's @`record_function_latency_telemetry_event`.
+pub fn with_telemetry_latency<F, T>(
+    function_call: &str,
+    config: Option<&IniConfig>,
+    telemetry: Option<&TelemetryClient>,
+    f: F,
+) -> T
+where
+    F: FnOnce() -> T,
+{
+    let ephemeral;
+    let tc = if let Some(t) = telemetry { t } else { ephemeral = create_telemetry(config); &ephemeral };
+    let start = std::time::Instant::now();
+    let result = f();
+    record_latency(tc, function_call, start);
+    result
 }
 
 #[cfg(test)]
@@ -493,71 +556,4 @@ mod tests {
             "Expected account_id to be resolved from STS"
         );
     }
-}
-
-// ---------------------------------------------------------------------------
-// Convenience helpers for API-layer telemetry
-// ---------------------------------------------------------------------------
-
-/// Resolve AWS account ID from STS GetCallerIdentity with a 2s timeout.
-/// Returns None on any failure (best-effort, matches Python).
-pub async fn resolve_account_id(sdk_config: &aws_config::SdkConfig) -> Option<String> {
-    let sts = aws_sdk_sts::Client::new(sdk_config);
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        sts.get_caller_identity().send(),
-    ).await.ok()?.ok()?;
-    result.account().map(String::from)
-}
-
-/// Create a TelemetryClient initialized from AWS_ENDPOINT_URL_DEADLINE.
-pub fn create_telemetry(config: Option<&deadline_config::ini::IniConfig>) -> TelemetryClient {
-    create_telemetry_with_metadata(config, None, None, None)
-}
-
-/// Create a TelemetryClient with optional DCM metadata and account ID.
-/// Callers in `deadline-api` pass `user_id` and `monitor_id` from
-/// `auth::get_user_and_identity_store_id()` and `auth::get_monitor_id()`,
-/// and `account_id` from STS `GetCallerIdentity`.
-pub fn create_telemetry_with_metadata(
-    config: Option<&deadline_config::ini::IniConfig>,
-    user_id: Option<&str>,
-    monitor_id: Option<&str>,
-    account_id: Option<&str>,
-) -> TelemetryClient {
-    let mut client = TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config);
-    if let Ok(ep) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
-        client.initialize_with_metadata(&ep, user_id, monitor_id, account_id);
-    }
-    client
-}
-
-/// Record a latency event matching Python's @record_function_latency_telemetry_event.
-pub fn record_latency(client: &TelemetryClient, function_call: &str, start: std::time::Instant) {
-    let mut details = std::collections::HashMap::new();
-    details.insert("latency".into(), serde_json::json!(start.elapsed().as_nanos() as u64));
-    details.insert("function_call".into(), serde_json::json!(function_call));
-    client.record_event("com.amazon.rum.deadline.latency", details, false);
-}
-
-/// Run a sync function with latency telemetry. Uses the provided TelemetryClient
-/// or creates an ephemeral one. Matches Python's @record_function_latency_telemetry_event.
-pub fn with_telemetry_latency<F, T>(
-    function_call: &str,
-    config: Option<&deadline_config::ini::IniConfig>,
-    telemetry: Option<&TelemetryClient>,
-    f: F,
-) -> T
-where
-    F: FnOnce() -> T,
-{
-    let ephemeral;
-    let tc = match telemetry {
-        Some(t) => t,
-        None => { ephemeral = create_telemetry(config); &ephemeral }
-    };
-    let start = std::time::Instant::now();
-    let result = f();
-    record_latency(tc, function_call, start);
-    result
 }

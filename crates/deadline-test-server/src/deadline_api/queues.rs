@@ -19,7 +19,7 @@ pub async fn mock_get_queue(server: &MockServer, farm_id: &str, queue: Value) {
         .await;
 }
 
-/// Mount a ListQueues response that requires a specific principalId query param.
+/// Mount a `ListQueues` response that requires a specific principalId query param.
 pub async fn mock_list_queues_with_principal_id(
     server: &MockServer,
     farm_id: &str,

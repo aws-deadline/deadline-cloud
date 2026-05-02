@@ -1,7 +1,7 @@
 use wiremock::matchers::{method, body_string_contains};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount a successful STS GetCallerIdentity response.
+/// Mount a successful STS `GetCallerIdentity` response.
 /// STS uses the query API (POST with form-encoded body), not JSON.
 pub async fn mock_get_caller_identity(server: &MockServer) {
     Mock::given(method("POST"))
@@ -19,7 +19,7 @@ pub async fn mock_get_caller_identity(server: &MockServer) {
         .await;
 }
 
-/// Mount a failing STS GetCallerIdentity response (expired/invalid creds).
+/// Mount a failing STS `GetCallerIdentity` response (expired/invalid creds).
 pub async fn mock_get_caller_identity_failure(server: &MockServer) {
     Mock::given(method("POST"))
         .and(body_string_contains("Action=GetCallerIdentity"))

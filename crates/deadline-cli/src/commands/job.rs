@@ -18,8 +18,7 @@ static SESSION_ACTION_ID_RE: LazyLock<Regex> =
 fn parse_session_action_id(session_action_id: &str) -> Result<String, CliError> {
     let caps = SESSION_ACTION_ID_RE.captures(session_action_id).ok_or_else(|| {
         CliError::Operation(format!(
-            "Invalid session action ID format: '{}'. Expected format: sessionaction-{{uuid}}-{{number}}",
-            session_action_id
+            "Invalid session action ID format: '{session_action_id}'. Expected format: sessionaction-{{uuid}}-{{number}}"
         ))
     })?;
     Ok(format!("session-{}", &caps[1]))
@@ -27,7 +26,7 @@ fn parse_session_action_id(session_action_id: &str) -> Result<String, CliError> 
 
 fn parse_trace_format(s: &str) -> Result<String, String> {
     match s.to_lowercase().as_str() {
-        "chrome" => Ok("chrome".to_string()),
+        "chrome" => Ok("chrome".to_owned()),
         other => Err(format!("Invalid value '{other}' for --trace-format. Valid values: chrome")),
     }
 }
@@ -37,7 +36,7 @@ fn parse_conflict_resolution(s: &str) -> Result<deadline_job_attachments::models
 }
 
 /// Set up config from CLI options and extract required settings.
-/// Returns (config, farm_id, queue_id) or (config, farm_id, queue_id, job_id).
+/// Returns (config, `farm_id`, `queue_id`) or (config, `farm_id`, `queue_id`, `job_id`).
 fn setup_config(
     profile: Option<String>,
     farm_id: Option<String>,
@@ -61,7 +60,7 @@ fn get(config: &IniConfig, setting: &str) -> String {
 }
 
 #[derive(Subcommand)]
-pub enum JobAction {
+pub(crate) enum JobAction {
     /// List jobs in a queue
     List {
         #[arg(long)] profile: Option<String>,
@@ -125,7 +124,7 @@ pub enum JobAction {
         #[arg(long, default_value = "verbose")]
         output: String,
     },
-    /// Print session logs from CloudWatch for a job
+    /// Print session logs from `CloudWatch` for a job
     Logs {
         #[arg(long)] profile: Option<String>,
         #[arg(long)] farm_id: Option<String>,
@@ -216,7 +215,7 @@ pub enum JobAction {
     },
 }
 
-pub fn run(action: JobAction) -> Result<(), CliError> {
+pub(crate) fn run(action: JobAction) -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(e.to_string()))?
         .block_on(run_async(action))
@@ -247,16 +246,15 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let mut effective_job_id = job_id;
             let mut search = None;
 
-            if let Some(ref term) = search_term {
-                if effective_job_id.is_none() {
+            if let Some(ref term) = search_term
+                && effective_job_id.is_none() {
                     // Check if search_term is a job ID pattern
-                    if regex::Regex::new(r"^job-[0-9a-f]{32}$").unwrap().is_match(term) {
+                    if Regex::new(r"^job-[0-9a-f]{32}$").unwrap().is_match(term) {
                         effective_job_id = Some(term.clone());
                     } else {
                         search = Some(term.clone());
                     }
                 }
-            }
 
             if let Some(search_term) = search {
                 // Search mode
@@ -299,14 +297,14 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             ).await
                 .map_err(|e| CliError::Operation(format!("Failed to list Sessions from Deadline:\n{e}")))?;
             let sessions: Vec<serde_json::Value> = pages.iter()
-                .flat_map(|p| p.sessions())
+                .flat_map(aws_sdk_deadline::operation::list_sessions::ListSessionsOutput::sessions)
                 .map(|s| {
                     let mut m = serde_json::Map::new();
-                    m.insert("sessionId".into(), serde_json::Value::String(s.session_id().to_string()));
-                    m.insert("fleetId".into(), serde_json::Value::String(s.fleet_id().to_string()));
-                    m.insert("workerId".into(), serde_json::Value::String(s.worker_id().to_string()));
+                    m.insert("sessionId".into(), serde_json::Value::String(s.session_id().to_owned()));
+                    m.insert("fleetId".into(), serde_json::Value::String(s.fleet_id().to_owned()));
+                    m.insert("workerId".into(), serde_json::Value::String(s.worker_id().to_owned()));
                     m.insert("startedAt".into(), serde_json::Value::String(format_datetime(s.started_at())));
-                    m.insert("lifecycleStatus".into(), serde_json::Value::String(s.lifecycle_status().as_str().to_string()));
+                    m.insert("lifecycleStatus".into(), serde_json::Value::String(s.lifecycle_status().as_str().to_owned()));
                     if let Some(ended) = s.ended_at() { m.insert("endedAt".into(), serde_json::Value::String(format_datetime(ended))); }
                     serde_json::Value::Object(m)
                 })
@@ -326,12 +324,12 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             ).await
                 .map_err(|e| CliError::Operation(format!("Failed to list Steps from Deadline:\n{e}")))?;
             let steps: Vec<serde_json::Value> = pages.iter()
-                .flat_map(|p| p.steps())
+                .flat_map(aws_sdk_deadline::operation::list_steps::ListStepsOutput::steps)
                 .map(|s| {
                     let mut m = serde_json::Map::new();
-                    m.insert("stepId".into(), serde_json::Value::String(s.step_id().to_string()));
-                    m.insert("name".into(), serde_json::Value::String(s.name().to_string()));
-                    m.insert("lifecycleStatus".into(), serde_json::Value::String(s.lifecycle_status().as_str().to_string()));
+                    m.insert("stepId".into(), serde_json::Value::String(s.step_id().to_owned()));
+                    m.insert("name".into(), serde_json::Value::String(s.name().to_owned()));
+                    m.insert("lifecycleStatus".into(), serde_json::Value::String(s.lifecycle_status().as_str().to_owned()));
                     m.insert("createdAt".into(), serde_json::Value::String(format_datetime(&s.created_at)));
                     serde_json::Value::Object(m)
                 })
@@ -351,13 +349,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             ).await
                 .map_err(|e| CliError::Operation(format!("Failed to list Tasks from Deadline:\n{e}")))?;
             let tasks: Vec<serde_json::Value> = pages.iter()
-                .flat_map(|p| p.tasks())
+                .flat_map(aws_sdk_deadline::operation::list_tasks::ListTasksOutput::tasks)
                 .map(|t| {
                     let mut m = serde_json::Map::new();
-                    m.insert("taskId".into(), serde_json::Value::String(t.task_id().to_string()));
-                    m.insert("runStatus".into(), serde_json::Value::String(t.run_status().as_str().to_string()));
+                    m.insert("taskId".into(), serde_json::Value::String(t.task_id().to_owned()));
+                    m.insert("runStatus".into(), serde_json::Value::String(t.run_status().as_str().to_owned()));
                     m.insert("createdAt".into(), serde_json::Value::String(format_datetime(&t.created_at)));
-                    m.insert("createdBy".into(), serde_json::Value::String(t.created_by().to_string()));
+                    m.insert("createdBy".into(), serde_json::Value::String(t.created_by().to_owned()));
                     serde_json::Value::Object(m)
                 })
                 .collect();
@@ -375,7 +373,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 .get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
                 .send().await
                 .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {}", client::format_sdk_error(&e))))?;
-            let job_name = job_resp.name().to_string();
+            let job_name = job_resp.name().to_owned();
 
             let job_cb: Box<dyn Fn(&aws_sdk_deadline::operation::get_job::GetJobOutput, f64, u64)> = if is_json {
                 Box::new(|_, _, _| {})
@@ -383,14 +381,14 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 Box::new(|j: &aws_sdk_deadline::operation::get_job::GetJobOutput, elapsed: f64, t: u64| {
                     let counts = j.task_run_status_counts();
                     let get_count = |s: aws_sdk_deadline::types::TaskRunStatus| -> i64 {
-                        counts.and_then(|m| m.get(&s)).copied().unwrap_or(0) as i64
+                        i64::from(counts.and_then(|m| m.get(&s)).copied().unwrap_or(0))
                     };
                     let running = get_count(aws_sdk_deadline::types::TaskRunStatus::Running)
                         + get_count(aws_sdk_deadline::types::TaskRunStatus::Assigned)
                         + get_count(aws_sdk_deadline::types::TaskRunStatus::Starting);
                     let ok = get_count(aws_sdk_deadline::types::TaskRunStatus::Succeeded);
-                    let total: i64 = counts.map_or(0, |m| m.values().sum::<i32>() as i64);
-                    let s = j.task_run_status.as_ref().map(|s| s.as_str()).unwrap_or("");
+                    let total: i64 = counts.map_or(0, |m| i64::from(m.values().sum::<i32>()));
+                    let s = j.task_run_status.as_ref().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
                     let ti = if t > 0 {
                         let r = (t as f64 - elapsed).max(0.0);
                         format!(" [{elapsed:.1}s elapsed, {r:.1}s remaining]")
@@ -481,7 +479,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 if !is_json {
                     eprintln!(
                         "Warning: --timezone is deprecated and will be removed in a future version. \
-                         Use --timestamp-format {} instead.", tz
+                         Use --timestamp-format {tz} instead."
                     );
                 }
                 tz.clone()
@@ -495,15 +493,13 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let (mut resolved_session_id_owned, mut action_start, mut action_end) = (None, None, None);
             if let Some(ref said) = session_action_id {
                 let derived = parse_session_action_id(said)?;
-                if let Some(ref explicit_sid) = session_id {
-                    if *explicit_sid != derived {
+                if let Some(ref explicit_sid) = session_id
+                    && *explicit_sid != derived {
                         return Err(CliError::Operation(format!(
-                            "Session ID mismatch: --session-id '{}' does not match \
-                             session ID '{}' derived from --session-action-id '{}'",
-                            explicit_sid, derived, said
+                            "Session ID mismatch: --session-id '{explicit_sid}' does not match \
+                             session ID '{derived}' derived from --session-action-id '{said}'"
                         )));
                     }
-                }
                 resolved_session_id_owned = Some(derived);
             }
 
@@ -522,14 +518,14 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     .map_err(|e| CliError::Operation(format!(
                         "Session action '{}' not found in job '{}':\n{}", said, job, client::format_sdk_error(&e)
                     )))?;
-                let sa_start = sa.started_at().map(|dt| responses::format_datetime(dt));
+                let sa_start = sa.started_at().map(responses::format_datetime);
                 if sa_start.is_none() {
                     return Err(CliError::Operation(format!(
-                        "Session action '{}' has not started yet. No logs are available.", said
+                        "Session action '{said}' has not started yet. No logs are available."
                     )));
                 }
                 action_start = sa_start;
-                action_end = sa.ended_at().map(|dt| responses::format_datetime(dt));
+                action_end = sa.ended_at().map(responses::format_datetime);
             }
 
             let sid = resolved_session_id_owned.as_deref().or(session_id.as_deref());
@@ -700,7 +696,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 let mut sorted: Vec<_> = m.iter().filter(|(_, v)| **v != 0).collect();
                 sorted.sort_by_key(|(k, _)| k.as_str());
                 for (k, v) in sorted {
-                    counts.insert(k.as_str().to_string(), serde_json::json!(v));
+                    counts.insert(k.as_str().to_owned(), serde_json::json!(v));
                 }
             }
 
@@ -712,15 +708,15 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 summary.insert("taskRunStatus".into(), serde_json::json!(s.as_str()));
             }
             summary.insert("taskRunStatusCounts".into(), serde_json::Value::Object(counts));
-            summary.insert("startedAt".into(), serde_json::json!(job.started_at().map(|d| responses::format_datetime(d)).unwrap_or_default()));
-            summary.insert("endedAt".into(), serde_json::json!(job.ended_at().map(|d| responses::format_datetime(d)).unwrap_or_default()));
+            summary.insert("startedAt".into(), serde_json::json!(job.started_at().map(responses::format_datetime).unwrap_or_default()));
+            summary.insert("endedAt".into(), serde_json::json!(job.ended_at().map(responses::format_datetime).unwrap_or_default()));
             summary.insert("createdBy".into(), serde_json::json!(job.created_by()));
             summary.insert("createdAt".into(), serde_json::json!(responses::format_datetime(job.created_at())));
             println!("{}", crate::common::cli_object_repr(&serde_json::Value::Object(summary)));
 
             if !auto_accept {
                 let msg = if mark_as == "CANCELED" {
-                    "Are you sure you want to cancel this job?".to_string()
+                    "Are you sure you want to cancel this job?".to_owned()
                 } else {
                     format!("Are you sure you want to cancel this job and mark its taskRunStatus as {mark_as}?")
                 };
@@ -768,7 +764,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             let auto_accept = is_auto_accept(&config);
 
             let run_status_set: std::collections::HashSet<String> = if run_status.is_empty() {
-                ["SUSPENDED", "CANCELED", "FAILED"].iter().map(|s| s.to_string()).collect()
+                ["SUSPENDED", "CANCELED", "FAILED"].iter().map(ToString::to_string).collect()
             } else {
                 run_status.iter().map(|s| s.to_uppercase()).collect()
             };
@@ -871,7 +867,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
 
                     let step_counts = step.task_run_status_counts();
                     let step_counts_map: serde_json::Map<String, serde_json::Value> = step_counts.iter()
-                        .map(|(k, v)| (k.as_str().to_string(), serde_json::Value::Number((*v).into())))
+                        .map(|(k, v)| (k.as_str().to_owned(), serde_json::Value::Number((*v).into())))
                         .collect();
                     let (step_to_requeue, step_summary) = count_and_summarize(Some(&step_counts_map), &run_status_set);
 
@@ -909,7 +905,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                                 param_pairs.sort();
                                 format!("{} ({task_id})", param_pairs.join(","))
                             } else {
-                                task_id.to_string()
+                                task_id.to_owned()
                             };
                             println!("    {status} {task_summary}");
 
@@ -1002,8 +998,8 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
     }
 }
 
-/// Read auto_accept from config (already set by apply_cli_options_to_config when --yes).
-fn is_auto_accept(config: &deadline_config::ini::IniConfig) -> bool {
+/// Read `auto_accept` from config (already set by `apply_cli_options_to_config` when --yes).
+fn is_auto_accept(config: &IniConfig) -> bool {
     config_file::get_setting("settings.auto_accept", config)
         .ok()
         .and_then(|v| config_file::str2bool(&v).ok())
@@ -1044,13 +1040,13 @@ fn estimate_remaining_time(job: &serde_json::Value) -> Option<String> {
     ).ok()?;
 
     let completed = ["SUCCEEDED", "FAILED", "CANCELED"].iter()
-        .filter_map(|s| counts.get(*s).and_then(|v| v.as_i64()))
+        .filter_map(|s| counts.get(*s).and_then(serde_json::Value::as_i64))
         .sum::<i64>();
     let in_progress = ["RUNNING", "STARTING", "ASSIGNED"].iter()
-        .filter_map(|s| counts.get(*s).and_then(|v| v.as_i64()))
+        .filter_map(|s| counts.get(*s).and_then(serde_json::Value::as_i64))
         .sum::<i64>();
     let pending = ["PENDING", "READY", "SCHEDULED"].iter()
-        .filter_map(|s| counts.get(*s).and_then(|v| v.as_i64()))
+        .filter_map(|s| counts.get(*s).and_then(serde_json::Value::as_i64))
         .sum::<i64>();
 
     if completed == 0 || (pending == 0 && in_progress == 0) {
@@ -1073,16 +1069,16 @@ fn format_duration(seconds: f64) -> String {
     }
     let minutes = secs / 60;
     if minutes < 60 {
-        let s = if minutes != 1 { "s" } else { "" };
+        let s = if minutes == 1 { "" } else { "s" };
         return format!("{minutes} minute{s}");
     }
     let hours = minutes / 60;
     let mins = minutes % 60;
-    let hs = if hours != 1 { "s" } else { "" };
+    let hs = if hours == 1 { "" } else { "s" };
     if mins == 0 {
         format!("{hours} hour{hs}")
     } else {
-        let ms = if mins != 1 { "s" } else { "" };
+        let ms = if mins == 1 { "" } else { "s" };
         format!("{hours} hour{hs}, {mins} minute{ms}")
     }
 }
@@ -1133,7 +1129,7 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
     };
 
     let jobs = resp.jobs();
-    let total = resp.total_results() as i64;
+    let total = i64::from(resp.total_results());
 
     if jobs.is_empty() {
         println!("No jobs found matching \"{search_term}\"");
@@ -1151,15 +1147,13 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
         let name = job.name().unwrap_or("");
         let name = truncate_middle(name, 80);
         let job_id = job.job_id().unwrap_or("");
-        let status = job.task_run_status().map(|s| s.as_str()).unwrap_or("");
+        let status = job.task_run_status().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
         let created = job.created_at().map(|dt| {
             let s = format_datetime(dt);
-            chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
-                .map(|dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S %z").to_string())
-                .unwrap_or_else(|_| s)
+            chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")).map_or_else(|_| s, |dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S %z").to_string())
         }).unwrap_or_default();
         let counts = job.task_run_status_counts().map(|c| {
-            c.iter().map(|(k, v)| (k.as_str().to_string(), serde_json::Value::Number((*v).into()))).collect::<serde_json::Map<String, serde_json::Value>>()
+            c.iter().map(|(k, v)| (k.as_str().to_owned(), serde_json::Value::Number((*v).into()))).collect::<serde_json::Map<String, serde_json::Value>>()
         });
         let task_summary = format_task_summary(counts.as_ref());
 
@@ -1177,7 +1171,7 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
 }
 
 fn truncate_middle(text: &str, max_length: usize) -> String {
-    if text.len() <= max_length { return text.to_string(); }
+    if text.len() <= max_length { return text.to_owned(); }
     let keep = max_length - 3;
     let start = (keep * 2) / 3;
     let end = keep - start;
@@ -1187,7 +1181,7 @@ fn truncate_middle(text: &str, max_length: usize) -> String {
 fn format_task_summary(counts: Option<&serde_json::Map<String, serde_json::Value>>) -> String {
     let Some(counts) = counts else { return "no tasks".into() };
     let get = |keys: &[&str]| -> i64 {
-        keys.iter().filter_map(|k| counts.get(*k).and_then(|v| v.as_i64())).sum()
+        keys.iter().filter_map(|k| counts.get(*k).and_then(serde_json::Value::as_i64)).sum()
     };
     let mut parts = Vec::new();
     let ready = get(&["READY"]);
@@ -1212,7 +1206,7 @@ fn format_task_summary(counts: Option<&serde_json::Map<String, serde_json::Value
 }
 
 /// Print job list output (shared between `job list` and `job search`).
-/// Format an AWS DateTime to the display format matching Python CLI output.
+/// Format an AWS `DateTime` to the display format matching Python CLI output.
 fn format_datetime(dt: &aws_sdk_deadline::primitives::DateTime) -> String {
     // Format as "YYYY-MM-DD HH:MM:SS+00:00" to match Python CLI output
     dt.fmt(aws_sdk_deadline::primitives::DateTimeFormat::DateTimeWithOffset)
@@ -1222,7 +1216,7 @@ fn format_datetime(dt: &aws_sdk_deadline::primitives::DateTime) -> String {
         .replace('Z', "+00:00")
 }
 
-/// Call SearchJobs directly via the SDK. Returns typed output.
+/// Call `SearchJobs` directly via the SDK. Returns typed output.
 async fn search_jobs_call(
     farm_id: &str,
     queue_ids: &[&str],
@@ -1236,12 +1230,12 @@ async fn search_jobs_call(
 
     let filter = filter_expressions.map(api::build_filter_expressions).transpose()?;
     let sort = sort_expressions.map(api::build_sort_expressions).transpose()?;
-    let client = deadline_api::session::deadline_client(config).await;
+    let client = session::deadline_client(config).await;
 
     let mut req = client
         .search_jobs()
         .farm_id(farm_id)
-        .set_queue_ids(Some(queue_ids.iter().map(|s| s.to_string()).collect()))
+        .set_queue_ids(Some(queue_ids.iter().map(ToString::to_string).collect()))
         .item_offset(item_offset)
         .page_size(page_size);
 
@@ -1265,31 +1259,31 @@ async fn search_jobs_call(
         );
     }
 
-    req.send().await.map_err(|e| DeadlineError::OperationError(deadline_api::client::format_sdk_error(&e)))
+    req.send().await.map_err(|e| DeadlineError::OperationError(client::format_sdk_error(&e)))
 }
 
-/// Print SearchJobs output in the standard job list format.
+/// Print `SearchJobs` output in the standard job list format.
 fn print_search_jobs_output(resp: &aws_sdk_deadline::operation::search_jobs::SearchJobsOutput, item_offset: i32) {
-    let total = resp.total_results() as i64;
+    let total = i64::from(resp.total_results());
     let jobs = resp.jobs();
 
     let structured: Vec<serde_json::Value> = jobs.iter().map(|j| {
         let mut m = serde_json::Map::new();
-        m.insert("name".into(), serde_json::Value::String(j.name().unwrap_or("").to_string()));
-        m.insert("jobId".into(), serde_json::Value::String(j.job_id().unwrap_or("").to_string()));
-        m.insert("taskRunStatus".into(), serde_json::Value::String(j.task_run_status().map(|s| s.as_str()).unwrap_or("").to_string()));
-        m.insert("startedAt".into(), serde_json::Value::String(j.started_at().map(|d| format_datetime(d)).unwrap_or_default()));
-        m.insert("endedAt".into(), serde_json::Value::String(j.ended_at().map(|d| format_datetime(d)).unwrap_or_default()));
-        m.insert("createdBy".into(), serde_json::Value::String(j.created_by().unwrap_or("").to_string()));
-        m.insert("createdAt".into(), serde_json::Value::String(j.created_at().map(|d| format_datetime(d)).unwrap_or_default()));
+        m.insert("name".into(), serde_json::Value::String(j.name().unwrap_or("").to_owned()));
+        m.insert("jobId".into(), serde_json::Value::String(j.job_id().unwrap_or("").to_owned()));
+        m.insert("taskRunStatus".into(), serde_json::Value::String(j.task_run_status().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str).to_owned()));
+        m.insert("startedAt".into(), serde_json::Value::String(j.started_at().map(format_datetime).unwrap_or_default()));
+        m.insert("endedAt".into(), serde_json::Value::String(j.ended_at().map(format_datetime).unwrap_or_default()));
+        m.insert("createdBy".into(), serde_json::Value::String(j.created_by().unwrap_or("").to_owned()));
+        m.insert("createdAt".into(), serde_json::Value::String(j.created_at().map(format_datetime).unwrap_or_default()));
         // Estimate remaining time from task run status counts
-        let counts_val = j.task_run_status_counts().map(|counts| {
+        let counts_val = j.task_run_status_counts().map_or(serde_json::Value::Null, |counts| {
             let map: serde_json::Map<String, serde_json::Value> = counts.iter()
-                .map(|(k, v)| (k.as_str().to_string(), serde_json::Value::Number((*v).into())))
+                .map(|(k, v)| (k.as_str().to_owned(), serde_json::Value::Number((*v).into())))
                 .collect();
             serde_json::Value::Object(map)
-        }).unwrap_or(serde_json::Value::Null);
-        let fake_job = serde_json::json!({"taskRunStatusCounts": counts_val, "startedAt": j.started_at().map(|d| format_datetime(d)).unwrap_or_default()});
+        });
+        let fake_job = serde_json::json!({"taskRunStatusCounts": counts_val, "startedAt": j.started_at().map(format_datetime).unwrap_or_default()});
         m.insert("estimatedTimeRemaining".into(),
             serde_json::Value::String(
                 estimate_remaining_time(&fake_job).unwrap_or_else(|| "N/A".into())
@@ -1309,7 +1303,7 @@ fn parse_json_or_file_arg(arg: Option<&str>) -> Result<Option<serde_json::Value>
         std::fs::read_to_string(path)
             .map_err(|e| CliError::Operation(format!("Failed to read {path}: {e}")))?
     } else {
-        arg.to_string()
+        arg.to_owned()
     };
     let val: serde_json::Value = serde_json::from_str(&content)
         .map_err(|e| CliError::Operation(format!("Invalid JSON: {e}")))?;
@@ -1333,7 +1327,7 @@ fn download_start_message(
         if let Some(params) = task_parameters {
             let param_str = if let Some(obj) = params.as_object() {
                 if obj.is_empty() {
-                    "{}".to_string()
+                    "{}".to_owned()
                 } else {
                     let inner: Vec<String> = obj.iter().map(|(k, v)| {
                         let val = v.as_object()
@@ -1345,7 +1339,7 @@ fn download_start_message(
                     format!("{{{}}}", inner.join(","))
                 }
             } else {
-                "{}".to_string()
+                "{}".to_owned()
             };
             format!("Downloading output from Job '{job_name}' Step '{sn}' Task {param_str}")
         } else {
@@ -1364,7 +1358,7 @@ fn no_output_message(is_json: bool) -> String {
     if is_json {
         serde_json::json!({"messageType": "summary", "value": msg}).to_string()
     } else {
-        msg.to_string()
+        msg.to_owned()
     }
 }
 
@@ -1425,14 +1419,14 @@ pub(crate) async fn download_output_impl(
     let job = dl.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
         .send().await
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
-    let job_name = job.name().to_string();
+    let job_name = job.name().to_owned();
 
     // Get optional step/task
     let step_name = if let Some(sid) = step_id {
         let step = dl.get_step().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(sid)
             .send().await
             .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
-        Some(step.name().to_string())
+        Some(step.name().to_owned())
     } else {
         None
     };
@@ -1449,7 +1443,7 @@ pub(crate) async fn download_output_impl(
                 .collect();
             serde_json::Value::Object(obj)
         });
-        session_action_id = task.latest_session_action_id.clone();
+        session_action_id = task.latest_session_action_id;
     } else {
         task_params = None;
         session_action_id = None;
@@ -1470,10 +1464,10 @@ pub(crate) async fn download_output_impl(
     ));
 
     // Get queue for jobAttachmentSettings
-    let queue = deadline_api::session::deadline_client(Some(config)).await
+    let queue = session::deadline_client(Some(config)).await
         .get_queue().farm_id(farm_id).queue_id(queue_id)
         .send().await
-        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", deadline_api::client::format_sdk_error(&e))))?;
+        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
 
     let attachment_settings = queue.job_attachment_settings()
         .ok_or_else(|| CliError::Operation(format!(
@@ -1484,12 +1478,12 @@ pub(crate) async fn download_output_impl(
     let bucket = attachment_settings.s3_bucket_name();
     let prefix = attachment_settings.root_prefix();
     let s3_settings = JobAttachmentS3Settings {
-        s3_bucket_name: bucket.to_string(),
-        root_prefix: prefix.to_string(),
+        s3_bucket_name: bucket.to_owned(),
+        root_prefix: prefix.to_owned(),
     };
 
     // Build S3 client with queue-scoped credentials
-    let sdk_config = deadline_api::session::get_queue_scoped_config(
+    let sdk_config = session::get_queue_scoped_config(
         farm_id, queue_id, Some(config),
     ).await.map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
@@ -1521,7 +1515,7 @@ pub(crate) async fn download_output_impl(
         for manifest in attachments.manifests() {
             let root = manifest.root_path();
             let fmt = manifest.root_path_format().as_str();
-            root_path_format_mapping.insert(root.to_string(), fmt.to_string());
+            root_path_format_mapping.insert(root.to_owned(), fmt.to_owned());
         }
     }
 
@@ -1529,20 +1523,18 @@ pub(crate) async fn download_output_impl(
     let host_format = PathFormat::get_host_path_format_string();
     let asset_roots: Vec<String> = output_paths.keys().cloned().collect();
     for asset_root in &asset_roots {
-        let root_format = root_path_format_mapping.get(asset_root).map(|s| s.as_str()).unwrap_or("");
+        let root_format = root_path_format_mapping.get(asset_root).map_or("", String::as_str);
         if !root_format.is_empty() && host_format != root_format {
             if is_json {
                 println!("{}", serde_json::json!({"messageType": "path", "value": [asset_root]}));
                 let mut line = String::new();
                 std::io::stdin().read_line(&mut line).unwrap_or(0);
                 let line = line.trim();
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
-                    if let Some(vals) = parsed.get("value").and_then(|v| v.as_array()) {
-                        if let Some(new_root) = vals.first().and_then(|v| v.as_str()) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line)
+                    && let Some(vals) = parsed.get("value").and_then(|v| v.as_array())
+                        && let Some(new_root) = vals.first().and_then(|v| v.as_str()) {
                             downloader.set_root_path(asset_root, new_root);
                         }
-                    }
-                }
             } else {
                 let fmt_cap = format!("{}{}", &root_format[..1].to_uppercase(), &root_format[1..]);
                 println!(
@@ -1569,7 +1561,24 @@ pub(crate) async fn download_output_impl(
 
     // F7: Root editing loop — skipped when auto_accept
     if !auto_accept && !output_paths.is_empty() {
-        if !is_json {
+        if is_json {
+            // JSON mode: emit paths, read pathConfirm response
+            let roots: Vec<String> = output_paths.keys().cloned().collect();
+            println!("{}", serde_json::json!({"messageType": "path", "value": roots}));
+            let mut line = String::new();
+            std::io::stdin().read_line(&mut line).unwrap_or(0);
+            let line = line.trim();
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line)
+                && let Some(vals) = parsed.get("value").and_then(|v| v.as_array()) {
+                    for (i, val) in vals.iter().enumerate() {
+                        if let Some(new_root) = val.as_str()
+                            && i < roots.len() {
+                                downloader.set_root_path(&roots[i], new_root);
+                            }
+                    }
+                    output_paths = downloader.get_output_paths_by_root();
+                }
+        } else {
             loop {
                 // Show summary
                 let summary_lines: Vec<String> = output_paths.iter().map(|(dir, paths)| {
@@ -1599,8 +1608,8 @@ pub(crate) async fn download_output_impl(
                     return Ok(());
                 } else if choice == "y" || choice.is_empty() {
                     break;
-                } else if let Ok(idx) = choice.parse::<usize>() {
-                    if idx < roots.len() {
+                } else if let Ok(idx) = choice.parse::<usize>()
+                    && idx < roots.len() {
                         print!("> Please enter the new root directory path, or press Enter to keep it unchanged: ");
                         std::io::stdout().flush().ok();
                         let mut new_root = String::new();
@@ -1611,26 +1620,6 @@ pub(crate) async fn download_output_impl(
                             output_paths = downloader.get_output_paths_by_root();
                         }
                     }
-                }
-            }
-        } else {
-            // JSON mode: emit paths, read pathConfirm response
-            let roots: Vec<String> = output_paths.keys().cloned().collect();
-            println!("{}", serde_json::json!({"messageType": "path", "value": roots}));
-            let mut line = String::new();
-            std::io::stdin().read_line(&mut line).unwrap_or(0);
-            let line = line.trim();
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
-                if let Some(vals) = parsed.get("value").and_then(|v| v.as_array()) {
-                    for (i, val) in vals.iter().enumerate() {
-                        if let Some(new_root) = val.as_str() {
-                            if i < roots.len() {
-                                downloader.set_root_path(&roots[i], new_root);
-                            }
-                        }
-                    }
-                    output_paths = downloader.get_output_paths_by_root();
-                }
             }
         }
     }
@@ -1647,7 +1636,7 @@ pub(crate) async fn download_output_impl(
                 })
             })
             .collect();
-        let path_refs: Vec<&str> = all_paths.iter().map(|s| s.as_str()).collect();
+        let path_refs: Vec<&str> = all_paths.iter().map(String::as_str).collect();
         println!("\nSummary of file paths to download:");
         let summary = summarize_path_list(&path_refs, 10, None);
         for line in summary.lines() {
@@ -1656,36 +1645,33 @@ pub(crate) async fn download_output_impl(
     }
 
     // Resolve conflict resolution — check for existing files if not explicitly set
-    let resolution = match conflict_resolution {
-        Some(r) => r,
-        None => {
-            // Check for conflicting files
-            let mut conflicting: Vec<String> = Vec::new();
-            for (root, paths) in &output_paths {
-                for p in paths {
-                    let full = std::path::PathBuf::from(root).join(p);
-                    if full.is_file() {
-                        conflicting.push(full.to_string_lossy().to_string());
-                    }
+    let resolution = if let Some(r) = conflict_resolution { r } else {
+        // Check for conflicting files
+        let mut conflicting: Vec<String> = Vec::new();
+        for (root, paths) in &output_paths {
+            for p in paths {
+                let full = std::path::PathBuf::from(root).join(p);
+                if full.is_file() {
+                    conflicting.push(full.to_string_lossy().to_string());
                 }
             }
-            if !conflicting.is_empty() && !is_json {
-                println!("\nThe following files already exist in your local directory:");
-                for f in conflicting.iter().take(10) {
-                    println!("        {f}");
-                }
-                if conflicting.len() > 10 {
-                    println!("        ... and {} more", conflicting.len() - 10);
-                }
-                println!("Defaulting to Create a copy (appending '(1)' to conflicting files).");
+        }
+        if !conflicting.is_empty() && !is_json {
+            println!("\nThe following files already exist in your local directory:");
+            for f in conflicting.iter().take(10) {
+                println!("        {f}");
             }
-            let setting = config_file::get_setting("settings.conflict_resolution", config)
-                .unwrap_or_default();
-            match setting.to_uppercase().as_str() {
-                "SKIP" => FileConflictResolution::Skip,
-                "OVERWRITE" => FileConflictResolution::Overwrite,
-                _ => FileConflictResolution::CreateCopy,
+            if conflicting.len() > 10 {
+                println!("        ... and {} more", conflicting.len() - 10);
             }
+            println!("Defaulting to Create a copy (appending '(1)' to conflicting files).");
+        }
+        let setting = config_file::get_setting("settings.conflict_resolution", config)
+            .unwrap_or_default();
+        match setting.to_uppercase().as_str() {
+            "SKIP" => FileConflictResolution::Skip,
+            "OVERWRITE" => FileConflictResolution::Overwrite,
+            _ => FileConflictResolution::CreateCopy,
         }
     };
 
@@ -1758,7 +1744,7 @@ async fn batch_get<F, Fut>(
 ) -> Result<(std::collections::HashMap<String, serde_json::Value>, Vec<serde_json::Value>), CliError>
 where
     F: Fn(Vec<serde_json::Value>) -> Fut,
-    Fut: std::future::Future<Output = Result<serde_json::Value, deadline_api::errors::DeadlineError>>,
+    Fut: Future<Output = Result<serde_json::Value, deadline_api::errors::DeadlineError>>,
 {
     let mut remaining = identifiers;
     let mut results = std::collections::HashMap::new();
@@ -1783,7 +1769,7 @@ where
                         let mut retry_id = serde_json::Map::new();
                         for &field in id_fields {
                             if let Some(v) = err.get(field) {
-                                retry_id.insert(field.to_string(), v.clone());
+                                retry_id.insert(field.to_owned(), v.clone());
                             }
                         }
                         next_round.push(serde_json::Value::Object(retry_id));
@@ -1804,7 +1790,7 @@ where
     }
     for ident in &remaining {
         let mut err = ident.as_object().cloned().unwrap_or_default();
-        err.insert("code".to_string(), serde_json::Value::String("ExhaustedRetries".to_string()));
+        err.insert("code".to_owned(), serde_json::Value::String("ExhaustedRetries".to_owned()));
         terminal.push(serde_json::Value::Object(err));
     }
     Ok((results, terminal))
@@ -1869,7 +1855,7 @@ async fn run_trace_schedule(
 
     if trace_file.is_some() && trace_format.is_none() {
         return Err(CliError::Operation(
-            "Error: Must provide --trace-format with --trace-file.".to_string()
+            "Error: Must provide --trace-format with --trace-file.".to_owned()
         ));
     }
 
@@ -1887,7 +1873,7 @@ async fn run_trace_schedule(
             })?
         }
         None => return Err(CliError::Operation(
-            "No trace available - Job hasn't started yet, exiting".to_string()
+            "No trace available - Job hasn't started yet, exiting".to_owned()
         )),
     };
     let trace_end_utc = chrono::Utc::now();
@@ -1899,7 +1885,7 @@ async fn run_trace_schedule(
     ).await
         .map_err(|e| CliError::Operation(format!("Failed to list sessions: {e}")))?;
     let mut sessions: Vec<serde_json::Value> = sessions_pages.iter()
-        .flat_map(|p| p.sessions())
+        .flat_map(aws_sdk_deadline::operation::list_sessions::ListSessionsOutput::sessions)
         .map(|s| {
             let mut m = serde_json::Map::new();
             m.insert("sessionId".into(), json!(s.session_id()));
@@ -1921,12 +1907,12 @@ async fn run_trace_schedule(
     // Fetch session actions for each session
     println!("Getting all the session actions for the job...");
     for i in 0..sessions.len() {
-        let sid = sessions[i]["sessionId"].as_str().unwrap_or("").to_string();
+        let sid = sessions[i]["sessionId"].as_str().unwrap_or("").to_owned();
         let action_pages = collect_paginated_session_actions(&dl, &farm, &queue, &job, &sid).await
             .map_err(|e| CliError::Operation(format!("Failed to list session actions: {e}")))?;
         let actions: Vec<serde_json::Value> = action_pages.iter()
-            .flat_map(|p| p.session_actions())
-            .map(|a| session_action_summary_to_value(a))
+            .flat_map(aws_sdk_deadline::operation::list_session_actions::ListSessionActionsOutput::session_actions)
+            .map(session_action_summary_to_value)
             .collect();
         sessions[i]["actions"] = json!(actions);
     }
@@ -1936,15 +1922,14 @@ async fn run_trace_schedule(
     let mut task_refs = std::collections::HashSet::new();
     for session in &sessions {
         for action in session["actions"].as_array().unwrap_or(&vec![]) {
-            if let Some(task_run) = action.get("definition").and_then(|d| d.get("taskRun")) {
-                if let (Some(sid), Some(tid)) = (
+            if let Some(task_run) = action.get("definition").and_then(|d| d.get("taskRun"))
+                && let (Some(sid), Some(tid)) = (
                     task_run.get("stepId").and_then(|v| v.as_str()),
                     task_run.get("taskId").and_then(|v| v.as_str()),
                 ) {
-                    step_ids.insert(sid.to_string());
-                    task_refs.insert((sid.to_string(), tid.to_string()));
+                    step_ids.insert(sid.to_owned());
+                    task_refs.insert((sid.to_owned(), tid.to_owned()));
                 }
-            }
         }
     }
 
@@ -1957,7 +1942,7 @@ async fn run_trace_schedule(
     let (steps, step_errors) = batch_get(
         |chunk| async move { api::batch_get_steps_page(&chunk, Some(config_ref)).await },
         step_identifiers,
-        |item| item.get("stepId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        |item| item.get("stepId").and_then(|v| v.as_str()).map(ToOwned::to_owned),
         "steps",
         &["farmId", "queueId", "jobId", "stepId"],
         3,
@@ -1972,7 +1957,7 @@ async fn run_trace_schedule(
     let (tasks, task_errors) = batch_get(
         |chunk| async move { api::batch_get_tasks_page(&chunk, Some(config_ref)).await },
         task_identifiers,
-        |item| item.get("taskId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        |item| item.get("taskId").and_then(|v| v.as_str()).map(ToOwned::to_owned),
         "tasks",
         &["farmId", "queueId", "jobId", "stepId", "taskId"],
         3,
@@ -2009,7 +1994,7 @@ async fn run_trace_schedule(
 
     // Build worker index map (sorted for deterministic pid assignment)
     let mut worker_list: Vec<String> = sessions.iter()
-        .filter_map(|s| s.get("workerId").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .filter_map(|s| s.get("workerId").and_then(|v| v.as_str()).map(ToOwned::to_owned))
         .collect::<std::collections::HashSet<_>>().into_iter().collect();
     worker_list.sort();
     let workers: std::collections::HashMap<String, usize> = worker_list.iter()
@@ -2019,7 +2004,7 @@ async fn run_trace_schedule(
 
     // Build trace events and accumulators
     let time_int = |ts: &str| -> i64 {
-        parse_datetime(ts).map(|dt| (dt - started_at).num_microseconds().unwrap_or(0)).unwrap_or(0)
+        parse_datetime(ts).map_or(0, |dt| (dt - started_at).num_microseconds().unwrap_or(0))
     };
     let trace_end_str = trace_end_utc.to_rfc3339();
     let duration_of = |resource: &serde_json::Value| -> i64 {
@@ -2045,7 +2030,7 @@ async fn run_trace_schedule(
         let worker_id = session.get("workerId").and_then(|v| v.as_str()).unwrap_or("");
         let pid = workers.get(worker_id).copied().unwrap_or(0);
         let step_name = session.get("step").and_then(|s| s.get("name")).and_then(|n| n.as_str()).unwrap_or("Unknown");
-        let index = session.get("index").and_then(|v| v.as_i64()).unwrap_or(0);
+        let index = session.get("index").and_then(serde_json::Value::as_i64).unwrap_or(0);
         let mut session_event_name = format!("{step_name} - {index}");
         if session.get("endedAt").is_none() {
             session_event_name = format!("{session_event_name} - In Progress");
@@ -2073,9 +2058,9 @@ async fn run_trace_schedule(
             let empty_obj = json!({});
             let definition = action.get("definition").unwrap_or(&empty_obj);
             let action_type = definition.as_object()
-                .and_then(|m| m.keys().next()).map(|s| s.as_str()).unwrap_or("");
+                .and_then(|m| m.keys().next()).map_or("", String::as_str);
 
-            let mut name = action.get("sessionActionId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let mut name = action.get("sessionActionId").and_then(|v| v.as_str()).unwrap_or("").to_owned();
 
             match action_type {
                 "taskRun" => {
@@ -2095,7 +2080,7 @@ async fn run_trace_schedule(
                                 format!("{k}={val}")
                             }).collect::<Vec<_>>().join(",")
                         }
-                        _ => "<No Task Params>".to_string(),
+                        _ => "<No Task Params>".to_owned(),
                     };
                 }
                 "envEnter" | "envExit" => {
@@ -2105,7 +2090,7 @@ async fn run_trace_schedule(
                     let env_id = definition.get(action_type)
                         .and_then(|e| e.get("environmentId"))
                         .and_then(|v| v.as_str()).unwrap_or("");
-                    name = env_id.rsplit(':').next().unwrap_or(env_id).to_string();
+                    name = env_id.rsplit(':').next().unwrap_or(env_id).to_owned();
                 }
                 "syncInputJobAttachments" => {
                     *acc.get_mut("syncJobAttachmentsCount").unwrap() += 1;
@@ -2114,9 +2099,9 @@ async fn run_trace_schedule(
                     let empty_sync = json!({});
                     let sync_def = definition.get(action_type).unwrap_or(&empty_sync);
                     name = if sync_def.get("stepId").is_some() {
-                        "Sync Job Attchmnt (Dependencies)".to_string()
+                        "Sync Job Attchmnt (Dependencies)".to_owned()
                     } else {
-                        "Sync Job Attchmnt (Submitted)".to_string()
+                        "Sync Job Attchmnt (Submitted)".to_owned()
                     };
                 }
                 _ => {}
@@ -2173,7 +2158,7 @@ async fn run_trace_schedule(
     let session_action_count = acc["sessionActionCount"];
 
     let pct = |part: i64| -> String {
-        if session_duration == 0 { "0.0".to_string() }
+        if session_duration == 0 { "0.0".to_owned() }
         else { format!("{:.1}", 100.0 * part as f64 / session_duration as f64) }
     };
 
@@ -2205,10 +2190,9 @@ async fn run_trace_schedule(
     if let Some(ref trace_path) = trace_file {
         // Python uses datetime.isoformat(sep="T") for trace file timestamps
         let to_iso = |s: &str| -> String {
-            parse_datetime(s).map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Micros, false))
-                .unwrap_or_else(|| s.to_string())
+            parse_datetime(s).map_or_else(|| s.to_owned(), |dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Micros, false))
         };
-        let job_started = job_data.started_at().map(|d| responses::format_datetime(d)).unwrap_or_default();
+        let job_started = job_data.started_at().map(responses::format_datetime).unwrap_or_default();
         let mut other_data = json!({
             "farmId": farm,
             "queueId": queue,
@@ -2237,7 +2221,7 @@ async fn run_trace_schedule(
     Ok(())
 }
 
-/// Paginate ListSessionActions using the SDK paginator.
+/// Paginate `ListSessionActions` using the SDK paginator.
 async fn collect_paginated_session_actions(
     client: &aws_sdk_deadline::Client,
     farm_id: &str,
@@ -2245,14 +2229,14 @@ async fn collect_paginated_session_actions(
     job_id: &str,
     session_id: &str,
 ) -> Result<Vec<aws_sdk_deadline::operation::list_session_actions::ListSessionActionsOutput>, deadline_api::errors::DeadlineError> {
-    deadline_api::client::collect_paginated(
+    client::collect_paginated(
         client.list_session_actions()
             .farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
             .into_paginator().send()
     ).await
 }
 
-/// Convert a SessionActionSummary to a serde_json::Value for the trace-schedule consumer.
+/// Convert a `SessionActionSummary` to a `serde_json::Value` for the trace-schedule consumer.
 fn session_action_summary_to_value(a: &aws_sdk_deadline::types::SessionActionSummary) -> serde_json::Value {
     use serde_json::json;
     let mut m = serde_json::Map::new();

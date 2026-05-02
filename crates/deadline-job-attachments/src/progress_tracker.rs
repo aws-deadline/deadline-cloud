@@ -301,8 +301,7 @@ impl ProgressTracker {
         let now = Instant::now();
         let elapsed = inner
             .last_report_time
-            .map(|t| now.duration_since(t).as_secs_f64())
-            .unwrap_or(0.0);
+            .map_or(0.0, |t| now.duration_since(t).as_secs_f64());
 
         let all_done =
             inner.processed_files + inner.skipped_files == self.total_files;
@@ -380,7 +379,7 @@ mod tests {
     #[test]
     fn progress_tracker_new_with_callback_stores_it() {
         let called = Arc::new(AtomicBool::new(false));
-        let called_clone = called.clone();
+        let called_clone = called;
         let callback = move |_: ProgressReportMetadata| -> bool {
             called_clone.store(true, Ordering::SeqCst);
             true

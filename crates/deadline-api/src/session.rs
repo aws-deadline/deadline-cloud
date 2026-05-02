@@ -60,7 +60,7 @@ impl SessionContext {
 pub struct SessionCache {
     cached_config: Option<SdkConfig>,
     cached_profile: Option<Option<String>>,
-    /// Queue user configs cached by (farm_id, queue_id).
+    /// Queue user configs cached by (`farm_id`, `queue_id`).
     /// Python equivalent: `@lru_cache` on `_get_queue_user_boto3_session`.
     cached_queue_configs: HashMap<(String, String), SdkConfig>,
     pub context: SessionContext,
@@ -143,9 +143,9 @@ impl SessionCache {
         StsClient::from_conf(builder.build())
     }
 
-    /// Build an SdkConfig with queue user credentials for the given farm/queue.
-    /// Cached by (farm_id, queue_id). The credential provider calls
-    /// AssumeQueueRoleForUser and auto-refreshes when credentials expire.
+    /// Build an `SdkConfig` with queue user credentials for the given farm/queue.
+    /// Cached by (`farm_id`, `queue_id`). The credential provider calls
+    /// `AssumeQueueRoleForUser` and auto-refreshes when credentials expire.
     pub async fn get_queue_user_config(
         &mut self,
         farm_id: &str,
@@ -153,7 +153,7 @@ impl SessionCache {
         queue_display_name: Option<String>,
         config: Option<&IniConfig>,
     ) -> Result<SdkConfig, crate::errors::DeadlineError> {
-        let key = (farm_id.to_string(), queue_id.to_string());
+        let key = (farm_id.to_owned(), queue_id.to_owned());
         if let Some(cached) = self.cached_queue_configs.get(&key) {
             return Ok(cached.clone());
         }
@@ -170,12 +170,12 @@ impl SessionCache {
 
         let provider = QueueUserCredentialProvider::new(
             dl_client,
-            farm_id.to_string(),
-            queue_id.to_string(),
+            farm_id.to_owned(),
+            queue_id.to_owned(),
             queue_display_name,
         );
 
-        let mut builder = aws_config::SdkConfig::builder()
+        let mut builder = SdkConfig::builder()
             .behavior_version(aws_config::BehaviorVersion::latest())
             .credentials_provider(SharedCredentialsProvider::new(provider));
         if let Some(r) = region {
@@ -208,7 +208,7 @@ impl SessionCache {
 // QueueUserCredentialProvider — calls AssumeQueueRoleForUser
 // ---------------------------------------------------------------------------
 
-/// Custom credential provider that calls AssumeQueueRoleForUser to obtain
+/// Custom credential provider that calls `AssumeQueueRoleForUser` to obtain
 /// temporary credentials scoped to a specific queue. The SDK automatically
 /// calls `provide_credentials()` when credentials expire.
 ///
@@ -246,11 +246,11 @@ impl QueueUserCredentialProvider {
                     let inner = e.err();
                     use aws_sdk_deadline::error::ProvideErrorMetadata;
                     (
-                        ProvideErrorMetadata::code(inner).unwrap_or("Unknown").to_string(),
+                        ProvideErrorMetadata::code(inner).unwrap_or("Unknown").to_owned(),
                         format!("{inner}"),
                     )
                 }
-                other => ("Unknown".to_string(), format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other))),
+                other => ("Unknown".to_owned(), format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other))),
             };
 
             let display = &self.queue_display_name_or_id;
@@ -268,7 +268,7 @@ impl QueueUserCredentialProvider {
                      administrator to ensure a Queue role exists and that you have permissions to access this Queue."
                 ),
             };
-            return Err(aws_credential_types::provider::error::CredentialsError::provider_error(err_msg));
+            return Err(provider::error::CredentialsError::provider_error(err_msg));
         }
 
         let output = result.unwrap();
@@ -276,7 +276,7 @@ impl QueueUserCredentialProvider {
             Some(c) if !c.access_key_id().is_empty() => c,
             _ => {
                 let display = &self.queue_display_name_or_id;
-                return Err(aws_credential_types::provider::error::CredentialsError::provider_error(
+                return Err(provider::error::CredentialsError::provider_error(
                     format!("Failed to get credentials for '{display}': Empty credentials received.")
                 ));
             }
@@ -295,7 +295,7 @@ impl QueueUserCredentialProvider {
         Ok(Credentials::new(
             creds.access_key_id(),
             creds.secret_access_key(),
-            Some(creds.session_token().to_string()),
+            Some(creds.session_token().to_owned()),
             expiration,
             "queue-credential-provider",
         ))
@@ -318,15 +318,15 @@ impl ProvideCredentials for QueueUserCredentialProvider {
 /// Set the CLI command name for user-agent tracking.
 /// Called by the CLI before dispatching to a subcommand.
 pub fn set_cli_command_name(name: &str) {
-    SESSION.blocking_lock().context.cli_command_name = Some(name.to_string());
+    SESSION.blocking_lock().context.cli_command_name = Some(name.to_owned());
 }
 
 /// Set submitter info for user-agent tracking.
 /// Called by GUI/DCC plugins before making API calls.
 pub async fn set_submitter_info(name: &str, version: Option<&str>) {
     let mut cache = SESSION.lock().await;
-    cache.context.submitter_name = Some(name.to_string());
-    cache.context.submitter_version = version.map(|v| v.to_string());
+    cache.context.submitter_name = Some(name.to_owned());
+    cache.context.submitter_version = version.map(ToOwned::to_owned);
 }
 
 /// Clear the cached SDK config. Next call re-resolves credentials.
@@ -354,8 +354,8 @@ pub async fn deadline_client(config: Option<&IniConfig>) -> DeadlineClient {
     SESSION.lock().await.build_deadline_client(config).await
 }
 
-/// Get the cached SdkConfig (for building non-Deadline AWS clients like CloudWatch Logs).
-pub async fn get_sdk_config(config: Option<&IniConfig>) -> aws_config::SdkConfig {
+/// Get the cached `SdkConfig` (for building non-Deadline AWS clients like `CloudWatch` Logs).
+pub async fn get_sdk_config(config: Option<&IniConfig>) -> SdkConfig {
     SESSION.lock().await.get_config(config).await.clone()
 }
 
@@ -364,8 +364,8 @@ pub async fn sts_client(config: Option<&IniConfig>) -> StsClient {
     SESSION.lock().await.build_sts_client(config).await
 }
 
-/// Get an SdkConfig with queue user credentials.
-/// Falls back to config defaults for farm_id and queue_id.
+/// Get an `SdkConfig` with queue user credentials.
+/// Falls back to config defaults for `farm_id` and `queue_id`.
 /// Python equivalent: `get_queue_user_boto3_session()`.
 pub async fn get_queue_user_config(
     farm_id: Option<&str>,
@@ -377,19 +377,19 @@ pub async fn get_queue_user_config(
     if force_refresh {
         invalidate_session_cache_async().await;
     }
-    let farm = farm_id.map(String::from).unwrap_or_else(|| get_setting("defaults.farm_id", config));
-    let queue = queue_id.map(String::from).unwrap_or_else(|| get_setting("defaults.queue_id", config));
+    let farm = farm_id.map_or_else(|| get_setting("defaults.farm_id", config), String::from);
+    let queue = queue_id.map_or_else(|| get_setting("defaults.queue_id", config), String::from);
     SESSION.lock().await.get_queue_user_config(&farm, &queue, queue_display_name, config).await
 }
 
-/// Get an SdkConfig appropriate for non-Deadline AWS services (CloudWatch, S3)
+/// Get an `SdkConfig` appropriate for non-Deadline AWS services (`CloudWatch`, S3)
 /// that access queue-scoped resources.
 ///
-/// If the user is logged in via DCM (monitor_id present in AWS profile),
+/// If the user is logged in via DCM (`monitor_id` present in AWS profile),
 /// assumes the queue role via `AssumeQueueRoleForUser` and returns an
-/// SdkConfig with queue-scoped credentials. If not DCM, returns the base
-/// SdkConfig. If queue role assumption fails for a DCM user, the error is
-/// propagated (matching Python, which raises DeadlineOperationError).
+/// `SdkConfig` with queue-scoped credentials. If not DCM, returns the base
+/// `SdkConfig`. If queue role assumption fails for a DCM user, the error is
+/// propagated (matching Python, which raises `DeadlineOperationError`).
 pub async fn get_queue_scoped_config(
     farm_id: &str,
     queue_id: &str,
@@ -432,7 +432,7 @@ pub fn resolve_profile_name(config: Option<&IniConfig>) -> Option<String> {
 
 pub fn display_profile_name(config: Option<&IniConfig>) -> String {
     let name = get_setting("defaults.aws_profile_name", config);
-    if name.is_empty() { "(default)".to_string() } else { name }
+    if name.is_empty() { "(default)".to_owned() } else { name }
 }
 
 #[cfg(test)]
@@ -516,9 +516,9 @@ mod tests {
     async fn get_config_twice_returns_cached() {
         let mut cache = SessionCache::new();
         cache.get_config(None).await;
-        let ptr1 = cache.cached_config.as_ref().unwrap() as *const SdkConfig;
+        let ptr1 = std::ptr::from_ref::<SdkConfig>(cache.cached_config.as_ref().unwrap());
         cache.get_config(None).await;
-        let ptr2 = cache.cached_config.as_ref().unwrap() as *const SdkConfig;
+        let ptr2 = std::ptr::from_ref::<SdkConfig>(cache.cached_config.as_ref().unwrap());
         assert_eq!(ptr1, ptr2, "second call should return cached config");
     }
 
@@ -584,12 +584,12 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    /// Build a DeadlineClient pointed at the given wiremock server.
+    /// Build a `DeadlineClient` pointed at the given wiremock server.
     fn test_deadline_client(server: &MockServer) -> DeadlineClient {
         let port = server.address().port();
         let config = aws_sdk_deadline::Config::builder()
             .endpoint_url(format!("http://localhost:{port}"))
-            .credentials_provider(aws_sdk_deadline::config::Credentials::new(
+            .credentials_provider(Credentials::new(
                 "AKID", "SECRET", Some("TOKEN".into()), None, "test",
             ))
             .region(aws_sdk_deadline::config::Region::new("us-west-2"))
@@ -626,8 +626,8 @@ mod tests {
         assert!(creds.expiry().is_some());
     }
 
-    /// Extract the source error message from a CredentialsError.
-    /// CredentialsError::ProviderError wraps our message in source().
+    /// Extract the source error message from a `CredentialsError`.
+    /// `CredentialsError::ProviderError` wraps our message in `source()`.
     fn credential_error_message(err: &dyn std::error::Error) -> String {
         // Walk the error chain to find our message
         let mut current: Option<&dyn std::error::Error> = Some(err);
@@ -801,7 +801,7 @@ mod tests {
         ).await;
         assert!(cfg1.is_ok());
         // Second call should return cached (same key)
-        assert!(cache.cached_queue_configs.contains_key(&("farm-abc".to_string(), "queue-123".to_string())));
+        assert!(cache.cached_queue_configs.contains_key(&("farm-abc".to_owned(), "queue-123".to_owned())));
     }
 
     // force_refresh clears base session and queue configs

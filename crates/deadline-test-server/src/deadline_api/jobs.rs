@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount a ListJobs response (GET). Used by suggest_resources_on_client_error.
+/// Mount a `ListJobs` response (GET). Used by `suggest_resources_on_client_error`.
 pub async fn mock_list_jobs(server: &MockServer, farm_id: &str, queue_id: &str, jobs: &[Value]) {
     Mock::given(method("GET"))
         .and(path(format!("/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs")))
@@ -11,7 +11,7 @@ pub async fn mock_list_jobs(server: &MockServer, farm_id: &str, queue_id: &str, 
         .await;
 }
 
-/// Mount a paginated ListJobs response (GET, 2 pages).
+/// Mount a paginated `ListJobs` response (GET, 2 pages).
 pub async fn mock_list_jobs_paginated(
     server: &MockServer,
     farm_id: &str,
@@ -42,7 +42,7 @@ pub async fn mock_list_jobs_paginated(
         .await;
 }
 
-/// Mount a SearchJobs response (POST). Used by `deadline job list`.
+/// Mount a `SearchJobs` response (POST). Used by `deadline job list`.
 pub async fn mock_search_jobs(
     server: &MockServer,
     farm_id: &str,
@@ -61,7 +61,7 @@ pub async fn mock_search_jobs(
         .await;
 }
 
-/// Mount a paginated SearchJobs sequence for `list_jobs_by_filter_expression`.
+/// Mount a paginated `SearchJobs` sequence for `list_jobs_by_filter_expression`.
 ///
 /// Page 1 is served once (via `up_to_n_times(1)`) with `totalResults` > page1 len
 /// to signal more pages. Page 2 is served for any subsequent request that contains
@@ -136,7 +136,7 @@ pub async fn mock_get_task(server: &MockServer, farm_id: &str, queue_id: &str, j
         .await;
 }
 
-/// Mount an UpdateJob response (PATCH). Used by `deadline job cancel`.
+/// Mount an `UpdateJob` response (PATCH). Used by `deadline job cancel`.
 pub async fn mock_update_job(server: &MockServer, farm_id: &str, queue_id: &str, job_id: &str) {
     Mock::given(method("PATCH"))
         .and(path(format!("/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}")))

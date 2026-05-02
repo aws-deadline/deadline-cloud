@@ -17,8 +17,8 @@ pub async fn mock_s3_put_success(server: &MockServer) {
         .await;
 }
 
-/// Mount an S3 ListObjectsV2 response that returns empty results.
-/// Matches GET requests with `list-type=2` query parameter (S3 ListObjectsV2).
+/// Mount an S3 `ListObjectsV2` response that returns empty results.
+/// Matches GET requests with `list-type=2` query parameter (S3 `ListObjectsV2`).
 pub async fn mock_s3_list_empty(server: &MockServer) {
     Mock::given(method("GET"))
         .and(query_param("list-type", "2"))
@@ -36,7 +36,7 @@ pub async fn mock_s3_list_empty(server: &MockServer) {
         .await;
 }
 
-/// Mount an S3 ListObjectsV2 response that returns the given keys.
+/// Mount an S3 `ListObjectsV2` response that returns the given keys.
 pub async fn mock_s3_list_objects(server: &MockServer, keys: &[&str]) {
     let contents: String = keys
         .iter()
@@ -78,7 +78,7 @@ fn encode_s3_path(key: &str) -> String {
     format!("/{}", key.replace(':', "%3A"))
 }
 
-/// Mount an S3 GetObject response for a specific key with the given body.
+/// Mount an S3 `GetObject` response for a specific key with the given body.
 pub async fn mock_s3_get_object(server: &MockServer, key: &str, body: &[u8]) {
     use wiremock::matchers::path;
     Mock::given(method("GET"))
@@ -92,7 +92,7 @@ pub async fn mock_s3_get_object(server: &MockServer, key: &str, body: &[u8]) {
         .await;
 }
 
-/// Mount an S3 GetObject response with custom metadata headers.
+/// Mount an S3 `GetObject` response with custom metadata headers.
 pub async fn mock_s3_get_object_with_metadata(
     server: &MockServer,
     key: &str,
@@ -113,7 +113,7 @@ pub async fn mock_s3_get_object_with_metadata(
         .await;
 }
 
-/// Mount a catch-all S3 GetObject response for any GET request.
+/// Mount a catch-all S3 `GetObject` response for any GET request.
 /// Useful when the exact key path is hard to predict.
 pub async fn mock_s3_get_object_catchall(
     server: &MockServer,

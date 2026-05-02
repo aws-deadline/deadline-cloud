@@ -5,10 +5,10 @@
 //!
 //! DCM is detected by the presence of `monitor_id` in the AWS profile.
 //! When DCM is active, `get_session_logs` calls `AssumeQueueRoleForUser`
-//! and builds the CloudWatch client with queue credentials.
+//! and builds the `CloudWatch` client with queue credentials.
 //! When DCM is not active, base credentials are used directly.
 //! If queue role assumption fails for a DCM user, the error is propagated
-//! (matching Python's behavior — it raises DeadlineOperationError).
+//! (matching Python's behavior — it raises `DeadlineOperationError`).
 //!
 //! Worker log credential scoping is tested at Level 1
 //! in `deadline-api` since `get_worker_logs` is not exposed via CLI.

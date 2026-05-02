@@ -1,7 +1,7 @@
 //! Level 2 tests for `suggest_resources_on_client_error`.
 //!
 //! These test that CLI commands include resource suggestions in error output
-//! when API calls fail with AccessDenied or ResourceNotFound.
+//! when API calls fail with `AccessDenied` or `ResourceNotFound`.
 
 use deadline_test_server::deadline_api::{errors, farms, fleets, jobs, queues, queue_resources, workers};
 use deadline_test_server::TestHarness;

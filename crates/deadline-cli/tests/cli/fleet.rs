@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline fleet` subcommands.
 
 use deadline_test_server::TestHarness;
-use deadline_test_server::deadline_api::{errors, farms, fleets, queues, telemetry};
+use deadline_test_server::deadline_api::{errors, fleets, queues, telemetry};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 

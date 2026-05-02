@@ -6,7 +6,7 @@ use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
 
 #[derive(Subcommand)]
-pub enum FleetAction {
+pub(crate) enum FleetAction {
     /// List available fleets
     List {
         #[arg(long)] profile: Option<String>,
@@ -21,7 +21,7 @@ pub enum FleetAction {
     },
 }
 
-pub fn run(action: FleetAction) -> Result<(), CliError> {
+pub(crate) fn run(action: FleetAction) -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(e.to_string()))?
         .block_on(run_async(action))
@@ -49,7 +49,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
                         .iter()
-                        .flat_map(|p| p.fleets())
+                        .flat_map(aws_sdk_deadline::operation::list_fleets::ListFleetsOutput::fleets)
                         .map(|f| serde_json::json!({"fleetId": f.fleet_id(), "displayName": f.display_name()}))
                         .collect();
                     println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
@@ -143,7 +143,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                     CliError::Operation(format!("Failed to list queue fleet associations:\n{e}"))
                 })?;
                 let associations: Vec<_> = assoc_pages.iter()
-                    .flat_map(|p| p.queue_fleet_associations())
+                    .flat_map(aws_sdk_deadline::operation::list_queue_fleet_associations::ListQueueFleetAssociationsOutput::queue_fleet_associations)
                     .collect();
 
                 println!("Showing all fleets ({} total) associated with queue: {queue_name}", associations.len());

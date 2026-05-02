@@ -6,7 +6,7 @@ use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
 
 #[derive(Subcommand)]
-pub enum WorkerAction {
+pub(crate) enum WorkerAction {
     /// List workers in a fleet
     List {
         #[arg(long)] profile: Option<String>,
@@ -24,7 +24,7 @@ pub enum WorkerAction {
     },
 }
 
-pub fn run(action: WorkerAction) -> Result<(), CliError> {
+pub(crate) fn run(action: WorkerAction) -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(e.to_string()))?
         .block_on(run_async(action))
@@ -46,7 +46,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         WorkerAction::List { profile, farm_id, fleet_id, page_size, item_offset } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = deadline_api::session::deadline_client(Some(&config)).await;
+            let dl = session::deadline_client(Some(&config)).await;
             let resp = match dl.search_workers()
                 .farm_id(&farm)
                 .fleet_ids(&fleet_id)
@@ -57,16 +57,16 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
             {
                 Ok(r) => r,
                 Err(e) => {
-                    let err_str = deadline_api::client::format_sdk_error(&e);
+                    let err_str = client::format_sdk_error(&e);
                     let suggestion = suggest_resources_on_client_error(&err_str, "SearchWorkers", Some(&farm), None, Some(&fleet_id), Some(&config)).await;
                     return Err(CliError::Operation(format!("Failed to get Workers from Deadline:\n{err_str}{suggestion}")));
                 }
             };
-            let total = resp.total_results() as i64;
+            let total = i64::from(resp.total_results());
             let workers = resp.workers();
             let structured: Vec<serde_json::Value> = workers
                 .iter()
-                .map(|w| serde_json::json!({"workerId": w.worker_id().unwrap_or(""), "status": w.status().map(|s| s.as_str()).unwrap_or(""), "createdAt": w.created_at().map(|d| {
+                .map(|w| serde_json::json!({"workerId": w.worker_id().unwrap_or(""), "status": w.status().map_or("", aws_sdk_deadline::types::WorkerStatus::as_str), "createdAt": w.created_at().map(|d| {
                     d.fmt(aws_sdk_deadline::primitives::DateTimeFormat::DateTimeWithOffset).unwrap_or_default().replace('T', " ").replace('Z', "+00:00")
                 }).unwrap_or_default()}))
                 .collect();

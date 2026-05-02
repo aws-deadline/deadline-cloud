@@ -2,7 +2,7 @@ use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Mount a CreateJob response (POST).
+/// Mount a `CreateJob` response (POST).
 pub async fn mock_create_job(
     server: &MockServer,
     farm_id: &str,
@@ -20,7 +20,7 @@ pub async fn mock_create_job(
         .await;
 }
 
-/// Mount a CreateJob error response.
+/// Mount a `CreateJob` error response.
 pub async fn mock_create_job_error(
     server: &MockServer,
     farm_id: &str,

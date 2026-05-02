@@ -52,7 +52,7 @@ steps:
           command: echo
           args: ['hello']
 ").unwrap();
-    dir.to_str().unwrap().to_string()
+    dir.to_str().unwrap().to_owned()
 }
 
 /// Bundle with a STRING parameter.
@@ -74,7 +74,7 @@ steps:
           command: echo
           args: ['{{Param.Frames}}']
 ").unwrap();
-    dir.to_str().unwrap().to_string()
+    dir.to_str().unwrap().to_owned()
 }
 
 /// Bundle with a JSON template.
@@ -86,7 +86,7 @@ fn create_json_bundle(harness: &TestHarness, name: &str) -> String {
         "name": "JsonJob",
         "steps": [{"name": "Step1", "script": {"actions": {"onRun": {"command": "echo", "args": ["hello"]}}}}]
     })).unwrap()).unwrap();
-    dir.to_str().unwrap().to_string()
+    dir.to_str().unwrap().to_owned()
 }
 
 /// Bundle with input files for attachment testing.
@@ -120,7 +120,7 @@ assetReferences:
     directories: []
   referencedPaths: []
 ", input_dir = input_dir.display())).unwrap();
-    dir.to_str().unwrap().to_string()
+    dir.to_str().unwrap().to_owned()
 }
 
 /// Bundle with a symlink that escapes the bundle directory.
@@ -140,7 +140,7 @@ steps:
     // Create a symlink pointing outside the bundle
     #[cfg(unix)]
     std::os::unix::fs::symlink("/etc/hosts", dir.join("escape_link")).unwrap();
-    dir.to_str().unwrap().to_string()
+    dir.to_str().unwrap().to_owned()
 }
 
 fn queue_role_credentials() -> serde_json::Value {
@@ -836,7 +836,7 @@ async fn bundle_submit_records_submission_telemetry_event() {
     harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().success();
 }
 
-/// Verify that a successful bundle submit sends a "create_job" telemetry event.
+/// Verify that a successful bundle submit sends a "`create_job`" telemetry event.
 #[tokio::test]
 async fn bundle_submit_records_create_job_telemetry_event() {
     let harness = TestHarness::new().await;
@@ -846,7 +846,7 @@ async fn bundle_submit_records_create_job_telemetry_event() {
     harness.cli(&["bundle", "submit", &bundle_dir, "--yes"]).assert().success();
 }
 
-/// Verify that the submission event fires even when CreateJob fails.
+/// Verify that the submission event fires even when `CreateJob` fails.
 #[tokio::test]
 async fn bundle_submit_failure_still_records_submission_event() {
     let harness = TestHarness::new().await;
@@ -872,7 +872,7 @@ async fn bundle_submit_failure_still_records_submission_event() {
 /// When --yes is NOT passed and there are attachments, the CLI should show
 /// an upload summary and prompt for confirmation. Since stdin is not a TTY
 /// in tests, the CLI should cancel (matching Python's behavior when
-/// interactive_confirmation_callback is None).
+/// `interactive_confirmation_callback` is None).
 #[tokio::test]
 async fn bundle_submit_shows_upload_confirmation_prompt() {
     let harness = TestHarness::new().await;
@@ -898,7 +898,7 @@ async fn bundle_submit_shows_upload_confirmation_prompt() {
     );
 }
 
-/// When auto_accept is true and all paths are known, submission should
+/// When `auto_accept` is true and all paths are known, submission should
 /// proceed without prompting and print the upload summary.
 #[tokio::test]
 async fn bundle_submit_auto_accept_known_paths_prints_summary() {
@@ -959,7 +959,7 @@ async fn bundle_submit_yes_flag_prints_upload_summary() {
 // ===========================================================================
 
 /// When submitting a bundle with attachments, telemetry events for
-/// hashing_summary and upload_summary should be sent.
+/// `hashing_summary` and `upload_summary` should be sent.
 #[tokio::test]
 async fn bundle_submit_with_attachments_emits_hashing_telemetry() {
     let harness = TestHarness::new().await;
@@ -993,8 +993,8 @@ async fn bundle_submit_with_attachments_emits_upload_telemetry() {
 // F6: Telemetry — error event emitted on submission failure
 // ===========================================================================
 
-/// When CreateJob fails, an error telemetry event should be emitted with
-/// exception_scope "on_submit".
+/// When `CreateJob` fails, an error telemetry event should be emitted with
+/// `exception_scope` "`on_submit`".
 #[tokio::test]
 async fn bundle_submit_error_emits_error_telemetry() {
     let harness = TestHarness::new().await;
@@ -1020,7 +1020,7 @@ async fn bundle_submit_error_emits_error_telemetry() {
 // ===========================================================================
 
 /// When --save-debug-snapshot is provided, the CLI should write snapshot
-/// files to the directory and NOT call CreateJob.
+/// files to the directory and NOT call `CreateJob`.
 #[tokio::test]
 async fn bundle_submit_save_debug_snapshot_creates_files() {
     let harness = TestHarness::new().await;
@@ -1053,7 +1053,7 @@ async fn bundle_submit_save_debug_snapshot_creates_files() {
         "Expected queue.json in snapshot dir");
 }
 
-/// When --save-debug-snapshot is provided, CreateJob should NOT be called
+/// When --save-debug-snapshot is provided, `CreateJob` should NOT be called
 /// and no job ID should be printed.
 #[tokio::test]
 async fn bundle_submit_save_debug_snapshot_skips_create_job() {
@@ -1087,7 +1087,7 @@ async fn bundle_submit_save_debug_snapshot_skips_create_job() {
 // F8: --save-debug-snapshot content validation
 // ===========================================================================
 
-/// Verify create_job_args.json contains expected keys (farmId, queueId, template).
+/// Verify `create_job_args.json` contains expected keys (farmId, queueId, template).
 #[tokio::test]
 async fn bundle_submit_save_debug_snapshot_valid_create_job_args() {
     let harness = TestHarness::new().await;
@@ -1119,7 +1119,7 @@ async fn bundle_submit_save_debug_snapshot_valid_create_job_args() {
     assert!(args.get("template").is_some(), "Expected template in create_job_args.json");
 }
 
-/// Verify submit_job.sh contains aws deadline create-job command.
+/// Verify `submit_job.sh` contains aws deadline create-job command.
 #[tokio::test]
 async fn bundle_submit_save_debug_snapshot_valid_shell_script() {
     let harness = TestHarness::new().await;
@@ -1183,7 +1183,7 @@ async fn bundle_submit_save_debug_snapshot_zip_mode() {
 }
 
 /// With attachments, --save-debug-snapshot should copy manifests locally
-/// instead of uploading to S3, and still not call CreateJob.
+/// instead of uploading to S3, and still not call `CreateJob`.
 #[tokio::test]
 async fn bundle_submit_save_debug_snapshot_with_attachments() {
     let harness = TestHarness::new().await;
@@ -1243,7 +1243,7 @@ async fn bundle_submit_save_debug_snapshot_with_attachments() {
 //            and shell-quoted values in scripts
 // ===========================================================================
 
-/// queue.json should contain the full GetQueue response, not just
+/// queue.json should contain the full `GetQueue` response, not just
 /// jobAttachmentSettings. Verify displayName and status are present.
 #[tokio::test]
 async fn bundle_submit_save_debug_snapshot_queue_json_has_full_content() {
@@ -1285,7 +1285,7 @@ async fn bundle_submit_save_debug_snapshot_queue_json_has_full_content() {
         "Expected status in queue.json, got: {queue_json}");
 }
 
-/// When a storage profile is configured, storage_profile.json should be
+/// When a storage profile is configured, `storage_profile.json` should be
 /// written to the debug snapshot directory.
 #[tokio::test]
 async fn bundle_submit_save_debug_snapshot_storage_profile_written() {
@@ -1497,8 +1497,8 @@ async fn bundle_submit_json_error_still_exits_nonzero() {
 // F5: Boundary — no attachments should NOT emit hashing/upload telemetry
 // ===========================================================================
 
-/// When submitting a bundle with no attachments, hashing_summary and
-/// upload_summary telemetry events should NOT be sent.
+/// When submitting a bundle with no attachments, `hashing_summary` and
+/// `upload_summary` telemetry events should NOT be sent.
 #[tokio::test]
 async fn bundle_submit_no_attachments_no_hashing_upload_telemetry() {
     let harness = TestHarness::new().await;
@@ -1527,7 +1527,7 @@ async fn bundle_submit_no_attachments_no_hashing_upload_telemetry() {
 // ===========================================================================
 
 /// When --max-retries-per-task is not specified on CLI, the value from
-/// settings.max_retries_per_task config should be used in the CreateJob request.
+/// `settings.max_retries_per_task` config should be used in the `CreateJob` request.
 #[tokio::test]
 async fn bundle_submit_max_retries_from_config() {
     let harness = TestHarness::new().await;
@@ -1545,11 +1545,11 @@ async fn bundle_submit_max_retries_from_config() {
         .collect();
     assert_eq!(create_job_requests.len(), 1);
     let body: serde_json::Value = serde_json::from_slice(&create_job_requests[0].body).unwrap();
-    assert_eq!(body["maxRetriesPerTask"], 10, "Expected config default maxRetriesPerTask=10, got: {}", body);
+    assert_eq!(body["maxRetriesPerTask"], 10, "Expected config default maxRetriesPerTask=10, got: {body}");
 }
 
 /// When --max-failed-tasks-count is not specified on CLI, the value from
-/// settings.max_failed_tasks_count config should be used in the CreateJob request.
+/// `settings.max_failed_tasks_count` config should be used in the `CreateJob` request.
 #[tokio::test]
 async fn bundle_submit_max_failed_from_config() {
     let harness = TestHarness::new().await;
@@ -1566,7 +1566,7 @@ async fn bundle_submit_max_failed_from_config() {
         .collect();
     assert_eq!(create_job_requests.len(), 1);
     let body: serde_json::Value = serde_json::from_slice(&create_job_requests[0].body).unwrap();
-    assert_eq!(body["maxFailedTasksCount"], 15, "Expected config default maxFailedTasksCount=15, got: {}", body);
+    assert_eq!(body["maxFailedTasksCount"], 15, "Expected config default maxFailedTasksCount=15, got: {body}");
 }
 
 /// CLI flag --max-retries-per-task should override the config setting.
@@ -1586,5 +1586,5 @@ async fn bundle_submit_cli_flag_overrides_config_max_retries() {
         .collect();
     assert_eq!(create_job_requests.len(), 1);
     let body: serde_json::Value = serde_json::from_slice(&create_job_requests[0].body).unwrap();
-    assert_eq!(body["maxRetriesPerTask"], 3, "CLI flag should override config, got: {}", body);
+    assert_eq!(body["maxRetriesPerTask"], 3, "CLI flag should override config, got: {body}");
 }

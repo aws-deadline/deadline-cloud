@@ -4,16 +4,16 @@ use deadline_config::ini::IniConfig;
 use crate::errors::DeadlineError;
 use crate::{auth, session};
 
-/// A single log event from CloudWatch Logs.
+/// A single log event from `CloudWatch` Logs.
 #[derive(Debug)]
 pub struct LogEvent {
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: DateTime<Utc>,
     pub message: String,
-    pub ingestion_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub ingestion_time: Option<DateTime<Utc>>,
     pub event_id: Option<String>,
 }
 
-/// Result of fetching session logs from CloudWatch.
+/// Result of fetching session logs from `CloudWatch`.
 #[derive(Debug)]
 pub struct SessionLogResult {
     pub events: Vec<LogEvent>,
@@ -23,7 +23,7 @@ pub struct SessionLogResult {
     pub count: usize,
 }
 
-/// Result of fetching worker logs from CloudWatch.
+/// Result of fetching worker logs from `CloudWatch`.
 #[derive(Debug)]
 pub struct WorkerLogResult {
     pub events: Vec<LogEvent>,
@@ -46,7 +46,7 @@ pub enum SessionAutoSelect {
     LatestSession(String),
 }
 
-/// Build a CloudWatch Logs client from an SdkConfig.
+/// Build a `CloudWatch` Logs client from an `SdkConfig`.
 fn logs_client(sdk_config: &aws_config::SdkConfig) -> aws_sdk_cloudwatchlogs::Client {
     let mut builder = aws_sdk_cloudwatchlogs::config::Builder::from(sdk_config);
     if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_CLOUDWATCHLOGS") {
@@ -55,11 +55,11 @@ fn logs_client(sdk_config: &aws_config::SdkConfig) -> aws_sdk_cloudwatchlogs::Cl
     aws_sdk_cloudwatchlogs::Client::from_conf(builder.build())
 }
 
-/// Get an SdkConfig with fleet-scoped credentials for worker log access.
+/// Get an `SdkConfig` with fleet-scoped credentials for worker log access.
 ///
 /// If the user is logged in via DCM, calls `AssumeFleetRoleForRead` and
-/// builds a temporary SdkConfig from the returned credentials. If not DCM,
-/// returns the base SdkConfig. If fleet role assumption fails for a DCM
+/// builds a temporary `SdkConfig` from the returned credentials. If not DCM,
+/// returns the base `SdkConfig`. If fleet role assumption fails for a DCM
 /// user, the error is propagated (matching Python behavior).
 async fn get_fleet_scoped_config(
     farm_id: &str,
@@ -85,7 +85,7 @@ async fn get_fleet_scoped_config(
 
         let credentials = aws_credential_types::Credentials::new(
             creds.access_key_id(), creds.secret_access_key(),
-            Some(creds.session_token().to_string()), None, "fleet-role",
+            Some(creds.session_token().to_owned()), None, "fleet-role",
         );
         let mut builder = aws_config::SdkConfig::builder()
             .behavior_version(aws_config::BehaviorVersion::latest())
@@ -100,7 +100,7 @@ async fn get_fleet_scoped_config(
     }
 }
 
-/// Format a CloudWatch SDK error using the common smithy trait.
+/// Format a `CloudWatch` SDK error using the common smithy trait.
 fn cw_sdk_err<E>(err: &aws_sdk_cloudwatchlogs::error::SdkError<E>) -> String
 where
     E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static,
@@ -116,7 +116,7 @@ where
     }
 }
 
-/// Check if a CloudWatch error is ResourceNotFoundException.
+/// Check if a `CloudWatch` error is `ResourceNotFoundException`.
 fn is_resource_not_found<E>(err: &aws_sdk_cloudwatchlogs::error::SdkError<E>) -> bool
 where
     E: aws_smithy_types::error::metadata::ProvideErrorMetadata,
@@ -125,14 +125,13 @@ where
     err.code() == Some("ResourceNotFoundException")
 }
 
-/// Parse CloudWatch log events into our LogEvent type.
+/// Parse `CloudWatch` log events into our `LogEvent` type.
 fn parse_events(raw_events: &[aws_sdk_cloudwatchlogs::types::OutputLogEvent]) -> Vec<LogEvent> {
     raw_events
         .iter()
         .map(|e| {
-            let timestamp = e.timestamp.map(|ms| Utc.timestamp_millis_opt(ms).unwrap())
-                .unwrap_or_else(Utc::now);
-            let message = e.message.as_deref().unwrap_or("").trim_end().to_string();
+            let timestamp = e.timestamp.map_or_else(Utc::now, |ms| Utc.timestamp_millis_opt(ms).unwrap());
+            let message = e.message.as_deref().unwrap_or("").trim_end().to_owned();
             let ingestion_time = e.ingestion_time
                 .map(|ms| Utc.timestamp_millis_opt(ms).unwrap());
             LogEvent {
@@ -157,16 +156,13 @@ pub async fn get_session_logs(
     config: Option<&IniConfig>,
 ) -> Result<(SessionLogResult, SessionAutoSelect), DeadlineError> {
     // Resolve session_id
-    let (resolved_session_id, auto_select) = match session_id {
-        Some(id) => (id.to_string(), SessionAutoSelect::Provided),
-        None => {
-            let jid = job_id.ok_or_else(|| {
-                DeadlineError::OperationError(
-                    "Either session_id or job_id must be provided".into(),
-                )
-            })?;
-            auto_select_session(farm_id, queue_id, jid, config).await?
-        }
+    let (resolved_session_id, auto_select) = if let Some(id) = session_id { (id.to_owned(), SessionAutoSelect::Provided) } else {
+        let jid = job_id.ok_or_else(|| {
+            DeadlineError::OperationError(
+                "Either session_id or job_id must be provided".into(),
+            )
+        })?;
+        auto_select_session(farm_id, queue_id, jid, config).await?
     };
 
     let log_group = format!("/aws/deadline/{farm_id}/{queue_id}");
@@ -198,7 +194,7 @@ pub async fn get_session_logs(
             let count = events.len();
             Ok((SessionLogResult {
                 events,
-                next_token: resp.next_forward_token().map(|s| s.to_string()),
+                next_token: resp.next_forward_token().map(ToOwned::to_owned),
                 log_group,
                 log_stream: resolved_session_id,
                 count,
@@ -261,11 +257,11 @@ pub async fn get_worker_logs(
             let count = events.len();
             Ok(WorkerLogResult {
                 events,
-                next_token: resp.next_forward_token().map(|s| s.to_string()),
+                next_token: resp.next_forward_token().map(ToOwned::to_owned),
                 log_group,
-                log_stream: worker_id.to_string(),
-                worker_id: worker_id.to_string(),
-                fleet_id: fleet_id.to_string(),
+                log_stream: worker_id.to_owned(),
+                worker_id: worker_id.to_owned(),
+                fleet_id: fleet_id.to_owned(),
                 count,
             })
         }
@@ -275,9 +271,9 @@ pub async fn get_worker_logs(
                     events: vec![],
                     next_token: None,
                     log_group,
-                    log_stream: worker_id.to_string(),
-                    worker_id: worker_id.to_string(),
-                    fleet_id: fleet_id.to_string(),
+                    log_stream: worker_id.to_owned(),
+                    worker_id: worker_id.to_owned(),
+                    fleet_id: fleet_id.to_owned(),
                     count: 0,
                 })
             } else {
@@ -296,13 +292,13 @@ async fn auto_select_session(
     job_id: &str,
     config: Option<&IniConfig>,
 ) -> Result<(String, SessionAutoSelect), DeadlineError> {
-    let client = crate::session::deadline_client(config).await;
+    let client = session::deadline_client(config).await;
     let resp = crate::client::collect_paginated(
         client.list_sessions().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
             .into_paginator().send()
     ).await?;
     let sessions: Vec<&aws_sdk_deadline::types::SessionSummary> = resp.iter()
-        .flat_map(|p| p.sessions())
+        .flat_map(aws_sdk_deadline::operation::list_sessions::ListSessionsOutput::sessions)
         .collect();
 
     if sessions.is_empty() {
@@ -312,7 +308,7 @@ async fn auto_select_session(
     }
 
     if sessions.len() == 1 {
-        let id = sessions[0].session_id().to_string();
+        let id = sessions[0].session_id().to_owned();
         return Ok((id.clone(), SessionAutoSelect::OnlySession(id)));
     }
 
@@ -322,20 +318,20 @@ async fn auto_select_session(
         .filter(|s| s.ended_at().is_none())
         .collect();
 
-    let best = if !ongoing.is_empty() {
-        ongoing
-            .iter()
-            .max_by_key(|s| s.started_at())
-            .unwrap()
-    } else {
+    let best = if ongoing.is_empty() {
         // Fall back to most recently ended
         sessions
             .iter()
             .max_by_key(|s| s.ended_at())
             .unwrap()
+    } else {
+        ongoing
+            .iter()
+            .max_by_key(|s| s.started_at())
+            .unwrap()
     };
 
-    let id = best.session_id().to_string();
+    let id = best.session_id().to_owned();
     Ok((id.clone(), SessionAutoSelect::LatestSession(id)))
 }
 

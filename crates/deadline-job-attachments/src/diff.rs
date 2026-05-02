@@ -111,10 +111,10 @@ pub fn hash_diff(
         match ref_map.get(path) {
             None => results.push((FileStatus::New, (*cmp_entry).clone())),
             Some(ref_entry) => {
-                if ref_entry.hash != cmp_entry.hash {
-                    results.push((FileStatus::Modified, (*cmp_entry).clone()));
-                } else {
+                if ref_entry.hash == cmp_entry.hash {
                     results.push((FileStatus::Unchanged, (*cmp_entry).clone()));
+                } else {
+                    results.push((FileStatus::Modified, (*cmp_entry).clone()));
                 }
             }
         }

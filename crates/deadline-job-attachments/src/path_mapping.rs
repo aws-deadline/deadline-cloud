@@ -38,7 +38,7 @@ pub fn generate_path_mapping_rules(
         .iter()
         .filter_map(|loc| {
             dest_locations.get(loc.name.as_str()).map(|dest_path| PathMappingRule {
-                source_path_format: format.to_string(),
+                source_path_format: format.to_owned(),
                 source_path: loc.path.clone(),
                 destination_path: dest_path.to_string(),
             })
@@ -87,7 +87,7 @@ impl PathMappingRuleApplier {
         if !rules.iter().all(|r| r.source_path_format == *format) {
             let mut formats: Vec<&str> =
                 rules.iter().map(|r| r.source_path_format.as_str()).collect();
-            formats.sort();
+            formats.sort_unstable();
             formats.dedup();
             return Err(JobAttachmentsError::AssetSync(format!(
                 "The path mapping rules included multiple source path formats {}, only one is permitted.",
@@ -165,24 +165,23 @@ impl PathMappingRuleApplier {
     /// Returns the original path unchanged if no rule matches.
     pub fn transform(&self, source_path: &str) -> String {
         if self.source_path_format.is_none() {
-            return source_path.to_string();
+            return source_path.to_owned();
         }
         match self.try_transform(source_path) {
             Some(path) => path.to_string_lossy().into_owned(),
-            None => source_path.to_string(),
+            None => source_path.to_owned(),
         }
     }
 
     /// Transform `source_path` using the most specific matching rule.
     /// Returns error if no rule matches.
     pub fn strict_transform(&self, source_path: &str) -> Result<PathBuf, JobAttachmentsError> {
-        if self.source_path_format.is_some() {
-            if let Some(result) = self.try_transform(source_path) {
+        if self.source_path_format.is_some()
+            && let Some(result) = self.try_transform(source_path) {
                 return Ok(result);
             }
-        }
         Err(JobAttachmentsError::AssetSync(
-            "No path mapping rule could be applied".to_string(),
+            "No path mapping rule could be applied".to_owned(),
         ))
     }
 }
@@ -196,10 +195,10 @@ fn split_path(mode: &SplitMode, path: &str) -> Vec<String> {
             }
             let mut parts = Vec::new();
             if path.starts_with('/') {
-                parts.push("/".to_string());
+                parts.push("/".to_owned());
             }
             for component in path.split('/').filter(|s| !s.is_empty()) {
-                parts.push(component.to_string());
+                parts.push(component.to_owned());
             }
             parts
         }
@@ -220,7 +219,7 @@ fn split_path(mode: &SplitMode, path: &str) -> Vec<String> {
                 }
             } else {
                 // Fallback: treat as single component
-                parts.push(path.to_string());
+                parts.push(path.to_owned());
             }
             parts
         }
@@ -232,7 +231,7 @@ fn split_path(mode: &SplitMode, path: &str) -> Vec<String> {
 fn normalize_part(mode: &SplitMode, part: &str) -> String {
     match mode {
         SplitMode::Windows => part.to_lowercase(),
-        _ => part.to_string(),
+        _ => part.to_owned(),
     }
 }
 
@@ -259,7 +258,7 @@ fn insert_into_trie(
 mod tests {
     use super::*;
     use crate::models::{
-        FileSystemLocation, FileSystemLocationType, PathFormat, StorageProfile,
+        FileSystemLocation, FileSystemLocationType, StorageProfile,
         StorageProfileOperatingSystemFamily,
     };
 
@@ -267,14 +266,14 @@ mod tests {
 
     fn linux_profile(id: &str, locations: Vec<(&str, &str)>) -> StorageProfile {
         StorageProfile {
-            storage_profile_id: id.to_string(),
-            display_name: id.to_string(),
+            storage_profile_id: id.to_owned(),
+            display_name: id.to_owned(),
             os_family: StorageProfileOperatingSystemFamily::Linux,
             file_system_locations: locations
                 .into_iter()
                 .map(|(name, path)| FileSystemLocation {
-                    name: name.to_string(),
-                    path: path.to_string(),
+                    name: name.to_owned(),
+                    path: path.to_owned(),
                     location_type: FileSystemLocationType::Shared,
                 })
                 .collect(),
@@ -283,14 +282,14 @@ mod tests {
 
     fn macos_profile(id: &str, locations: Vec<(&str, &str)>) -> StorageProfile {
         StorageProfile {
-            storage_profile_id: id.to_string(),
-            display_name: id.to_string(),
+            storage_profile_id: id.to_owned(),
+            display_name: id.to_owned(),
             os_family: StorageProfileOperatingSystemFamily::Macos,
             file_system_locations: locations
                 .into_iter()
                 .map(|(name, path)| FileSystemLocation {
-                    name: name.to_string(),
-                    path: path.to_string(),
+                    name: name.to_owned(),
+                    path: path.to_owned(),
                     location_type: FileSystemLocationType::Shared,
                 })
                 .collect(),
@@ -299,14 +298,14 @@ mod tests {
 
     fn windows_profile(id: &str, locations: Vec<(&str, &str)>) -> StorageProfile {
         StorageProfile {
-            storage_profile_id: id.to_string(),
-            display_name: id.to_string(),
+            storage_profile_id: id.to_owned(),
+            display_name: id.to_owned(),
             os_family: StorageProfileOperatingSystemFamily::Windows,
             file_system_locations: locations
                 .into_iter()
                 .map(|(name, path)| FileSystemLocation {
-                    name: name.to_string(),
-                    path: path.to_string(),
+                    name: name.to_owned(),
+                    path: path.to_owned(),
                     location_type: FileSystemLocationType::Shared,
                 })
                 .collect(),
@@ -315,9 +314,9 @@ mod tests {
 
     fn rule(fmt: &str, src: &str, dst: &str) -> PathMappingRule {
         PathMappingRule {
-            source_path_format: fmt.to_string(),
-            source_path: src.to_string(),
-            destination_path: dst.to_string(),
+            source_path_format: fmt.to_owned(),
+            source_path: src.to_owned(),
+            destination_path: dst.to_owned(),
         }
     }
 

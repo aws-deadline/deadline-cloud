@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline handle-web-url`.
 //!
-//! Test spec reference: specs/test_specs/cli.md, Section 48, cases 1-14.
-//! Python test reference: test/unit/deadline_client/cli/test_cli_handle_web_url.py
+//! Test spec reference: `specs/test_specs/cli.md`, Section 48, cases 1-14.
+//! Python test reference: `test/unit/deadline_client/cli/test_cli_handle_web_url.py`
 
 use deadline_test_server::deadline_api::{jobs, queues, s3, sts};
 use deadline_test_server::TestHarness;

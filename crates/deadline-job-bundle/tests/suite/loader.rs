@@ -1,7 +1,7 @@
 //! : Job bundle — loading & parsing
 //!
 //! Tests for file discovery (JSON vs YAML, mutual exclusion), symlink
-//! containment validation, YAML/JSON parsing, and deadline_yaml_dump.
+//! containment validation, YAML/JSON parsing, and `deadline_yaml_dump`.
 
 use deadline_job_bundle::loader::{
     deadline_yaml_dump, parse_yaml_or_json_content, read_yaml_or_json, read_yaml_or_json_object,
@@ -239,7 +239,7 @@ fn yaml_dump_singleline_no_block_literal() {
     let data = serde_json::json!({"name": "hello"});
     let yaml = deadline_yaml_dump(&data);
     assert!(yaml.contains("name:"));
-    assert!(!yaml.contains("|"), "Single-line should not use block literal");
+    assert!(!yaml.contains('|'), "Single-line should not use block literal");
 }
 
 #[test]

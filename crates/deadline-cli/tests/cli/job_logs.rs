@@ -1,6 +1,6 @@
 //! Level 2 tests for `deadline job logs` subcommand.
 //!
-//! Covers get_session_logs (cases 16-30) via the CLI interface.
+//! Covers `get_session_logs` (cases 16-30) via the CLI interface.
 //! DCM credential path tests (cases 22, 32) are deferred — they require
 //! AWS config file setup for DCM profiles.
 

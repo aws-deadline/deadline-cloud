@@ -6,7 +6,7 @@ use deadline_api::{client, session};
 /// Dispatches suggestion chains based on which API operation failed,
 /// matching Python's `_OPERATION_GROUPS` pattern.
 /// Returns a suggestion string to append to the error message, or empty string.
-pub async fn suggest_resources_on_client_error(
+pub(crate) async fn suggest_resources_on_client_error(
     error_msg: &str,
     operation_name: &str,
     farm_id: Option<&str>,
@@ -89,8 +89,7 @@ pub async fn suggest_resources_on_client_error(
 
     if suggestions.is_empty() {
         "\nCould not list available resources to suggest alternatives.\n\
-         This may indicate your IAM policy is missing List permissions."
-            .to_string()
+         This may indicate your IAM policy is missing List permissions.".to_owned()
     } else {
         suggestions.join("\n")
     }
@@ -104,7 +103,7 @@ async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bo
         Ok(pages) => {
             let items: Vec<serde_json::Value> = pages
                 .iter()
-                .flat_map(|p| p.farms())
+                .flat_map(aws_sdk_deadline::operation::list_farms::ListFarmsOutput::farms)
                 .map(|f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
                 .collect();
             format_suggestions(
@@ -127,7 +126,7 @@ async fn try_list_queues(farm_id: &str, config: Option<&IniConfig>, out: &mut Ve
         Ok(pages) => {
             let items: Vec<serde_json::Value> = pages
                 .iter()
-                .flat_map(|p| p.queues())
+                .flat_map(aws_sdk_deadline::operation::list_queues::ListQueuesOutput::queues)
                 .map(|q| serde_json::json!({"queueId": q.queue_id(), "displayName": q.display_name()}))
                 .collect();
             format_suggestions(
@@ -150,7 +149,7 @@ async fn try_list_fleets(farm_id: &str, config: Option<&IniConfig>, out: &mut Ve
         Ok(pages) => {
             let items: Vec<serde_json::Value> = pages
                 .iter()
-                .flat_map(|p| p.fleets())
+                .flat_map(aws_sdk_deadline::operation::list_fleets::ListFleetsOutput::fleets)
                 .map(|f| serde_json::json!({"fleetId": f.fleet_id(), "displayName": f.display_name()}))
                 .collect();
             format_suggestions(
@@ -176,7 +175,7 @@ async fn try_list_jobs(
     match client::collect_paginated(builder.into_paginator().send()).await {
         Ok(pages) => {
             let items: Vec<serde_json::Value> = pages.iter()
-                .flat_map(|p| p.jobs())
+                .flat_map(aws_sdk_deadline::operation::list_jobs::ListJobsOutput::jobs)
                 .map(|j| serde_json::json!({"jobId": j.job_id(), "name": j.name()}))
                 .collect();
             format_suggestions(
@@ -212,10 +211,10 @@ async fn try_list_workers(
             out.push(format!("\nAvailable workers in fleet {fleet_id}:"));
             for w in workers.iter().take(10) {
                 let id = w.worker_id().unwrap_or("");
-                let status = w.status().map(|s| s.as_str()).unwrap_or("");
+                let status = w.status().map_or("", aws_sdk_deadline::types::WorkerStatus::as_str);
                 out.push(format!("  {id}  {status}"));
             }
-            let total = output.total_results() as i64;
+            let total = i64::from(output.total_results());
             if total > 10 {
                 out.push(format!("  ... and {} more", total - 10));
             }
@@ -238,7 +237,7 @@ async fn try_list_storage_profiles(
     ).await {
         Ok(pages) => {
             let profiles: Vec<serde_json::Value> = pages.iter()
-                .flat_map(|p| p.storage_profiles())
+                .flat_map(aws_sdk_deadline::operation::list_storage_profiles_for_queue::ListStorageProfilesForQueueOutput::storage_profiles)
                 .map(|sp| serde_json::json!({
                     "storageProfileId": sp.storage_profile_id(),
                     "displayName": sp.display_name(),

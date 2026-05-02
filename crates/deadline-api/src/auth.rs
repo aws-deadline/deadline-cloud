@@ -78,7 +78,7 @@ fn read_aws_config_section(content: &str, section_header: &str, key: &str) -> Op
         }
         if let Some((k, v)) = trimmed.split_once('=')
             && k.trim() == key {
-                return Some(v.trim().to_string());
+                return Some(v.trim().to_owned());
             }
     }
     None
@@ -122,7 +122,7 @@ fn aws_profile_exists(profile_name: &str) -> bool {
     content.contains(&section_header)
 }
 
-/// If logged in with DCM, returns (user_id, identity_store_id).
+/// If logged in with DCM, returns (`user_id`, `identity_store_id`).
 /// Otherwise returns (None, None).
 pub fn get_user_and_identity_store_id(
     config: Option<&deadline_config::ini::IniConfig>,
@@ -145,7 +145,7 @@ pub fn get_user_and_identity_store_id(
     (user_id, identity_store_id)
 }
 
-/// Returns the monitor_id from the AWS profile if it's a DCM profile.
+/// Returns the `monitor_id` from the AWS profile if it's a DCM profile.
 pub fn get_monitor_id(
     config: Option<&deadline_config::ini::IniConfig>,
 ) -> Option<String> {
@@ -155,7 +155,7 @@ pub fn get_monitor_id(
     }
 }
 
-/// Check authentication by calling ListFarms with maxResults=1.
+/// Check authentication by calling `ListFarms` with maxResults=1.
 /// This validates both credential validity AND Deadline API reachability
 /// in one call, matching Python's behavior. No STS dependency.
 pub async fn check_authentication_status(
@@ -167,16 +167,13 @@ pub async fn check_authentication_status(
     if let Some(uid) = user_id {
         req = req.principal_id(uid);
     }
-    match req.send().await {
-        Ok(_) => AwsAuthenticationStatus::Authenticated,
-        Err(_) => {
-            let source = get_credentials_source(config);
-            match source {
-                AwsCredentialsSource::DeadlineCloudMonitorLogin => {
-                    AwsAuthenticationStatus::NeedsLogin
-                }
-                _ => AwsAuthenticationStatus::ConfigurationError,
+    if let Ok(_) = req.send().await { AwsAuthenticationStatus::Authenticated } else {
+        let source = get_credentials_source(config);
+        match source {
+            AwsCredentialsSource::DeadlineCloudMonitorLogin => {
+                AwsAuthenticationStatus::NeedsLogin
             }
+            _ => AwsAuthenticationStatus::ConfigurationError,
         }
     }
 }
@@ -190,10 +187,7 @@ pub async fn login(
     telemetry: Option<&TelemetryClient>,
 ) -> Result<String, String> {
     let ephemeral;
-    let tc = match telemetry {
-        Some(t) => t,
-        None => { ephemeral = crate::telemetry::create_telemetry(config); &ephemeral }
-    };
+    let tc = if let Some(t) = telemetry { t } else { ephemeral = crate::telemetry::create_telemetry(config); &ephemeral };
     let start = std::time::Instant::now();
     let result = login_inner(on_pending_authorization, on_cancellation_check, config).await;
     crate::telemetry::record_latency(tc, "login", start);
@@ -208,8 +202,7 @@ async fn login_inner(
     let source = get_credentials_source(config);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
         return Err(
-            "Logging in is only supported for AWS Profiles created by Deadline Cloud monitor."
-                .to_string(),
+            "Logging in is only supported for AWS Profiles created by Deadline Cloud monitor.".to_owned(),
         );
     }
 
@@ -249,7 +242,7 @@ async fn login_inner(
         if let Some(cb) = on_cancellation_check
             && cb() {
                 let _ = child.kill();
-                return Err("Login canceled".to_string());
+                return Err("Login canceled".to_owned());
             }
         if let Some(_exit) = child.try_wait().ok().flatten() {
             let out = child
@@ -284,8 +277,7 @@ fn logout_inner(
     let source = get_credentials_source(config);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
         return Err(
-            "Logging out is only supported for AWS Profiles created by Deadline Cloud monitor."
-                .to_string(),
+            "Logging out is only supported for AWS Profiles created by Deadline Cloud monitor.".to_owned(),
         );
     }
 
@@ -334,7 +326,7 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    /// Write content to a temp file and set AWS_CONFIG_FILE to point at it.
+    /// Write content to a temp file and set `AWS_CONFIG_FILE` to point at it.
     /// Returns the temp file (must stay alive for the duration of the test).
     fn with_aws_config(content: &str) -> NamedTempFile {
         let mut f = NamedTempFile::new().unwrap();

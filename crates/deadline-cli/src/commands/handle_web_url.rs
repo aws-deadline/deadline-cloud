@@ -10,7 +10,7 @@ use super::job::download_output_impl;
 const DEADLINE_URL_SCHEME: &str = "deadline";
 
 #[derive(Args)]
-pub struct HandleWebUrlArgs {
+pub(crate) struct HandleWebUrlArgs {
     /// deadline:// protocol URL
     pub url: Option<String>,
 
@@ -31,7 +31,7 @@ pub struct HandleWebUrlArgs {
     pub prompt_when_complete: bool,
 }
 
-pub fn run(args: HandleWebUrlArgs) -> Result<(), CliError> {
+pub(crate) fn run(args: HandleWebUrlArgs) -> Result<(), CliError> {
     let result = tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(e.to_string()))?
         .block_on(run_async(&args));
@@ -112,19 +112,16 @@ async fn handle_download_output(query: &str) -> Result<(), CliError> {
     let farm_id = &params["farm_id"];
     let queue_id = &params["queue_id"];
     let job_id = &params["job_id"];
-    let step_id = params.get("step_id").map(|s| s.as_str());
-    let task_id = params.get("task_id").map(|s| s.as_str());
+    let step_id = params.get("step_id").map(String::as_str);
+    let task_id = params.get("task_id").map(String::as_str);
 
     // Resolve AWS profile: use URL-provided profile, or find best match
-    let profile = match params.get("profile") {
-        Some(p) => p.clone(),
-        None => {
-            let config = config_file::read_config()
-                .map_err(|e| CliError::Operation(e.to_string()))?;
-            let aws_profiles = read_aws_profile_names();
-            let profile_refs: Vec<&str> = aws_profiles.iter().map(|s| s.as_str()).collect();
-            config_file::get_best_profile_for_farm(&config, &profile_refs, farm_id, Some(queue_id))
-        }
+    let profile = if let Some(p) = params.get("profile") { p.clone() } else {
+        let config = config_file::read_config()
+            .map_err(|e| CliError::Operation(e.to_string()))?;
+        let aws_profiles = read_aws_profile_names();
+        let profile_refs: Vec<&str> = aws_profiles.iter().map(String::as_str).collect();
+        config_file::get_best_profile_for_farm(&config, &profile_refs, farm_id, Some(queue_id))
     };
 
     // Build config with the resolved profile
@@ -325,9 +322,9 @@ fn read_aws_profile_names() -> Vec<String> {
         .filter_map(|line| {
             let line = line.trim();
             if let Some(rest) = line.strip_prefix("[profile ") {
-                rest.strip_suffix(']').map(|s| s.to_string())
+                rest.strip_suffix(']').map(ToOwned::to_owned)
             } else if line == "[default]" {
-                Some("default".to_string())
+                Some("default".to_owned())
             } else {
                 None
             }
@@ -337,7 +334,7 @@ fn read_aws_profile_names() -> Vec<String> {
 
 /// Parse a URL query string into a map, validating required/allowed params.
 /// Dashes in parameter names are converted to underscores in the result.
-pub fn parse_query_string(
+pub(crate) fn parse_query_string(
     query: &str,
     parameter_names: &[&str],
     required_names: &[&str],
@@ -348,7 +345,7 @@ pub fn parse_query_string(
         for pair in query.split('&') {
             let (key, value) = pair.split_once('=')
                 .ok_or_else(|| format!("Malformed query parameter: {pair}"))?;
-            parsed.entry(key.to_string()).or_default().push(value.to_string());
+            parsed.entry(key.to_owned()).or_default().push(value.to_owned());
         }
     }
 
@@ -389,7 +386,7 @@ pub fn parse_query_string(
 /// Validate that a resource ID has the correct format.
 /// Standard: `<resource>-<32 hex chars>`.
 /// Task: `task-<32 hex chars>-<0 or number up to 10 digits>`.
-pub fn validate_id_format(resource_type: &str, full_id: &str) -> bool {
+pub(crate) fn validate_id_format(resource_type: &str, full_id: &str) -> bool {
     const VALID_RESOURCES: &[&str] = &["farm", "queue", "job", "step", "task"];
     if !VALID_RESOURCES.contains(&resource_type) {
         return false;
@@ -416,7 +413,7 @@ pub fn validate_id_format(resource_type: &str, full_id: &str) -> bool {
 }
 
 /// Validate a map of `{resource_type_id: full_id_string}` entries.
-pub fn validate_resource_ids(ids: &HashMap<String, String>) -> Result<(), String> {
+pub(crate) fn validate_resource_ids(ids: &HashMap<String, String>) -> Result<(), String> {
     for (id_name, id_str) in ids {
         let resource_type = id_str.split('-').next().unwrap_or("");
         if !id_name.starts_with(resource_type) || !validate_id_format(resource_type, id_str) {
@@ -600,8 +597,8 @@ mod tests {
             Some(h) => unsafe { std::env::set_var("HOME", h); },
             None => unsafe { std::env::remove_var("HOME"); },
         }
-        assert!(profiles.contains(&"default".to_string()));
-        assert!(profiles.contains(&"my-profile".to_string()));
+        assert!(profiles.contains(&"default".to_owned()));
+        assert!(profiles.contains(&"my-profile".to_owned()));
         assert_eq!(profiles.len(), 2);
     }
 }

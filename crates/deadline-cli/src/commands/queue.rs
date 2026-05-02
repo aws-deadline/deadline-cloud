@@ -17,7 +17,7 @@ const DOWNLOAD_CHECKPOINT_FILE_NAME: &str = "download_checkpoint.json";
 const DEFAULT_CHECKPOINT_DIR: &str = "~/.deadline/incremental_download";
 
 #[derive(Subcommand)]
-pub enum QueueAction {
+pub(crate) enum QueueAction {
     /// List available queues
     List {
         #[arg(long)] profile: Option<String>,
@@ -37,7 +37,7 @@ pub enum QueueAction {
         /// USER (default) or READ
         #[arg(long, default_value = "USER")]
         mode: String,
-        /// Format of the output (default: credentials_process)
+        /// Format of the output (default: `credentials_process`)
         #[arg(long, default_value = "credentials_process", value_parser = ["credentials_process"])]
         output_format: String,
     },
@@ -76,7 +76,7 @@ pub enum QueueAction {
         /// Ignore storage profile configuration
         #[arg(long)]
         ignore_storage_profiles: bool,
-        /// File conflict resolution: SKIP, OVERWRITE, CREATE_COPY
+        /// File conflict resolution: SKIP, OVERWRITE, `CREATE_COPY`
         #[arg(long, default_value = "OVERWRITE")]
         conflict_resolution: String,
         /// Perform a dry run without downloading
@@ -85,7 +85,7 @@ pub enum QueueAction {
     },
 }
 
-pub fn run(action: QueueAction) -> Result<(), CliError> {
+pub(crate) fn run(action: QueueAction) -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(e.to_string()))?
         .block_on(run_async(action))
@@ -113,7 +113,7 @@ struct PidFileLock {
 impl PidFileLock {
     fn acquire(path: &Path, operation_name: &str) -> Result<Self, CliError> {
         let pid = std::process::id();
-        let tmp_path = path.with_extension(format!("{}~tmp", pid));
+        let tmp_path = path.with_extension(format!("{pid}~tmp"));
 
         // Write PID to temp file
         if let Some(parent) = path.parent() {
@@ -161,7 +161,7 @@ impl PidFileLock {
         // On POSIX, hard link is atomic and fails if target exists
         #[cfg(unix)]
         {
-            if std::fs::hard_link(tmp, target).is_ok() {
+            if fs::hard_link(tmp, target).is_ok() {
                 let _ = fs::remove_file(tmp);
                 return true;
             }
@@ -191,11 +191,10 @@ impl PidFileLock {
 impl Drop for PidFileLock {
     fn drop(&mut self) {
         // Only remove if we still own it (our PID matches)
-        if let Ok(contents) = fs::read_to_string(&self.path) {
-            if contents.trim() == std::process::id().to_string() {
+        if let Ok(contents) = fs::read_to_string(&self.path)
+            && contents.trim() == std::process::id().to_string() {
                 let _ = fs::remove_file(&self.path);
             }
-        }
     }
 }
 
@@ -214,7 +213,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
                         .iter()
-                        .flat_map(|p| p.queues())
+                        .flat_map(aws_sdk_deadline::operation::list_queues::ListQueuesOutput::queues)
                         .map(|q| serde_json::json!({"queueId": q.queue_id(), "displayName": q.display_name()}))
                         .collect();
                     println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
@@ -302,7 +301,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                     println!("{}", serde_json::to_string_pretty(&output).unwrap());
                     Ok(())
                 }
-                Ok(None) | Ok(Some(_)) => {
+                Ok(None | Some(_)) => {
                     details.insert("is_success".into(), serde_json::json!(false));
                     details.insert("error_type".into(), serde_json::json!("MissingCredentials"));
                     telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
@@ -312,7 +311,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 }
                 Err(e) => {
                     details.insert("is_success".into(), serde_json::json!(false));
-                    details.insert("error_type".into(), serde_json::json!(e.to_string()));
+                    details.insert("error_type".into(), serde_json::json!(e));
                     telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
                     Err(CliError::Operation(format!("Failed to export credentials:\n{e}")))
                 }
@@ -471,7 +470,7 @@ async fn run_sync_output(
     let checkpoint_file_path = checkpoint_dir.join(&checkpoint_file_name);
 
     // Get queue and validate job attachment settings
-    let queue = deadline_api::session::deadline_client(Some(&config)).await
+    let queue = session::deadline_client(Some(&config)).await
         .get_queue().farm_id(&farm).queue_id(&queue_id_str)
         .send().await
         .map_err(|e| CliError::Operation(format!("Failed to get queue:\n{}", client::format_sdk_error(&e))))?;
@@ -613,13 +612,11 @@ async fn incremental_output_download(
     let mut download_candidates: std::collections::HashMap<String, serde_json::Value> =
         std::collections::HashMap::new();
     for job in &active_jobs {
-        if let Some(counts) = job.get("taskRunStatusCounts") {
-            if counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
-                if let Some(id) = job["jobId"].as_str() {
-                    download_candidates.insert(id.to_string(), job.clone());
+        if let Some(counts) = job.get("taskRunStatusCounts")
+            && counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0) > 0
+                && let Some(id) = job["jobId"].as_str() {
+                    download_candidates.insert(id.to_owned(), job.clone());
                 }
-            }
-        }
     }
 
     // Recently ended jobs — paginate through all
@@ -638,13 +635,11 @@ async fn incremental_output_download(
     ).await.map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
 
     for job in &ended_jobs {
-        if let Some(counts) = job.get("taskRunStatusCounts") {
-            if counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0) > 0 {
-                if let Some(id) = job["jobId"].as_str() {
-                    download_candidates.insert(id.to_string(), job.clone());
+        if let Some(counts) = job.get("taskRunStatusCounts")
+            && counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0) > 0
+                && let Some(id) = job["jobId"].as_str() {
+                    download_candidates.insert(id.to_owned(), job.clone());
                 }
-            }
-        }
     }
 
     eprintln!("...retrieval completed");
@@ -652,7 +647,7 @@ async fn incremental_output_download(
 
     // Step 2: Categorize jobs
     let checkpoint_jobs_map: std::collections::HashMap<String, &IncrementalDownloadJob> =
-        checkpoint.jobs.iter().map(|j| (j.job_id().to_string(), j)).collect();
+        checkpoint.jobs.iter().map(|j| (j.job_id().to_owned(), j)).collect();
     let checkpoint_job_ids: std::collections::HashSet<String> =
         checkpoint_jobs_map.keys().cloned().collect();
     let candidate_ids: std::collections::HashSet<String> =
@@ -675,7 +670,7 @@ async fn incremental_output_download(
     // Copy attachments from checkpoint for updated jobs
     for job_id in updated_job_ids.clone() {
         if let Some(cp_job) = checkpoint_jobs_map.get(&job_id) {
-            if cp_job.job.get("attachments").map_or(false, |a| a.is_null()) {
+            if cp_job.job.get("attachments").is_some_and(serde_json::Value::is_null) {
                 attachments_free_ids.insert(job_id.clone());
                 continue;
             }
@@ -695,9 +690,9 @@ async fn incremental_output_download(
     for job_id in updated_job_ids.clone() {
         if let (Some(cp_job), Some(dc_job)) = (checkpoint_jobs_map.get(&job_id), download_candidates.get(&job_id)) {
             let cp_succeeded = cp_job.job.get("taskRunStatusCounts")
-                .and_then(|c| c.get("SUCCEEDED")).and_then(|v| v.as_i64()).unwrap_or(0);
+                .and_then(|c| c.get("SUCCEEDED")).and_then(serde_json::Value::as_i64).unwrap_or(0);
             let dc_succeeded = dc_job.get("taskRunStatusCounts")
-                .and_then(|c| c.get("SUCCEEDED")).and_then(|v| v.as_i64()).unwrap_or(0);
+                .and_then(|c| c.get("SUCCEEDED")).and_then(serde_json::Value::as_i64).unwrap_or(0);
             let cp_ended = cp_job.job.get("endedAt").and_then(|v| v.as_str());
             let dc_ended = dc_job.get("endedAt").and_then(|v| v.as_str());
             if cp_succeeded == dc_succeeded && cp_ended == dc_ended {
@@ -716,10 +711,10 @@ async fn incremental_output_download(
             eprintln!("EXISTING Job: {name} ({job_id})");
             let cp_counts = &cp_job.job["taskRunStatusCounts"];
             let dc_counts = &dc_job["taskRunStatusCounts"];
-            let cp_succeeded = cp_counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
-            let cp_total: i64 = cp_counts.as_object().map(|m| m.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
-            let dc_succeeded = dc_counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
-            let dc_total: i64 = dc_counts.as_object().map(|m| m.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
+            let cp_succeeded = cp_counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0);
+            let cp_total: i64 = cp_counts.as_object().map_or(0, |m| m.values().filter_map(serde_json::Value::as_i64).sum());
+            let dc_succeeded = dc_counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0);
+            let dc_total: i64 = dc_counts.as_object().map_or(0, |m| m.values().filter_map(serde_json::Value::as_i64).sum());
             eprintln!("  Succeeded tasks (before): {cp_succeeded} / {cp_total}");
             eprintln!("  Succeeded tasks (now)   : {dc_succeeded} / {dc_total}");
 
@@ -735,16 +730,16 @@ async fn incremental_output_download(
     for job_id in &finished_tracking_ids {
         if let Some(cp_job) = checkpoint_jobs_map.get(job_id) {
             let name = cp_job.job.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-            if cp_job.job.as_object().map_or(true, |m| m.len() <= 1) {
+            if cp_job.job.as_object().is_none_or(|m| m.len() <= 1) {
                 continue; // minimal placeholder, skip
             }
             eprintln!("FINISHED TRACKING Job: {name} ({job_id})");
-            if cp_job.job.get("attachments").map_or(false, |a| a.is_null()) {
+            if cp_job.job.get("attachments").is_some_and(serde_json::Value::is_null) {
                 eprintln!("  Job without job attachments is no longer active");
             } else {
                 let counts = &cp_job.job["taskRunStatusCounts"];
-                let succeeded = counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
-                let total: i64 = counts.as_object().map(|m| m.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
+                let succeeded = counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0);
+                let total: i64 = counts.as_object().map_or(0, |m| m.values().filter_map(serde_json::Value::as_i64).sum());
                 if succeeded == total {
                     eprintln!("   Job succeeded");
                 } else {
@@ -762,23 +757,22 @@ async fn incremental_output_download(
             .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {}", client::format_sdk_error(&e))))?;
         if let Some(dc_job) = download_candidates.get_mut(&job_id) {
             dc_job["attachments"] = job_detail.attachments.as_ref()
-                .map(deadline_api::type_conversions::attachments_to_value)
-                .unwrap_or(serde_json::Value::Null);
+                .map_or(serde_json::Value::Null, deadline_api::type_conversions::attachments_to_value);
             dc_job["storageProfileId"] = serde_json::json!(job_detail.storage_profile_id.as_deref());
         }
 
         let dc_job = &download_candidates[&job_id];
         let name = dc_job["name"].as_str().unwrap_or("unknown");
         let counts = &dc_job["taskRunStatusCounts"];
-        let succeeded = counts.get("SUCCEEDED").and_then(|v| v.as_i64()).unwrap_or(0);
-        let total: i64 = counts.as_object().map(|m| m.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
+        let succeeded = counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0);
+        let total: i64 = counts.as_object().map_or(0, |m| m.values().filter_map(serde_json::Value::as_i64).sum());
 
-        if dc_job.get("attachments").map_or(true, |a| a.is_null()) {
+        if dc_job.get("attachments").is_none_or(serde_json::Value::is_null) {
             eprintln!("NEW Job: {name} ({job_id})");
             eprintln!("  Succeeded tasks: {succeeded} / {total}");
             eprintln!("  Job does not use job attachments.");
             attachments_free_ids.insert(job_id.clone());
-        } else if dc_job.get("storageProfileId").map_or(false, |s| s.is_null())
+        } else if dc_job.get("storageProfileId").is_some_and(serde_json::Value::is_null)
             && local_storage_profile_id.is_some()
         {
             eprintln!("NEW Job: {name} ({job_id})");
@@ -823,7 +817,7 @@ async fn incremental_output_download(
                 .and_then(|j| j.get("storageProfileId"))
                 .and_then(|v| v.as_str())
             {
-                sp_ids.insert(sp.to_string());
+                sp_ids.insert(sp.to_owned());
             }
         }
 
@@ -890,8 +884,7 @@ async fn incremental_output_download(
         .filter(|id| {
             download_candidates.get(*id)
                 .and_then(|j| j.get("attachments"))
-                .map(|a| !a.is_null())
-                .unwrap_or(false)
+                .is_some_and(|a| !a.is_null())
         })
         .cloned()
         .collect();
@@ -901,7 +894,7 @@ async fn incremental_output_download(
     // Collect session completed indexes from checkpoint
     let checkpoint_session_indexes: std::collections::HashMap<String, std::collections::HashMap<String, i64>> =
         checkpoint.jobs.iter()
-            .map(|j| (j.job_id().to_string(), j.session_completed_indexes.clone()))
+            .map(|j| (j.job_id().to_owned(), j.session_completed_indexes.clone()))
             .collect();
 
     let mut all_session_actions: Vec<serde_json::Value> = Vec::new();
@@ -947,7 +940,7 @@ async fn incremental_output_download(
                                 .get(job_id)
                                 .and_then(|m| m.get(session_id))
                                 .copied();
-                            if completed_index.map_or(true, |ci| sa_index > ci) {
+                            if completed_index.is_none_or(|ci| sa_index > ci) {
                                 let mut action_val = serde_json::Map::new();
                                 action_val.insert("sessionActionId".into(), serde_json::json!(sa_id));
                                 action_val.insert("status".into(), serde_json::json!(action.status().as_str()));
@@ -971,7 +964,7 @@ async fn incremental_output_download(
         }
 
         let action_ids: Vec<String> = job_actions.iter()
-            .filter_map(|a| a["sessionActionId"].as_str().map(|s| s.to_string()))
+            .filter_map(|a| a["sessionActionId"].as_str().map(ToOwned::to_owned))
             .collect();
         job_session_action_counts.insert(job_id.clone(), (job_actions.len(), 0));
         job_session_action_ids.insert(job_id.clone(), action_ids);
@@ -991,8 +984,11 @@ async fn incremental_output_download(
     let mut downloaded_files_count: usize = 0;
     let mut downloaded_bytes: u64 = 0;
 
-    if !jobs_to_process.is_empty() {
-        let sdk_config = deadline_api::session::get_queue_scoped_config(
+    if jobs_to_process.is_empty() {
+        eprintln!("Summary of paths to download:");
+        eprintln!("  (no files to download)");
+    } else {
+        let sdk_config = session::get_queue_scoped_config(
             farm_id, queue_id, Some(config),
         ).await.map_err(|e| CliError::Operation(format!("Failed to get S3 credentials:\n{e}")))?;
 
@@ -1008,7 +1004,7 @@ async fn incremental_output_download(
                 None => continue,
             };
 
-            let manifest_prefix = format!("{}/Manifests/{}/{}/{}/", prefix, farm_id, queue_id, job_id);
+            let manifest_prefix = format!("{prefix}/Manifests/{farm_id}/{queue_id}/{job_id}/");
             let manifest_keys = deadline_job_attachments::download::list_output_manifest_keys(
                 &s3_client, bucket, &manifest_prefix, &account_id,
             ).await.unwrap_or_default();
@@ -1018,11 +1014,10 @@ async fn incremental_output_download(
             for key in &manifest_keys {
                 // Extract session action ID from manifest key path
                 // Format: .../step-X/task-Y/timestamp_sessionaction-ID/file.manifest
-                if let Some(sa_part) = key.rsplit('/').nth(1) {
-                    if let Some(sa_id) = sa_part.split('_').find(|p| p.starts_with("sessionaction-")) {
-                        session_action_ids_with_manifests.insert(sa_id.to_string());
+                if let Some(sa_part) = key.rsplit('/').nth(1)
+                    && let Some(sa_id) = sa_part.split('_').find(|p| p.starts_with("sessionaction-")) {
+                        session_action_ids_with_manifests.insert(sa_id.to_owned());
                     }
-                }
             }
 
             // Update the with-output count for this job
@@ -1091,7 +1086,7 @@ async fn incremental_output_download(
         } else {
             // SYNC-004: Use summarize_path_list with sizes instead of aggregate count
             let local_paths: Vec<String> = manifest_paths.iter().map(|p| p.path.clone()).collect();
-            let path_refs: Vec<&str> = local_paths.iter().map(|s| s.as_str()).collect();
+            let path_refs: Vec<&str> = local_paths.iter().map(String::as_str).collect();
             let size_by_path: std::collections::HashMap<String, i64> = manifest_paths.iter()
                 .map(|p| (p.path.clone(), p.size))
                 .collect();
@@ -1101,11 +1096,11 @@ async fn incremental_output_download(
         eprintln!();
 
         if !dry_run && !manifest_paths.is_empty() {
-            eprintln!("Downloading {} files from S3...", total_files);
+            eprintln!("Downloading {total_files} files from S3...");
 
             let s3_settings = deadline_job_attachments::models::JobAttachmentS3Settings {
-                s3_bucket_name: bucket.to_string(),
-                root_prefix: prefix.to_string(),
+                s3_bucket_name: bucket.to_owned(),
+                root_prefix: prefix.to_owned(),
             };
             let cas_prefix = s3_settings.full_cas_prefix()
                 .map_err(|e| CliError::Operation(format!("Failed to compute CAS prefix: {e}")))?;
@@ -1114,11 +1109,9 @@ async fn incremental_output_download(
             let mut manifests_by_root: std::collections::HashMap<String, deadline_job_attachments::asset_manifests::AssetManifest> =
                 std::collections::HashMap::new();
             for mp in &manifest_paths {
-                let dir = std::path::Path::new(&mp.path)
-                    .parent()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/".to_string());
-                let root = if dir.is_empty() { "/".to_string() } else { dir };
+                let dir = Path::new(&mp.path)
+                    .parent().map_or_else(|| "/".to_owned(), |p| p.to_string_lossy().to_string());
+                let root = if dir.is_empty() { "/".to_owned() } else { dir };
                 let entry = manifests_by_root.entry(root).or_insert_with(|| {
                     deadline_job_attachments::asset_manifests::AssetManifest::new(
                         deadline_job_attachments::asset_manifests::HashAlgorithm::Xxh128,
@@ -1126,10 +1119,8 @@ async fn incremental_output_download(
                         0, vec![],
                     ).unwrap()
                 });
-                let filename = std::path::Path::new(&mp.path)
-                    .file_name()
-                    .map(|f| f.to_string_lossy().to_string())
-                    .unwrap_or_else(|| mp.path.clone());
+                let filename = Path::new(&mp.path)
+                    .file_name().map_or_else(|| mp.path.clone(), |f| f.to_string_lossy().to_string());
                 entry.paths.push(deadline_job_attachments::asset_manifests::ManifestPath {
                     path: filename, hash: mp.hash.clone(), size: mp.size, mtime: mp.mtime,
                 });
@@ -1149,9 +1140,6 @@ async fn incremental_output_download(
         } else if dry_run {
             eprintln!("Skipping downloads due to DRY RUN");
         }
-    } else {
-        eprintln!("Summary of paths to download:");
-        eprintln!("  (no files to download)");
     }
     eprintln!();
 
@@ -1161,7 +1149,7 @@ async fn incremental_output_download(
         eprintln!("Summary of incremental output download:");
     }
     eprintln!("  Downloaded session actions: {}", job_session_action_counts.values().map(|&(_, with_output)| with_output).sum::<usize>());
-    eprintln!("  Downloaded files: {}", downloaded_files_count);
+    eprintln!("  Downloaded files: {downloaded_files_count}");
     eprintln!("  Downloaded bytes: {}",
         deadline_job_attachments::progress_tracker::human_readable_file_size(downloaded_bytes));
     eprintln!("  Jobs with downloads:");
@@ -1175,10 +1163,10 @@ async fn incremental_output_download(
     eprintln!("    inactive: {}", finished_tracking_ids.len());
 
     // Update checkpoint
-    let mut updated_jobs: Vec<deadline_job_attachments::incremental_download::IncrementalDownloadJob> = Vec::new();
-    for (_job_id, job) in &download_candidates {
+    let mut updated_jobs: Vec<IncrementalDownloadJob> = Vec::new();
+    for job in download_candidates.values() {
         updated_jobs.push(
-            deadline_job_attachments::incremental_download::IncrementalDownloadJob::new(
+            IncrementalDownloadJob::new(
                 job.clone(), None, None,
             )
         );
@@ -1190,7 +1178,7 @@ async fn incremental_output_download(
     Ok(checkpoint)
 }
 
-/// Format a chrono::Duration as H:MM:SS.ffffff matching Python's timedelta str()
+/// Format a `chrono::Duration` as H:MM:SS.ffffff matching Python's timedelta `str()`
 /// Python outputs "X day(s), H:MM:SS.ffffff" when days > 0.
 fn format_duration(d: Duration) -> String {
     let total_secs = d.num_seconds();
@@ -1208,6 +1196,23 @@ fn format_duration(d: Duration) -> String {
     } else {
         format!("{days} days, {time}")
     }
+}
+
+fn is_writable(path: &Path) -> bool {
+    // Try creating a temp file in the directory
+    let test_file = path.join(".deadline_write_test");
+    match fs::File::create(&test_file) {
+        Ok(_) => {
+            let _ = fs::remove_file(&test_file);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// Convert `GetStorageProfileForQueueOutput` to a `serde_json::Value` matching the API JSON shape.
+fn storage_profile_output_to_value(output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput) -> serde_json::Value {
+    deadline_api::type_conversions::storage_profile_output_to_value(output)
 }
 
 #[cfg(test)]
@@ -1231,21 +1236,4 @@ mod duration_tests {
         let d = Duration::days(1) + Duration::hours(2);
         assert_eq!(format_duration(d), "1 day, 2:00:00.000000");
     }
-}
-
-fn is_writable(path: &Path) -> bool {
-    // Try creating a temp file in the directory
-    let test_file = path.join(".deadline_write_test");
-    match fs::File::create(&test_file) {
-        Ok(_) => {
-            let _ = fs::remove_file(&test_file);
-            true
-        }
-        Err(_) => false,
-    }
-}
-
-/// Convert GetStorageProfileForQueueOutput to a serde_json::Value matching the API JSON shape.
-fn storage_profile_output_to_value(output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput) -> serde_json::Value {
-    deadline_api::type_conversions::storage_profile_output_to_value(output)
 }

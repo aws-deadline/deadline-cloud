@@ -37,11 +37,10 @@ pub fn build_s3_client(
     // Validate pool connections early so misconfiguration is caught at client
     // construction time, not mid-transfer. The value itself is used by
     // upload/download callers, not by the HTTP client.
-    if let Some(c) = config {
-        if let Err(e) = get_s3_max_pool_connections(Some(c)) {
+    if let Some(c) = config
+        && let Err(e) = get_s3_max_pool_connections(Some(c)) {
             log::warn!("S3 pool connections config issue: {e}");
         }
-    }
 
     let timeout_config = aws_config::timeout::TimeoutConfig::builder()
         .connect_timeout(std::time::Duration::from_secs(S3_CONNECT_TIMEOUT_SECS))
@@ -57,7 +56,7 @@ pub fn build_s3_client(
         s3_config_builder = s3_config_builder.endpoint_url(url).force_path_style(true);
     }
 
-    if let Ok(app_name) = aws_sdk_s3::config::AppName::new(S3_USER_AGENT_EXTRA.to_string()) {
+    if let Ok(app_name) = aws_sdk_s3::config::AppName::new(S3_USER_AGENT_EXTRA.to_owned()) {
         s3_config_builder = s3_config_builder.app_name(app_name);
     }
 
@@ -173,7 +172,7 @@ where
     }
 }
 
-/// Retrieves the AWS account ID by calling STS GetCallerIdentity.
+/// Retrieves the AWS account ID by calling STS `GetCallerIdentity`.
 ///
 /// Creates a new STS client per call. Callers should cache the result
 /// if they need the account ID for multiple S3 operations (e.g. as
@@ -193,7 +192,7 @@ pub async fn get_account_id(
         })?;
     identity
         .account()
-        .map(|s| s.to_string())
+        .map(ToOwned::to_owned)
         .ok_or_else(|| {
             JobAttachmentsError::AssetSync("GetCallerIdentity returned no account ID".into())
         })
@@ -231,7 +230,7 @@ mod tests {
             .region(aws_config::Region::new("us-west-2"))
             .build();
         let client = build_s3_client(&sdk_config, None);
-        assert!(std::mem::size_of_val(&client) > 0);
+        assert!(size_of_val(&client) > 0);
     }
 
     // === pool connections from config ===

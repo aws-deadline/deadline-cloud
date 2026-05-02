@@ -1,4 +1,4 @@
-//! Level 1 tests for manifest_upload and manifest_download (batch 9e-2).
+//! Level 1 tests for `manifest_upload` and `manifest_download` (batch 9e-2).
 //!
 //! Uses wiremock to stub S3 and Deadline API responses.
 
@@ -245,7 +245,7 @@ async fn manifest_download_input_only_skips_output_manifests() {
 
     let manifest = make_test_manifest();
     Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(&manifest.encode()))
+        .respond_with(ResponseTemplate::new(200).set_body_string(manifest.encode()))
         .mount(&server)
         .await;
 
