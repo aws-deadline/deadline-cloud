@@ -65,7 +65,8 @@ async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
     let profile_name = session::display_profile_name(config_ref);
     let creds_source = auth::get_credentials_source(config_ref);
     let auth_status = auth::check_authentication_status(config_ref).await;
-    let api_available = auth::check_deadline_api_available(config_ref).await;
+    // Auth check uses ListFarms, so AUTHENTICATED implies API available.
+    let api_available = auth_status == auth::AwsAuthenticationStatus::Authenticated;
 
     if output.eq_ignore_ascii_case("json") {
         let json = serde_json::json!({

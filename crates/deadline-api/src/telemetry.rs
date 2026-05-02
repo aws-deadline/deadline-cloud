@@ -450,14 +450,67 @@ mod tests {
             Some(&Value::String("123456789012".into()))
         );
     }
+
+    // When no account_id is explicitly passed, the telemetry
+    // system should resolve it best-effort from STS GetCallerIdentity
+    // (matching Python's behavior). This test verifies that
+    // resolve_account_id returns the account from STS.
+    #[tokio::test]
+    async fn account_id_resolved_from_sts_when_not_provided() {
+        use wiremock::{MockServer, Mock, ResponseTemplate};
+        use wiremock::matchers::{method, body_string_contains};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(body_string_contains("Action=GetCallerIdentity"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                r#"<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
+  <GetCallerIdentityResult>
+    <UserId>AIDACKCEVSQ6C2EXAMPLE</UserId>
+    <Account>987654321098</Account>
+    <Arn>arn:aws:iam::987654321098:user/test</Arn>
+  </GetCallerIdentityResult>
+</GetCallerIdentityResponse>"#,
+            ))
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .endpoint_url(&endpoint)
+            .credentials_provider(aws_sdk_sts::config::Credentials::new(
+                "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                None, None, "test",
+            ))
+            .region(aws_config::Region::new("us-west-2"))
+            .load()
+            .await;
+
+        let account_id = resolve_account_id(&sdk_config).await;
+        assert_eq!(
+            account_id.as_deref(),
+            Some("987654321098"),
+            "Expected account_id to be resolved from STS"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Convenience helpers for API-layer telemetry
 // ---------------------------------------------------------------------------
 
+/// Resolve AWS account ID from STS GetCallerIdentity with a 2s timeout.
+/// Returns None on any failure (best-effort, matches Python).
+pub async fn resolve_account_id(sdk_config: &aws_config::SdkConfig) -> Option<String> {
+    let sts = aws_sdk_sts::Client::new(sdk_config);
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        sts.get_caller_identity().send(),
+    ).await.ok()?.ok()?;
+    result.account().map(String::from)
+}
+
 /// Create a TelemetryClient initialized from AWS_ENDPOINT_URL_DEADLINE.
-/// Used by API functions to create an ephemeral client when none is provided.
 pub fn create_telemetry(config: Option<&deadline_config::ini::IniConfig>) -> TelemetryClient {
     create_telemetry_with_metadata(config, None, None, None)
 }

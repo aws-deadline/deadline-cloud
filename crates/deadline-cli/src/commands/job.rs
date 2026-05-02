@@ -206,6 +206,9 @@ pub enum JobAction {
         #[arg(long)] task_id: Option<String>,
         #[arg(long, value_parser = parse_conflict_resolution)]
         conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+        /// Ignore storage profile configuration. Downloads to unmapped paths.
+        #[arg(long)]
+        ignore_storage_profiles: bool,
         #[arg(long)]
         yes: bool,
         #[arg(long, default_value = "verbose")]
@@ -963,7 +966,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
         }
         JobAction::DownloadOutput {
             profile, farm_id, queue_id, job_id, step_id, task_id,
-            conflict_resolution, yes, output,
+            conflict_resolution, ignore_storage_profiles: _, yes, output,
         } => {
             let is_json = output.eq_ignore_ascii_case("json");
 

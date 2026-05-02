@@ -1237,6 +1237,156 @@ async fn bundle_submit_save_debug_snapshot_with_attachments() {
 }
 
 // ===========================================================================
+
+// ===========================================================================
+// Debug snapshot content — full queue.json, storage_profile.json,
+//            and shell-quoted values in scripts
+// ===========================================================================
+
+/// queue.json should contain the full GetQueue response, not just
+/// jobAttachmentSettings. Verify displayName and status are present.
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_queue_json_has_full_content() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE,
+        "displayName": "My Test Queue",
+        "status": "ACTIVE",
+        "farmId": FARM,
+        "defaultBudgetAction": "NONE",
+        "createdAt": "2024-01-15T10:30:00Z",
+        "createdBy": "user-abc",
+        "updatedAt": "2024-01-15T10:30:00Z",
+        "updatedBy": "user-abc",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    let bundle_dir = create_bundle(&harness, "snapshot_queue_full");
+    let snapshot_dir = harness.config_dir.path().join("debug_queue_full");
+
+    harness.cli(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+    ]).assert().success();
+
+    let queue_content = fs::read_to_string(snapshot_dir.join("queue.json"))
+        .expect("Failed to read queue.json");
+    let queue_json: serde_json::Value = serde_json::from_str(&queue_content)
+        .expect("Invalid JSON in queue.json");
+
+    // queue.json must contain full queue fields, not just jobAttachmentSettings
+    assert!(queue_json.get("displayName").is_some(),
+        "Expected displayName in queue.json, got: {queue_json}");
+    assert!(queue_json.get("status").is_some(),
+        "Expected status in queue.json, got: {queue_json}");
+}
+
+/// When a storage profile is configured, storage_profile.json should be
+/// written to the debug snapshot directory.
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_storage_profile_written() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    harness.cli(&["config", "set", "settings.storage_profile_id", "sp-abc123"]).assert().success();
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    queue_resources::mock_get_storage_profile_for_queue(
+        &harness.server, FARM, QUEUE, "sp-abc123",
+        json!({
+            "storageProfileId": "sp-abc123",
+            "displayName": "My Storage Profile",
+            "osFamily": "LINUX",
+            "fileSystemLocations": [
+                {"name": "Output", "path": "/mnt/shared/output", "type": "SHARED"}
+            ],
+        }),
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    let bundle_dir = create_bundle(&harness, "snapshot_sp");
+    let snapshot_dir = harness.config_dir.path().join("debug_sp");
+
+    harness.cli(&[
+        "bundle", "submit", &bundle_dir, "--yes",
+        "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+    ]).assert().success();
+
+    // storage_profile.json must be written when storage profile is configured
+    let sp_path = snapshot_dir.join("storage_profile.json");
+    assert!(sp_path.is_file(),
+        "Expected storage_profile.json in snapshot dir when storage profile is configured");
+    let sp_content = fs::read_to_string(&sp_path).expect("Failed to read storage_profile.json");
+    let sp_json: serde_json::Value = serde_json::from_str(&sp_content)
+        .expect("Invalid JSON in storage_profile.json");
+    assert_eq!(sp_json["storageProfileId"], "sp-abc123");
+    assert_eq!(sp_json["displayName"], "My Storage Profile");
+}
+
+/// Shell scripts should properly quote values that contain spaces or
+/// special characters to prevent broken scripts.
+#[tokio::test]
+async fn bundle_submit_save_debug_snapshot_shell_script_quotes_values() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    queues::mock_get_queue(&harness.server, FARM, json!({
+        "queueId": QUEUE, "displayName": "Test Queue",
+    })).await;
+    queue_resources::mock_list_queue_environments(
+        &harness.server, FARM, QUEUE, &[],
+    ).await;
+    telemetry::mock_telemetry_endpoint_permissive(&harness.server).await;
+
+    // Use a bundle with a name containing spaces to test quoting
+    let dir = harness.config_dir.path().join("snapshot_quote_bundle");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("template.yaml"), "\
+specificationVersion: jobtemplate-2023-09
+name: My Render Job With Spaces
+steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ['hello']
+").unwrap();
+
+    let snapshot_dir = harness.config_dir.path().join("debug_quote");
+
+    harness.cli(&[
+        "bundle", "submit", dir.to_str().unwrap(), "--yes",
+        "--save-debug-snapshot", snapshot_dir.to_str().unwrap(),
+    ]).assert().success();
+
+    let sh_content = fs::read_to_string(snapshot_dir.join("submit_job.sh"))
+        .expect("Failed to read submit_job.sh");
+
+    // CLI argument values must be shell-quoted.
+    // Find the line with --farm-id and verify the value is quoted.
+    // Currently the script writes bare values like:
+    //   --farm-id farm-0123456789abcdef0123456789abcdef
+    // After fix it should be:
+    //   --farm-id 'farm-0123456789abcdef0123456789abcdef'
+    let has_quoted_args = sh_content.lines().any(|line| {
+        let trimmed = line.trim();
+        // Check for a --flag 'value' or --flag "value" pattern
+        (trimmed.starts_with("--farm-id") || trimmed.starts_with("--queue-id"))
+            && (trimmed.contains('\'') || trimmed.contains('"'))
+    });
+    assert!(
+        has_quoted_args,
+        "Expected CLI argument values to be shell-quoted in submit_job.sh, got:\n{sh_content}"
+    );
+}
+
 // Batch 1: --json flag outputs JSON with jobId
 // ===========================================================================
 

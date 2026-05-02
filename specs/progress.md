@@ -85,6 +85,8 @@ pick and execute work items.
 | 23 | Failure case handling analysis | Not started | — | — |
 | 27 | Typed SDK API layer | ✅ Done | — | — |
 | 27b | SDK calling behavior audit | ✅ Done | — | 27 |
+| 28 | CLI feature parity audit fixes (AUDIT-101,103,106,107) | ✅ Done | — | — |
+| 29 | Investigate Python `--save-debug-snapshot` bug on no-attachment bundles | Not started | — | — |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |
@@ -101,7 +103,7 @@ No items remain as ⚠️ Gaps. #16 (GUI FFI) is in progress.
 
 **Audit status:** See `audit_reports/2026-04-17-behavioral-parity.md`
 (all findings resolved) and `audit_reports/2026-05-01-cli-feature-parity.md`
-(4 open findings: AUDIT-101, 103, 106, 107). Codebase health audit
+(all findings resolved). Codebase health audit
 complete — see `audit_reports/2026-05-01-codebase-health.md`.
 
 **GUI FFI migration plan (#16a-16f):**

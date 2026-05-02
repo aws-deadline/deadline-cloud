@@ -112,8 +112,8 @@ impl SessionCache {
     }
 
     async fn build_deadline_client(&mut self, config: Option<&IniConfig>) -> DeadlineClient {
-        let sdk_config = self.get_config(config).await;
-        let mut builder = aws_sdk_deadline::config::Builder::from(sdk_config);
+        let sdk_config = self.get_config(config).await.clone();
+        let mut builder = aws_sdk_deadline::config::Builder::from(&sdk_config);
         if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
             builder = builder.endpoint_url(url);
         }
@@ -121,8 +121,11 @@ impl SessionCache {
         if let Ok(app_name) = aws_sdk_deadline::config::AppName::new(ua) {
             builder = builder.app_name(app_name);
         }
-        // Install telemetry interceptor — every operation gets automatic latency telemetry.
-        let telemetry = crate::telemetry::create_telemetry(config);
+        // Resolve account_id best-effort from STS
+        let account_id = crate::telemetry::resolve_account_id(&sdk_config).await;
+        let telemetry = crate::telemetry::create_telemetry_with_metadata(
+            config, None, None, account_id.as_deref(),
+        );
         builder = builder.interceptor(TelemetryInterceptor::new(Some(telemetry)));
         DeadlineClient::from_conf(builder.build())
     }

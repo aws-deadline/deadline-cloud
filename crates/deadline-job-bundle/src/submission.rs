@@ -695,7 +695,27 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 
     // F8: If debug snapshot dir is set, save snapshot and return without calling CreateJob
     if let Some(ref snapshot_dir) = params.debug_snapshot_dir {
-        save_debug_snapshot(snapshot_dir, &create_job_args, queue.job_attachment_settings())?;
+        // Pass full queue response and storage profile for complete snapshot
+        let queue_json = {
+            use deadline_api::responses::QueueResponse;
+            let resp = QueueResponse::from(queue.clone());
+            serde_json::to_value(&resp).unwrap_or_default()
+        };
+        let sp_json = storage_profile.as_ref().map(|sp| {
+            serde_json::json!({
+                "storageProfileId": sp.storage_profile_id,
+                "displayName": sp.display_name,
+                "osFamily": format!("{:?}", sp.os_family).to_uppercase(),
+                "fileSystemLocations": sp.file_system_locations.iter().map(|loc| {
+                    serde_json::json!({
+                        "name": loc.name,
+                        "path": loc.path,
+                        "type": format!("{:?}", loc.location_type).to_uppercase(),
+                    })
+                }).collect::<Vec<_>>(),
+            })
+        });
+        save_debug_snapshot(snapshot_dir, &create_job_args, &queue_json, sp_json.as_ref())?;
         return Ok(None);
     }
 
@@ -755,7 +775,8 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 fn save_debug_snapshot(
     snapshot_dir: &str,
     create_job_args: &serde_json::Map<String, Value>,
-    job_attachment_settings: Option<&aws_sdk_deadline::types::JobAttachmentSettings>,
+    queue_json: &Value,
+    storage_profile_json: Option<&Value>,
 ) -> Result<(), DeadlineError> {
     use std::fs;
     use std::io::Write;
@@ -801,8 +822,10 @@ fn save_debug_snapshot(
     }
 
     // Determine S3 path for attachment upload commands in scripts
-    let s3_base = job_attachment_settings.map(|ja| {
-        format!("s3://{}/{}", ja.s3_bucket_name(), ja.root_prefix())
+    let s3_base = queue_json.get("jobAttachmentSettings").and_then(|ja| {
+        let bucket = ja.get("s3BucketName")?.as_str()?;
+        let prefix = ja.get("rootPrefix")?.as_str()?;
+        Some(format!("s3://{bucket}/{prefix}"))
     });
     let has_attachments = create_job_args.contains_key("attachments");
 
@@ -821,7 +844,7 @@ fn save_debug_snapshot(
                 .map_err(|e| op_err(format!("Failed to write submit_job.sh: {e}")))?;
         }
     }
-    write_create_job_commands(&mut sh, &cli_args, " \\\n")
+    write_create_job_commands(&mut sh, &cli_args, " \\\n", shell_quote)
         .map_err(|e| op_err(format!("Failed to write submit_job.sh: {e}")))?;
 
     // 4. submit_job.bat
@@ -837,23 +860,26 @@ fn save_debug_snapshot(
                 .map_err(|e| op_err(format!("Failed to write submit_job.bat: {e}")))?;
         }
     }
-    write_create_job_commands(&mut bat, &cli_args, " ^\r\n")
+    write_create_job_commands(&mut bat, &cli_args, " ^\r\n", bat_quote)
         .map_err(|e| op_err(format!("Failed to write submit_job.bat: {e}")))?;
 
-    // 5. queue.json (attachment settings snapshot)
-    let queue_json = match job_attachment_settings {
-        Some(s) => serde_json::to_string_pretty(&serde_json::json!({
-            "jobAttachmentSettings": {
-                "s3BucketName": s.s3_bucket_name(),
-                "rootPrefix": s.root_prefix(),
-            }
-        })).unwrap_or_else(|_| "{}".to_string()),
-        None => "{}".to_string(),
-    };
+    // 5. queue.json — full queue response
+    let queue_str = serde_json::to_string_pretty(queue_json)
+        .unwrap_or_else(|_| "{}".to_string());
     fs::write(
         std::path::Path::new(snapshot_dir).join("queue.json"),
-        &queue_json,
+        &queue_str,
     ).map_err(|e| op_err(format!("Failed to write queue.json: {e}")))?;
+
+    // 6. storage_profile.json — when storage profile is configured
+    if let Some(sp) = storage_profile_json {
+        let sp_str = serde_json::to_string_pretty(sp)
+            .unwrap_or_else(|_| "{}".to_string());
+        fs::write(
+            std::path::Path::new(snapshot_dir).join("storage_profile.json"),
+            &sp_str,
+        ).map_err(|e| op_err(format!("Failed to write storage_profile.json: {e}")))?;
+    }
 
     Ok(())
 }
@@ -877,13 +903,31 @@ fn write_create_job_commands(
     w: &mut impl std::io::Write,
     cli_args: &[(String, String)],
     continuation: &str,
+    quote_fn: fn(&str) -> String,
 ) -> std::io::Result<()> {
     write!(w, "aws deadline create-job")?;
     for (flag, val) in cli_args {
-        write!(w, "{continuation}    {flag} {val}")?;
+        write!(w, "{continuation}    {flag} {}", quote_fn(val))?;
     }
     writeln!(w)?;
     Ok(())
+}
+
+/// Unix shell quoting: wrap in single quotes, matching Python's shlex.join().
+fn shell_quote(s: &str) -> String {
+    if s.is_empty() {
+        return "''".to_string();
+    }
+    // Wrap in single quotes, escaping any embedded single quotes
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// Windows cmd.exe quoting: wrap in double quotes.
+fn bat_quote(s: &str) -> String {
+    if s.is_empty() {
+        return "\"\"".to_string();
+    }
+    format!("\"{}\"", s.replace('"', "\\\""))
 }
 
 /// Convert camelCase to kebab-case.

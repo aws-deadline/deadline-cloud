@@ -777,3 +777,25 @@ async fn job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt() 
         "Expected no root editing loop with --yes"
     );
 }
+
+// ===========================================================================
+// --ignore-storage-profiles flag on download-output
+// ===========================================================================
+
+/// The --ignore-storage-profiles flag should be accepted and skip storage
+/// profile resolution. When set, downloads go to original unmapped paths.
+#[tokio::test]
+async fn job_download_output_ignore_storage_profiles_accepted() {
+    let harness = TestHarness::new().await;
+    setup_no_output_mocks(&harness).await;
+
+    // Flag should be accepted without error
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job", "download-output",
+        "--farm-id", FARM,
+        "--queue-id", QUEUE,
+        "--job-id", JOB,
+        "--ignore-storage-profiles",
+        "--yes",
+    ]));
+}

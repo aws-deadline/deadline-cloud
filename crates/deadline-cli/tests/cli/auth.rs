@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline auth` subcommands.
 
 use deadline_test_server::TestHarness;
-use deadline_test_server::deadline_api::{farms, sts};
+use deadline_test_server::deadline_api::{errors, farms, sts};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
@@ -47,21 +47,24 @@ fn dcm_cmd(harness: &TestHarness, args: &[&str]) -> std::process::Command {
 
 // --- auth status (verbose) ---
 
-// Authenticated with API available — shows all four fields
+// Auth check uses ListFarms, not STS. No separate "API availability"
+// field — if ListFarms succeeds, status is AUTHENTICATED (implies API available).
+
+// ListFarms succeeds → AUTHENTICATED
 #[tokio::test]
-async fn auth_status_authenticated_api_available() {
+async fn auth_status_authenticated() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity(&harness.server).await;
+    // No STS mock — auth check uses ListFarms only
     farms::mock_list_farms(&harness.server, &[json!({"farmId": "farm-abc", "displayName": "F"})]).await;
 
     assert_cmd_snapshot!(harness.cmd(&["auth", "status"]));
 }
 
-// STS fails — shows CONFIGURATION_ERROR
+// ListFarms fails (no mock) → CONFIGURATION_ERROR
 #[tokio::test]
 async fn auth_status_configuration_error() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity_failure(&harness.server).await;
+    // No ListFarms mock → request fails → CONFIGURATION_ERROR
 
     assert_cmd_snapshot!(harness.cmd(&["auth", "status"]));
 }
@@ -70,27 +73,19 @@ async fn auth_status_configuration_error() {
 #[tokio::test]
 async fn auth_status_with_profile_option() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity(&harness.server).await;
     farms::mock_list_farms(&harness.server, &[]).await;
 
     assert_cmd_snapshot!(harness.cmd(&["auth", "status", "--profile", "custom-profile"]));
 }
 
-// API unavailable (no ListFarms mock)
-#[tokio::test]
-async fn auth_status_api_unavailable() {
-    let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity(&harness.server).await;
-
-    assert_cmd_snapshot!(harness.cmd(&["auth", "status"]));
-}
+// "AUTHENTICATED but API unavailable" state no longer exists.
+// Tests auth_status_api_unavailable and auth_status_json_api_unavailable removed.
 
 // --- auth status (JSON) ---
 
 #[tokio::test]
 async fn auth_status_json_authenticated() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity(&harness.server).await;
     farms::mock_list_farms(&harness.server, &[]).await;
 
     assert_cmd_snapshot!(harness.cmd(&["auth", "status", "--output", "json"]));
@@ -99,15 +94,7 @@ async fn auth_status_json_authenticated() {
 #[tokio::test]
 async fn auth_status_json_configuration_error() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity_failure(&harness.server).await;
-
-    assert_cmd_snapshot!(harness.cmd(&["auth", "status", "--output", "json"]));
-}
-
-#[tokio::test]
-async fn auth_status_json_api_unavailable() {
-    let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity(&harness.server).await;
+    // No ListFarms mock → CONFIGURATION_ERROR
 
     assert_cmd_snapshot!(harness.cmd(&["auth", "status", "--output", "json"]));
 }
@@ -132,11 +119,14 @@ async fn auth_logout_non_dcm_profile_prints_error() {
 
 // --- auth login (DCM profile) ---
 
-// DCM login happy path — monitor starts, STS succeeds
+// Login polling now uses ListFarms instead of STS.
+
+// DCM login happy path — monitor starts, ListFarms succeeds
 #[tokio::test]
 async fn auth_login_dcm_profile_succeeds() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity(&harness.server).await;
+    // Login polls check_authentication_status which now uses ListFarms
+    farms::mock_list_farms(&harness.server, &[]).await;
 
     // Fake monitor that exits immediately (login is non-blocking, polling handles auth)
     setup_dcm_env(&harness, "#!/bin/bash\nexit 0\n");
@@ -148,7 +138,7 @@ async fn auth_login_dcm_profile_succeeds() {
 #[tokio::test]
 async fn auth_login_dcm_monitor_exits_with_error() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity_failure(&harness.server).await;
+    // No ListFarms mock → auth check fails → login fails
 
     // Fake monitor that prints an error and exits non-zero
     setup_dcm_env(&harness, "#!/bin/bash\necho 'Monitor login failed'\nexit 1\n");
@@ -208,7 +198,6 @@ async fn auth_logout_dcm_monitor_fails() {
 #[tokio::test]
 async fn auth_status_output_json_uppercase_produces_json() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity(&harness.server).await;
     farms::mock_list_farms(&harness.server, &[]).await;
 
     let output = harness.cli(&["auth", "status", "--output", "JSON"])

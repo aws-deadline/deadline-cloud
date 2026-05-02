@@ -3,23 +3,14 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-No active work item. Last completed: #21d (CLI backward-compat flags).
+No active work item. Last completed: #28 (CLI feature parity audit fixes).
 
 ---
 
 ## CLI Feature Parity Audit (2026-05-01)
 
 **Report:** `audit_reports/2026-05-01-cli-feature-parity.md`
-**Scope:** Full three-tier audit against Python CLI v0.56.0
-
-### Open findings
-
-| ID | Title | Priority |
-|----|-------|----------|
-| AUDIT-101 | Auth status uses STS instead of ListFarms | Critical |
-| AUDIT-103 | Missing `--ignore-storage-profiles` on download-output | High |
-| AUDIT-106 | Telemetry `account_id` not resolved | Medium |
-| AUDIT-107 | Debug snapshot reduced content | Medium |
+**Status:** All findings resolved.
 
 ### Decisions needed
 

@@ -3,7 +3,7 @@
 //! These tests spawn the MCP server as a child process and connect an rmcp
 //! client over stdio.
 
-use deadline_test_server::deadline_api::{cloudwatch, errors, farms, fleets, jobs, queues, sessions, sts};
+use deadline_test_server::deadline_api::{cloudwatch, errors, farms, fleets, jobs, queues, sessions};
 use deadline_test_server::TestHarness;
 use rmcp::model::CallToolRequestParams;
 use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
@@ -158,7 +158,7 @@ async fn mcp_tools_have_descriptions() {
 #[tokio::test]
 async fn mcp_check_authentication_status_returns_status() {
     let harness = TestHarness::new().await;
-    sts::mock_get_caller_identity(&harness.server).await;
+    // Auth check uses ListFarms, not STS
     farms::mock_list_farms(&harness.server, &[]).await;
 
     let client = mcp_client(&harness).await;

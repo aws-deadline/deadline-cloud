@@ -18,7 +18,7 @@ pub fn check_auth_status(py: Python<'_>, config_path: Option<&str>) -> PyResult<
     let result = rt.block_on(async {
         let source = deadline_api::auth::get_credentials_source(config.as_ref());
         let status = deadline_api::auth::check_authentication_status(config.as_ref()).await;
-        let api_available = deadline_api::auth::check_deadline_api_available(config.as_ref()).await;
+        let api_available = status == deadline_api::auth::AwsAuthenticationStatus::Authenticated;
         (source.to_string(), status.to_string(), api_available)
     });
     let dict = pyo3::types::PyDict::new(py);
@@ -47,8 +47,7 @@ pub fn check_auth_status_with_progress(
         let source = deadline_api::auth::get_credentials_source(config.as_ref());
         notify("Checking authentication status...");
         let status = deadline_api::auth::check_authentication_status(config.as_ref()).await;
-        notify("Checking API availability...");
-        let api_available = deadline_api::auth::check_deadline_api_available(config.as_ref()).await;
+        let api_available = status == deadline_api::auth::AwsAuthenticationStatus::Authenticated;
         notify("Done");
         (source.to_string(), status.to_string(), api_available)
     });
@@ -64,7 +63,8 @@ pub fn check_auth_status_with_progress(
 pub fn check_api_available(config_path: Option<&str>) -> PyResult<bool> {
     let config = crate::load_config(config_path).ok();
     let rt = crate::make_runtime()?;
-    Ok(rt.block_on(deadline_api::auth::check_deadline_api_available(config.as_ref())))
+    let status = rt.block_on(deadline_api::auth::check_authentication_status(config.as_ref()));
+    Ok(status == deadline_api::auth::AwsAuthenticationStatus::Authenticated)
 }
 
 #[pyfunction]

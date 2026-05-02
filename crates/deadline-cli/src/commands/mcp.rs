@@ -253,10 +253,10 @@ impl DeadlineServer {
     async fn check_authentication_status(&self) -> String {
         let source = deadline_api::auth::get_credentials_source(None);
         let status = deadline_api::auth::check_authentication_status(None).await;
-        let api_available = deadline_api::auth::check_deadline_api_available(None).await;
+        let api_available = status == deadline_api::auth::AwsAuthenticationStatus::Authenticated;
         ok_result(json!({
-            "source": format!("{source:?}"),
-            "status": format!("{status:?}"),
+            "source": source.to_string(),
+            "status": status.to_string(),
             "api_available": api_available,
         }))
     }
