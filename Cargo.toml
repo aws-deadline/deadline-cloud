@@ -78,7 +78,10 @@ dbg_macro = "warn"
 print_stdout = "warn"
 print_stderr = "warn"
 unwrap_used = "warn"
-expect_used = "warn"
+# expect_used: not enabled — expect() with a reason is the approved escape
+# hatch from unwrap_used. Use .expect("reason") for infallible operations
+# (regex literals, mutex locks, serialization of own types) and ? for
+# operations that can legitimately fail.
 get_unwrap = "warn"
 undocumented_unsafe_blocks = "warn"
 empty_drop = "warn"

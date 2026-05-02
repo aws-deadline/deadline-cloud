@@ -11,7 +11,7 @@ use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
 
 static SESSION_ACTION_ID_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^sessionaction-([0-9a-f]{32})-\d+$").unwrap());
+    LazyLock::new(|| Regex::new(r"^sessionaction-([0-9a-f]{32})-\d+$").expect("valid regex"));
 
 /// Parse a session action ID and derive the session ID.
 /// Format: `sessionaction-{uuid}-{number}` → `session-{uuid}`
@@ -249,7 +249,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             if let Some(ref term) = search_term
                 && effective_job_id.is_none() {
                     // Check if search_term is a job ID pattern
-                    if Regex::new(r"^job-[0-9a-f]{32}$").unwrap().is_match(term) {
+                    if Regex::new(r"^job-[0-9a-f]{32}$").expect("valid regex").is_match(term) {
                         effective_job_id = Some(term.clone());
                     } else {
                         search = Some(term.clone());
@@ -421,7 +421,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                             "jobId": job, "jobName": job_name,
                             "status": result.status, "elapsedTime": result.elapsed_time,
                             "failedTasks": failed_json,
-                        })).unwrap());
+                        })).expect("JSON serialization"));
                     } else {
                         eprintln!();
                         println!("Job ID: {job}");
@@ -452,7 +452,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                         println!("{}", serde_json::to_string_pretty(&serde_json::json!({
                             "error": e.to_string(), "timeout": is_timeout,
                             "jobId": job, "jobName": job_name,
-                        })).unwrap());
+                        })).expect("JSON serialization"));
                     } else {
                         println!("Job ID: {job}");
                         println!("Job Name: {job_name}");
@@ -588,7 +588,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 }
                 println!("Retrieving logs for {} from log group /aws/deadline/{farm}/{queue}...",
                     if session_action_id.is_some() {
-                        format!("session action {}", session_action_id.as_deref().unwrap())
+                        format!("session action {}", session_action_id.as_deref().expect("checked is_some above"))
                     } else {
                         format!("session {}", result.log_stream)
                     });
@@ -633,7 +633,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                     "logGroup": result.log_group,
                     "logStream": result.log_stream,
                 });
-                println!("{}", serde_json::to_string_pretty(&response).unwrap());
+                println!("{}", serde_json::to_string_pretty(&response).expect("JSON serialization"));
             } else {
                 // Show reference time for relative format
                 if let crate::common::TimestampFormat::Relative { ref reference } = ts_fmt {
@@ -1254,7 +1254,7 @@ async fn search_jobs_call(
                     .name("CREATED_AT")
                     .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
                     .build()
-                    .unwrap(),
+                    .expect("required fields set"),
             ),
         );
     }
@@ -1684,7 +1684,7 @@ pub(crate) async fn download_output_impl(
         resolution,
         Some(Box::new(move |meta| {
             let new_progress = meta.progress as u64;
-            progress_mgr.lock().unwrap().callback(new_progress);
+            progress_mgr.lock().expect("lock poisoned").callback(new_progress);
             crate::common::should_continue()
         })),
     ).await.map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
@@ -2024,8 +2024,8 @@ async fn run_trace_schedule(
     ]);
 
     for session in &sessions {
-        *acc.get_mut("sessionCount").unwrap() += 1;
-        *acc.get_mut("sessionDuration").unwrap() += duration_of(session);
+        *acc.get_mut("sessionCount").expect("key initialized above") += 1;
+        *acc.get_mut("sessionDuration").expect("key initialized above") += duration_of(session);
 
         let worker_id = session.get("workerId").and_then(|v| v.as_str()).unwrap_or("");
         let pid = workers.get(worker_id).copied().unwrap_or(0);
@@ -2052,8 +2052,8 @@ async fn run_trace_schedule(
         }));
 
         for action in session["actions"].as_array().unwrap_or(&vec![]) {
-            *acc.get_mut("sessionActionCount").unwrap() += 1;
-            *acc.get_mut("sessionActionDuration").unwrap() += duration_of(action);
+            *acc.get_mut("sessionActionCount").expect("key initialized above") += 1;
+            *acc.get_mut("sessionActionDuration").expect("key initialized above") += duration_of(action);
 
             let empty_obj = json!({});
             let definition = action.get("definition").unwrap_or(&empty_obj);
@@ -2064,8 +2064,8 @@ async fn run_trace_schedule(
 
             match action_type {
                 "taskRun" => {
-                    *acc.get_mut("taskRunCount").unwrap() += 1;
-                    *acc.get_mut("taskRunDuration").unwrap() += duration_of(action);
+                    *acc.get_mut("taskRunCount").expect("key initialized above") += 1;
+                    *acc.get_mut("taskRunDuration").expect("key initialized above") += duration_of(action);
 
                     let empty_task = json!({});
                     let task = action.get("task").unwrap_or(&empty_task);
@@ -2084,8 +2084,8 @@ async fn run_trace_schedule(
                     };
                 }
                 "envEnter" | "envExit" => {
-                    *acc.get_mut("envActionCount").unwrap() += 1;
-                    *acc.get_mut("envActionDuration").unwrap() += duration_of(action);
+                    *acc.get_mut("envActionCount").expect("key initialized above") += 1;
+                    *acc.get_mut("envActionDuration").expect("key initialized above") += duration_of(action);
 
                     let env_id = definition.get(action_type)
                         .and_then(|e| e.get("environmentId"))
@@ -2093,8 +2093,8 @@ async fn run_trace_schedule(
                     name = env_id.rsplit(':').next().unwrap_or(env_id).to_owned();
                 }
                 "syncInputJobAttachments" => {
-                    *acc.get_mut("syncJobAttachmentsCount").unwrap() += 1;
-                    *acc.get_mut("syncJobAttachmentsDuration").unwrap() += duration_of(action);
+                    *acc.get_mut("syncJobAttachmentsCount").expect("key initialized above") += 1;
+                    *acc.get_mut("syncJobAttachmentsDuration").expect("key initialized above") += duration_of(action);
 
                     let empty_sync = json!({});
                     let sync_def = definition.get(action_type).unwrap_or(&empty_sync);
@@ -2145,7 +2145,7 @@ async fn run_trace_schedule(
         let job_resp = JobResponse::from(dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
             .send().await
             .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?);
-        println!("{}", crate::common::cli_object_repr(&serde_json::to_value(&job_resp).unwrap()));
+        println!("{}", crate::common::cli_object_repr(&serde_json::to_value(&job_resp).expect("JSON serialization")));
         println!("{}", crate::common::cli_object_repr(&json!(sessions)));
     }
 
