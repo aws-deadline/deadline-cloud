@@ -8,7 +8,7 @@ use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
 
 static OPENJD_IDENT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").unwrap());
+    LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").expect("valid regex"));
 
 #[derive(Subcommand)]
 pub(crate) enum BundleAction {
@@ -273,10 +273,10 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     Box::new(|msg| println!("{msg}"))
                 },
                 hashing_progress_callback: Some(Box::new(move |meta| {
-                    hash_progress.lock().unwrap().callback(meta.progress as u64)
+                    hash_progress.lock().expect("lock poisoned").callback(meta.progress as u64)
                 })),
                 upload_progress_callback: Some(Box::new(move |meta| {
-                    upload_progress.lock().unwrap().callback(meta.progress as u64)
+                    upload_progress.lock().expect("lock poisoned").callback(meta.progress as u64)
                 })),
                 continue_callback: Some(Box::new(crate::common::should_continue)),
                 interactive_confirmation_callback: Some(Box::new(|msg, _default| {

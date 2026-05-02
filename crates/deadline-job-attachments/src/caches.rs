@@ -53,7 +53,7 @@ fn open_db(db_path: &str, table_name: &str, create_query: &str) -> Result<Connec
     }
     Err(JobAttachmentsError::AssetSync(format!(
         "Could not access cache file after {RETRY_ATTEMPTS} retry attempts: {db_path}: {}",
-        last_err.unwrap()
+        last_err.expect("retry loop ran")
     )))
 }
 
@@ -171,7 +171,7 @@ impl HashCache {
         range_start: i64,
         range_end: i64,
     ) -> Option<HashCacheEntry> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().expect("lock poisoned");
         let encoded_path = file_path.as_bytes();
         let mut stmt = conn
             .prepare(&format!(
@@ -206,7 +206,7 @@ impl HashCache {
     }
 
     pub fn put_entry(&self, entry: &HashCacheEntry) {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().expect("lock poisoned");
         let encoded_path = entry.file_path.as_bytes();
         conn.execute(
             &format!(
@@ -267,7 +267,7 @@ impl S3CheckCache {
     }
 
     pub fn get_entry(&self, s3_key: &str) -> Option<S3CheckCacheEntry> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().expect("lock poisoned");
         let mut stmt = conn
             .prepare(&format!(
                 "SELECT s3_key, last_seen_time FROM {S3_CHECK_TABLE} WHERE s3_key=?1"
@@ -303,7 +303,7 @@ impl S3CheckCache {
     }
 
     pub fn put_entry(&self, entry: &S3CheckCacheEntry) {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().expect("lock poisoned");
         conn.execute(
             &format!(
                 "INSERT OR REPLACE INTO {S3_CHECK_TABLE} (s3_key, last_seen_time) VALUES (?1, ?2)"

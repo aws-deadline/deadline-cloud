@@ -148,7 +148,7 @@ pub fn split_parameter_args(
 }
 
 static FRAME_RANGE_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(r"^(?P<start>-?\d+)(-(?P<stop>-?\d+)(:(?P<step>-?\d+))?)?$").unwrap()
+    regex::Regex::new(r"^(?P<start>-?\d+)(-(?P<stop>-?\d+)(:(?P<step>-?\d+))?)?$").expect("valid regex")
 });
 
 pub fn parse_frame_range(frame_string: &str) -> Result<Vec<i64>, DeadlineError> {
@@ -156,9 +156,9 @@ pub fn parse_frame_range(frame_string: &str) -> Result<Vec<i64>, DeadlineError> 
         .captures(frame_string)
         .ok_or_else(|| op_err("Framelist not valid".into()))?;
 
-    let start: i64 = caps["start"].parse().unwrap();
-    let stop: i64 = caps.name("stop").map_or(start, |m| m.as_str().parse::<i64>().unwrap());
-    let step: i64 = caps.name("step").map_or(if start <= stop { 1 } else { -1 }, |m| m.as_str().parse::<i64>().unwrap());
+    let start: i64 = caps["start"].parse().expect("infallible");
+    let stop: i64 = caps.name("stop").map_or(start, |m| m.as_str().parse::<i64>().expect("infallible"));
+    let step: i64 = caps.name("step").map_or(if start <= stop { 1 } else { -1 }, |m| m.as_str().parse::<i64>().expect("infallible"));
 
     if step == 0 {
         return Err(op_err("Frame step cannot be zero".into()));
@@ -583,7 +583,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 tc.record_event("com.amazon.rum.deadline.job_attachments.hashing_summary", details, false);
             }
 
-            let ja_settings = queue.job_attachment_settings().unwrap();
+            let ja_settings = queue.job_attachment_settings().expect("infallible");
             let s3_settings = JobAttachmentS3Settings::from_root_path(&format!(
                 "{}/{}",
                 ja_settings.s3_bucket_name(),
@@ -633,7 +633,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
             }
 
             let mut att_json = attachments.to_json();
-            att_json.as_object_mut().unwrap().insert(
+            att_json.as_object_mut().expect("value is object").insert(
                 "fileSystem".into(),
                 json!(if ja_file_system == "VIRTUAL" { "VIRTUAL" } else { "COPIED" }),
             );

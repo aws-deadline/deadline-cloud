@@ -397,7 +397,7 @@ impl ManifestProperties {
             );
         } else {
             // S3 metadata must be ASCII. JSON-encode with \u escapes.
-            let json_root = serde_json::to_string(&self.root_path).unwrap();
+            let json_root = serde_json::to_string(&self.root_path).expect("JSON serialization");
             // serde_json outputs UTF-8 by default; we need ASCII \u escapes
             let ascii_json = crate::asset_manifests::escape_to_ascii(&json_root);
             metadata.insert(

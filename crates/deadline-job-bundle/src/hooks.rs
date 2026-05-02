@@ -233,7 +233,7 @@ pub fn merge_asset_references(original: Option<&Value>, modified: Option<&Value>
 
 pub fn merge_payload(original: &Value, modified: &Value) -> Value {
     let mut result = original.clone();
-    let result_obj = result.as_object_mut().unwrap();
+    let result_obj = result.as_object_mut().expect("value is object");
     if let Some(mod_obj) = modified.as_object() {
         for (key, value) in mod_obj {
             if key == "attachments" && value.is_object() && value.get("assetReferences").is_some() {

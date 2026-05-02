@@ -404,7 +404,7 @@ impl DeadlineServer {
                     .name("CREATED_AT")
                     .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
                     .build()
-                    .unwrap(),
+                    .expect("required fields set"),
             ),
         );
 

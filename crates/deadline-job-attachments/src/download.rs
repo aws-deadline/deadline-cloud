@@ -568,7 +568,7 @@ pub async fn get_output_manifests_by_asset_root(
         }
         return get_manifests_by_session_action_id(
             s3_settings, farm_id, queue_id, job_id,
-            step_id.unwrap(), task_id.unwrap(), sa_id,
+            step_id.expect("infallible"), task_id.expect("infallible"), sa_id,
             s3_client, account_id,
         )
         .await;
@@ -723,7 +723,7 @@ async fn list_manifest_keys_from_s3(
 fn select_latest_manifests_per_task(keys: &[String]) -> Vec<String> {
     let step_pattern = regex::Regex::new(r"step-.*/.*/.*output.*").unwrap_or_else(|_| {
         // Fallback: accept all keys if regex fails
-        regex::Regex::new(r".*").unwrap()
+        regex::Regex::new(r".*").expect("valid regex")
     });
 
     let mut direct_keys = Vec::new();
@@ -854,7 +854,7 @@ async fn get_manifests_by_session_action_id(
     )?;
 
     let sa_pattern = regex::Regex::new(&format!(r".*{}.*output.*", regex::escape(session_action_id)))
-        .unwrap_or_else(|_| regex::Regex::new(r"$^").unwrap());
+        .unwrap_or_else(|_| regex::Regex::new(r"$^").expect("valid regex"));
 
     let mut manifest_keys: Vec<String> = Vec::new();
 

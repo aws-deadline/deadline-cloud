@@ -108,7 +108,7 @@ impl SessionCache {
             self.cached_config = Some(loader.load().await);
             self.cached_profile = Some(profile);
         }
-        self.cached_config.as_ref().unwrap()
+        self.cached_config.as_ref().expect("value set above")
     }
 
     async fn build_deadline_client(&mut self, config: Option<&IniConfig>) -> DeadlineClient {
@@ -271,7 +271,7 @@ impl QueueUserCredentialProvider {
             return Err(provider::error::CredentialsError::provider_error(err_msg));
         }
 
-        let output = result.unwrap();
+        let output = result.expect("infallible");
         let creds = match output.credentials() {
             Some(c) if !c.access_key_id().is_empty() => c,
             _ => {

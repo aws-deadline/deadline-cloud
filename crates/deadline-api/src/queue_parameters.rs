@@ -70,7 +70,7 @@ pub async fn get_queue_parameter_definitions(
                 } else {
                     None
                 };
-                let ui = param.as_object_mut().unwrap()
+                let ui = param.as_object_mut().expect("value is object")
                     .entry("userInterface").or_insert_with(|| serde_json::json!({}));
                 if let Some(ctrl) = control {
                     ui["control"] = Value::String(ctrl);

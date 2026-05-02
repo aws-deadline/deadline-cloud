@@ -27,7 +27,7 @@ pub fn human_readable_file_size(size_in_bytes: u64) -> String {
     let rounded = (converted * 100.0).round() / 100.0;
     let s = format!("{rounded:.2}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
-    format!("{s} {}", postfixes.last().unwrap())
+    format!("{s} {}", postfixes.last().expect("non-empty"))
 }
 
 // --- ProgressStatus ---
@@ -224,15 +224,15 @@ impl ProgressTracker {
     }
 
     pub fn set_total_time(&self, t: f64) {
-        *self.total_time.lock().unwrap() = t;
+        *self.total_time.lock().expect("lock poisoned") = t;
     }
 
     pub fn continue_reporting(&self) -> bool {
-        self.inner.lock().unwrap().continue_reporting
+        self.inner.lock().expect("lock poisoned").continue_reporting
     }
 
     pub fn increase_processed(&self, num_files: u64, file_bytes: u64) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("lock poisoned");
         Self::init_timestamp(&mut inner);
         inner.processed_files += num_files;
         inner.processed_bytes += file_bytes;
@@ -240,19 +240,19 @@ impl ProgressTracker {
     }
 
     pub fn increase_skipped(&self, num_files: u64, file_bytes: u64) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("lock poisoned");
         inner.skipped_files += num_files;
         inner.skipped_bytes += file_bytes;
         inner.completed_files_in_chunk += num_files;
     }
 
     pub fn report_progress(&self) -> bool {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("lock poisoned");
         self.report_progress_inner(&mut inner)
     }
 
     pub fn track_progress(&self, bytes_amount: u64, current_file_done: bool) -> bool {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("lock poisoned");
         Self::init_timestamp(&mut inner);
         inner.processed_bytes += bytes_amount;
         if current_file_done {
@@ -264,12 +264,12 @@ impl ProgressTracker {
 
     /// Returns the current count of processed files.
     pub fn processed_files(&self) -> u64 {
-        self.inner.lock().unwrap().processed_files
+        self.inner.lock().expect("lock poisoned").processed_files
     }
 
     pub fn get_summary_statistics(&self) -> SummaryStatistics {
-        let inner = self.inner.lock().unwrap();
-        let total_time = *self.total_time.lock().unwrap();
+        let inner = self.inner.lock().expect("lock poisoned");
+        let total_time = *self.total_time.lock().expect("lock poisoned");
         let transfer_rate = if total_time > 0.0 {
             inner.processed_bytes as f64 / total_time
         } else {

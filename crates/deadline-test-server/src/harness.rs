@@ -32,7 +32,7 @@ impl TestHarness {
         Self {
             server,
             config_dir,
-            config_path: config_path.to_str().unwrap().to_owned(),
+            config_path: config_path.to_str().expect("valid UTF-8 path").to_owned(),
         }
     }
 

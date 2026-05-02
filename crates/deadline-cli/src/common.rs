@@ -8,19 +8,19 @@ use std::sync::LazyLock;
 // ---------------------------------------------------------------------------
 
 static RE_REF_DEF: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)^\s*\[[^\]]+\]:\s*\S+.*$").unwrap());
+    LazyLock::new(|| Regex::new(r"(?m)^\s*\[[^\]]+\]:\s*\S+.*$").expect("valid regex"));
 static RE_INLINE_LINK: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap());
+    LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").expect("valid regex"));
 static RE_REF_LINK: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\[[^\]]*\]").unwrap());
+    LazyLock::new(|| Regex::new(r"\[([^\]]+)\]\[[^\]]*\]").expect("valid regex"));
 static RE_BOLD: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
+    LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").expect("valid regex"));
 static RE_BOLD_UNDER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"__([^_]+)__").unwrap());
+    LazyLock::new(|| Regex::new(r"__([^_]+)__").expect("valid regex"));
 static RE_ITALIC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)(?P<pre>[^*\n])\*(?P<inner>[^*\n]+)\*").unwrap());
+    LazyLock::new(|| Regex::new(r"(?m)(?P<pre>[^*\n])\*(?P<inner>[^*\n]+)\*").expect("valid regex"));
 static RE_BLANK_LINES: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
+    LazyLock::new(|| Regex::new(r"\n{3,}").expect("valid regex"));
 
 /// Strip markdown syntax for clean terminal display.
 pub(crate) fn strip_markdown_for_terminal(text: &str) -> String {
@@ -153,7 +153,7 @@ pub(crate) fn json_with_spaces(value: &serde_json::Value) -> String {
 /// ON/OFF/YES/NO etc. unquoted. Downstream YAML 1.1 parsers (`PyYAML`) would
 /// interpret them as booleans, corrupting data.
 static YAML_11_BOOL_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)(: |^[ \t]*- )(y|Y|yes|Yes|YES|n|N|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF)$").unwrap()
+    Regex::new(r"(?m)(: |^[ \t]*- )(y|Y|yes|Yes|YES|n|N|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF)$").expect("valid regex")
 });
 
 /// Format a JSON value as YAML for CLI output.

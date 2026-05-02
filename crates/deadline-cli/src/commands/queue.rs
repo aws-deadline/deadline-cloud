@@ -298,7 +298,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                         "SessionToken": creds.session_token(),
                         "Expiration": expiration,
                     });
-                    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                    println!("{}", serde_json::to_string_pretty(&output).expect("JSON serialization"));
                     Ok(())
                 }
                 Ok(None | Some(_)) => {
@@ -976,7 +976,7 @@ async fn incremental_output_download(
 
     // Step 4: Download output manifests and files
     eprintln!("Populating manifest S3 keys for {} jobs...", jobs_to_process.len());
-    let attachment_settings = queue.job_attachment_settings().unwrap();
+    let attachment_settings = queue.job_attachment_settings().expect("infallible");
     let bucket = attachment_settings.s3_bucket_name();
     let prefix = attachment_settings.root_prefix();
 
@@ -1117,7 +1117,7 @@ async fn incremental_output_download(
                         deadline_job_attachments::asset_manifests::HashAlgorithm::Xxh128,
                         deadline_job_attachments::asset_manifests::ManifestVersion::V2023_03_03,
                         0, vec![],
-                    ).unwrap()
+                    ).expect("valid manifest params")
                 });
                 let filename = Path::new(&mp.path)
                     .file_name().map_or_else(|| mp.path.clone(), |f| f.to_string_lossy().to_string());

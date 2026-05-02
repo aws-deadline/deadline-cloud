@@ -323,12 +323,12 @@ async fn auto_select_session(
         sessions
             .iter()
             .max_by_key(|s| s.ended_at())
-            .unwrap()
+            .expect("sessions is non-empty")
     } else {
         ongoing
             .iter()
             .max_by_key(|s| s.started_at())
-            .unwrap()
+            .expect("ongoing is non-empty")
     };
 
     let id = best.session_id().to_owned();

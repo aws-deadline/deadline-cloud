@@ -332,7 +332,7 @@ pub fn validate_job_parameter_value(
                 )))?;
                 serde_json::json!(f)
             } else if value.is_number() {
-                serde_json::json!(value.as_f64().unwrap())
+                serde_json::json!(value.as_f64().expect("checked is_number"))
             } else {
                 return Err(op_err(format!(
                     "Job parameter '{name}' has type FLOAT but got value {value:?} which is not floating point."
@@ -429,7 +429,7 @@ pub fn read_job_bundle_parameters(
             for entry in arr {
                 let name = entry["name"].as_str().unwrap_or("").to_owned();
                 if let Some(existing) = params.get_mut(&name) {
-                    existing.as_object_mut().unwrap().insert("value".into(), entry["value"].clone());
+                    existing.as_object_mut().expect("value is object").insert("value".into(), entry["value"].clone());
                 } else {
                     params.insert(name, entry.clone());
                 }
@@ -473,14 +473,14 @@ pub fn read_job_bundle_parameters(
                     let abs = std::path::absolute(Path::new(bundle_dir).join(&default))
                         .unwrap_or_else(|_| Path::new(bundle_dir).join(&default));
                     let normalized = abs.to_string_lossy().into_owned();
-                    param.as_object_mut().unwrap().insert("value".into(), serde_json::json!(normalized));
+                    param.as_object_mut().expect("value is object").insert("value".into(), serde_json::json!(normalized));
                 }
     }
 
     // Validate and collect
     let parameters: Vec<serde_json::Value> = params.into_iter().map(|(name, mut v)| {
         if v.get("name").is_none() {
-            v.as_object_mut().unwrap().insert("name".into(), serde_json::json!(name));
+            v.as_object_mut().expect("value is object").insert("name".into(), serde_json::json!(name));
         }
         let _ = validate_job_parameter(&v, false, false);
         v
@@ -542,10 +542,10 @@ pub fn apply_job_parameters(
                     .unwrap_or(abs)
                     .to_string_lossy()
                     .into_owned();
-                param.as_object_mut().unwrap().insert("value".into(), serde_json::json!(abs_str));
+                param.as_object_mut().expect("value is object").insert("value".into(), serde_json::json!(abs_str));
                 abs_str
             } else {
-                param.as_object_mut().unwrap().insert("value".into(), v.clone());
+                param.as_object_mut().expect("value is object").insert("value".into(), v.clone());
                 v.as_str().unwrap_or("").to_owned()
             }
         } else {
@@ -607,7 +607,7 @@ pub fn merge_queue_job_parameters(
         if let Some(existing) = collected.get_mut(&name) {
             // Copy value if present
             if let Some(v) = jp.get("value") {
-                existing.as_object_mut().unwrap().insert("value".into(), v.clone());
+                existing.as_object_mut().expect("value is object").insert("value".into(), v.clone());
                 // Value-only parameter — nothing more to merge
                 let keys: HashSet<&str> = jp.as_object()
                     .map(|o| o.keys().map(String::as_str).collect())
@@ -618,7 +618,7 @@ pub fn merge_queue_job_parameters(
             }
             // Copy default if present
             if let Some(d) = jp.get("default") {
-                existing.as_object_mut().unwrap().insert("default".into(), d.clone());
+                existing.as_object_mut().expect("value is object").insert("default".into(), d.clone());
             }
             let diffs = parameter_definition_difference(existing, jp, false);
             let diffs: Vec<String> = diffs.into_iter().filter(|d| d != "default").collect();

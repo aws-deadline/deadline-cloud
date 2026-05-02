@@ -32,7 +32,7 @@ pub fn human_readable_file_size(size_in_bytes: u64) -> String {
     let rounded = (converted * 100.0).round() / 100.0;
     let s = format!("{rounded:.2}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
-    format!("{s} {}", postfixes.last().unwrap())
+    format!("{s} {}", postfixes.last().expect("non-empty"))
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +142,7 @@ fn divide_numbered_path_group(group: &mut Vec<NumberedPath>) -> BTreeMap<String,
         }
 
         // The largest minimum padding is likely the right padding for the group
-        let padding = group.iter().map(|np| np.padding_min).max().unwrap();
+        let padding = group.iter().map(|np| np.padding_min).max().expect("infallible");
         let pattern = if padding > 1 {
             format!("%0{padding}d")
         } else {
@@ -154,7 +154,7 @@ fn divide_numbered_path_group(group: &mut Vec<NumberedPath>) -> BTreeMap<String,
             .partition(|np| np.padding_max >= padding);
 
         if !consistent.is_empty() {
-            let parts = consistent[0].parts.as_ref().unwrap();
+            let parts = consistent[0].parts.as_ref().expect("value set above");
             let pattern_path = format!("{}{}{}", parts.0, pattern, if parts.2.is_empty() { String::new() } else { format!(".{}", parts.2) });
             let numbers: BTreeSet<i64> = consistent
                 .iter()

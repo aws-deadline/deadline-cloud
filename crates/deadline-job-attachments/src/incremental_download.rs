@@ -125,7 +125,7 @@ impl IncrementalDownloadState {
 /// Regex to extract session action ID from an S3 manifest key.
 /// Matches `sessionaction-{id}-{index}` segments in the key path.
 fn session_action_id_regex() -> Regex {
-    Regex::new(r"(sessionaction-[^/-]+-[^/-]+)/").unwrap()
+    Regex::new(r"(sessionaction-[^/-]+-[^/-]+)/").expect("valid regex")
 }
 
 /// Populate session actions with output manifest S3 keys by matching

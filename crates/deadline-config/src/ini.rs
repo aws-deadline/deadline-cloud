@@ -77,7 +77,7 @@ impl IniConfig {
 
                 match &current_section {
                     Some(section) => {
-                        sections.get_mut(section).unwrap().insert(key.clone(), value);
+                        sections.get_mut(section).expect("key exists").insert(key.clone(), value);
                         last_key = Some((section.clone(), key));
                     }
                     None => {

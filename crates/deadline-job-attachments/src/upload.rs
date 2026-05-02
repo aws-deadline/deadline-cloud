@@ -198,7 +198,7 @@ fn find_group_key(
     let mut best_match: Option<(&str, &str)> = None;
     for &(loc_path, loc_name) in local_locations {
         if is_relative_to(abs_path, loc_path)
-            && (best_match.is_none() || loc_path.len() > best_match.unwrap().0.len()) {
+            && (best_match.is_none() || loc_path.len() > best_match.expect("infallible").0.len()) {
                 best_match = Some((loc_path, loc_name));
             }
     }

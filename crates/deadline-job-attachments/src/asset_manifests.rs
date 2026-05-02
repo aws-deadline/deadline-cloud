@@ -139,7 +139,7 @@ pub(crate) fn escape_to_ascii(s: &str) -> String {
             let encoded = ch.encode_utf16(&mut buf);
             for &unit in encoded.iter() {
                 use std::fmt::Write;
-                write!(out, "\\u{unit:04x}").unwrap();
+                write!(out, "\\u{unit:04x}").expect("write to String");
             }
         }
     }
@@ -190,7 +190,7 @@ impl AssetManifest {
                 m.insert("mtime", serde_json::Value::Number(p.mtime.into()));
                 m.insert("path", serde_json::Value::String(p.path.clone()));
                 m.insert("size", serde_json::Value::Number(p.size.into()));
-                serde_json::to_value(m).unwrap()
+                serde_json::to_value(m).expect("JSON serialization")
             })
             .collect();
         map.insert("paths", serde_json::Value::Array(paths_json));
@@ -199,7 +199,7 @@ impl AssetManifest {
             serde_json::Value::Number(self.total_size.into()),
         );
 
-        let json = serde_json::to_string(&map).unwrap();
+        let json = serde_json::to_string(&map).expect("JSON serialization");
 
         // Apply ensure_ascii: escape non-ASCII characters
         escape_to_ascii(&json)

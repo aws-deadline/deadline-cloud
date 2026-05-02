@@ -49,7 +49,7 @@ impl Intercept for TelemetryInterceptor {
         _context: &BeforeSerializationInterceptorContextRef<'_>,
         _cfg: &mut ConfigBag,
     ) -> Result<(), BoxError> {
-        *self.start.lock().unwrap() = Some(Instant::now());
+        *self.start.lock().expect("lock poisoned") = Some(Instant::now());
         Ok(())
     }
 
@@ -59,11 +59,11 @@ impl Intercept for TelemetryInterceptor {
         _runtime_components: &RuntimeComponents,
         cfg: &mut ConfigBag,
     ) -> Result<(), BoxError> {
-        let start = self.start.lock().unwrap().take();
+        let start = self.start.lock().expect("lock poisoned").take();
         if let Some(start) = start {
             let name = cfg
                 .load::<Metadata>().map_or_else(|| "unknown".to_owned(), |m| pascal_to_snake(m.name()));
-            if let Some(ref tc) = *self.telemetry.lock().unwrap() {
+            if let Some(ref tc) = *self.telemetry.lock().expect("lock poisoned") {
                 telemetry::record_latency(tc, &name, start);
             }
         }
