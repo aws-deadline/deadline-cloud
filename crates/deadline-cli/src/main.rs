@@ -1,3 +1,6 @@
+// CLI binary — printing to stdout/stderr is its primary job.
+#![allow(clippy::print_stdout, clippy::print_stderr, reason = "CLI binary outputs to stdout/stderr by design")]
+
 use clap::Parser;
 use log::debug;
 use std::fs::OpenOptions;

@@ -289,6 +289,7 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
         }
 
     // Show confirmation and build the hook manager we'll actually use
+    #[allow(clippy::print_stderr, reason = "hook manager output goes to stderr by design, matching Python CLI behavior")]
     let mut hook_manager = HookManager::new(&params.job_bundle_dir,
         Box::new(|s| { eprintln!("{s}"); }));
     hook_manager.hooks = merged_hooks.clone();

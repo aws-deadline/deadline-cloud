@@ -89,7 +89,8 @@ async fn main() {
         "endpoint": format!("http://localhost:{port}"),
         "config_path": harness.config_path,
     });
-    println!("{info}");
+    #[allow(clippy::print_stdout, reason = "test binary outputs server info for harness to read")]
+    { println!("{info}"); }
 
     // Wait for termination
     tokio::signal::ctrl_c().await.ok();
