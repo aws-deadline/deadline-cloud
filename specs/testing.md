@@ -139,3 +139,28 @@ diff <(deadline bundle submit test_fixtures/job_bundles/simple_job --dry-run --y
 ```
 
 See `test_fixtures/README.md` for more examples.
+
+
+## Lint Conventions in Tests
+
+The workspace enables strict clippy lints including `unwrap_used` and
+`expect_used` (see `clippy.toml` and `Cargo.toml`). The `clippy.toml`
+setting `allow-unwrap-in-tests = true` covers `#[test]` functions and
+`#[cfg(test)]` modules, but **not** helper functions in integration test
+crates (`tests/` directories). Clippy treats those helpers as regular
+functions since they lack a `#[test]` attribute.
+
+To avoid false positives, each integration test entry file has a
+crate-level allow:
+
+```rust
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+```
+
+This applies to:
+- `crates/deadline-cli/tests/cli.rs`
+- `crates/deadline-job-attachments/tests/suite.rs`
+- `crates/deadline-job-bundle/tests/suite.rs`
+
+When adding a new integration test crate, include the same allow at the
+top of its entry file.

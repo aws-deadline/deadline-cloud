@@ -1,3 +1,7 @@
+// Integration tests — unwrap/expect are the standard way to assert in tests.
+// clippy's allow-unwrap-in-tests only covers #[test] fns, not helper functions
+// in integration test crates. See specs/testing.md for details.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 #[path = "suite/api.rs"]
 mod api;
 #[path = "suite/diff.rs"]
