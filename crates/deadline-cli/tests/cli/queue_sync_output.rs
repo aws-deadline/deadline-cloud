@@ -467,7 +467,7 @@ async fn sync_output_dry_run_does_not_save_checkpoint() {
 
     // Verify no checkpoint file was created
     let entries: Vec<_> = fs::read_dir(checkpoint_dir.path()).unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
         .collect();
     assert!(entries.is_empty(), "dry-run should not save checkpoint file");
@@ -974,7 +974,7 @@ async fn sync_output_downloads_files_to_disk() {
             "path": "output/render.exr",
             "hash": file_hash,
             "size": 5,
-            "mtime": 1700000000000000_i64
+            "mtime": 1_700_000_000_000_000_i64
         }],
         "totalSize": 5
     })).unwrap();
@@ -1172,7 +1172,7 @@ async fn sync_output_session_action_count_excludes_no_output_actions() {
     let manifest_json = serde_json::to_string(&json!({
         "hashAlg": "xxh128",
         "manifestVersion": "2023-03-03",
-        "paths": [{ "path": "output/result.exr", "hash": file_hash, "size": 10, "mtime": 1700000000000000_i64 }],
+        "paths": [{ "path": "output/result.exr", "hash": file_hash, "size": 10, "mtime": 1_700_000_000_000_000_i64 }],
         "totalSize": 10
     })).unwrap();
 
@@ -1319,7 +1319,7 @@ async fn sync_output_warning_for_session_actions_without_manifests() {
     let manifest_json = serde_json::to_string(&json!({
         "hashAlg": "xxh128",
         "manifestVersion": "2023-03-03",
-        "paths": [{ "path": "output/result.exr", "hash": file_hash, "size": 10, "mtime": 1700000000000000_i64 }],
+        "paths": [{ "path": "output/result.exr", "hash": file_hash, "size": 10, "mtime": 1_700_000_000_000_000_i64 }],
         "totalSize": 10
     })).unwrap();
 
@@ -1406,10 +1406,10 @@ async fn sync_output_path_summary_shows_per_file_listing() {
         "hashAlg": "xxh128",
         "manifestVersion": "2023-03-03",
         "paths": [
-            { "path": "renders/frame_001.exr", "hash": hash_a, "size": 1500000, "mtime": 1700000000000000_i64 },
-            { "path": "renders/frame_002.exr", "hash": hash_b, "size": 1500000, "mtime": 1700000000000000_i64 }
+            { "path": "renders/frame_001.exr", "hash": hash_a, "size": 1_500_000, "mtime": 1_700_000_000_000_000_i64 },
+            { "path": "renders/frame_002.exr", "hash": hash_b, "size": 1_500_000, "mtime": 1_700_000_000_000_000_i64 }
         ],
-        "totalSize": 3000000
+        "totalSize": 3_000_000
     })).unwrap();
 
     s3::mock_s3_get_object_with_metadata(
@@ -1422,12 +1422,12 @@ async fn sync_output_path_summary_shows_per_file_listing() {
     s3::mock_s3_get_object(
         &harness.server,
         &format!("my-bucket/DeadlineCloud/Data/{hash_a}.xxh128"),
-        &vec![0u8; 1500000],
+        &vec![0u8; 1_500_000],
     ).await;
     s3::mock_s3_get_object(
         &harness.server,
         &format!("my-bucket/DeadlineCloud/Data/{hash_b}.xxh128"),
-        &vec![0u8; 1500000],
+        &vec![0u8; 1_500_000],
     ).await;
 
     let output = harness.cli(&[

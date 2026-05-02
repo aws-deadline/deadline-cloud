@@ -40,7 +40,7 @@ fn write_manifest_file(dir: &Path, filename: &str, files: &[(&str, &str, i64)]) 
             path: p.to_string(),
             hash: h.to_string(),
             size: *s,
-            mtime: 1700000000_000_000,
+            mtime: 1_700_000_000_000_000,
         })
         .collect();
     let total_size: i64 = paths.iter().map(|p| p.size).sum();

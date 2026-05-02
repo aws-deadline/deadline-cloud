@@ -514,12 +514,12 @@ mod tests {
     #[test]
     fn format_mtime_for_cache_format_matches_python() {
         // Whole seconds: no fractional part
-        let whole = format_mtime_for_cache(1745262534, 0);
+        let whole = format_mtime_for_cache(1_745_262_534, 0);
         assert!(!whole.contains('.'), "whole-second mtime should have no fractional part, got: {whole}");
         assert_eq!(whole.len(), 19, "expected YYYY-MM-DD HH:MM:SS (19 chars), got: {whole}");
 
         // With microseconds: 6-digit fractional part
-        let frac = format_mtime_for_cache(1745262534, 500_000_000);
+        let frac = format_mtime_for_cache(1_745_262_534, 500_000_000);
         assert!(frac.ends_with(".500000"), "expected .500000 suffix, got: {frac}");
         assert_eq!(frac.len(), 26, "expected 26-char datetime with microseconds, got: {frac}");
     }
@@ -534,7 +534,7 @@ mod tests {
         //
         // Rust gets (secs=1776796813, nsec=370875952). Must convert through
         // float64 to match Python's precision loss.
-        let result = format_mtime_for_cache(1776796813, 370_875_952);
+        let result = format_mtime_for_cache(1_776_796_813, 370_875_952);
         assert!(
             result.contains(".370876") || result.contains(".370875"),
             "expected float-precision microseconds matching Python, got: {result}"
@@ -543,7 +543,7 @@ mod tests {
         // Edge case: nsec close to 1 second rounds up to next second.
         // Python: str(datetime.fromtimestamp(1745262534 + 999999500/1e9)) == "...:08:55"
         // The float rounds microseconds to 1000000, which carries into seconds.
-        let edge = format_mtime_for_cache(1745262534, 999_999_500);
+        let edge = format_mtime_for_cache(1_745_262_534, 999_999_500);
         assert!(
             edge.contains(":08:55") || edge.contains(":08:54.999999"),
             "near-boundary nsec should round to next second like Python, got: {edge}"

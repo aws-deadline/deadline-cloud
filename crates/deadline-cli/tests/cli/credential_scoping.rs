@@ -133,7 +133,7 @@ async fn job_logs_dcm_user_uses_queue_scoped_credentials() {
 
     cloudwatch::mock_get_log_events(
         &harness.server,
-        &[json!({"timestamp": 1702857600000_i64, "message": "DCM log line"})],
+        &[json!({"timestamp": 1_702_857_600_000_i64, "message": "DCM log line"})],
         None,
     )
     .await;
@@ -209,7 +209,7 @@ async fn job_logs_non_dcm_user_uses_base_credentials() {
 
     cloudwatch::mock_get_log_events(
         &harness.server,
-        &[json!({"timestamp": 1702857600000_i64, "message": "base cred log line"})],
+        &[json!({"timestamp": 1_702_857_600_000_i64, "message": "base cred log line"})],
         None,
     )
     .await;

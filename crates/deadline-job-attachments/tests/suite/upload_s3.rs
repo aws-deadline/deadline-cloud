@@ -71,7 +71,7 @@ fn test_manifest(dir: &Path, files: &[(&str, &[u8])]) -> AssetManifest {
             path: name.to_string(),
             hash,
             size: meta.len() as i64,
-            mtime: 1000000, // fixed for tests
+            mtime: 1_000_000, // fixed for tests
         });
     }
     let total_size: i64 = paths.iter().map(|p| p.size).sum();
@@ -1087,7 +1087,7 @@ async fn upload_input_files_large_file_multipart() {
             path: "large.bin".into(),
             hash,
             size: large_content.len() as i64,
-            mtime: 1000000,
+            mtime: 1_000_000,
         }],
     ).unwrap();
 
@@ -1175,7 +1175,7 @@ async fn upload_file_to_s3_multipart_part_failure_aborts() {
             path: "large.bin".into(),
             hash,
             size: large_content.len() as i64,
-            mtime: 1000000,
+            mtime: 1_000_000,
         }],
     ).unwrap();
 
@@ -1234,7 +1234,7 @@ async fn upload_input_files_small_file_uses_put_object_not_multipart() {
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
         100,
-        vec![ManifestPath { path: "small.txt".into(), hash, size: 100, mtime: 1000000 }],
+        vec![ManifestPath { path: "small.txt".into(), hash, size: 100, mtime: 1_000_000 }],
     ).unwrap();
 
     let uploader = build_uploader_low_threshold(&server).await;
@@ -1291,7 +1291,7 @@ async fn upload_input_files_multipart_create_fails_propagates_error() {
         large_content.len() as i64,
         vec![ManifestPath {
             path: "large.bin".into(), hash,
-            size: large_content.len() as i64, mtime: 1000000,
+            size: large_content.len() as i64, mtime: 1_000_000,
         }],
     ).unwrap();
 

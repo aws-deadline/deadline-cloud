@@ -1221,7 +1221,7 @@ mod duration_tests {
 
     #[test]
     fn format_duration_under_24h() {
-        let d = Duration::seconds(3661) + Duration::microseconds(500000);
+        let d = Duration::seconds(3661) + Duration::microseconds(500_000);
         assert_eq!(format_duration(d), "1:01:01.500000");
     }
 

@@ -937,14 +937,14 @@ mod tests {
 
     #[test]
     fn float_to_iso_datetime_string_basic() {
-        let ts = 1705312200.0;
+        let ts = 1_705_312_200.0;
         let result = float_to_iso_datetime_string(ts);
         assert_eq!(result, "2024-01-15T09:50:00.000000Z");
     }
 
     #[test]
     fn float_to_iso_datetime_string_with_microseconds() {
-        let ts = 1705312200.123456;
+        let ts = 1_705_312_200.123_456;
         let result = float_to_iso_datetime_string(ts);
         assert_eq!(result, "2024-01-15T09:50:00.123456Z");
     }
@@ -959,7 +959,7 @@ mod tests {
 
     #[test]
     fn partial_session_action_manifest_prefix_with_task() {
-        let ts = 1705312200.5;
+        let ts = 1_705_312_200.5;
         let result = JobAttachmentS3Settings::partial_session_action_manifest_prefix(
             "farm-1", "queue-1", "job-1", "step-1", "task-1", "sa-1", ts,
         );
@@ -971,7 +971,7 @@ mod tests {
 
     #[test]
     fn partial_session_action_manifest_prefix_without_task() {
-        let ts = 1705312200.5;
+        let ts = 1_705_312_200.5;
         let result = JobAttachmentS3Settings::partial_session_action_manifest_prefix_without_task(
             "farm-1", "queue-1", "job-1", "step-1", "sa-1", ts,
         );

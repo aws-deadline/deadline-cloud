@@ -80,7 +80,7 @@ async fn setup_manifest_mocks(harness: &TestHarness, job: serde_json::Value, ass
         "manifestVersion": "2023-03-03",
         "hashAlg": "xxh128",
         "totalSize": 100,
-        "paths": [{"path": "render.exr", "hash": "abc123", "size": 100, "mtime": 1700000000}]
+        "paths": [{"path": "render.exr", "hash": "abc123", "size": 100, "mtime": 1_700_000_000}]
     }).to_string();
     s3::mock_s3_get_object_with_metadata(
         &harness.server,
@@ -429,7 +429,7 @@ async fn job_download_output_existing_files_shows_conflict_prompt() {
         "hashAlg": "xxh128",
         "totalSize": 1024,
         "paths": [
-            {"path": "render.exr", "hash": "abc123", "size": 1024, "mtime": 1700000000}
+            {"path": "render.exr", "hash": "abc123", "size": 1024, "mtime": 1_700_000_000}
         ]
     }).to_string();
 
@@ -543,7 +543,7 @@ async fn job_download_output_cross_os_root_prompts_for_new_path() {
         "manifestVersion": "2023-03-03",
         "hashAlg": "xxh128",
         "totalSize": 100,
-        "paths": [{"path": "render.exr", "hash": "abc123", "size": 100, "mtime": 1700000000}]
+        "paths": [{"path": "render.exr", "hash": "abc123", "size": 100, "mtime": 1_700_000_000}]
     }).to_string();
     s3::mock_s3_get_object_with_metadata(
         &harness.server,

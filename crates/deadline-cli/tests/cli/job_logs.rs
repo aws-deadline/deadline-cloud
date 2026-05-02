@@ -46,8 +46,8 @@ async fn job_logs_with_session_id_prints_events() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "Starting session\n", "ingestionTime": 1702857601000_i64}),
-        json!({"timestamp": 1702857601000_i64, "message": "Task running   "}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "Starting session\n", "ingestionTime": 1_702_857_601_000_i64}),
+        json!({"timestamp": 1_702_857_601_000_i64, "message": "Task running   "}),
     ], None).await;
 
     let _guard = insta_settings().bind_to_scope();
@@ -80,7 +80,7 @@ async fn job_logs_auto_selects_ongoing_session() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702944000000_i64, "message": "log line"}),
+        json!({"timestamp": 1_702_944_000_000_i64, "message": "log line"}),
     ], None).await;
 
     let _guard = insta_settings().bind_to_scope();
@@ -183,7 +183,7 @@ async fn job_logs_json_output_with_next_token() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "hello"}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "hello"}),
     ], Some("f/next-page")).await;
 
     let output = harness.cli(&["job", "logs", "--session-id", "session-001", "--output", "json"])
@@ -222,7 +222,7 @@ async fn job_logs_next_token_passed_through() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857700000_i64, "message": "page 2 line"}),
+        json!({"timestamp": 1_702_857_700_000_i64, "message": "page 2 line"}),
     ], None).await;
 
     let output = harness.cli(&[
@@ -261,7 +261,7 @@ async fn job_logs_timestamp_format_local() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "hello"}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "hello"}),
     ], None).await;
 
     let output = harness.cli(&["job", "logs", "--session-id", "session-001", "--timestamp-format", "local"])
@@ -299,7 +299,7 @@ async fn job_logs_timestamp_format_relative() {
 
     // Event is 60 seconds after session start (2023-12-18T00:00:00Z = epoch 1702857600)
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857660000_i64, "message": "one minute in"}),
+        json!({"timestamp": 1_702_857_660_000_i64, "message": "one minute in"}),
     ], None).await;
 
     let output = harness.cli(&["job", "logs", "--session-id", "session-001", "--timestamp-format", "relative"])
@@ -340,7 +340,7 @@ async fn job_logs_timestamp_format_relative_negative_timedelta() {
     // session start = 2023-12-18T00:01:00Z = epoch 1702857660
     // event = 1702857630 = 2023-12-18T00:00:30Z (30 seconds before start)
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857630000_i64, "message": "early event"}),
+        json!({"timestamp": 1_702_857_630_000_i64, "message": "early event"}),
     ], None).await;
 
     let output = harness.cli(&["job", "logs", "--session-id", "session-001", "--timestamp-format", "relative"])
@@ -374,7 +374,7 @@ async fn job_logs_json_timestamp_format_utc() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "hello"}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "hello"}),
     ], None).await;
 
     let output = harness.cli(&["job", "logs", "--session-id", "session-001", "--output", "json", "--timestamp-format", "utc"])
@@ -413,7 +413,7 @@ async fn job_logs_auto_select_single_session_prints_message() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "log line"}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "log line"}),
     ], None).await;
 
     let output = harness.cli(&["job", "logs"])
@@ -484,7 +484,7 @@ async fn job_logs_auto_select_json_no_message() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "log line"}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "log line"}),
     ], None).await;
 
     let output = harness.cli(&["job", "logs", "--output", "json"])
@@ -523,7 +523,7 @@ async fn job_logs_auto_select_ongoing_from_multiple_prints_latest_message() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702944000000_i64, "message": "log line"}),
+        json!({"timestamp": 1_702_944_000_000_i64, "message": "log line"}),
     ], None).await;
 
     let output = harness.cli(&["job", "logs"])
@@ -572,7 +572,7 @@ async fn job_logs_relative_timestamp_auto_selected_session_uses_session_start() 
 
     // Event is 60 seconds after session start (2023-12-18T00:00:00Z = epoch 1702857600)
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857660000_i64, "message": "one minute in"}),
+        json!({"timestamp": 1_702_857_660_000_i64, "message": "one minute in"}),
     ], None).await;
 
     let output = harness.cli(&["job", "logs", "--timestamp-format", "relative"])
@@ -662,7 +662,7 @@ async fn job_logs_session_action_id_derives_session_and_scopes_time() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "Action started"}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "Action started"}),
     ], None).await;
 
     let _guard = insta_settings().bind_to_scope();
@@ -792,7 +792,7 @@ async fn job_logs_session_action_id_matches_session_id_succeeds() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "Action started"}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "Action started"}),
     ], None).await;
 
     let _guard = insta_settings().bind_to_scope();
@@ -827,7 +827,7 @@ async fn job_logs_timezone_deprecated_flag() {
     })).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        json!({"timestamp": 1702857600000_i64, "message": "Test log line"}),
+        json!({"timestamp": 1_702_857_600_000_i64, "message": "Test log line"}),
     ], None).await;
 
     let output = harness.cli(&[

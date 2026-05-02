@@ -35,7 +35,7 @@ fn make_test_manifest() -> AssetManifest {
             path: "file.txt".into(),
             hash: "aa".repeat(16),
             size: 5,
-            mtime: 1700000000_000_000,
+            mtime: 1_700_000_000_000_000,
         }],
     )
     .unwrap()

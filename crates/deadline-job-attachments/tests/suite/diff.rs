@@ -42,7 +42,7 @@ fn fast_diff_new_file_detected() {
     let _manifest = make_manifest(&[]);
     // Empty manifest, one file on disk → file is New
     // fast_diff needs a non-empty manifest to work; use one with a different file
-    let manifest = make_manifest(&[("other.txt", "aa".repeat(16).as_str(), 5, 1000000)]);
+    let manifest = make_manifest(&[("other.txt", "aa".repeat(16).as_str(), 5, 1_000_000)]);
     let result = fast_diff(dir.path().to_str().unwrap(), &[f1], &manifest);
     assert!(result.iter().any(|(_, s)| *s == FileStatus::New));
 }
@@ -51,7 +51,7 @@ fn fast_diff_new_file_detected() {
 fn fast_diff_deleted_file_detected() {
     let dir = TempDir::new().unwrap();
     // Manifest has a file, disk doesn't
-    let manifest = make_manifest(&[("gone.txt", "aa".repeat(16).as_str(), 10, 1000000)]);
+    let manifest = make_manifest(&[("gone.txt", "aa".repeat(16).as_str(), 10, 1_000_000)]);
     let result = fast_diff(dir.path().to_str().unwrap(), &[], &manifest);
     assert!(result.iter().any(|(p, s)| p == "gone.txt" && *s == FileStatus::Deleted));
 }

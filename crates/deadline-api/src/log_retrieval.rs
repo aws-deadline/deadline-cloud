@@ -376,7 +376,7 @@ mod tests {
         setup_env(&server).await;
 
         mock_cw_events(&server, &[
-            serde_json::json!({"timestamp": 1702857600000_i64, "message": "Worker started\n", "ingestionTime": 1702857601000_i64}),
+            serde_json::json!({"timestamp": 1_702_857_600_000_i64, "message": "Worker started\n", "ingestionTime": 1_702_857_601_000_i64}),
         ]).await;
 
         let result = get_worker_logs(

@@ -431,8 +431,8 @@ mod tests {
             "hashAlg": "xxh128",
             "totalSize": 100,
             "paths": [
-                {"path": "file1.txt", "hash": "abcdef1234567890abcdef1234567890", "size": 50, "mtime": 1000000},
-                {"path": "file2.txt", "hash": "1234567890abcdef1234567890abcdef", "size": 50, "mtime": 2000000}
+                {"path": "file1.txt", "hash": "abcdef1234567890abcdef1234567890", "size": 50, "mtime": 1_000_000},
+                {"path": "file2.txt", "hash": "1234567890abcdef1234567890abcdef", "size": 50, "mtime": 2_000_000}
             ]
         })
         .to_string()
@@ -740,13 +740,13 @@ mod tests {
                     path: "dir/file1.exr".into(),
                     hash: "abcdef1234567890abcdef1234567890".into(),
                     size: 100,
-                    mtime: 1710000000000000,
+                    mtime: 1_710_000_000_000_000,
                 },
                 ManifestPath {
                     path: "dir/file2.exr".into(),
                     hash: "1234567890abcdef1234567890abcdef".into(),
                     size: 50,
-                    mtime: 1710000001000000,
+                    mtime: 1_710_000_001_000_000,
                 },
             ],
         )

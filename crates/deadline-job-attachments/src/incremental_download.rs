@@ -726,7 +726,7 @@ mod tests {
                 path: p.to_string(),
                 hash: h.to_string(),
                 size: *s,
-                mtime: 1000000,
+                mtime: 1_000_000,
             }).collect(),
         ).unwrap()
     }

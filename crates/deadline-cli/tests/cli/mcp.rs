@@ -559,7 +559,7 @@ async fn mcp_session_and_worker_logs_returns_both() {
     ).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        serde_json::json!({"timestamp": 1700000000000_i64, "message": "Rendering frame 1"}),
+        serde_json::json!({"timestamp": 1_700_000_000_000_i64, "message": "Rendering frame 1"}),
     ], None).await;
 
     fleets::mock_assume_fleet_role_for_read(&harness.server, "farm-aaa", "fleet-fff",
@@ -612,7 +612,7 @@ async fn mcp_session_and_worker_logs_no_worker_id() {
     ).await;
 
     cloudwatch::mock_get_log_events(&harness.server, &[
-        serde_json::json!({"timestamp": 1700000000000_i64, "message": "Starting"}),
+        serde_json::json!({"timestamp": 1_700_000_000_000_i64, "message": "Starting"}),
     ], None).await;
 
     let client = mcp_client(&harness).await;

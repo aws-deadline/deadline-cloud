@@ -49,7 +49,7 @@ fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> AssetManifest {
             path: name.to_string(),
             hash,
             size: meta.len() as i64,
-            mtime: 1700000000_000_000, // fixed microseconds for test determinism
+            mtime: 1_700_000_000_000_000, // fixed microseconds for test determinism
         });
     }
     let total_size: i64 = paths.iter().map(|p| p.size).sum();
@@ -70,7 +70,7 @@ fn make_manifest_no_files(entries: &[(&str, &str, i64)]) -> AssetManifest {
             path: p.to_string(),
             hash: h.to_string(),
             size: *s,
-            mtime: 1700000000_000_000,
+            mtime: 1_700_000_000_000_000,
         })
         .collect();
     let total_size: i64 = paths.iter().map(|p| p.size).sum();
@@ -206,7 +206,7 @@ async fn download_file_happy_path_creates_file_and_sets_mtime() {
         path: "subdir/test.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: content.len() as i64,
-        mtime: 1700000000_000_000, // microseconds
+        mtime: 1_700_000_000_000_000, // microseconds
     };
 
     let (bytes, local_path) = download_file(
@@ -242,7 +242,7 @@ async fn download_file_creates_parent_directories() {
         path: "deep/nested/dir/file.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: 4,
-        mtime: 1700000000_000_000,
+        mtime: 1_700_000_000_000_000,
     };
 
     let (_, local_path) = download_file(
@@ -295,7 +295,7 @@ async fn download_file_404_retries_without_algorithm_suffix() {
         path: "file.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: 16,
-        mtime: 1700000000_000_000,
+        mtime: 1_700_000_000_000_000,
     };
 
     let (bytes, local_path) = download_file(
@@ -335,7 +335,7 @@ async fn download_file_404_on_both_attempts_returns_error() {
         path: "file.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: 10,
-        mtime: 1700000000_000_000,
+        mtime: 1_700_000_000_000_000,
     };
 
     let err = download_file(
@@ -374,7 +374,7 @@ async fn download_file_403_non_kms_returns_get_object_guidance() {
         path: "file.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: 10,
-        mtime: 1700000000_000_000,
+        mtime: 1_700_000_000_000_000,
     };
 
     let err = download_file(
@@ -413,7 +413,7 @@ async fn download_file_403_kms_returns_decrypt_guidance() {
         path: "file.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: 10,
-        mtime: 1700000000_000_000,
+        mtime: 1_700_000_000_000_000,
     };
 
     let err = download_file(
@@ -449,7 +449,7 @@ async fn download_file_skip_existing_returns_none_path() {
         path: "existing.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: 8,
-        mtime: 1700000000_000_000,
+        mtime: 1_700_000_000_000_000,
     };
 
     let (bytes, local_path) = download_file(
@@ -489,7 +489,7 @@ async fn download_file_overwrite_existing_replaces_content() {
         path: "existing.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: 11,
-        mtime: 1700000000_000_000,
+        mtime: 1_700_000_000_000_000,
     };
 
     let (_, local_path) = download_file(
@@ -527,7 +527,7 @@ async fn download_file_create_copy_generates_unique_name() {
         path: "file.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
         size: 12,
-        mtime: 1700000000_000_000,
+        mtime: 1_700_000_000_000_000,
     };
 
     let (_, local_path) = download_file(

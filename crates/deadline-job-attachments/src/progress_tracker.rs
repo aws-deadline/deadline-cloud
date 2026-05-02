@@ -144,7 +144,7 @@ impl fmt::Display for SummaryStatistics {
 }
 
 fn round_to_5(v: f64) -> f64 {
-    (v * 100000.0).round() / 100000.0
+    (v * 100_000.0).round() / 100_000.0
 }
 
 // --- DownloadSummaryStatistics ---

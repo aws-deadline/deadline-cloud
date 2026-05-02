@@ -33,7 +33,7 @@ async fn manifest_snapshot_creates_manifest_file() {
     // Should have created a .manifest file in the root dir
     let manifests: Vec<_> = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .collect();
     assert_eq!(manifests.len(), 1, "Expected one manifest file");
@@ -70,13 +70,13 @@ async fn manifest_snapshot_writes_to_destination() {
     // Manifest should be in dest, not root
     let in_dest: Vec<_> = fs::read_dir(dest.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .collect();
     assert_eq!(in_dest.len(), 1);
     let in_root: Vec<_> = fs::read_dir(root.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .collect();
     assert_eq!(in_root.len(), 0);
@@ -104,7 +104,7 @@ async fn manifest_snapshot_uses_provided_name() {
     assert!(output.status.success());
     let manifests: Vec<_> = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .filter(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             name.starts_with("my-snapshot-") && name.ends_with(".manifest")
@@ -137,7 +137,7 @@ async fn manifest_snapshot_include_exclude_filters() {
     assert!(output.status.success());
     let manifest_file = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .find(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .expect("manifest file should exist");
     let contents = fs::read_to_string(manifest_file.path()).unwrap();
@@ -178,7 +178,7 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
 
     let manifest_file = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .find(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .expect("manifest should exist");
 
@@ -246,7 +246,7 @@ async fn manifest_snapshot_diff_only_includes_changed_files() {
 
     let first_manifest = fs::read_dir(dest.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .find(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .expect("first manifest should exist");
 
@@ -269,7 +269,7 @@ async fn manifest_snapshot_diff_only_includes_changed_files() {
     // Find the diff manifest
     let diff_manifest = fs::read_dir(dest.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .find(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             name.starts_with("diff-snap-") && name.ends_with(".manifest")
@@ -599,7 +599,7 @@ async fn manifest_diff_root_optional() {
     // Find the manifest file
     let manifest_file = fs::read_dir(dir.path())
         .unwrap()
-        .filter_map(std::result::Result::ok)
+        .filter_map(Result::ok)
         .find(|e| e.path().extension().is_some_and(|ext| ext == "manifest"))
         .expect("manifest file should exist")
         .path();
