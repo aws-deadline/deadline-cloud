@@ -16,3 +16,6 @@ predicates = { workspace = true }
 [[bin]]
 name = "ffi-test-server"
 path = "src/bin/ffi_test_server.rs"
+
+[lints]
+workspace = true

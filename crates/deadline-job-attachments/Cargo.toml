@@ -31,3 +31,6 @@ tempfile = { workspace = true }
 test-case = { workspace = true }
 wiremock = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

@@ -38,7 +38,7 @@ test-python:
 
 # Lint
 lint:
-	cargo clippy --workspace -- -D warnings
+	cargo clippy --workspace --all-targets -- -D warnings
 
 # Format check
 fmt:

@@ -20,3 +20,6 @@ deadline-job-bundle = { workspace = true }
 deadline-job-attachments = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+
+[lints]
+workspace = true

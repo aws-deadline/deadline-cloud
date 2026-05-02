@@ -55,3 +55,42 @@ wiremock = "0.6"
 serial_test = "3"
 insta = { version = "1", features = ["filters"] }
 insta-cmd = "0.6"
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+# ── Group enables ──────────────────────────────────────────────
+pedantic = { level = "warn", priority = -1 }
+
+# ── Pedantic overrides (allow) ─────────────────────────────────
+module_name_repetitions = "allow"       # deadline_config::ConfigFile is fine
+missing_errors_doc = "allow"            # Enable later when docs mature
+missing_panics_doc = "allow"            # Enable later when docs mature
+must_use_candidate = "allow"            # Too noisy on builders and getters
+similar_names = "allow"                 # farm_id/farm_ids is intentional
+needless_pass_by_value = "allow"        # Clap derive requires owned types
+
+# ── Cherry-picked restriction lints ────────────────────────────
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+get_unwrap = "warn"
+undocumented_unsafe_blocks = "warn"
+empty_drop = "warn"
+empty_structs_with_brackets = "warn"
+exit = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+str_to_string = "warn"
+allow_attributes_without_reason = "warn"
+
+# ── Cherry-picked nursery lints ────────────────────────────────
+redundant_clone = "warn"
+debug_assert_with_mut_call = "warn"
+unused_peekable = "warn"

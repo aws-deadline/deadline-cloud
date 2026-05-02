@@ -1,0 +1,9 @@
+# Allow unwrap/expect/dbg/print in test code — strict in production, pragmatic in tests.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-dbg-in-tests = true
+allow-print-in-tests = true
+
+# Doc-valid identifiers: append our domain terms to the defaults so
+# doc_markdown doesn't flag them as needing backticks.
+doc-valid-idents = ["PyO3", "PySide6", "OpenJD", ".."]

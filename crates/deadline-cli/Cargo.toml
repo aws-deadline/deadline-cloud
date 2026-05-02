@@ -43,3 +43,6 @@ serde_json = { workspace = true }
 insta = { workspace = true }
 insta-cmd = { workspace = true }
 rmcp = { version = "1.5", features = ["client", "transport-child-process"] }
+
+[lints]
+workspace = true
