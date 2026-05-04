@@ -32,6 +32,7 @@ __all__ = [
     "check_authentication_status",
     "check_deadline_api_available",
     "get_credentials_source",
+    "get_user_and_identity_store_id",
     "precache_clients",
     "list_farms",
     "list_queues",
@@ -74,7 +75,7 @@ __all__ = [
 import encodings.idna  # noqa # pylint: disable=unused-import
 from configparser import ConfigParser
 from logging import getLogger
-from typing import Any, Dict, Optional
+from typing import Optional
 
 
 # Telemetry must be imported before Submit Job Bundle to avoid circular dependencies.
@@ -157,17 +158,11 @@ def check_deadline_api_available(config: Optional[ConfigParser] = None) -> bool:
     """
     import logging
 
-    from ._session import _modified_logging_level
+    from ._session import _list_farms_for_auth_probe, _modified_logging_level
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
         try:
-            list_farm_params: Dict[str, Any] = {"maxResults": 1}
-            user_id, _ = get_user_and_identity_store_id(config=config)
-            if user_id:
-                list_farm_params["principalId"] = str(user_id)
-
-            deadline = get_boto3_client("deadline", config=config)
-            deadline.list_farms(**list_farm_params)
+            _list_farms_for_auth_probe(config=config)
             return True
         except Exception:
             logger.exception("Error invoking ListFarms")

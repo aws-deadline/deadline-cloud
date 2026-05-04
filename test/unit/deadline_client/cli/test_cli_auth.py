@@ -29,6 +29,8 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
         "credential_process": f"{dcm} get-credentials --profile sandbox-us-west-2",
         "monitor_id": "monitor-1g9neezauta8ease",
         "region": "us-west-2",
+        "user_id": "user-1234",
+        "identity_store_id": "d-abcdef0123",
     }
 
     profile_name = "sandbox-us-west-2"
@@ -149,12 +151,16 @@ def test_cli_auth_status_json(fresh_deadline_config):
         "credential_process": "/bin/DeadlineCloudMonitor get-credentials --profile sandbox-us-west-2",
         "monitor_id": "monitor-1g9neezauta8ease",
         "region": "us-west-2",
+        "user_id": "user-1234",
+        "identity_store_id": "d-abcdef0123",
     }
     config.set_setting("defaults.aws_profile_name", profile_name)
 
     with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
         api, "get_boto3_session", new=session_mock
-    ):
+    ), patch.object(
+        api, "check_authentication_status", return_value=api.AwsAuthenticationStatus.AUTHENTICATED
+    ), patch.object(api, "check_deadline_api_available", return_value=False):
         # The profile name
         session_mock().profile_name = profile_name
         # This configuration includes the IdC profile

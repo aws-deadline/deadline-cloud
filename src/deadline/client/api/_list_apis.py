@@ -7,6 +7,14 @@ from ._session import (
 from .. import api
 
 
+def _apply_principal_id_filter(kwargs, config=None):
+    """Injects ``principalId`` into *kwargs* when the active profile has a DCM user_id."""
+    if "principalId" not in kwargs:
+        user_id, _ = get_user_and_identity_store_id(config=config)
+        if user_id:
+            kwargs["principalId"] = user_id
+
+
 def _call_paginated_deadline_list_api(list_api, list_property_name, **kwargs):
     """
     Calls a deadline:List* API repeatedly to concatenate all pages.
@@ -39,11 +47,7 @@ def list_farms(config=None, **kwargs):
 
     [deadline:ListFarms]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListFarms.html
     """
-    if "principalId" not in kwargs:
-        user_id, _ = get_user_and_identity_store_id(config=config)
-        if user_id:
-            kwargs["principalId"] = user_id
-
+    _apply_principal_id_filter(kwargs, config=config)
     deadline = get_boto3_client("deadline", config=config)
     return _call_paginated_deadline_list_api(deadline.list_farms, "farms", **kwargs)
 
@@ -57,11 +61,7 @@ def list_queues(config=None, **kwargs):
 
     [deadline:ListQueues]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListQueues.html
     """
-    if "principalId" not in kwargs:
-        user_id, _ = get_user_and_identity_store_id(config=config)
-        if user_id:
-            kwargs["principalId"] = user_id
-
+    _apply_principal_id_filter(kwargs, config=config)
     deadline = get_boto3_client("deadline", config=config)
     return _call_paginated_deadline_list_api(deadline.list_queues, "queues", **kwargs)
 
@@ -75,11 +75,7 @@ def list_jobs(config=None, **kwargs):
 
     [deadline:ListJobs]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListJobs.html
     """
-    if "principalId" not in kwargs:
-        user_id, _ = get_user_and_identity_store_id(config=config)
-        if user_id:
-            kwargs["principalId"] = user_id
-
+    _apply_principal_id_filter(kwargs, config=config)
     deadline = get_boto3_client("deadline", config=config)
     return _call_paginated_deadline_list_api(deadline.list_jobs, "jobs", **kwargs)
 
@@ -93,11 +89,7 @@ def list_fleets(config=None, **kwargs):
 
     [deadline:ListFleets]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListFleets.html
     """
-    if "principalId" not in kwargs:
-        user_id, _ = get_user_and_identity_store_id(config=config)
-        if user_id:
-            kwargs["principalId"] = user_id
-
+    _apply_principal_id_filter(kwargs, config=config)
     deadline = get_boto3_client("deadline", config=config)
     return _call_paginated_deadline_list_api(deadline.list_fleets, "fleets", **kwargs)
 

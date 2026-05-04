@@ -283,6 +283,27 @@ def _modified_logging_level(logger, level):
         logger.setLevel(old_level)
 
 
+def _list_farms_for_auth_probe(config: Optional[ConfigParser] = None) -> None:
+    """
+    Makes a minimal ``deadline:ListFarms`` call used as an auth/reachability
+    probe by :func:`check_authentication_status` and
+    :func:`check_deadline_api_available`.
+
+    For Deadline Cloud monitor profiles, injects ``principalId`` so the call
+    is scoped to the caller's IdC user (matching the :func:`api.list_farms`
+    wrapper). Without it, IdC-issued sessions get denied by the service and
+    the auth-login poll loop never resolves to AUTHENTICATED.
+
+    Raises whatever exception the underlying boto3 call raises; callers are
+    responsible for exception handling.
+    """
+    from ._list_apis import _apply_principal_id_filter
+
+    list_farm_params: dict = {"maxResults": 1}
+    _apply_principal_id_filter(list_farm_params, config=config)
+    get_boto3_client("deadline", config=config).list_farms(**list_farm_params)
+
+
 def check_authentication_status(
     config: Optional[ConfigParser] = None,
 ) -> AwsAuthenticationStatus:
@@ -303,7 +324,7 @@ def check_authentication_status(
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
         try:
-            get_boto3_client("deadline", config=config).list_farms(maxResults=1)
+            _list_farms_for_auth_probe(config=config)
             return AwsAuthenticationStatus.AUTHENTICATED
         except Exception:
             # We assume that the presence of a Deadline Cloud monitor profile
