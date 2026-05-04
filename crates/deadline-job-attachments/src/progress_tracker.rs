@@ -15,11 +15,10 @@ pub fn human_readable_file_size(size_in_bytes: u64) -> String {
         if rounded < 1000.0 {
             if *postfix == "B" {
                 return format!("{} {postfix}", rounded as u64);
-            } else {
-                let s = format!("{rounded:.2}");
-                let s = s.trim_end_matches('0').trim_end_matches('.');
-                return format!("{s} {postfix}");
             }
+            let s = format!("{rounded:.2}");
+            let s = s.trim_end_matches('0').trim_end_matches('.');
+            return format!("{s} {postfix}");
         }
         converted /= 1000.0;
     }

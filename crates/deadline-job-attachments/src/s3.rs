@@ -70,7 +70,7 @@ pub fn build_s3_client(
 /// file when no `IniConfig` is provided.
 pub fn get_s3_max_pool_connections(
     config: Option<&IniConfig>,
-) -> Result<i32, JobAttachmentsError> {
+) -> Result<usize, JobAttachmentsError> {
     let value_str = match config {
         Some(c) => get_setting("settings.s3_max_pool_connections", c),
         None => get_setting_from_disk("settings.s3_max_pool_connections"),
@@ -81,7 +81,7 @@ pub fn get_s3_max_pool_connections(
         ))
     })?;
 
-    let value: i32 = value_str.parse().map_err(|_| {
+    let value: usize = value_str.parse().map_err(|_| {
         JobAttachmentsError::AssetSync(
             "Failed to parse configuration settings. Please ensure that the following \
              settings in the config file are integers: 's3_max_pool_connections'"
@@ -89,7 +89,7 @@ pub fn get_s3_max_pool_connections(
         )
     })?;
 
-    if value <= 0 {
+    if value == 0 {
         return Err(JobAttachmentsError::AssetSync(format!(
             "Nonvalid value for configuration setting: \
              's3_max_pool_connections' ({value}) must be positive integer."
@@ -103,7 +103,7 @@ pub fn get_s3_max_pool_connections(
 /// if the value is not a positive integer.
 pub fn get_small_file_threshold_multiplier(
     config: Option<&IniConfig>,
-) -> Result<i32, JobAttachmentsError> {
+) -> Result<usize, JobAttachmentsError> {
     let value_str = match config {
         Some(c) => get_setting("settings.small_file_threshold_multiplier", c),
         None => get_setting_from_disk("settings.small_file_threshold_multiplier"),
@@ -114,7 +114,7 @@ pub fn get_small_file_threshold_multiplier(
         ))
     })?;
 
-    let value: i32 = value_str.parse().map_err(|_| {
+    let value: usize = value_str.parse().map_err(|_| {
         JobAttachmentsError::AssetSync(
             "Failed to parse configuration settings. Please ensure that the following \
              settings in the config file are integers: \
@@ -123,7 +123,7 @@ pub fn get_small_file_threshold_multiplier(
         )
     })?;
 
-    if value <= 0 {
+    if value == 0 {
         return Err(JobAttachmentsError::AssetSync(format!(
             "Nonvalid value for configuration setting: \
              'small_file_threshold_multiplier' ({value}) must be positive integer."
@@ -141,17 +141,17 @@ pub fn compute_upload_config(
     let multiplier = get_small_file_threshold_multiplier(config)?;
     let pool_connections = get_s3_max_pool_connections(config)?;
 
-    let threshold = S3_MULTIPART_UPLOAD_CHUNK_SIZE * (multiplier as usize);
-    let divisor = (multiplier as usize).min(S3_UPLOAD_MAX_CONCURRENCY);
-    let workers = ((pool_connections as usize) / divisor).max(1);
+    let threshold = S3_MULTIPART_UPLOAD_CHUNK_SIZE * multiplier;
+    let divisor = multiplier.min(S3_UPLOAD_MAX_CONCURRENCY);
+    let workers = (pool_connections / divisor).max(1);
 
     Ok((threshold, workers))
 }
 
 /// Computes the number of download workers from pool connections.
 /// Matches Python's `_get_num_download_workers`: `pool / MAX_CONCURRENCY`, min 1.
-pub fn compute_download_workers(s3_max_pool_connections: i32) -> usize {
-    ((s3_max_pool_connections as usize) / S3_DOWNLOAD_MAX_CONCURRENCY).max(1)
+pub fn compute_download_workers(s3_max_pool_connections: usize) -> usize {
+    (s3_max_pool_connections / S3_DOWNLOAD_MAX_CONCURRENCY).max(1)
 }
 
 // --- Account identity ---

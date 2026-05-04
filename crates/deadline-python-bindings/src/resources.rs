@@ -11,6 +11,8 @@ pub fn list_farms<'py>(py: Python<'py>, config_path: Option<&str>) -> PyResult<B
     let builder = deadline_api::client::apply_dcm_principal(dl.list_farms(), Some(&config));
     let pages = rt.block_on(deadline_api::client::collect_paginated(builder.into_paginator().send()))
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    // AWS SDK method references (e.g. ListFarmsOutput::farms) are unreadably long
+    #[allow(clippy::redundant_closure_for_method_calls, reason = "AWS SDK method references are unreadably long")]
     let farms: Vec<serde_json::Value> = pages
         .iter()
         .flat_map(|p| p.farms())
@@ -45,6 +47,7 @@ pub fn list_queues<'py>(py: Python<'py>, farm_id: &str, config_path: Option<&str
     let builder = deadline_api::client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), Some(&config));
     let pages = rt.block_on(deadline_api::client::collect_paginated(builder.into_paginator().send()))
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    #[allow(clippy::redundant_closure_for_method_calls, reason = "AWS SDK method references are unreadably long")]
     let queues: Vec<serde_json::Value> = pages
         .iter()
         .flat_map(|p| p.queues())
@@ -86,6 +89,7 @@ pub fn list_storage_profiles_for_queue<'py>(
             client.list_storage_profiles_for_queue().farm_id(farm_id).queue_id(queue_id)
                 .into_paginator().send()
         ).await?;
+        #[allow(clippy::redundant_closure_for_method_calls, reason = "AWS SDK method references are unreadably long")]
         let profiles: Vec<serde_json::Value> = pages.iter()
             .flat_map(|p| p.storage_profiles())
             .map(|sp| serde_json::json!({

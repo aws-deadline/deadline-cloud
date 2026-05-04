@@ -222,6 +222,11 @@ fn command_name(cmd: &Commands) -> String {
 fn redirect_std_to_file(file: &std::fs::File) {
     use std::os::unix::io::AsRawFd;
     let fd = file.as_raw_fd();
+    // SAFETY: dup2 atomically replaces the target fd with a copy of the
+    // source fd. We own the file and the target fds (1, 2) are the
+    // process's own stdout/stderr. This is only called at startup for the
+    // windowless binary variant (deadlinew) to suppress console output.
+    #[allow(unsafe_code, reason = "redirecting stdout/stderr requires POSIX dup2")]
     unsafe {
         libc::dup2(fd, 1);
         libc::dup2(fd, 2);
@@ -232,6 +237,10 @@ fn redirect_std_to_file(file: &std::fs::File) {
 fn redirect_std_to_file(file: &std::fs::File) {
     use std::os::windows::io::AsRawHandle;
     let handle = file.as_raw_handle();
+    // SAFETY: SetStdHandle replaces the process's stdout/stderr handles.
+    // Same rationale as the Unix dup2 variant — only called at startup for
+    // the windowless binary (deadlinew).
+    #[allow(unsafe_code, reason = "redirecting stdout/stderr requires Win32 SetStdHandle")]
     unsafe {
         // SetStdHandle(STD_OUTPUT_HANDLE, handle)
         extern "system" { fn SetStdHandle(nStdHandle: u32, hHandle: *mut std::ffi::c_void) -> i32; }

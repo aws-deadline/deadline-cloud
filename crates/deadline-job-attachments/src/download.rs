@@ -184,12 +184,12 @@ async fn s3_stream_to_file(
             Ok(())
         }
         Err(sdk_err) => {
+            use aws_sdk_s3::error::ProvideErrorMetadata;
             let status = sdk_err
                 .raw_response()
                 .map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
-            use aws_sdk_s3::error::ProvideErrorMetadata;
             let msg = service_err.message().unwrap_or_default();
             let full_text = format!("{raw} {msg}");
             Err(s3_download_error(status, &full_text, s3_bucket, s3_key, local_path))
@@ -226,9 +226,8 @@ fn get_new_copy_file_path(
         let candidate = parent.join(format!("{stem} ({num}){ext}"));
         // Atomic check: try to exclusively create the file
         match OpenOptions::new().write(true).create_new(true).open(&candidate) {
-            Ok(_) => return candidate,
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(_) => return candidate, // best effort on other errors
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Ok(_) | Err(_) => return candidate, // best effort on other errors
         }
     }
 }
@@ -313,7 +312,7 @@ pub fn merge_asset_manifests(
     }
 
     let paths: Vec<ManifestPath> = merged.into_values().collect();
-    let total_size: i64 = paths.iter().map(|p| p.size).sum();
+    let total_size: u64 = paths.iter().map(|p| p.size).sum();
 
     Ok(Some(AssetManifest::new(
         hash_alg,
@@ -338,7 +337,7 @@ pub async fn download_file(
     progress_tracker: Option<&ProgressTracker>,
     file_conflict_resolution: FileConflictResolution,
     collision_state: &CollisionState,
-) -> Result<(i64, Option<PathBuf>), JobAttachmentsError> {
+) -> Result<(u64, Option<PathBuf>), JobAttachmentsError> {
     let file_bytes = file.size;
 
     // Build local path
@@ -355,7 +354,7 @@ pub async fn download_file(
         match file_conflict_resolution {
             FileConflictResolution::Skip => {
                 if let Some(tracker) = progress_tracker {
-                    tracker.increase_skipped(1, file_bytes as u64);
+                    tracker.increase_skipped(1, file_bytes);
                     tracker.report_progress();
                 }
                 return Ok((file_bytes, None));
@@ -409,7 +408,7 @@ pub async fn download_file(
 
     // Report progress
     if let Some(tracker) = progress_tracker {
-        tracker.increase_processed(1, file_bytes as u64);
+        tracker.increase_processed(1, file_bytes);
         tracker.report_progress();
     }
 
@@ -419,6 +418,9 @@ pub async fn download_file(
 /// Download all files from manifests grouped by local root directory.
 ///
 /// Returns download summary statistics with per-root file counts.
+// These are internal functions that always receive the default RandomState hasher.
+// Making the hasher generic would add complexity for no practical benefit.
+#[allow(clippy::implicit_hasher, reason = "only used with default HashMap")]
 pub async fn download_files_from_manifests(
     s3_bucket: &str,
     manifests_by_root: &HashMap<String, AssetManifest>,
@@ -429,11 +431,12 @@ pub async fn download_files_from_manifests(
     conflict_resolution: FileConflictResolution,
 ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
     // Compute totals
+    use futures::stream::{self, StreamExt, TryStreamExt};
     let mut total_files: u64 = 0;
     let mut total_bytes: u64 = 0;
     for manifest in manifests_by_root.values() {
         total_files += manifest.paths.len() as u64;
-        total_bytes += manifest.total_size as u64;
+        total_bytes += manifest.total_size;
     }
 
     let progress_tracker = ProgressTracker::new(
@@ -452,16 +455,15 @@ pub async fn download_files_from_manifests(
         ensure_paths_within_directory(local_root, &manifest.paths)?;
     }
 
+    // Download files in parallel across all manifests
+
     // Compute download worker count from config
     let num_workers = crate::s3::compute_download_workers(
         crate::s3::get_s3_max_pool_connections(None).unwrap_or(50),
     );
 
-    // Download files in parallel across all manifests
-    use futures::stream::{self, StreamExt, TryStreamExt};
-
     for (local_root, manifest) in manifests_by_root {
-        let results: Vec<(i64, Option<PathBuf>)> = stream::iter(
+        let results: Vec<(u64, Option<PathBuf>)> = stream::iter(
             manifest.paths.iter().map(|file| {
                 let collision = &collision_state;
                 let tracker = &progress_tracker;
@@ -579,13 +581,12 @@ pub async fn get_output_manifests_by_asset_root(
     )?;
 
     // List S3 objects under the prefix
-    let manifest_keys = match list_manifest_keys_from_s3(
+    let Ok(manifest_keys) = list_manifest_keys_from_s3(
         s3_client, &s3_settings.s3_bucket_name, &manifest_prefix, account_id,
     )
     .await
-    {
-        Ok(keys) => keys,
-        Err(_) => return Ok(HashMap::new()),
+    else {
+        return Ok(HashMap::new());
     };
 
     if manifest_keys.is_empty() {

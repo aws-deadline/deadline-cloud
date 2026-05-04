@@ -302,7 +302,7 @@ impl HookManager {
             Some(h) if !h.pre_submission.is_empty() => &h.pre_submission,
             _ => return Ok(payload),
         };
-        metadata.job_bundle_dir = self.script_resolve_dir.clone();
+        metadata.job_bundle_dir.clone_from(&self.script_resolve_dir);
         let mut current = payload;
         for (i, hook) in hooks.iter().enumerate() {
             let hook_name = format_hook_name(hook);
@@ -490,8 +490,13 @@ fn execute_hook(
         }),
         Ok(Err(e)) => Err(op_err(format!("Failed to execute hook: {}\n{e}", hook.command))),
         Err(_) => {
-            // Timed out — kill via PID
+            // Timed out — force-kill the child process via its PID.
+            // SAFETY: SIGKILL is sent to a child process we spawned. The pid
+            // is from Child::id() (a u32 cast to i32, safe for valid PIDs).
+            // SIGKILL cannot be caught or ignored, so this is a last-resort
+            // cleanup after the hook exceeded its timeout.
             #[cfg(unix)]
+            #[allow(unsafe_code, reason = "force-killing a timed-out child process requires POSIX kill")]
             unsafe { libc::kill(pid as i32, libc::SIGKILL); }
             #[cfg(not(unix))]
             { /* On non-unix, the thread's Child will be dropped eventually */ }

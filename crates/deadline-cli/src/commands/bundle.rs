@@ -219,7 +219,9 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             let telemetry = deadline_api::telemetry::create_telemetry(Some(&config));
 
             // F8: If snapshot path ends in .zip, use a temp dir then zip after
-            let snapshot_tmpdir: Option<std::path::PathBuf> = if save_debug_snapshot.as_ref().is_some_and(|p| p.ends_with(".zip")) {
+            let snapshot_tmpdir: Option<std::path::PathBuf> = if save_debug_snapshot.as_ref().is_some_and(|p| {
+                std::path::Path::new(p.as_str()).extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+            }) {
                 let tmp = std::env::temp_dir().join(format!("deadline-snapshot-{}", std::process::id()));
                 std::fs::create_dir_all(&tmp).map_err(|e| CliError::Operation(format!("Failed to create temp dir: {e}")))?;
                 Some(tmp)
@@ -404,7 +406,8 @@ fn validate_submitter_info(
             let content = std::fs::read_to_string(path).map_err(|e| {
                 CliError::Operation(format!("Cannot read --submitter-info file '{path}': {e}"))
             })?;
-            let obj: serde_json::Value = if path.ends_with(".yaml") || path.ends_with(".yml") {
+            let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str());
+            let obj: serde_json::Value = if ext.is_some_and(|e| e.eq_ignore_ascii_case("yaml") || e.eq_ignore_ascii_case("yml")) {
                 serde_yaml::from_str(&content).map_err(|e| {
                     CliError::Operation(format!("Invalid YAML in '{path}': {e}"))
                 })?

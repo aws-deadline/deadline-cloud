@@ -170,7 +170,12 @@ impl PidFileLock {
     fn pid_exists(pid: u32) -> bool {
         #[cfg(unix)]
         {
-            // Signal 0 checks if process exists without sending a signal
+            // Signal 0 checks if process exists without sending a signal.
+            // SAFETY: kill(pid, 0) is a standard POSIX probe — it sends no
+            // actual signal and cannot affect the target process. The pid comes
+            // from our own checkpoint file (a u32 cast to i32, which is safe
+            // for valid PIDs on all supported platforms).
+            #[allow(unsafe_code, reason = "POSIX process-existence check via kill(pid, 0)")]
             unsafe { libc::kill(pid as i32, 0) == 0 }
         }
         #[cfg(not(unix))]
@@ -351,7 +356,8 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
 // sync-output implementation
 // =========================================================================
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, reason = "CLI handler passes through all user-provided options")]
+#[allow(clippy::fn_params_excessive_bools, reason = "bool params map 1:1 to CLI flags")]
 async fn run_sync_output(
     profile: Option<String>,
     farm_id: Option<String>,
@@ -532,6 +538,8 @@ async fn run_sync_output(
 }
 
 /// Core orchestration: find jobs with new output, download manifests and files.
+#[allow(clippy::ref_option, reason = "callers pass &Option from local bindings")]
+#[allow(clippy::too_many_lines, reason = "incremental sync pipeline with 4 major steps")]
 async fn incremental_output_download(
     farm_id: &str,
     queue_id: &str,
@@ -814,6 +822,7 @@ async fn incremental_output_download(
 
         // Print path mapping rules for each non-local storage profile
         for (sp_id, sp) in &storage_profiles {
+            use deadline_job_attachments::models::StorageProfile;
             if sp_id == local_sp_id {
                 continue;
             }
@@ -829,8 +838,6 @@ async fn incremental_output_download(
             eprintln!("  job storage profile: {sp_name} ({sp_os})");
             eprintln!("  local storage profile: {local_name} ({local_os})");
 
-            // Generate rules using Batch B's path mapping
-            use deadline_job_attachments::models::StorageProfile;
             let source_sp = StorageProfile::from_json(sp);
             let dest_sp = StorageProfile::from_json(local_sp);
             if let (Some(src), Some(dst)) = (source_sp, dest_sp) {
@@ -970,9 +977,8 @@ async fn incremental_output_download(
 
         // Download output manifests for each job
         for job_id in &jobs_to_process {
-            let dc_job = match download_candidates.get(job_id) {
-                Some(j) => j,
-                None => continue,
+            let Some(dc_job) = download_candidates.get(job_id) else {
+                continue;
             };
 
             let manifest_prefix = format!("{prefix}/Manifests/{farm_id}/{queue_id}/{job_id}/");
@@ -1044,12 +1050,12 @@ async fn incremental_output_download(
             &mut downloaded_manifests,
         );
 
-        let total_bytes: i64 = manifest_paths.iter().map(|p| p.size).sum();
+        let total_bytes: u64 = manifest_paths.iter().map(|p| p.size).sum();
         let total_files = manifest_paths.len();
 
         // SYNC-007: Set stats from manifest paths so dry-run reports would-be counts
         downloaded_files_count = total_files;
-        downloaded_bytes = total_bytes as u64;
+        downloaded_bytes = total_bytes;
 
         eprintln!("Summary of paths to download:");
         if manifest_paths.is_empty() {
@@ -1058,7 +1064,7 @@ async fn incremental_output_download(
             // SYNC-004: Use summarize_path_list with sizes instead of aggregate count
             let local_paths: Vec<String> = manifest_paths.iter().map(|p| p.path.clone()).collect();
             let path_refs: Vec<&str> = local_paths.iter().map(String::as_str).collect();
-            let size_by_path: std::collections::HashMap<String, i64> = manifest_paths.iter()
+            let size_by_path: std::collections::HashMap<String, u64> = manifest_paths.iter()
                 .map(|p| (p.path.clone(), p.size))
                 .collect();
             let summary = deadline_api::path_utils::summarize_path_list(&path_refs, 30, Some(&size_by_path));

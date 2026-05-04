@@ -19,11 +19,10 @@ pub fn human_readable_file_size(size_in_bytes: u64) -> String {
             // display: round to 2 decimals, strip trailing zeros
             if *postfix == "B" {
                 return format!("{} {postfix}", rounded as u64);
-            } else {
-                let s = format!("{rounded:.2}");
-                let s = s.trim_end_matches('0').trim_end_matches('.');
-                return format!("{s} {postfix}");
             }
+            let s = format!("{rounded:.2}");
+            let s = s.trim_end_matches('0').trim_end_matches('.');
+            return format!("{s} {postfix}");
         }
         converted /= 1000.0;
     }
@@ -245,10 +244,11 @@ pub fn summarize_paths_by_sequence(paths: &[&str]) -> Vec<PathSummary> {
 ///
 /// If `total_size_by_path` is provided, sizes are shown per entry and
 /// entries are sorted by size descending (matching Python).
+#[allow(clippy::implicit_hasher, reason = "only used with default HashMap")]
 pub fn summarize_path_list(
     paths: &[&str],
     max_entries: usize,
-    total_size_by_path: Option<&std::collections::HashMap<String, i64>>,
+    total_size_by_path: Option<&std::collections::HashMap<String, u64>>,
 ) -> String {
     if paths.is_empty() {
         return String::new();
@@ -256,8 +256,8 @@ pub fn summarize_path_list(
 
     // Group paths by parent directory, tracking sizes per directory and per file
     let mut by_dir: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut dir_sizes: BTreeMap<String, i64> = BTreeMap::new();
-    let mut file_sizes: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    let mut dir_sizes: BTreeMap<String, u64> = BTreeMap::new();
+    let mut file_sizes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     for path in paths {
         let p = std::path::Path::new(path);
         let dir = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
@@ -291,7 +291,7 @@ pub fn summarize_path_list(
         let summaries = summarize_paths_by_sequence(&file_refs);
 
         let size_suffix = if let Some(&dir_size) = dir_sizes.get(dir) {
-            format!(", {}", human_readable_file_size(dir_size as u64))
+            format!(", {}", human_readable_file_size(dir_size))
         } else {
             String::new()
         };
@@ -303,7 +303,7 @@ pub fn summarize_path_list(
             let show = summaries.len().min(max_entries.saturating_sub(lines.len()));
             for summary in &summaries[..show] {
                 let child_size = file_sizes.get(&format!("{dir}/{}", summary.path))
-                    .map(|&s| format!(", {}", human_readable_file_size(s as u64)))
+                    .map(|&s| format!(", {}", human_readable_file_size(s)))
                     .unwrap_or_default();
                 if summary.index_set.is_empty() {
                     lines.push(format!("  {} (1 file{child_size})\n", summary.path));

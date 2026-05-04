@@ -160,17 +160,14 @@ pub fn safe_check_for_updates(
     }
 
     // Look up integration version
-    let latest_str = match platform_data["componentVersions"][integration_name].as_str() {
-        Some(v) => v,
-        None => {
-            return UpdateCheckResult {
-                status: UpdateCheckStatus::IntegrationNotFound,
-                error_message: Some(format!(
-                    "Integration '{integration_name}' not found in manifest"
-                )),
-                ..base()
-            };
-        }
+    let Some(latest_str) = platform_data["componentVersions"][integration_name].as_str() else {
+        return UpdateCheckResult {
+            status: UpdateCheckStatus::IntegrationNotFound,
+            error_message: Some(format!(
+                "Integration '{integration_name}' not found in manifest"
+            )),
+            ..base()
+        };
     };
 
     // Parse and compare versions

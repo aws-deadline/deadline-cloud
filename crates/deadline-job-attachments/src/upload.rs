@@ -115,14 +115,15 @@ pub fn prepare_paths_for_upload(
     }
 
     if !missing_inputs.is_empty() || !misconfigured_dirs.is_empty() {
+        use std::fmt::Write;
         let mut msg = "Job submission contains missing input files or directories specified as files. All inputs must exist and be classified properly.".to_owned();
         if !missing_inputs.is_empty() {
             let list: Vec<String> = missing_inputs.iter().map(|p| p.display().to_string()).collect();
-            msg.push_str(&format!("\nMissing input files:\n\t{}", list.join("\n\t")));
+            let _ = write!(msg, "\nMissing input files:\n\t{}", list.join("\n\t"));
         }
         if !misconfigured_dirs.is_empty() {
             let list: Vec<String> = misconfigured_dirs.iter().map(|p| p.display().to_string()).collect();
-            msg.push_str(&format!("\nDirectories classified as files:\n\t{}", list.join("\n\t")));
+            let _ = write!(msg, "\nDirectories classified as files:\n\t{}", list.join("\n\t"));
         }
         return Err(JobAttachmentsError::MisconfiguredInputs(msg));
     }
@@ -237,7 +238,7 @@ fn find_group_key(
     }
 }
 
-fn get_group_mut<'a>(key: &str, groupings: &'a mut Vec<(String, AssetRootGroup)>) -> &'a mut AssetRootGroup {
+fn get_group_mut<'a>(key: &str, groupings: &'a mut [(String, AssetRootGroup)]) -> &'a mut AssetRootGroup {
     let idx = groupings
         .iter()
         .position(|(k, _)| k.eq_ignore_ascii_case(key))
@@ -350,7 +351,7 @@ pub fn hash_assets_and_create_manifest(
                         input_path.display()
                     ))
                 })?;
-                let file_size = meta.len() as i64;
+                let file_size = meta.len();
 
                 #[cfg(unix)]
                 let (mtime_secs, mtime_nsec) = {
@@ -396,9 +397,9 @@ pub fn hash_assets_and_create_manifest(
                 });
 
                 if was_cached {
-                    progress_tracker.increase_skipped(1, file_size as u64);
+                    progress_tracker.increase_skipped(1, file_size);
                 } else {
-                    progress_tracker.increase_processed(1, file_size as u64);
+                    progress_tracker.increase_processed(1, file_size);
                 }
                 if !progress_tracker.report_progress() {
                     return Err(JobAttachmentsError::Cancelled {
@@ -407,7 +408,7 @@ pub fn hash_assets_and_create_manifest(
                 }
             }
 
-            let total_size: i64 = paths.iter().map(|p| p.size).sum();
+            let total_size: u64 = paths.iter().map(|p| p.size).sum();
             Some(AssetManifest::new(
                 HashAlgorithm::Xxh128,
                 ManifestVersion::V2023_03_03,
@@ -667,6 +668,7 @@ impl S3UploadContext {
     ) -> Result<(), JobAttachmentsError> {
         use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
         use crate::s3::S3_MULTIPART_UPLOAD_CHUNK_SIZE;
+        use futures::stream::{self, StreamExt, TryStreamExt};
 
         // Initiate multipart upload
         let create_resp = self.s3_client
@@ -698,8 +700,6 @@ impl S3UploadContext {
             .collect();
 
         // Upload parts concurrently using buffer_unordered
-        use futures::stream::{self, StreamExt, TryStreamExt};
-
         let part_results: Result<Vec<CompletedPart>, JobAttachmentsError> = stream::iter(
             chunks.into_iter().map(|(idx, chunk)| {
                 let part_number = (idx + 1) as i32;
@@ -828,12 +828,14 @@ impl S3UploadContext {
         s3_cas_prefix: &str,
         s3_bucket: &str,
     ) -> bool {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
         let cache_dir = s3_check_cache_dir
             .map(ToOwned::to_owned)
             .or_else(crate::caches::default_cache_dir);
-        let cache = match cache_dir.as_deref().map(S3CheckCache::new) {
-            Some(Ok(c)) => c,
-            _ => return true, // No cache → nothing to verify
+        let Some(Ok(cache)) = cache_dir.as_deref().map(S3CheckCache::new) else {
+            return true; // No cache → nothing to verify
         };
 
         // Build S3 keys for all manifest files, shuffle, sample up to 30
@@ -843,8 +845,6 @@ impl S3UploadContext {
             .map(|f| format!("{}/{}.xxh128", s3_cas_prefix, f.hash))
             .collect();
 
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
         // Deterministic-ish shuffle using hash of first key + time
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -904,6 +904,8 @@ impl S3UploadContext {
         s3_check_cache_dir: Option<&str>,
         force_s3_check: Option<bool>,
     ) -> Result<(), JobAttachmentsError> {
+        use futures::stream::{self, StreamExt, TryStreamExt};
+
         let cache_dir = s3_check_cache_dir
             .map(ToOwned::to_owned)
             .or_else(crate::caches::default_cache_dir);
@@ -925,7 +927,6 @@ impl S3UploadContext {
         }
 
         // Upload small files in parallel
-        use futures::stream::{self, StreamExt, TryStreamExt};
         stream::iter(small_files.into_iter().map(|file| {
             let cache = &cache;
             async move {
@@ -961,6 +962,9 @@ impl S3UploadContext {
     }
 
     /// Upload a single file: check cache, check S3, upload if needed, update cache.
+    // Changing &Option<T> → Option<&T> would require restructuring callers
+    // that hold the Option in a variable and pass a reference to it.
+    #[allow(clippy::ref_option, reason = "callers pass &Option from local bindings")]
     async fn upload_one_file(
         &self,
         file: &ManifestPath,
@@ -980,7 +984,7 @@ impl S3UploadContext {
             && let Some(c) = cache
                 && c.get_entry(&cache_key).is_some() {
                     if let Some(tracker) = progress_tracker {
-                        tracker.increase_skipped(1, file.size as u64);
+                        tracker.increase_skipped(1, file.size);
                     }
                     return Ok(());
                 }
@@ -994,7 +998,7 @@ impl S3UploadContext {
                 });
             }
             if let Some(tracker) = progress_tracker {
-                tracker.increase_skipped(1, file.size as u64);
+                tracker.increase_skipped(1, file.size);
             }
             return Ok(());
         }
@@ -1049,7 +1053,7 @@ pub async fn upload_assets(
     for m in manifests {
         if let Some(ref am) = m.asset_manifest {
             total_files += am.paths.len() as u64;
-            total_bytes += am.paths.iter().map(|p| p.size as u64).sum::<u64>();
+            total_bytes += am.paths.iter().map(|p| p.size).sum::<u64>();
         }
     }
 
@@ -1165,7 +1169,7 @@ pub fn snapshot_assets(
     for m in manifests {
         if let Some(ref am) = m.asset_manifest {
             total_files += am.paths.len() as u64;
-            total_bytes += am.paths.iter().map(|p| p.size as u64).sum::<u64>();
+            total_bytes += am.paths.iter().map(|p| p.size).sum::<u64>();
         }
     }
 
@@ -1224,7 +1228,7 @@ pub fn snapshot_assets(
                     ))
                 })?;
 
-                progress_tracker.track_progress(file.size as u64, true);
+                progress_tracker.track_progress(file.size, true);
                 if !progress_tracker.continue_reporting() {
                     return Err(JobAttachmentsError::Cancelled {
                         message: "File snapshot cancelled.".into(),

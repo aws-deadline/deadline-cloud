@@ -40,9 +40,8 @@ pub fn fast_diff(
             .replace('\\', "/");
         seen_relative.push(relative.clone());
 
-        let meta = match std::fs::metadata(file_path) {
-            Ok(m) => m,
-            Err(_) => continue,
+        let Ok(meta) = std::fs::metadata(file_path) else {
+            continue;
         };
 
         match manifest_map.get(&relative) {
@@ -50,7 +49,7 @@ pub fn fast_diff(
                 results.push((relative, FileStatus::New));
             }
             Some(entry) => {
-                let file_size = meta.len() as i64;
+                let file_size = meta.len();
                 if file_size != entry.size {
                     results.push((relative, FileStatus::Modified));
                     continue;

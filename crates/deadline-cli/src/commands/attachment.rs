@@ -67,6 +67,7 @@ struct S3Context {
 /// When --profile is absent: call `get_queue()` to derive S3 URI from queue settings,
 /// then call `get_queue_user_config()` to get queue-scoped credentials (unconditional,
 /// matching Python's `get_queue_user_boto3_session` pattern).
+#[allow(clippy::ref_option, reason = "callers pass &Option from local bindings")]
 async fn resolve_s3_context(
     profile: &Option<String>,
     s3_root_uri: Option<String>,

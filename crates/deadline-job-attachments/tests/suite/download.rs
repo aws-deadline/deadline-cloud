@@ -48,11 +48,11 @@ fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> AssetManifest {
         paths.push(ManifestPath {
             path: name.to_string(),
             hash,
-            size: meta.len() as i64,
+            size: meta.len(),
             mtime: 1_700_000_000_000_000, // fixed microseconds for test determinism
         });
     }
-    let total_size: i64 = paths.iter().map(|p| p.size).sum();
+    let total_size: u64 = paths.iter().map(|p| p.size).sum();
     AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
@@ -62,7 +62,7 @@ fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> AssetManifest {
     .unwrap()
 }
 
-fn make_manifest_no_files(entries: &[(&str, &str, i64)]) -> AssetManifest {
+fn make_manifest_no_files(entries: &[(&str, &str, u64)]) -> AssetManifest {
     // entries: (path, hash, size)
     let paths: Vec<ManifestPath> = entries
         .iter()
@@ -73,7 +73,7 @@ fn make_manifest_no_files(entries: &[(&str, &str, i64)]) -> AssetManifest {
             mtime: 1_700_000_000_000_000,
         })
         .collect();
-    let total_size: i64 = paths.iter().map(|p| p.size).sum();
+    let total_size: u64 = paths.iter().map(|p| p.size).sum();
     AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
@@ -205,7 +205,7 @@ async fn download_file_happy_path_creates_file_and_sets_mtime() {
     let manifest_path = ManifestPath {
         path: "subdir/test.txt".into(),
         hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: content.len() as i64,
+        size: content.len() as u64,
         mtime: 1_700_000_000_000_000, // microseconds
     };
 
@@ -224,7 +224,7 @@ async fn download_file_happy_path_creates_file_and_sets_mtime() {
     .await
     .unwrap();
 
-    assert_eq!(bytes, content.len() as i64);
+    assert_eq!(bytes, content.len() as u64);
     let path = local_path.unwrap();
     assert!(path.exists());
     assert_eq!(fs::read(&path).unwrap(), content);

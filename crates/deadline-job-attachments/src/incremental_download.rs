@@ -717,7 +717,7 @@ mod tests {
     // make_manifest_paths_absolute tests
     // ===================================================================
 
-    fn make_manifest(paths: Vec<(&str, &str, i64)>) -> AssetManifest {
+    fn make_manifest(paths: Vec<(&str, &str, u64)>) -> AssetManifest {
         AssetManifest::new(
             HashAlgorithm::Xxh128,
             crate::asset_manifests::ManifestVersion::V2023_03_03,

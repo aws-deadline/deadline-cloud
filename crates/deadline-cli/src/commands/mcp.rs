@@ -78,6 +78,7 @@ fn error_json(error_type: &str, message: &str) -> String {
 // --- Parameter structs ---
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(clippy::empty_structs_with_brackets, reason = "serde requires braced struct to deserialize from JSON {}")]
 struct ListFarmsParams {}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -93,18 +94,23 @@ struct ListFleetsParams { farm_id: String }
 struct ListStorageProfilesParams { farm_id: String, queue_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
 struct GetJobParams { farm_id: String, queue_id: String, job_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
 struct GetSessionParams { farm_id: String, queue_id: String, job_id: String, session_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
 struct ListSessionsParams { farm_id: String, queue_id: String, job_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
 struct ListStepsParams { farm_id: String, queue_id: String, job_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
 struct ListTasksParams { farm_id: String, queue_id: String, job_id: String, step_id: String }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]

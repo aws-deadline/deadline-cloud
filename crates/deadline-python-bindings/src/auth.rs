@@ -4,6 +4,9 @@ use crate::DeadlineOperationError;
 
 #[pyfunction]
 #[pyo3(signature = (config_path=None))]
+// PyO3 requires PyResult return type for #[pyfunction] even when the
+// function is infallible — Python always expects an exception-capable call.
+#[allow(clippy::unnecessary_wraps, reason = "PyO3 requires PyResult return type")]
 pub fn get_credentials_source(config_path: Option<&str>) -> PyResult<String> {
     let config = crate::load_config(config_path).ok();
     let source = deadline_api::auth::get_credentials_source(config.as_ref());
@@ -73,7 +76,7 @@ pub fn login(config_path: Option<&str>) -> PyResult<String> {
     let config = crate::load_config(config_path).ok();
     let rt = crate::make_runtime()?;
     rt.block_on(deadline_api::auth::login(None, None, config.as_ref(), None))
-        .map_err(|e| DeadlineOperationError::new_err(e))
+        .map_err(DeadlineOperationError::new_err)
 }
 
 #[pyfunction]
@@ -81,5 +84,5 @@ pub fn login(config_path: Option<&str>) -> PyResult<String> {
 pub fn logout(config_path: Option<&str>) -> PyResult<String> {
     let config = crate::load_config(config_path).ok();
     deadline_api::auth::logout(config.as_ref(), None)
-        .map_err(|e| DeadlineOperationError::new_err(e))
+        .map_err(DeadlineOperationError::new_err)
 }

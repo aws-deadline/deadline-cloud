@@ -55,6 +55,7 @@ where
 
 /// Trait for fluent builders that accept a `principal_id` filter.
 pub trait WithPrincipalId {
+    #[must_use]
     fn principal_id(self, id: impl Into<String>) -> Self;
 }
 

@@ -197,6 +197,11 @@ static CONTINUE_OPERATION: AtomicBool = AtomicBool::new(true);
 
 /// Install the SIGINT handler. Safe to call multiple times.
 pub(crate) fn install_sigint_handler() {
+    // SAFETY: libc::signal replaces the default SIGINT handler with our
+    // async-signal-safe handler that only performs an atomic store. The
+    // function pointer cast is the standard pattern for libc::signal on
+    // all supported POSIX platforms.
+    #[allow(unsafe_code, reason = "installing a POSIX signal handler requires unsafe")]
     unsafe {
         libc::signal(libc::SIGINT, sigint_handler as *const () as usize);
     }

@@ -184,660 +184,716 @@ pub(crate) fn run(action: JobAction) -> Result<(), CliError> {
 async fn run_async(action: JobAction) -> Result<(), CliError> {
     match action {
         JobAction::List { profile, farm_id, queue_id, page_size, item_offset } => {
-            let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let resp = match search_jobs_call(&farm, &[&queue], item_offset, page_size, None, None, Some(&config)).await {
-                Ok(r) => r,
-                Err(e) => {
-                    let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "SearchJobs", Some(&farm), Some(&queue), None, Some(&config),
-                    ).await;
-                    return Err(CliError::Operation(format!(
-                        "Failed to get Jobs from Deadline:\n{e}{suggestion}"
-                    )));
-                }
-            };
-            print_search_jobs_output(&resp, item_offset);
-            Ok(())
+            run_list(profile, farm_id, queue_id, page_size, item_offset).await
         }
         JobAction::Get { search_term, profile, farm_id, queue_id, job_id } => {
-            // If --job-id is provided, it takes precedence over search_term
-            let mut effective_job_id = job_id;
-            let mut search = None;
-
-            if let Some(ref term) = search_term
-                && effective_job_id.is_none() {
-                    // Check if search_term is a job ID pattern
-                    if Regex::new(r"^job-[0-9a-f]{32}$").expect("valid regex").is_match(term) {
-                        effective_job_id = Some(term.clone());
-                    } else {
-                        search = Some(term.clone());
-                    }
-                }
-
-            if let Some(search_term) = search {
-                // Search mode
-                let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
-                let farm = get(&config, "defaults.farm_id");
-                let queue = get(&config, "defaults.queue_id");
-                resolve_job_search(&farm, &queue, &search_term, &config).await
-            } else {
-                // Direct get mode
-                let config = setup_config(profile, farm_id, queue_id, effective_job_id, false, &["farm_id", "queue_id", "job_id"])?;
-                let farm = get(&config, "defaults.farm_id");
-                let queue = get(&config, "defaults.queue_id");
-                let job = get(&config, "defaults.job_id");
-                print_job_details(&farm, &queue, &job, &config).await
-            }
+            run_get(search_term, profile, farm_id, queue_id, job_id).await
         }
         JobAction::Wait { profile, farm_id, queue_id, job_id, max_poll_interval, timeout, output } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let job = get(&config, "defaults.job_id");
-            let is_json = output.eq_ignore_ascii_case("json");
-
-            let job_resp = session::deadline_client(Some(&config)).await
-                .get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
-                .send().await
-                .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {}", client::format_sdk_error(&e))))?;
-            let job_name = job_resp.name().to_owned();
-
-            let job_cb: Box<dyn Fn(&aws_sdk_deadline::operation::get_job::GetJobOutput, f64, u64)> = if is_json {
-                Box::new(|_, _, _| {})
-            } else {
-                Box::new(|j: &aws_sdk_deadline::operation::get_job::GetJobOutput, elapsed: f64, t: u64| {
-                    let counts = j.task_run_status_counts();
-                    let get_count = |s: aws_sdk_deadline::types::TaskRunStatus| -> i64 {
-                        i64::from(counts.and_then(|m| m.get(&s)).copied().unwrap_or(0))
-                    };
-                    let running = get_count(aws_sdk_deadline::types::TaskRunStatus::Running)
-                        + get_count(aws_sdk_deadline::types::TaskRunStatus::Assigned)
-                        + get_count(aws_sdk_deadline::types::TaskRunStatus::Starting);
-                    let ok = get_count(aws_sdk_deadline::types::TaskRunStatus::Succeeded);
-                    let total: i64 = counts.map_or(0, |m| i64::from(m.values().sum::<i32>()));
-                    let s = j.task_run_status.as_ref().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
-                    let ti = if t > 0 {
-                        let r = (t as f64 - elapsed).max(0.0);
-                        format!(" [{elapsed:.1}s elapsed, {r:.1}s remaining]")
-                    } else {
-                        format!(" [{elapsed:.1}s elapsed]")
-                    };
-                    eprint!("\rCurrent status: {s} ({ok}/{total} tasks succeeded, {running} workers running).{ti}");
-                })
-            };
-
-            if !is_json {
-                eprintln!("Waiting for job {job} to complete...");
-                eprintln!("Job Name: {job_name}");
-            }
-
-            match job_monitoring::wait_for_job_completion(
-                &farm, &queue, &job, max_poll_interval, timeout,
-                Some(&config), None, Some(&*job_cb),
-            ).await {
-                Ok(result) => {
-                    let failed_json: Vec<serde_json::Value> = result.failed_tasks.iter().map(|t| {
-                        serde_json::json!({
-                            "stepId": t.step_id, "taskId": t.task_id,
-                            "stepName": t.step_name, "sessionId": t.session_id,
-                        })
-                    }).collect();
-
-                    if is_json {
-                        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                            "jobId": job, "jobName": job_name,
-                            "status": result.status, "elapsedTime": result.elapsed_time,
-                            "failedTasks": failed_json,
-                        })).expect("JSON serialization"));
-                    } else {
-                        eprintln!();
-                        println!("Job ID: {job}");
-                        println!("Job completed with status: {}", result.status);
-                        println!("Elapsed time: {:.1} seconds", result.elapsed_time);
-                        if result.failed_tasks.is_empty() {
-                            println!("No failed tasks found.");
-                        } else {
-                            println!("Found {} failed tasks:", result.failed_tasks.len());
-                            println!("{}", crate::common::cli_object_repr(&serde_json::json!(failed_json)));
-                        }
-                    }
-
-                    let exit_code = match result.status.as_str() {
-                        "SUCCEEDED" if result.failed_tasks.is_empty() => 0,
-                        "CANCELED" => 3,
-                        "SUSPENDED" | "ARCHIVED" => 4,
-                        "NOT_COMPATIBLE" => 5,
-                        _ => 2,
-                    };
-                    if exit_code == 0 { Ok(()) } else {
-                        Err(CliError::ExitCode { code: exit_code, message: String::new() })
-                    }
-                }
-                Err(e) => {
-                    let is_timeout = matches!(e, deadline_api::errors::DeadlineError::OperationTimedOut(_));
-                    if is_json {
-                        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                            "error": e.to_string(), "timeout": is_timeout,
-                            "jobId": job, "jobName": job_name,
-                        })).expect("JSON serialization"));
-                    } else {
-                        println!("Job ID: {job}");
-                        println!("Job Name: {job_name}");
-                        println!("Error waiting for job completion: {e}");
-                    }
-                    Err(CliError::ExitCode { code: if is_timeout { 1 } else { 2 }, message: String::new() })
-                }
-            }
+            run_wait(profile, farm_id, queue_id, job_id, max_poll_interval, timeout, output).await
         }
         JobAction::Logs { profile, farm_id, queue_id, job_id, session_id, session_action_id, limit, start_time, end_time, next_token, output, timestamp_format, timezone } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let is_json = output.eq_ignore_ascii_case("json");
-
-            // Handle --timezone deprecation
-            let timestamp_format = if let Some(ref tz) = timezone {
-                if timestamp_format.is_some() {
-                    // User explicitly provided both flags
-                    return Err(CliError::Operation(
-                        "Cannot use both --timezone and --timestamp-format options. Use --timestamp-format instead.".into()
-                    ));
-                }
-                if !is_json {
-                    eprintln!(
-                        "Warning: --timezone is deprecated and will be removed in a future version. \
-                         Use --timestamp-format {tz} instead."
-                    );
-                }
-                tz.clone()
-            } else {
-                timestamp_format.unwrap_or_else(|| "utc".into())
-            };
-
-            let job = get(&config, "defaults.job_id");
-
-            // Validate --session-action-id format early (before API calls)
-            let (mut resolved_session_id_owned, mut action_start, mut action_end) = (None, None, None);
-            if let Some(ref said) = session_action_id {
-                let derived = parse_session_action_id(said)?;
-                if let Some(ref explicit_sid) = session_id
-                    && *explicit_sid != derived {
-                        return Err(CliError::Operation(format!(
-                            "Session ID mismatch: --session-id '{explicit_sid}' does not match \
-                             session ID '{derived}' derived from --session-action-id '{said}'"
-                        )));
-                    }
-                resolved_session_id_owned = Some(derived);
-            }
-
-            let dl = session::deadline_client(Some(&config)).await;
-
-            let job_resp = dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
-                .send().await
-                .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?;
-            let job_name = job_resp.name();
-
-            // Get session action details for time bounds (after validation)
-            if let Some(ref said) = session_action_id {
-                let sa = dl.get_session_action()
-                    .farm_id(&farm).queue_id(&queue).job_id(&job).session_action_id(said)
-                    .send().await
-                    .map_err(|e| CliError::Operation(format!(
-                        "Session action '{}' not found in job '{}':\n{}", said, job, client::format_sdk_error(&e)
-                    )))?;
-                let sa_start = sa.started_at().map(responses::format_datetime);
-                if sa_start.is_none() {
-                    return Err(CliError::Operation(format!(
-                        "Session action '{said}' has not started yet. No logs are available."
-                    )));
-                }
-                action_start = sa_start;
-                action_end = sa.ended_at().map(responses::format_datetime);
-            }
-
-            let sid = resolved_session_id_owned.as_deref().or(session_id.as_deref());
-
-            // Use action time bounds if available, otherwise use explicit start/end
-            let start = action_start.as_deref().or(start_time.as_deref()).and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
-                    .ok()
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-            });
-            let end = action_end.as_deref().or(end_time.as_deref()).and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
-                    .ok()
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-            });
-
-            let (result, auto_select) = log_retrieval::get_session_logs(
-                &farm, &queue, sid, Some(&job), limit, start, end,
-                next_token.as_deref(), Some(&config),
-            ).await.map_err(|e| CliError::Operation(format!("{e}")))?;
-
-            // Resolve the actual session ID (may have been auto-selected)
-            let resolved_session_id = match &auto_select {
-                SessionAutoSelect::OnlySession(id) | SessionAutoSelect::LatestSession(id) => id.as_str(),
-                SessionAutoSelect::Provided => session_id.as_deref().unwrap_or(&result.log_stream),
-            };
-
-            // Get session start time for timestamp formatting (needed for relative mode)
-            let reference_start = {
-                let sess = dl.get_session().farm_id(&farm).queue_id(&queue).job_id(&job).session_id(resolved_session_id)
-                    .send().await
-                    .map_err(|e| CliError::Operation(format!("Failed to get session: {}", client::format_sdk_error(&e))))?;
-                let s = responses::format_datetime(&sess.started_at);
-                chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
-                    .ok()
-            };
-
-            // Build timestamp formatter
-            let ts_fmt = match timestamp_format.to_lowercase().as_str() {
-                "local" => crate::common::TimestampFormat::Local,
-                "relative" => {
-                    let reference = reference_start.unwrap_or_else(|| {
-                        chrono::Utc::now().fixed_offset()
-                    });
-                    crate::common::TimestampFormat::new_relative(reference)
-                }
-                _ => crate::common::TimestampFormat::Utc,
-            };
-
-            // Print auto-selection message then header (non-JSON only, matching Python order)
-            if !is_json {
-                match &auto_select {
-                    SessionAutoSelect::OnlySession(id) => {
-                        println!("Using the only available session: {id}");
-                    }
-                    SessionAutoSelect::LatestSession(id) => {
-                        println!("Using the latest session: {id}");
-                    }
-                    SessionAutoSelect::Provided => {}
-                }
-                println!("Retrieving logs for {} from log group /aws/deadline/{farm}/{queue}...",
-                    if session_action_id.is_some() {
-                        format!("session action {}", session_action_id.as_deref().expect("checked is_some above"))
-                    } else {
-                        format!("session {}", result.log_stream)
-                    });
-                println!("Job ID: {job}");
-                println!("Job Name: {job_name}");
-
-                // Show session action time bounds if available
-                if let (Some(sa_start), Some(_said)) = (&action_start, &session_action_id) {
-                    println!("Session action start: {sa_start}");
-                    if let Some(sa_end) = &action_end {
-                        println!("Session action end: {sa_end}");
-                        // Parse and compute duration
-                        if let (Ok(start_dt), Ok(end_dt)) = (
-                            chrono::DateTime::parse_from_rfc3339(&sa_start.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")),
-                            chrono::DateTime::parse_from_rfc3339(&sa_end.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")),
-                        ) {
-                            let duration = end_dt.signed_duration_since(start_dt);
-                            let secs = duration.num_seconds();
-                            let micros = duration.num_microseconds().unwrap_or(0) % 1_000_000;
-                            println!("Session action duration: {}:{:02}:{:02}.{:06}",
-                                secs / 3600, (secs % 3600) / 60, secs % 60, micros);
-                        }
-                    }
-                }
-            }
-
-            if is_json {
-                let response = serde_json::json!({
-                    "jobId": job,
-                    "jobName": job_name,
-                    "events": result.events.iter().map(|e| {
-                        let ts_fixed = e.timestamp.fixed_offset();
-                        serde_json::json!({
-                            "timestamp": ts_fmt.format(&ts_fixed),
-                            "message": e.message,
-                            "ingestionTime": e.ingestion_time.map(|t| ts_fmt.format(&t.fixed_offset())),
-                            "eventId": e.event_id,
-                        })
-                    }).collect::<Vec<_>>(),
-                    "count": result.count,
-                    "nextToken": result.next_token,
-                    "logGroup": result.log_group,
-                    "logStream": result.log_stream,
-                });
-                println!("{}", serde_json::to_string_pretty(&response).expect("JSON serialization"));
-            } else {
-                // Show reference time for relative format
-                if let crate::common::TimestampFormat::Relative { ref reference } = ts_fmt {
-                    println!("Logs relative to start time: {}", reference.to_rfc3339());
-                }
-
-                println!();
-                if result.events.is_empty() {
-                    println!("No logs found for the specified session.");
-                } else {
-                    for event in &result.events {
-                        let ts_fixed = event.timestamp.fixed_offset();
-                        let ts = ts_fmt.format(&ts_fixed);
-                        println!("[{ts}] {}", event.message);
-                    }
-                    println!("\nRetrieved {} log events.", result.count);
-                }
-                if let Some(ref token) = result.next_token {
-                    println!("More logs are available. Use --next-token \"{token}\" to retrieve the next page.");
-                }
-            }
-            Ok(())
+            run_logs(profile, farm_id, queue_id, job_id, session_id, session_action_id, limit, start_time, end_time, next_token, output, timestamp_format, timezone).await
         }
         JobAction::Cancel { profile, farm_id, queue_id, job_id, mark_as, yes } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let job_id = get(&config, "defaults.job_id");
-            let mark_as = mark_as.to_uppercase();
-            const VALID_MARK_AS: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED"];
-            if !VALID_MARK_AS.contains(&mark_as.as_str()) {
-                return Err(CliError::ExitCode {
-                    code: 2,
-                    message: format!(
-                        "Invalid value for --mark-as: {mark_as}. Valid values: {}",
-                        VALID_MARK_AS.join(", ")
-                    ),
-                });
-            }
-            let auto_accept = is_auto_accept(&config);
-
-            let job = match session::deadline_client(Some(&config)).await
-                .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
-                .send().await {
-                Ok(j) => j,
-                Err(e) => {
-                    let err_str = client::format_sdk_error(&e);
-                    let suggestion = suggest_resources_on_client_error(
-                        &err_str, "GetJob", Some(&farm), Some(&queue), None, Some(&config),
-                    ).await;
-                    return Err(CliError::Operation(format!(
-                        "Failed to get Job from Deadline:\n{err_str}{suggestion}"
-                    )));
-                }
-            };
-
-            // Filter taskRunStatusCounts to non-zero entries (sorted for deterministic output)
-            let mut counts = serde_json::Map::new();
-            if let Some(m) = job.task_run_status_counts() {
-                let mut sorted: Vec<_> = m.iter().filter(|(_, v)| **v != 0).collect();
-                sorted.sort_by_key(|(k, _)| k.as_str());
-                for (k, v) in sorted {
-                    counts.insert(k.as_str().to_owned(), serde_json::json!(v));
-                }
-            }
-
-            // Build filtered summary
-            let mut summary = serde_json::Map::new();
-            summary.insert("name".into(), serde_json::json!(job.name()));
-            summary.insert("jobId".into(), serde_json::json!(job.job_id()));
-            if let Some(s) = job.task_run_status() {
-                summary.insert("taskRunStatus".into(), serde_json::json!(s.as_str()));
-            }
-            summary.insert("taskRunStatusCounts".into(), serde_json::Value::Object(counts));
-            summary.insert("startedAt".into(), serde_json::json!(job.started_at().map(responses::format_datetime).unwrap_or_default()));
-            summary.insert("endedAt".into(), serde_json::json!(job.ended_at().map(responses::format_datetime).unwrap_or_default()));
-            summary.insert("createdBy".into(), serde_json::json!(job.created_by()));
-            summary.insert("createdAt".into(), serde_json::json!(responses::format_datetime(job.created_at())));
-            println!("{}", crate::common::cli_object_repr(&serde_json::Value::Object(summary)));
-
-            if !auto_accept {
-                let msg = if mark_as == "CANCELED" {
-                    "Are you sure you want to cancel this job?".to_owned()
-                } else {
-                    format!("Are you sure you want to cancel this job and mark its taskRunStatus as {mark_as}?")
-                };
-                eprint!("{msg} [y/n]: ");
-                loop {
-                    let mut input = String::new();
-                    let bytes = std::io::stdin().read_line(&mut input).unwrap_or(0);
-                    if bytes == 0 {
-                        println!("Job not canceled.");
-                        return Err(CliError::ExitCode { code: 1, message: String::new() });
-                    }
-                    match input.trim().to_lowercase().as_str() {
-                        "y" | "yes" => break,
-                        "n" | "no" => {
-                            println!("Job not canceled.");
-                            return Err(CliError::ExitCode { code: 1, message: String::new() });
-                        }
-                        _ => {
-                            eprintln!("Error: invalid input");
-                            eprint!("{msg} [y/n]: ");
-                        }
-                    }
-                }
-            }
-
-            if mark_as == "CANCELED" {
-                println!("Canceling job...");
-            } else {
-                println!("Canceling job and marking as {mark_as}...");
-            }
-            let dl = session::deadline_client(Some(&config)).await;
-            let status: aws_sdk_deadline::types::JobTargetTaskRunStatus = mark_as.as_str().into();
-            dl.update_job()
-                .farm_id(&farm).queue_id(&queue).job_id(&job_id)
-                .target_task_run_status(status)
-                .send().await
-                .map_err(|e| CliError::Operation(format!("Failed to update job:\n{}", client::format_sdk_error(&e))))?;
-            Ok(())
+            run_cancel(profile, farm_id, queue_id, job_id, mark_as, yes).await
         }
         JobAction::RequeueTasks { profile, farm_id, queue_id, job_id, run_status, yes } => {
-            let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue = get(&config, "defaults.queue_id");
-            let job_id = get(&config, "defaults.job_id");
-            let auto_accept = is_auto_accept(&config);
-
-            let run_status_set: std::collections::HashSet<String> = if run_status.is_empty() {
-                ["SUSPENDED", "CANCELED", "FAILED"].iter().map(ToString::to_string).collect()
-            } else {
-                run_status.iter().map(|s| s.to_uppercase()).collect()
-            };
-            const VALID_RUN_STATUSES: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"];
-            for status in &run_status_set {
-                if !VALID_RUN_STATUSES.contains(&status.as_str()) {
-                    return Err(CliError::ExitCode {
-                        code: 2,
-                        message: format!(
-                            "Invalid value for --run-status: {status}. Valid values: {}",
-                            VALID_RUN_STATUSES.join(", ")
-                        ),
-                    });
-                }
-            }
-
-            let job = match session::deadline_client(Some(&config)).await
-                .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
-                .send().await {
-                Ok(j) => j,
-                Err(e) => {
-                    let err_str = client::format_sdk_error(&e);
-                    let suggestion = suggest_resources_on_client_error(
-                        &err_str, "GetJob", Some(&farm), Some(&queue), None, Some(&config),
-                    ).await;
-                    return Err(CliError::Operation(format!(
-                        "Failed to get Job from Deadline:\n{err_str}{suggestion}"
-                    )));
-                }
-            };
-
-            println!("Job: {} ({})", job.name(), job.job_id());
-
-            // Print taskRunStatusCounts (non-zero, keys uppercased, sorted)
-            let mut counts_map = serde_json::Map::new();
-            if let Some(m) = job.task_run_status_counts() {
-                let mut sorted: Vec<_> = m.iter().filter(|(_, v)| **v != 0).collect();
-                sorted.sort_by_key(|(k, _)| k.as_str());
-                for (k, v) in sorted {
-                    counts_map.insert(k.as_str().to_uppercase(), serde_json::json!(v));
-                }
-            }
-            println!("{}", crate::common::cli_object_repr(&serde_json::json!({"taskRunStatusCounts": counts_map})));
-
-            let sorted_statuses: Vec<&String> = {
-                let mut v: Vec<&String> = run_status_set.iter().collect();
-                v.sort();
-                v
-            };
-            println!("Requeuing all tasks with run status among: {}", sorted_statuses.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
-
-            let (total_to_requeue, summary_by_status) = count_and_summarize(Some(&counts_map), &run_status_set);
-
-            if total_to_requeue == 0 {
-                println!("No tasks to requeue.");
-                return Ok(());
-            }
-
-            if auto_accept {
-                println!("Estimated {total_to_requeue} total tasks ({summary_by_status}) to requeue.");
-            } else {
-                println!("This action will requeue an estimated {total_to_requeue} total tasks ({summary_by_status})");
-                eprint!("Are you sure you want to requeue these tasks? [y/n]: ");
-                loop {
-                    let mut input = String::new();
-                    let bytes = std::io::stdin().read_line(&mut input).unwrap_or(0);
-                    if bytes == 0 {
-                        println!("No tasks were requeued.");
-                        return Err(CliError::ExitCode { code: 1, message: String::new() });
-                    }
-                    match input.trim().to_lowercase().as_str() {
-                        "y" | "yes" => break,
-                        "n" | "no" => {
-                            println!("No tasks were requeued.");
-                            return Err(CliError::ExitCode { code: 1, message: String::new() });
-                        }
-                        _ => {
-                            eprintln!("Error: invalid input");
-                            eprint!("Are you sure you want to requeue these tasks? [y/n]: ");
-                        }
-                    }
-                }
-                println!("Requeuing tasks...");
-            }
-
-            let mut total_requeued: i64 = 0;
-
-            let dl = session::deadline_client(Some(&config)).await;
-            let steps_pages = client::collect_paginated(
-                dl.list_steps().farm_id(&farm).queue_id(&queue).job_id(&job_id)
-                    .into_paginator().send()
-            ).await
-                .map_err(|e| CliError::Operation(format!("Failed to list steps:\n{e}")))?;
-
-            for page in &steps_pages {
-                for step in page.steps() {
-                    let step_id = step.step_id();
-                    let step_name = step.name();
-                    println!("\nStep: {step_name} ({step_id})");
-
-                    let step_counts = step.task_run_status_counts();
-                    let step_counts_map: serde_json::Map<String, serde_json::Value> = step_counts.iter()
-                        .map(|(k, v)| (k.as_str().to_owned(), serde_json::Value::Number((*v).into())))
-                        .collect();
-                    let (step_to_requeue, step_summary) = count_and_summarize(Some(&step_counts_map), &run_status_set);
-
-                    if step_to_requeue == 0 {
-                        println!("  Step has no tasks to requeue.");
-                        continue;
-                    }
-                    println!("  Requeuing an estimated {step_to_requeue} total tasks ({step_summary})...");
-
-                    let tasks_pages = client::collect_paginated(
-                        dl.list_tasks().farm_id(&farm).queue_id(&queue).job_id(&job_id).step_id(step_id)
-                            .into_paginator().send()
-                    ).await
-                        .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
-
-                    for tpage in &tasks_pages {
-                        for task in tpage.tasks() {
-                            let status = task.run_status().as_str();
-                            if !run_status_set.contains(&status.to_uppercase()) {
-                                continue;
-                            }
-                            let task_id = task.task_id();
-                            let params = task.parameters();
-                            let task_summary = if let Some(p) = params.filter(|p| !p.is_empty()) {
-                                let mut param_pairs: Vec<_> = p.iter().map(|(name, val)| {
-                                    let extracted = match val {
-                                        aws_sdk_deadline::types::TaskParameterValue::Int(i) => i.clone(),
-                                        aws_sdk_deadline::types::TaskParameterValue::Float(f) => f.clone(),
-                                        aws_sdk_deadline::types::TaskParameterValue::String(s) => s.clone(),
-                                        aws_sdk_deadline::types::TaskParameterValue::Path(p) => p.clone(),
-                                        _ => String::new(),
-                                    };
-                                    format!("{name}={extracted}")
-                                }).collect();
-                                param_pairs.sort();
-                                format!("{} ({task_id})", param_pairs.join(","))
-                            } else {
-                                task_id.to_owned()
-                            };
-                            println!("    {status} {task_summary}");
-
-                            session::deadline_client(Some(&config)).await
-                                .update_task()
-                                .farm_id(&farm).queue_id(&queue).job_id(&job_id)
-                                .step_id(step_id).task_id(task_id)
-                                .target_run_status(aws_sdk_deadline::types::TaskTargetRunStatus::Pending)
-                                .customize()
-                                .config_override(aws_sdk_deadline::config::Builder::default()
-                                    .retry_config(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)))
-                                .send().await
-                                .map_err(|e| CliError::Operation(format!("Failed to update task:\n{}", client::format_sdk_error(&e))))?;
-                            total_requeued += 1;
-                        }
-                    }
-                }
-            }
-
-            println!("\nRequeued a total of {total_requeued} tasks.");
-            Ok(())
+            run_requeue_tasks(profile, farm_id, queue_id, job_id, run_status, yes).await
         }
-        JobAction::TraceSchedule {
-            profile, farm_id, queue_id, job_id,
-            verbose, trace_format, trace_file,
-        } => {
+        JobAction::TraceSchedule { profile, farm_id, queue_id, job_id, verbose, trace_format, trace_file } => {
             run_trace_schedule(profile, farm_id, queue_id, job_id, verbose, trace_format, trace_file).await
         }
-        JobAction::DownloadOutput {
-            profile, farm_id, queue_id, job_id, step_id, task_id,
-            conflict_resolution, ignore_storage_profiles: _, yes, output,
-        } => {
-            let is_json = output.eq_ignore_ascii_case("json");
+        JobAction::DownloadOutput { profile, farm_id, queue_id, job_id, step_id, task_id, conflict_resolution, ignore_storage_profiles: _, yes, output } => {
+            run_download_output(profile, farm_id, queue_id, job_id, step_id, task_id, conflict_resolution, yes, output).await
+        }
+    }
+}
 
-            // Validate --task-id requires --step-id
-            if task_id.is_some() && step_id.is_none() {
-                return Err(CliError::ExitCode {
-                    code: 2,
-                    message: "Missing option '--step-id' required with '--task-id'".into(),
-                });
-            }
-
-            let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
-            let farm = get(&config, "defaults.farm_id");
-            let queue_id_val = get(&config, "defaults.queue_id");
-            let job_id_val = get(&config, "defaults.job_id");
-
-            let result = download_output_impl(
-                &config, &farm, &queue_id_val, &job_id_val,
-                step_id.as_deref(), task_id.as_deref(),
-                conflict_resolution, is_json, is_auto_accept(&config),
+async fn run_list(
+    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
+    page_size: i32, item_offset: i32,
+) -> Result<(), CliError> {
+    let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
+    let farm = get(&config, "defaults.farm_id");
+    let queue = get(&config, "defaults.queue_id");
+    let resp = match search_jobs_call(&farm, &[&queue], item_offset, page_size, None, None, Some(&config)).await {
+        Ok(r) => r,
+        Err(e) => {
+            let suggestion = suggest_resources_on_client_error(
+                &e.to_string(), "SearchJobs", Some(&farm), Some(&queue), None, Some(&config),
             ).await;
+            return Err(CliError::Operation(format!(
+                "Failed to get Jobs from Deadline:\n{e}{suggestion}"
+            )));
+        }
+    };
+    print_search_jobs_output(&resp, item_offset);
+    Ok(())
+}
 
-            match result {
-                Ok(()) => Ok(()),
-                Err(e) if is_json => {
-                    let error_one_liner = e.to_string().replace('\n', ". ");
-                    println!("{}", serde_json::json!({"messageType": "error", "value": error_one_liner}));
-                    std::process::exit(1);
-                }
-                Err(e) => Err(e),
+async fn run_get(
+    search_term: Option<String>, profile: Option<String>,
+    farm_id: Option<String>, queue_id: Option<String>, job_id: Option<String>,
+) -> Result<(), CliError> {
+    // If --job-id is provided, it takes precedence over search_term
+    let mut effective_job_id = job_id;
+    let mut search = None;
+
+    if let Some(ref term) = search_term
+        && effective_job_id.is_none() {
+            // Check if search_term is a job ID pattern
+            if Regex::new(r"^job-[0-9a-f]{32}$").expect("valid regex").is_match(term) {
+                effective_job_id = Some(term.clone());
+            } else {
+                search = Some(term.clone());
             }
         }
+
+    if let Some(search_term) = search {
+        // Search mode
+        let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
+        let farm = get(&config, "defaults.farm_id");
+        let queue = get(&config, "defaults.queue_id");
+        resolve_job_search(&farm, &queue, &search_term, &config).await
+    } else {
+        // Direct get mode
+        let config = setup_config(profile, farm_id, queue_id, effective_job_id, false, &["farm_id", "queue_id", "job_id"])?;
+        let farm = get(&config, "defaults.farm_id");
+        let queue = get(&config, "defaults.queue_id");
+        let job = get(&config, "defaults.job_id");
+        print_job_details(&farm, &queue, &job, &config).await
+    }
+}
+
+async fn run_wait(
+    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
+    job_id: Option<String>, max_poll_interval: u64, timeout: u64, output: String,
+) -> Result<(), CliError> {
+    type JobCb = Box<dyn Fn(&aws_sdk_deadline::operation::get_job::GetJobOutput, f64, u64)>;
+    let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+    let farm = get(&config, "defaults.farm_id");
+    let queue = get(&config, "defaults.queue_id");
+    let job = get(&config, "defaults.job_id");
+    let is_json = output.eq_ignore_ascii_case("json");
+
+    let job_resp = session::deadline_client(Some(&config)).await
+        .get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
+        .send().await
+        .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {}", client::format_sdk_error(&e))))?;
+    let job_name = job_resp.name().to_owned();
+
+    let job_cb: JobCb = if is_json {
+        Box::new(|_, _, _| {})
+    } else {
+        Box::new(|j, elapsed: f64, t: u64| {
+            let counts = j.task_run_status_counts();
+            let get_count = |s: aws_sdk_deadline::types::TaskRunStatus| -> i64 {
+                i64::from(counts.and_then(|m| m.get(&s)).copied().unwrap_or(0))
+            };
+            let running = get_count(aws_sdk_deadline::types::TaskRunStatus::Running)
+                + get_count(aws_sdk_deadline::types::TaskRunStatus::Assigned)
+                + get_count(aws_sdk_deadline::types::TaskRunStatus::Starting);
+            let ok = get_count(aws_sdk_deadline::types::TaskRunStatus::Succeeded);
+            let total: i64 = counts.map_or(0, |m| i64::from(m.values().sum::<i32>()));
+            let s = j.task_run_status.as_ref().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
+            let ti = if t > 0 {
+                let r = (t as f64 - elapsed).max(0.0);
+                format!(" [{elapsed:.1}s elapsed, {r:.1}s remaining]")
+            } else {
+                format!(" [{elapsed:.1}s elapsed]")
+            };
+            eprint!("\rCurrent status: {s} ({ok}/{total} tasks succeeded, {running} workers running).{ti}");
+        })
+    };
+
+    if !is_json {
+        eprintln!("Waiting for job {job} to complete...");
+        eprintln!("Job Name: {job_name}");
+    }
+
+    match job_monitoring::wait_for_job_completion(
+        &farm, &queue, &job, max_poll_interval, timeout,
+        Some(&config), None, Some(&*job_cb),
+    ).await {
+        Ok(result) => {
+            let failed_json: Vec<serde_json::Value> = result.failed_tasks.iter().map(|t| {
+                serde_json::json!({
+                    "stepId": t.step_id, "taskId": t.task_id,
+                    "stepName": t.step_name, "sessionId": t.session_id,
+                })
+            }).collect();
+
+            if is_json {
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                    "jobId": job, "jobName": job_name,
+                    "status": result.status, "elapsedTime": result.elapsed_time,
+                    "failedTasks": failed_json,
+                })).expect("JSON serialization"));
+            } else {
+                eprintln!();
+                println!("Job ID: {job}");
+                println!("Job completed with status: {}", result.status);
+                println!("Elapsed time: {:.1} seconds", result.elapsed_time);
+                if result.failed_tasks.is_empty() {
+                    println!("No failed tasks found.");
+                } else {
+                    println!("Found {} failed tasks:", result.failed_tasks.len());
+                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(failed_json)));
+                }
+            }
+
+            let exit_code = match result.status.as_str() {
+                "SUCCEEDED" if result.failed_tasks.is_empty() => 0,
+                "CANCELED" => 3,
+                "SUSPENDED" | "ARCHIVED" => 4,
+                "NOT_COMPATIBLE" => 5,
+                _ => 2,
+            };
+            if exit_code == 0 { Ok(()) } else {
+                Err(CliError::ExitCode { code: exit_code, message: String::new() })
+            }
+        }
+        Err(e) => {
+            let is_timeout = matches!(e, deadline_api::errors::DeadlineError::OperationTimedOut(_));
+            if is_json {
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                    "error": e.to_string(), "timeout": is_timeout,
+                    "jobId": job, "jobName": job_name,
+                })).expect("JSON serialization"));
+            } else {
+                println!("Job ID: {job}");
+                println!("Job Name: {job_name}");
+                println!("Error waiting for job completion: {e}");
+            }
+            Err(CliError::ExitCode { code: if is_timeout { 1 } else { 2 }, message: String::new() })
+        }
+    }
+}
+
+#[allow(clippy::too_many_lines, reason = "log retrieval has many sequential steps: validation, API calls, formatting")]
+#[allow(clippy::too_many_arguments, reason = "each param maps to a CLI flag")]
+async fn run_logs(
+    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
+    job_id: Option<String>, session_id: Option<String>, session_action_id: Option<String>,
+    limit: i32, start_time: Option<String>, end_time: Option<String>,
+    next_token: Option<String>, output: String, timestamp_format: Option<String>,
+    timezone: Option<String>,
+) -> Result<(), CliError> {
+    let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+    let farm = get(&config, "defaults.farm_id");
+    let queue = get(&config, "defaults.queue_id");
+    let is_json = output.eq_ignore_ascii_case("json");
+
+    // Handle --timezone deprecation
+    let timestamp_format = if let Some(ref tz) = timezone {
+        if timestamp_format.is_some() {
+            // User explicitly provided both flags
+            return Err(CliError::Operation(
+                "Cannot use both --timezone and --timestamp-format options. Use --timestamp-format instead.".into()
+            ));
+        }
+        if !is_json {
+            eprintln!(
+                "Warning: --timezone is deprecated and will be removed in a future version. \
+                 Use --timestamp-format {tz} instead."
+            );
+        }
+        tz.clone()
+    } else {
+        timestamp_format.unwrap_or_else(|| "utc".into())
+    };
+
+    let job = get(&config, "defaults.job_id");
+
+    // Validate --session-action-id format early (before API calls)
+    let (mut resolved_session_id_owned, mut action_start, mut action_end) = (None, None, None);
+    if let Some(ref said) = session_action_id {
+        let derived = parse_session_action_id(said)?;
+        if let Some(ref explicit_sid) = session_id
+            && *explicit_sid != derived {
+                return Err(CliError::Operation(format!(
+                    "Session ID mismatch: --session-id '{explicit_sid}' does not match \
+                     session ID '{derived}' derived from --session-action-id '{said}'"
+                )));
+            }
+        resolved_session_id_owned = Some(derived);
+    }
+
+    let dl = session::deadline_client(Some(&config)).await;
+
+    let job_resp = dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
+        .send().await
+        .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?;
+    let job_name = job_resp.name();
+
+    // Get session action details for time bounds (after validation)
+    if let Some(ref said) = session_action_id {
+        let sa = dl.get_session_action()
+            .farm_id(&farm).queue_id(&queue).job_id(&job).session_action_id(said)
+            .send().await
+            .map_err(|e| CliError::Operation(format!(
+                "Session action '{}' not found in job '{}':\n{}", said, job, client::format_sdk_error(&e)
+            )))?;
+        let sa_start = sa.started_at().map(responses::format_datetime);
+        if sa_start.is_none() {
+            return Err(CliError::Operation(format!(
+                "Session action '{said}' has not started yet. No logs are available."
+            )));
+        }
+        action_start = sa_start;
+        action_end = sa.ended_at().map(responses::format_datetime);
+    }
+
+    let sid = resolved_session_id_owned.as_deref().or(session_id.as_deref());
+
+    // Use action time bounds if available, otherwise use explicit start/end
+    let start = action_start.as_deref().or(start_time.as_deref()).and_then(|s| {
+        chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
+            .ok()
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+    });
+    let end = action_end.as_deref().or(end_time.as_deref()).and_then(|s| {
+        chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
+            .ok()
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+    });
+
+    let (result, auto_select) = log_retrieval::get_session_logs(
+        &farm, &queue, sid, Some(&job), limit, start, end,
+        next_token.as_deref(), Some(&config),
+    ).await.map_err(|e| CliError::Operation(format!("{e}")))?;
+
+    // Resolve the actual session ID (may have been auto-selected)
+    let resolved_session_id = match &auto_select {
+        SessionAutoSelect::OnlySession(id) | SessionAutoSelect::LatestSession(id) => id.as_str(),
+        SessionAutoSelect::Provided => session_id.as_deref().unwrap_or(&result.log_stream),
+    };
+
+    // Get session start time for timestamp formatting (needed for relative mode)
+    let reference_start = {
+        let sess = dl.get_session().farm_id(&farm).queue_id(&queue).job_id(&job).session_id(resolved_session_id)
+            .send().await
+            .map_err(|e| CliError::Operation(format!("Failed to get session: {}", client::format_sdk_error(&e))))?;
+        let s = responses::format_datetime(&sess.started_at);
+        chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
+            .ok()
+    };
+
+    // Build timestamp formatter
+    let ts_fmt = match timestamp_format.to_lowercase().as_str() {
+        "local" => crate::common::TimestampFormat::Local,
+        "relative" => {
+            let reference = reference_start.unwrap_or_else(|| {
+                chrono::Utc::now().fixed_offset()
+            });
+            crate::common::TimestampFormat::new_relative(reference)
+        }
+        _ => crate::common::TimestampFormat::Utc,
+    };
+
+    // Print auto-selection message then header (non-JSON only, matching Python order)
+    if !is_json {
+        match &auto_select {
+            SessionAutoSelect::OnlySession(id) => {
+                println!("Using the only available session: {id}");
+            }
+            SessionAutoSelect::LatestSession(id) => {
+                println!("Using the latest session: {id}");
+            }
+            SessionAutoSelect::Provided => {}
+        }
+        println!("Retrieving logs for {} from log group /aws/deadline/{farm}/{queue}...",
+            if session_action_id.is_some() {
+                format!("session action {}", session_action_id.as_deref().expect("checked is_some above"))
+            } else {
+                format!("session {}", result.log_stream)
+            });
+        println!("Job ID: {job}");
+        println!("Job Name: {job_name}");
+
+        // Show session action time bounds if available
+        if let (Some(sa_start), Some(_said)) = (&action_start, &session_action_id) {
+            println!("Session action start: {sa_start}");
+            if let Some(sa_end) = &action_end {
+                println!("Session action end: {sa_end}");
+                // Parse and compute duration
+                if let (Ok(start_dt), Ok(end_dt)) = (
+                    chrono::DateTime::parse_from_rfc3339(&sa_start.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")),
+                    chrono::DateTime::parse_from_rfc3339(&sa_end.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")),
+                ) {
+                    let duration = end_dt.signed_duration_since(start_dt);
+                    let secs = duration.num_seconds();
+                    let micros = duration.num_microseconds().unwrap_or(0) % 1_000_000;
+                    println!("Session action duration: {}:{:02}:{:02}.{:06}",
+                        secs / 3600, (secs % 3600) / 60, secs % 60, micros);
+                }
+            }
+        }
+    }
+
+    if is_json {
+        let response = serde_json::json!({
+            "jobId": job,
+            "jobName": job_name,
+            "events": result.events.iter().map(|e| {
+                let ts_fixed = e.timestamp.fixed_offset();
+                serde_json::json!({
+                    "timestamp": ts_fmt.format(&ts_fixed),
+                    "message": e.message,
+                    "ingestionTime": e.ingestion_time.map(|t| ts_fmt.format(&t.fixed_offset())),
+                    "eventId": e.event_id,
+                })
+            }).collect::<Vec<_>>(),
+            "count": result.count,
+            "nextToken": result.next_token,
+            "logGroup": result.log_group,
+            "logStream": result.log_stream,
+        });
+        println!("{}", serde_json::to_string_pretty(&response).expect("JSON serialization"));
+    } else {
+        // Show reference time for relative format
+        if let crate::common::TimestampFormat::Relative { ref reference } = ts_fmt {
+            println!("Logs relative to start time: {}", reference.to_rfc3339());
+        }
+
+        println!();
+        if result.events.is_empty() {
+            println!("No logs found for the specified session.");
+        } else {
+            for event in &result.events {
+                let ts_fixed = event.timestamp.fixed_offset();
+                let ts = ts_fmt.format(&ts_fixed);
+                println!("[{ts}] {}", event.message);
+            }
+            println!("\nRetrieved {} log events.", result.count);
+        }
+        if let Some(ref token) = result.next_token {
+            println!("More logs are available. Use --next-token \"{token}\" to retrieve the next page.");
+        }
+    }
+    Ok(())
+}
+
+async fn run_cancel(
+    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
+    job_id: Option<String>, mark_as: String, yes: bool,
+) -> Result<(), CliError> {
+    const VALID_MARK_AS: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED"];
+    let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+    let farm = get(&config, "defaults.farm_id");
+    let queue = get(&config, "defaults.queue_id");
+    let job_id = get(&config, "defaults.job_id");
+    let mark_as = mark_as.to_uppercase();
+    if !VALID_MARK_AS.contains(&mark_as.as_str()) {
+        return Err(CliError::ExitCode {
+            code: 2,
+            message: format!(
+                "Invalid value for --mark-as: {mark_as}. Valid values: {}",
+                VALID_MARK_AS.join(", ")
+            ),
+        });
+    }
+    let auto_accept = is_auto_accept(&config);
+
+    let job = match session::deadline_client(Some(&config)).await
+        .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
+        .send().await {
+        Ok(j) => j,
+        Err(e) => {
+            let err_str = client::format_sdk_error(&e);
+            let suggestion = suggest_resources_on_client_error(
+                &err_str, "GetJob", Some(&farm), Some(&queue), None, Some(&config),
+            ).await;
+            return Err(CliError::Operation(format!(
+                "Failed to get Job from Deadline:\n{err_str}{suggestion}"
+            )));
+        }
+    };
+
+    // Filter taskRunStatusCounts to non-zero entries (sorted for deterministic output)
+    let mut counts = serde_json::Map::new();
+    if let Some(m) = job.task_run_status_counts() {
+        let mut sorted: Vec<_> = m.iter().filter(|(_, v)| **v != 0).collect();
+        sorted.sort_by_key(|(k, _)| k.as_str());
+        for (k, v) in sorted {
+            counts.insert(k.as_str().to_owned(), serde_json::json!(v));
+        }
+    }
+
+    // Build filtered summary
+    let mut summary = serde_json::Map::new();
+    summary.insert("name".into(), serde_json::json!(job.name()));
+    summary.insert("jobId".into(), serde_json::json!(job.job_id()));
+    if let Some(s) = job.task_run_status() {
+        summary.insert("taskRunStatus".into(), serde_json::json!(s.as_str()));
+    }
+    summary.insert("taskRunStatusCounts".into(), serde_json::Value::Object(counts));
+    summary.insert("startedAt".into(), serde_json::json!(job.started_at().map(responses::format_datetime).unwrap_or_default()));
+    summary.insert("endedAt".into(), serde_json::json!(job.ended_at().map(responses::format_datetime).unwrap_or_default()));
+    summary.insert("createdBy".into(), serde_json::json!(job.created_by()));
+    summary.insert("createdAt".into(), serde_json::json!(responses::format_datetime(job.created_at())));
+    println!("{}", crate::common::cli_object_repr(&serde_json::Value::Object(summary)));
+
+    if !auto_accept {
+        let msg = if mark_as == "CANCELED" {
+            "Are you sure you want to cancel this job?".to_owned()
+        } else {
+            format!("Are you sure you want to cancel this job and mark its taskRunStatus as {mark_as}?")
+        };
+        eprint!("{msg} [y/n]: ");
+        loop {
+            let mut input = String::new();
+            let bytes = std::io::stdin().read_line(&mut input).unwrap_or(0);
+            if bytes == 0 {
+                println!("Job not canceled.");
+                return Err(CliError::ExitCode { code: 1, message: String::new() });
+            }
+            match input.trim().to_lowercase().as_str() {
+                "y" | "yes" => break,
+                "n" | "no" => {
+                    println!("Job not canceled.");
+                    return Err(CliError::ExitCode { code: 1, message: String::new() });
+                }
+                _ => {
+                    eprintln!("Error: invalid input");
+                    eprint!("{msg} [y/n]: ");
+                }
+            }
+        }
+    }
+
+    if mark_as == "CANCELED" {
+        println!("Canceling job...");
+    } else {
+        println!("Canceling job and marking as {mark_as}...");
+    }
+    let dl = session::deadline_client(Some(&config)).await;
+    let status: aws_sdk_deadline::types::JobTargetTaskRunStatus = mark_as.as_str().into();
+    dl.update_job()
+        .farm_id(&farm).queue_id(&queue).job_id(&job_id)
+        .target_task_run_status(status)
+        .send().await
+        .map_err(|e| CliError::Operation(format!("Failed to update job:\n{}", client::format_sdk_error(&e))))?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines, reason = "requeue iterates steps and tasks with user confirmation")]
+async fn run_requeue_tasks(
+    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
+    job_id: Option<String>, run_status: Vec<String>, yes: bool,
+) -> Result<(), CliError> {
+    const VALID_RUN_STATUSES: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"];
+    let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+    let farm = get(&config, "defaults.farm_id");
+    let queue = get(&config, "defaults.queue_id");
+    let job_id = get(&config, "defaults.job_id");
+    let auto_accept = is_auto_accept(&config);
+
+    let run_status_set: std::collections::HashSet<String> = if run_status.is_empty() {
+        ["SUSPENDED", "CANCELED", "FAILED"].iter().map(ToString::to_string).collect()
+    } else {
+        run_status.iter().map(|s| s.to_uppercase()).collect()
+    };
+    for status in &run_status_set {
+        if !VALID_RUN_STATUSES.contains(&status.as_str()) {
+            return Err(CliError::ExitCode {
+                code: 2,
+                message: format!(
+                    "Invalid value for --run-status: {status}. Valid values: {}",
+                    VALID_RUN_STATUSES.join(", ")
+                ),
+            });
+        }
+    }
+
+    let job = match session::deadline_client(Some(&config)).await
+        .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
+        .send().await {
+        Ok(j) => j,
+        Err(e) => {
+            let err_str = client::format_sdk_error(&e);
+            let suggestion = suggest_resources_on_client_error(
+                &err_str, "GetJob", Some(&farm), Some(&queue), None, Some(&config),
+            ).await;
+            return Err(CliError::Operation(format!(
+                "Failed to get Job from Deadline:\n{err_str}{suggestion}"
+            )));
+        }
+    };
+
+    println!("Job: {} ({})", job.name(), job.job_id());
+
+    // Print taskRunStatusCounts (non-zero, keys uppercased, sorted)
+    let mut counts_map = serde_json::Map::new();
+    if let Some(m) = job.task_run_status_counts() {
+        let mut sorted: Vec<_> = m.iter().filter(|(_, v)| **v != 0).collect();
+        sorted.sort_by_key(|(k, _)| k.as_str());
+        for (k, v) in sorted {
+            counts_map.insert(k.as_str().to_uppercase(), serde_json::json!(v));
+        }
+    }
+    println!("{}", crate::common::cli_object_repr(&serde_json::json!({"taskRunStatusCounts": counts_map})));
+
+    let sorted_statuses: Vec<&String> = {
+        let mut v: Vec<&String> = run_status_set.iter().collect();
+        v.sort();
+        v
+    };
+    println!("Requeuing all tasks with run status among: {}", sorted_statuses.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+
+    let (total_to_requeue, summary_by_status) = count_and_summarize(Some(&counts_map), &run_status_set);
+
+    if total_to_requeue == 0 {
+        println!("No tasks to requeue.");
+        return Ok(());
+    }
+
+    if auto_accept {
+        println!("Estimated {total_to_requeue} total tasks ({summary_by_status}) to requeue.");
+    } else {
+        println!("This action will requeue an estimated {total_to_requeue} total tasks ({summary_by_status})");
+        eprint!("Are you sure you want to requeue these tasks? [y/n]: ");
+        loop {
+            let mut input = String::new();
+            let bytes = std::io::stdin().read_line(&mut input).unwrap_or(0);
+            if bytes == 0 {
+                println!("No tasks were requeued.");
+                return Err(CliError::ExitCode { code: 1, message: String::new() });
+            }
+            match input.trim().to_lowercase().as_str() {
+                "y" | "yes" => break,
+                "n" | "no" => {
+                    println!("No tasks were requeued.");
+                    return Err(CliError::ExitCode { code: 1, message: String::new() });
+                }
+                _ => {
+                    eprintln!("Error: invalid input");
+                    eprint!("Are you sure you want to requeue these tasks? [y/n]: ");
+                }
+            }
+        }
+        println!("Requeuing tasks...");
+    }
+
+    let mut total_requeued: i64 = 0;
+
+    let dl = session::deadline_client(Some(&config)).await;
+    let steps_pages = client::collect_paginated(
+        dl.list_steps().farm_id(&farm).queue_id(&queue).job_id(&job_id)
+            .into_paginator().send()
+    ).await
+        .map_err(|e| CliError::Operation(format!("Failed to list steps:\n{e}")))?;
+
+    for page in &steps_pages {
+        for step in page.steps() {
+            let step_id = step.step_id();
+            let step_name = step.name();
+            println!("\nStep: {step_name} ({step_id})");
+
+            let step_counts = step.task_run_status_counts();
+            let step_counts_map: serde_json::Map<String, serde_json::Value> = step_counts.iter()
+                .map(|(k, v)| (k.as_str().to_owned(), serde_json::Value::Number((*v).into())))
+                .collect();
+            let (step_to_requeue, step_summary) = count_and_summarize(Some(&step_counts_map), &run_status_set);
+
+            if step_to_requeue == 0 {
+                println!("  Step has no tasks to requeue.");
+                continue;
+            }
+            println!("  Requeuing an estimated {step_to_requeue} total tasks ({step_summary})...");
+
+            let tasks_pages = client::collect_paginated(
+                dl.list_tasks().farm_id(&farm).queue_id(&queue).job_id(&job_id).step_id(step_id)
+                    .into_paginator().send()
+            ).await
+                .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
+
+            for tpage in &tasks_pages {
+                for task in tpage.tasks() {
+                    let status = task.run_status().as_str();
+                    if !run_status_set.contains(&status.to_uppercase()) {
+                        continue;
+                    }
+                    let task_id = task.task_id();
+                    let params = task.parameters();
+                    let task_summary = if let Some(p) = params.filter(|p| !p.is_empty()) {
+                        let mut param_pairs: Vec<_> = p.iter().map(|(name, val)| {
+                            let extracted = match val {
+                                aws_sdk_deadline::types::TaskParameterValue::Int(i) => i.clone(),
+                                aws_sdk_deadline::types::TaskParameterValue::Float(f) => f.clone(),
+                                aws_sdk_deadline::types::TaskParameterValue::String(s) => s.clone(),
+                                aws_sdk_deadline::types::TaskParameterValue::Path(p) => p.clone(),
+                                _ => String::new(),
+                            };
+                            format!("{name}={extracted}")
+                        }).collect();
+                        param_pairs.sort();
+                        format!("{} ({task_id})", param_pairs.join(","))
+                    } else {
+                        task_id.to_owned()
+                    };
+                    println!("    {status} {task_summary}");
+
+                    session::deadline_client(Some(&config)).await
+                        .update_task()
+                        .farm_id(&farm).queue_id(&queue).job_id(&job_id)
+                        .step_id(step_id).task_id(task_id)
+                        .target_run_status(aws_sdk_deadline::types::TaskTargetRunStatus::Pending)
+                        .customize()
+                        .config_override(aws_sdk_deadline::config::Builder::default()
+                            .retry_config(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)))
+                        .send().await
+                        .map_err(|e| CliError::Operation(format!("Failed to update task:\n{}", client::format_sdk_error(&e))))?;
+                    total_requeued += 1;
+                }
+            }
+        }
+    }
+
+    println!("\nRequeued a total of {total_requeued} tasks.");
+    Ok(())
+}
+
+async fn run_download_output(
+    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
+    job_id: Option<String>, step_id: Option<String>, task_id: Option<String>,
+    conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    yes: bool, output: String,
+) -> Result<(), CliError> {
+    let is_json = output.eq_ignore_ascii_case("json");
+
+    // Validate --task-id requires --step-id
+    if task_id.is_some() && step_id.is_none() {
+        return Err(CliError::ExitCode {
+            code: 2,
+            message: "Missing option '--step-id' required with '--task-id'".into(),
+        });
+    }
+
+    let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+    let farm = get(&config, "defaults.farm_id");
+    let queue_id_val = get(&config, "defaults.queue_id");
+    let job_id_val = get(&config, "defaults.job_id");
+
+    let result = download_output_impl(
+        &config, &farm, &queue_id_val, &job_id_val,
+        step_id.as_deref(), task_id.as_deref(),
+        conflict_resolution, is_json, is_auto_accept(&config),
+    ).await;
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if is_json => {
+            // In JSON output mode, errors are formatted as JSON to stdout.
+            // We exit directly to prevent the error handler in main.rs from
+            // printing the same error again in human-readable format.
+            let error_one_liner = e.to_string().replace('\n', ". ");
+            println!("{}", serde_json::json!({"messageType": "error", "value": error_one_liner}));
+            #[allow(clippy::exit, reason = "JSON error already printed; returning Err would double-print")]
+            std::process::exit(1);
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -1139,7 +1195,6 @@ fn print_search_jobs_output(resp: &aws_sdk_deadline::operation::search_jobs::Sea
     println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
 }
 
-/// Parse a CLI argument that can be inline JSON or `file://path`.
 // ---------------------------------------------------------------------------
 // download-output implementation
 // ---------------------------------------------------------------------------
@@ -1228,6 +1283,7 @@ fn check_windows_long_paths(_output_paths_by_root: &std::collections::HashMap<St
 }
 
 /// Core implementation of `job download-output`.
+#[allow(clippy::too_many_lines, reason = "interactive download pipeline with user prompts and path mapping")]
 pub(crate) async fn download_output_impl(
     config: &IniConfig,
     farm_id: &str,
@@ -1366,6 +1422,7 @@ pub(crate) async fn download_output_impl(
                             downloader.set_root_path(asset_root, new_root);
                         }
             } else {
+                use std::io::Write;
                 let fmt_cap = format!("{}{}", &root_format[..1].to_uppercase(), &root_format[1..]);
                 println!(
                     "This root path format does not match the operating system you're using. \
@@ -1373,7 +1430,6 @@ pub(crate) async fn download_output_impl(
                      The location was {asset_root}, on {fmt_cap}."
                 );
                 print!("> Please enter a new root path: ");
-                use std::io::Write;
                 std::io::stdout().flush().ok();
                 let mut new_root = String::new();
                 std::io::stdin().read_line(&mut new_root).unwrap_or(0);
@@ -1411,6 +1467,7 @@ pub(crate) async fn download_output_impl(
         } else {
             loop {
                 // Show summary
+                use std::io::Write;
                 let summary_lines: Vec<String> = output_paths.iter().map(|(dir, paths)| {
                     let count = paths.len();
                     let s = if count > 1 { "s" } else { "" };
@@ -1426,7 +1483,6 @@ pub(crate) async fn download_output_impl(
                 }
 
                 print!("> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download: ");
-                use std::io::Write;
                 std::io::stdout().flush().ok();
                 let mut choice = String::new();
                 if std::io::stdin().read_line(&mut choice).unwrap_or(0) == 0 {
@@ -1538,12 +1594,12 @@ pub(crate) async fn download_output_impl(
         println!(
             "Download Summary:\n\
              \x20   Downloaded {} files totaling {}.\n\
-             \x20   Total download time of {} seconds at {}/s.\n\
+             \x20   Total download time of {:.5} seconds at {}/s.\n\
              \x20   Download locations (total file counts):\n\
              \x20       {}",
             download_summary.stats.processed_files,
             human_readable_file_size(download_summary.stats.processed_bytes),
-            format!("{:.5}", download_summary.stats.total_time),
+            download_summary.stats.total_time,
             human_readable_file_size(download_summary.stats.transfer_rate as u64),
             paths_joined,
         );
@@ -1666,6 +1722,7 @@ fn parse_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
         .map(|dt| dt.with_timezone(&chrono::Utc))
 }
 
+#[allow(clippy::too_many_lines, reason = "trace schedule analysis is a single coherent pipeline")]
 async fn run_trace_schedule(
     profile: Option<String>,
     farm_id: Option<String>,
@@ -1736,15 +1793,15 @@ async fn run_trace_schedule(
 
     // Fetch session actions for each session
     println!("Getting all the session actions for the job...");
-    for i in 0..sessions.len() {
-        let sid = sessions[i]["sessionId"].as_str().unwrap_or("").to_owned();
+    for session in &mut sessions {
+        let sid = session["sessionId"].as_str().unwrap_or("").to_owned();
         let action_pages = collect_paginated_session_actions(&dl, &farm, &queue, &job, &sid).await
             .map_err(|e| CliError::Operation(format!("Failed to list session actions: {e}")))?;
         let actions: Vec<serde_json::Value> = action_pages.iter()
             .flat_map(aws_sdk_deadline::operation::list_session_actions::ListSessionActionsOutput::session_actions)
             .map(session_action_summary_to_value)
             .collect();
-        sessions[i]["actions"] = json!(actions);
+        session["actions"] = json!(actions);
     }
 
     // Collect unique step IDs and (stepId, taskId) pairs from taskRun definitions
@@ -1920,7 +1977,7 @@ async fn run_trace_schedule(
                     let env_id = definition.get(action_type)
                         .and_then(|e| e.get("environmentId"))
                         .and_then(|v| v.as_str()).unwrap_or("");
-                    name = env_id.rsplit(':').next().unwrap_or(env_id).to_owned();
+                    env_id.rsplit(':').next().unwrap_or(env_id).clone_into(&mut name);
                 }
                 "syncInputJobAttachments" => {
                     *acc.get_mut("syncJobAttachmentsCount").expect("key initialized above") += 1;

@@ -93,7 +93,7 @@ pub fn create_job_from_job_bundle(
         })
     });
 
-    let confirm_cb = on_confirm.map(|cb| -> Box<dyn Fn(&str, bool) -> bool + Send> {
+    let confirm_cb = on_confirm.map(|cb| -> deadline_job_bundle::submission::ConfirmFn {
         Box::new(move |msg: &str, default: bool| {
             Python::with_gil(|py| {
                 cb.call1(py, (msg, default)).map(|r| r.is_truthy(py).unwrap_or(default)).unwrap_or(default)
@@ -144,8 +144,8 @@ pub fn create_job_from_job_bundle(
     Ok(dict.into_any().unbind())
 }
 
-/// Extract an optional typed value from a PyDict.
-fn extract_opt<'py, T: pyo3::FromPyObject<'py>>(
+/// Extract an optional typed value from a `PyDict`.
+fn extract_opt<'py, T: FromPyObject<'py>>(
     dict: &Bound<'py, PyDict>,
     key: &str,
 ) -> PyResult<Option<T>> {

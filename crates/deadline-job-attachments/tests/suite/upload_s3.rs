@@ -70,11 +70,11 @@ fn test_manifest(dir: &Path, files: &[(&str, &[u8])]) -> AssetManifest {
         paths.push(ManifestPath {
             path: name.to_string(),
             hash,
-            size: meta.len() as i64,
+            size: meta.len(),
             mtime: 1_000_000, // fixed for tests
         });
     }
-    let total_size: i64 = paths.iter().map(|p| p.size).sum();
+    let total_size: u64 = paths.iter().map(|p| p.size).sum();
     AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
@@ -1082,11 +1082,11 @@ async fn upload_input_files_large_file_multipart() {
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
-        large_content.len() as i64,
+        large_content.len() as u64,
         vec![ManifestPath {
             path: "large.bin".into(),
             hash,
-            size: large_content.len() as i64,
+            size: large_content.len() as u64,
             mtime: 1_000_000,
         }],
     ).unwrap();
@@ -1170,11 +1170,11 @@ async fn upload_file_to_s3_multipart_part_failure_aborts() {
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
-        large_content.len() as i64,
+        large_content.len() as u64,
         vec![ManifestPath {
             path: "large.bin".into(),
             hash,
-            size: large_content.len() as i64,
+            size: large_content.len() as u64,
             mtime: 1_000_000,
         }],
     ).unwrap();
@@ -1288,10 +1288,10 @@ async fn upload_input_files_multipart_create_fails_propagates_error() {
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
-        large_content.len() as i64,
+        large_content.len() as u64,
         vec![ManifestPath {
             path: "large.bin".into(), hash,
-            size: large_content.len() as i64, mtime: 1_000_000,
+            size: large_content.len() as u64, mtime: 1_000_000,
         }],
     ).unwrap();
 

@@ -10,7 +10,7 @@ use deadline_job_attachments::manifest_ops::{
 use std::fs;
 use tempfile::TempDir;
 
-fn make_manifest(entries: &[(&str, &str, i64, i64)]) -> AssetManifest {
+fn make_manifest(entries: &[(&str, &str, u64, i64)]) -> AssetManifest {
     let paths: Vec<ManifestPath> = entries
         .iter()
         .map(|(p, h, s, m)| ManifestPath {
@@ -20,7 +20,7 @@ fn make_manifest(entries: &[(&str, &str, i64, i64)]) -> AssetManifest {
             mtime: *m,
         })
         .collect();
-    let total_size: i64 = paths.iter().map(|p| p.size).sum();
+    let total_size: u64 = paths.iter().map(|p| p.size).sum();
     AssetManifest::new(HashAlgorithm::Xxh128, ManifestVersion::V2023_03_03, total_size, paths)
         .unwrap()
 }

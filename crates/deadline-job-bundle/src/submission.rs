@@ -101,7 +101,7 @@ const DEFAULT_SUPPORTED_APP_PARAMETER_NAMES: &[&str] = &[
     "maxWorkerCount",
 ];
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, reason = "return type is a tuple of two JSON maps, a type alias would not improve clarity")]
 pub fn split_parameter_args(
     parameters: &[Value],
     job_bundle_dir: &str,
@@ -225,9 +225,12 @@ pub struct SubmitJobParams<'a> {
     pub hashing_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     pub upload_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     pub continue_callback: Option<Box<dyn Fn() -> bool + Send>>,
-    pub interactive_confirmation_callback: Option<Box<dyn Fn(&str, bool) -> bool + Send>>,
+    pub interactive_confirmation_callback: Option<ConfirmFn>,
     pub telemetry: Option<&'a deadline_api::telemetry::TelemetryClient>,
 }
+
+/// Callback for interactive confirmation prompts: `(message, default) -> should_continue`.
+pub type ConfirmFn = Box<dyn Fn(&str, bool) -> bool + Send>;
 
 fn get_setting(name: &str, config: Option<&IniConfig>) -> String {
     match config {
@@ -237,6 +240,7 @@ fn get_setting(name: &str, config: Option<&IniConfig>) -> String {
 }
 
 /// Submit a job bundle to Deadline Cloud. Returns the job ID on success.
+#[allow(clippy::too_many_lines, reason = "end-to-end job submission pipeline with 11 sequential phases")]
 pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<Option<String>, DeadlineError> {
     let print = &params.print_callback;
     let submitter_name = params.submitter_name.as_deref().unwrap_or("Custom");
@@ -511,17 +515,16 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 if params.auto_accept {
                     print("Job submission canceled (settings.auto_accept enabled and there were unknown paths).");
                     return Err(op_err("Job submission canceled (settings.auto_accept enabled and there were unknown paths).".into()));
-                } else {
-                    let msg = format!(
-                        "WARNING: {} file(s) found outside of known asset paths.\nDo you wish to proceed?",
-                        outside.len()
-                    );
-                    let should_continue = params.interactive_confirmation_callback
-                        .as_ref()
-                        .is_none_or(|cb| cb(&msg, false));
-                    if !should_continue {
-                        return Err(op_err("Submission canceled by user.".into()));
-                    }
+                }
+                let msg = format!(
+                    "WARNING: {} file(s) found outside of known asset paths.\nDo you wish to proceed?",
+                    outside.len()
+                );
+                let should_continue = params.interactive_confirmation_callback
+                    .as_ref()
+                    .is_none_or(|cb| cb(&msg, false));
+                if !should_continue {
+                    return Err(op_err("Submission canceled by user.".into()));
                 }
             }
         }

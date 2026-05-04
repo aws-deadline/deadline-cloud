@@ -3,6 +3,11 @@
 //! Replaces the C ABI layer (`deadline-gui-ffi` + `_ffi.py`).
 //! Python imports this as `deadline._native`.
 
+// PyO3's #[pyfunction] macro requires `pub` visibility, but this crate is a
+// cdylib (shared library loaded by Python) — no Rust code links to it, so
+// every `pub fn` appears unreachable from Rust's perspective.
+#![allow(unreachable_pub, reason = "PyO3 #[pyfunction] requires pub visibility")]
+
 use pyo3::prelude::*;
 
 pyo3::create_exception!(deadline._native, DeadlineOperationError, pyo3::exceptions::PyException);

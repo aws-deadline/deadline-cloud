@@ -167,7 +167,7 @@ pub async fn check_authentication_status(
     if let Some(uid) = user_id {
         req = req.principal_id(uid);
     }
-    if let Ok(_) = req.send().await { AwsAuthenticationStatus::Authenticated } else {
+    if req.send().await.is_ok() { AwsAuthenticationStatus::Authenticated } else {
         let source = get_credentials_source(config);
         match source {
             AwsCredentialsSource::DeadlineCloudMonitorLogin => {

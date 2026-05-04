@@ -187,11 +187,7 @@ pub fn write_manifest(
 
     let manifest_name = if let Some(n) = name { n.to_owned() } else {
         let derived = root.replace(['/', '\\', ':'], "_");
-        if derived.starts_with('_') {
-            derived[1..].to_string()
-        } else {
-            derived
-        }
+        derived.strip_prefix('_').unwrap_or(&derived).to_owned()
     };
 
     let filename = format!("{manifest_name}-{root_hash}-{timestamp}.manifest");
@@ -459,6 +455,8 @@ pub async fn manifest_upload(
 /// `job_attachments` is the `attachments` field from the `GetJob` API
 /// response (or empty map if the job has no attachments). The CLI layer
 /// is responsible for calling `GetJob` and passing this in.
+#[allow(clippy::implicit_hasher, reason = "only used with default HashMap")]
+#[allow(clippy::too_many_arguments, reason = "S3 + Deadline context params needed for manifest resolution")]
 pub async fn manifest_download(
     download_dir: &str,
     farm_id: &str,

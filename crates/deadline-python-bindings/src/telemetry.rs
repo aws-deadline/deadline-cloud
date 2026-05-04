@@ -14,6 +14,8 @@ pub struct TelemetryClient {
 impl TelemetryClient {
     #[new]
     #[pyo3(signature = (config_path=None))]
+    // PyO3 #[new] requires PyResult even when construction is infallible.
+    #[allow(clippy::unnecessary_wraps, reason = "PyO3 requires PyResult for __new__")]
     fn new(config_path: Option<&str>) -> PyResult<Self> {
         let config = match config_path {
             Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p)).ok(),
@@ -43,7 +45,7 @@ impl TelemetryClient {
     }
 }
 
-/// Convert a Python object to serde_json::Value (simple types only).
+/// Convert a Python object to `serde_json::Value` (simple types only).
 fn python_to_json_value(obj: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
     if obj.is_none() {
         Ok(serde_json::Value::Null)

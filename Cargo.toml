@@ -73,6 +73,15 @@ must_use_candidate = "allow"            # Too noisy on builders and getters
 similar_names = "allow"                 # farm_id/farm_ids is intentional
 needless_pass_by_value = "allow"        # Clap derive requires owned types
 
+# Cast lints: relaxed for CLI tool. File sizes, progress percentages,
+# API boundary conversions, and display formatting all involve safe casts
+# where the domain guarantees correctness (e.g., file sizes are non-negative,
+# precision loss is acceptable for human-readable display).
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+
 # ── Cherry-picked restriction lints ────────────────────────────
 dbg_macro = "warn"
 print_stdout = "warn"

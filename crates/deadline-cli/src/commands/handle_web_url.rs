@@ -10,6 +10,8 @@ use super::job::download_output_impl;
 const DEADLINE_URL_SCHEME: &str = "deadline";
 
 #[derive(Args)]
+// Each bool field maps to a CLI flag (--install, --uninstall, --all-users, --wait).
+#[allow(clippy::struct_excessive_bools, reason = "fields map 1:1 to CLI flags")]
 pub(crate) struct HandleWebUrlArgs {
     /// deadline:// protocol URL
     pub url: Option<String>,

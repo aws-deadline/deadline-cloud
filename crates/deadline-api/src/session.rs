@@ -36,16 +36,17 @@ impl SessionContext {
     /// Build the user-agent extra string.
     /// Format: `app/deadline-client#<version> submitter/<name>#<ver> cli-command/<cmd>`
     pub fn build_user_agent(&self) -> String {
+        use std::fmt::Write;
         let version = env!("CARGO_PKG_VERSION");
         let mut ua = format!("app/deadline-client#{version}");
         if let Some(ref name) = self.submitter_name {
-            ua.push_str(&format!(" submitter/{name}"));
+            let _ = write!(ua, " submitter/{name}");
             if let Some(ref ver) = self.submitter_version {
-                ua.push_str(&format!("#{ver}"));
+                let _ = write!(ua, "#{ver}");
             }
         }
         if let Some(ref cmd) = self.cli_command_name {
-            ua.push_str(&format!(" cli-command/{cmd}"));
+            let _ = write!(ua, " cli-command/{cmd}");
         }
         ua
     }
@@ -59,6 +60,9 @@ impl SessionContext {
 /// Replaces Python's `@lru_cache` on `_get_boto3_session_for_profile`.
 pub struct SessionCache {
     cached_config: Option<SdkConfig>,
+    /// Three states: `None` = not cached yet, `Some(None)` = cached with
+    /// default profile, `Some(Some("name"))` = cached with named profile.
+    #[allow(clippy::option_option, reason = "intentional three-state cache: uncached / default profile / named profile")]
     cached_profile: Option<Option<String>>,
     /// Queue user configs cached by (`farm_id`, `queue_id`).
     /// Python equivalent: `@lru_cache` on `_get_queue_user_boto3_session`.
@@ -243,8 +247,8 @@ impl QueueUserCredentialProvider {
         if let Err(ref sdk_err) = result {
             let (code, message) = match sdk_err {
                 aws_sdk_deadline::error::SdkError::ServiceError(e) => {
-                    let inner = e.err();
                     use aws_sdk_deadline::error::ProvideErrorMetadata;
+                    let inner = e.err();
                     (
                         ProvideErrorMetadata::code(inner).unwrap_or("Unknown").to_owned(),
                         format!("{inner}"),

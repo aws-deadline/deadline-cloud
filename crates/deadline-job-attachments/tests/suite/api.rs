@@ -33,7 +33,7 @@ impl Drop for CleanupDir {
 // --- Test helpers ---
 
 /// Create a valid manifest and write it to disk. Returns the file path.
-fn write_manifest_file(dir: &Path, filename: &str, files: &[(&str, &str, i64)]) -> String {
+fn write_manifest_file(dir: &Path, filename: &str, files: &[(&str, &str, u64)]) -> String {
     let paths: Vec<ManifestPath> = files
         .iter()
         .map(|(p, h, s)| ManifestPath {
@@ -43,7 +43,7 @@ fn write_manifest_file(dir: &Path, filename: &str, files: &[(&str, &str, i64)]) 
             mtime: 1_700_000_000_000_000,
         })
         .collect();
-    let total_size: i64 = paths.iter().map(|p| p.size).sum();
+    let total_size: u64 = paths.iter().map(|p| p.size).sum();
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,

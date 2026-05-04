@@ -313,6 +313,10 @@ pub fn validate_job_parameter_value(
                 serde_json::json!(i)
             } else if let Some(n) = value.as_f64() {
                 let i = n as i64;
+                // Exact comparison is intentional: we're checking whether the
+                // f64 value is a whole number by round-tripping through i64.
+                // For integers within f64's 53-bit mantissa range this is exact.
+                #[allow(clippy::float_cmp, reason = "integer round-trip check is exact for values < 2^53")]
                 if (i as f64) != n {
                     return Err(op_err(format!(
                         "Job parameter '{name}' has type INT but got value {value:?} which is not an integer."

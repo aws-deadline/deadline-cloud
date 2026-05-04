@@ -129,7 +129,7 @@ pub fn write_config(config: &IniConfig) -> Result<(), ConfigError> {
 /// Walk the dependency chain for a setting and return the list of
 /// section name prefixes. For example, `defaults.queue_id` depends on
 /// `defaults.farm_id` which depends on `defaults.aws_profile_name`.
-/// If profile="myprofile" and farm="farm-abc", returns ["profile-myprofile", "farm-abc"].
+/// If profile=`"myprofile"` and farm=`"farm-abc"`, returns `["profile-myprofile", "farm-abc"]`.
 fn get_section_prefixes(setting_def: &SettingDef, config: &IniConfig) -> Vec<String> {
     match setting_def.depend {
         Some(dep_name) => {

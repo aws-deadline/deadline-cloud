@@ -105,7 +105,7 @@ impl std::str::FromStr for ManifestVersion {
 pub struct ManifestPath {
     pub path: String,
     pub hash: String,
-    pub size: i64,
+    pub size: u64,
     pub mtime: i64,
 }
 
@@ -115,7 +115,7 @@ pub struct ManifestPath {
 pub struct AssetManifest {
     pub hash_alg: HashAlgorithm,
     pub manifest_version: ManifestVersion,
-    pub total_size: i64,
+    pub total_size: u64,
     pub paths: Vec<ManifestPath>,
 }
 
@@ -150,7 +150,7 @@ impl AssetManifest {
     pub fn new(
         hash_alg: HashAlgorithm,
         manifest_version: ManifestVersion,
-        total_size: i64,
+        total_size: u64,
         mut paths: Vec<ManifestPath>,
     ) -> Result<Self, JobAttachmentsError> {
         // Sort paths by canonical UTF-16 BE ordering at construction time.
@@ -255,8 +255,8 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
 
     // Validate totalSize
     let total_size = obj["totalSize"]
-        .as_i64()
-        .ok_or_else(|| JobAttachmentsError::ManifestDecode("totalSize must be an integer".into()))?;
+        .as_u64()
+        .ok_or_else(|| JobAttachmentsError::ManifestDecode("totalSize must be a non-negative integer".into()))?;
 
     // Validate paths
     let paths_val = &obj["paths"];
@@ -295,8 +295,8 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
             .as_str()
             .ok_or_else(|| JobAttachmentsError::ManifestDecode("hash must be a string".into()))?;
         let size = entry_obj["size"]
-            .as_i64()
-            .ok_or_else(|| JobAttachmentsError::ManifestDecode("size must be an integer".into()))?;
+            .as_u64()
+            .ok_or_else(|| JobAttachmentsError::ManifestDecode("size must be a non-negative integer".into()))?;
         let mtime = entry_obj["mtime"]
             .as_i64()
             .ok_or_else(|| JobAttachmentsError::ManifestDecode("mtime must be an integer".into()))?;
@@ -557,7 +557,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("size must be an integer"));
+        assert!(err.to_string().contains("size must be a non-negative integer"));
     }
 
     #[test]
@@ -596,7 +596,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("totalSize must be an integer"));
+        assert!(err.to_string().contains("totalSize must be a non-negative integer"));
     }
 
     // === : AssetManifest::encode ===

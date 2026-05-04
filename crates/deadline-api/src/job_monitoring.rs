@@ -92,7 +92,7 @@ async fn collect_failed_tasks(
                                 .collect();
                             Value::Object(map)
                         }
-                        None => Value::Object(Default::default()),
+                        None => Value::Object(serde_json::Map::new()),
                     };
 
                     failed_tasks.push(FailedTask {
@@ -109,6 +109,12 @@ async fn collect_failed_tasks(
     Ok(failed_tasks)
 }
 
+/// Callback invoked with `(status_string, elapsed_seconds, timeout_seconds)`.
+pub type StatusFn<'a> = &'a dyn Fn(&str, f64, u64);
+
+/// Callback invoked with `(job_output, elapsed_seconds, timeout_seconds)`.
+pub type JobProgressFn<'a> = &'a dyn Fn(&GetJobOutput, f64, u64);
+
 pub async fn wait_for_job_completion(
     farm_id: &str,
     queue_id: &str,
@@ -116,8 +122,8 @@ pub async fn wait_for_job_completion(
     max_poll_interval: u64,
     timeout: u64,
     config: Option<&IniConfig>,
-    status_callback: Option<&dyn Fn(&str, f64, u64)>,
-    job_callback: Option<&dyn Fn(&GetJobOutput, f64, u64)>,
+    status_callback: Option<StatusFn<'_>>,
+    job_callback: Option<JobProgressFn<'_>>,
 ) -> Result<JobCompletionResult, DeadlineError> {
     let start = Instant::now();
     let mut interval_ms: u64 = 500;

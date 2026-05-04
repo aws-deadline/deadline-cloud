@@ -4,7 +4,6 @@ use crate::common::json_with_spaces;
 /// CLI-specific error type that distinguishes known operation errors
 /// from unexpected errors for the error handler in main.rs.
 #[derive(Debug, thiserror::Error)]
-#[allow(dead_code)]
 pub(crate) enum CliError {
     #[error("{0}")]
     Operation(String),
