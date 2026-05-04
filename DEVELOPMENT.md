@@ -22,7 +22,7 @@ Install prerequisites and build:
 # Rust toolchain (stable channel, edition 2024)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Install dev tools (cargo-insta, cargo-deny, cargo-nextest, etc.)
+# Install dev tools (cargo-insta, cargo-deny, cargo-outdated, cargo-bloat)
 make setup-tools
 
 # Python venv (needed for GUI and wheel builds)

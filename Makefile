@@ -7,7 +7,7 @@ BIN_NAME := deadline
 
 # Install required and recommended Cargo tools
 setup-tools:
-	cargo install cargo-insta cargo-deny cargo-nextest cargo-outdated cargo-bloat
+	cargo install cargo-insta cargo-deny cargo-outdated cargo-bloat
 
 # Default: build everything and install into .venv
 all: develop

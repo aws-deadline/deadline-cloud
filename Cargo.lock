@@ -1104,7 +1104,6 @@ name = "deadline-job-attachments"
 version = "0.1.0"
 dependencies = [
  "aws-config",
- "aws-sdk-deadline",
  "aws-sdk-s3",
  "aws-sdk-sts",
  "aws-smithy-types",

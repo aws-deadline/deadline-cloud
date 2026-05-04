@@ -21,12 +21,15 @@ Active work item: #30 — Rust tooling and optimization setup.
 
 ### Install for ongoing use
 
-4. **`cargo-nextest`** — Faster parallel test runner. 634 tests take
-   ~20s today; nextest could cut to ~8-10s.
-5. **`cargo-outdated`** — Identify stale dependencies.
-6. **`cargo-udeps`** — Find unused dependencies in Cargo.toml.
-7. **`cargo-bloat`** — Analyze binary size breakdown (likely AWS SDK
-   monomorphization).
+4. ✅ **`cargo-nextest`** — Installed. 452 tests pass. Better failure
+   output but no speed gain for our subprocess-based tests.
+5. ✅ **`cargo-outdated`** — Installed. Patch updates available for
+   indexmap, semver, uuid, aws-sdk-s3. Major upgrades needed for
+   rusqlite (0.32→0.39) and pyo3 (0.24→0.28) — separate work items.
+6. ✅ **`cargo-udeps`** — Installed. Found and removed unused
+   `aws-sdk-deadline` dep from `deadline-job-attachments`.
+7. ✅ **`cargo-bloat`** — Investigated. 70% of binary is AWS SDK + std +
+   TLS. Our code is 2.7MB — lean. No actionable cleanup.
 
 ### Optimization investigation
 
