@@ -86,6 +86,8 @@ pick and execute work items.
 | 27 | Typed SDK API layer | ✅ Done | — | — |
 | 27b | SDK calling behavior audit | ✅ Done | — | 27 |
 | 28 | CLI feature parity audit fixes (AUDIT-101,103,106,107) | ✅ Done | — | — |
+| 28b | CLI feature parity: remove Rust-only features (AUDIT-108,109) | ✅ Done | — | — |
+| 28c | Strict clippy lint resolution (2064 → 0 warnings) | ✅ Done | — | — |
 | 29 | Investigate Python `--save-debug-snapshot` bug on no-attachment bundles | Not started | — | — |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
@@ -187,15 +189,6 @@ story. See `specs/HANDOFF.md` for detailed analysis.
     (e.g. different uninstall behavior).
 
 **Technical debt:**
-- **Feature parity audit**: Audit Rust CLI for features that were added
-  beyond what the Python CLI supports. These should be removed unless
-  explicitly approved. Known examples:
-  - `fleet get --queue-id` (lists fleets associated with a queue — Python
-    only supports `fleet get --fleet-id`)
-  - `job get-session`, `job list-sessions`, `job list-steps`, `job list-tasks`,
-    `job search` (Rust-only subcommands not in Python CLI)
-  - `queue get-storage-profile` (Rust-only subcommand)
-  Investigate all subcommands for similar additions.
 - **Spec docs audit**: Review `specs/` docs to ensure they reflect
   current implementation.
 - **#15d**: Audit Level 1 tests for conversion to Level 2.
