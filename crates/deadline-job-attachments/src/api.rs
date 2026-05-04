@@ -7,10 +7,10 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use deadline_config::ini::IniConfig;
 use crate::errors::JobAttachmentsError;
+use deadline_config::ini::IniConfig;
 
-use crate::asset_manifests::{decode_manifest, hash_data, AssetManifest, HashAlgorithm};
+use crate::asset_manifests::{AssetManifest, HashAlgorithm, decode_manifest, hash_data};
 use crate::download::download_files_from_manifests;
 use crate::models::{
     FileConflictResolution, JobAttachmentS3Settings, PathMappingRule, UploadManifestInfo,
@@ -22,7 +22,9 @@ use crate::upload::S3UploadContext;
 ///
 /// Returns a `HashMap` keyed by base filename. Validates all paths
 /// exist upfront; collects invalid ones into a single error.
-pub fn read_manifests(manifest_paths: &[String]) -> Result<HashMap<String, AssetManifest>, JobAttachmentsError> {
+pub fn read_manifests(
+    manifest_paths: &[String],
+) -> Result<HashMap<String, AssetManifest>, JobAttachmentsError> {
     if manifest_paths.is_empty() {
         return Ok(HashMap::new());
     }
@@ -85,24 +87,25 @@ pub fn process_path_mapping(
         };
 
         let arr = list.as_array().ok_or_else(|| {
-            JobAttachmentsError::AssetSync(
-                "Path mapping rules have to be a list of dict.".into(),
-            )
+            JobAttachmentsError::AssetSync("Path mapping rules have to be a list of dict.".into())
         })?;
 
         for item in arr {
             let source_path_format = item
                 .get("source_path_format")
                 .and_then(|v| v.as_str())
-                .unwrap_or("").to_owned();
+                .unwrap_or("")
+                .to_owned();
             let source_path = item
                 .get("source_path")
                 .and_then(|v| v.as_str())
-                .unwrap_or("").to_owned();
+                .unwrap_or("")
+                .to_owned();
             let destination_path = item
                 .get("destination_path")
                 .and_then(|v| v.as_str())
-                .unwrap_or("").to_owned();
+                .unwrap_or("")
+                .to_owned();
             rules.push(PathMappingRule {
                 source_path_format,
                 source_path,
@@ -159,13 +162,17 @@ pub async fn attachment_download(
             .find(|rule| {
                 let hashed = rule.get_hashed_source_path(manifest.hash_alg);
                 file_name.contains(&hashed)
-            }).map_or_else(|| {
-                let cwd = std::env::current_dir()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned();
-                format!("{cwd}/{file_name}")
-            }, |rule| rule.destination_path.clone());
+            })
+            .map_or_else(
+                || {
+                    let cwd = std::env::current_dir()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned();
+                    format!("{cwd}/{file_name}")
+                },
+                |rule| rule.destination_path.clone(),
+            );
 
         if manifests_by_root.contains_key(&destination) {
             return Err(JobAttachmentsError::AssetSync(format!(
@@ -247,8 +254,7 @@ pub async fn attachment_upload(
         if rule.source_path.is_ascii() {
             metadata.insert("asset-root".to_owned(), rule.source_path.clone());
         } else {
-            let json_encoded =
-                serde_json::to_string(&rule.source_path).unwrap_or_default();
+            let json_encoded = serde_json::to_string(&rule.source_path).unwrap_or_default();
             metadata.insert("asset-root-json".to_owned(), json_encoded.clone());
             metadata.insert("asset-root".to_owned(), json_encoded);
         }
@@ -280,8 +286,7 @@ pub async fn attachment_upload(
 
         let partial_key = if let Some(prefix) = upload_manifest_path {
             let key = format!("{prefix}/{file_name}");
-            let full_key =
-                s3_settings.add_root_and_manifest_folder_prefix(&key)?;
+            let full_key = s3_settings.add_root_and_manifest_folder_prefix(&key)?;
             ctx.upload_bytes_to_s3(
                 &manifest_bytes,
                 &s3_settings.s3_bucket_name,

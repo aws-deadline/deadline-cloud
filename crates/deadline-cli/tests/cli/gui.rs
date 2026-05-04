@@ -73,8 +73,10 @@ async fn bundle_gui_submit_output_case_insensitive() {
 async fn bundle_gui_submit_submitter_info_unknown_field_errors() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&[
-        "bundle", "gui-submit",
-        "--submitter-info", "bogus_field=value",
+        "bundle",
+        "gui-submit",
+        "--submitter-info",
+        "bogus_field=value",
         "/tmp/fake-bundle",
     ]));
 }
@@ -84,8 +86,10 @@ async fn bundle_gui_submit_submitter_info_unknown_field_errors() {
 async fn bundle_gui_submit_submitter_info_missing_name_errors() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&[
-        "bundle", "gui-submit",
-        "--submitter-info", "host_application_name=Maya",
+        "bundle",
+        "gui-submit",
+        "--submitter-info",
+        "host_application_name=Maya",
         "/tmp/fake-bundle",
     ]));
 }
@@ -95,9 +99,12 @@ async fn bundle_gui_submit_submitter_info_missing_name_errors() {
 async fn bundle_gui_submit_submitter_info_key_value_accepted() {
     let harness = TestHarness::new().await;
     let mut cmd = harness.cmd(&[
-        "bundle", "gui-submit",
-        "--submitter-info", "submitter_name=MyApp",
-        "--submitter-info", "host_application_name=Maya",
+        "bundle",
+        "gui-submit",
+        "--submitter-info",
+        "submitter_name=MyApp",
+        "--submitter-info",
+        "host_application_name=Maya",
         "/tmp/fake-bundle",
     ]);
     cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");
@@ -117,8 +124,10 @@ async fn bundle_gui_submit_submitter_info_key_value_accepted() {
 async fn bundle_gui_submit_submitter_info_json_accepted() {
     let harness = TestHarness::new().await;
     let mut cmd = harness.cmd(&[
-        "bundle", "gui-submit",
-        "--submitter-info", r#"{"submitter_name": "MyApp", "host_application_name": "Blender"}"#,
+        "bundle",
+        "gui-submit",
+        "--submitter-info",
+        r#"{"submitter_name": "MyApp", "host_application_name": "Blender"}"#,
         "/tmp/fake-bundle",
     ]);
     cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");
@@ -138,8 +147,10 @@ async fn bundle_gui_submit_submitter_info_json_accepted() {
 async fn bundle_gui_submit_deprecated_submitter_name_warns() {
     let harness = TestHarness::new().await;
     let mut cmd = harness.cmd(&[
-        "bundle", "gui-submit",
-        "--submitter-name", "OldApp",
+        "bundle",
+        "gui-submit",
+        "--submitter-name",
+        "OldApp",
         "/tmp/fake-bundle",
     ]);
     cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");

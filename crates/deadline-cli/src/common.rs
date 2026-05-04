@@ -17,8 +17,9 @@ static RE_BOLD: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\*\*([^*]+)\*\*").expect("valid regex"));
 static RE_BOLD_UNDER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"__([^_]+)__").expect("valid regex"));
-static RE_ITALIC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)(?P<pre>[^*\n])\*(?P<inner>[^*\n]+)\*").expect("valid regex"));
+static RE_ITALIC: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)(?P<pre>[^*\n])\*(?P<inner>[^*\n]+)\*").expect("valid regex")
+});
 static RE_BLANK_LINES: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\n{3,}").expect("valid regex"));
 
@@ -171,13 +172,11 @@ fn fix_multiline_strings(val: &serde_json::Value) -> serde_json::Value {
         serde_json::Value::String(s) if s.contains('\n') && !s.ends_with('\n') => {
             serde_json::Value::String(format!("{s}\n"))
         }
-        serde_json::Value::Object(map) => {
-            serde_json::Value::Object(
-                map.iter()
-                    .map(|(k, v)| (k.clone(), fix_multiline_strings(v)))
-                    .collect(),
-            )
-        }
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), fix_multiline_strings(v)))
+                .collect(),
+        ),
         serde_json::Value::Array(arr) => {
             serde_json::Value::Array(arr.iter().map(fix_multiline_strings).collect())
         }
@@ -197,11 +196,14 @@ static CONTINUE_OPERATION: AtomicBool = AtomicBool::new(true);
 
 /// Install the SIGINT handler. Safe to call multiple times.
 pub(crate) fn install_sigint_handler() {
+    #[allow(
+        unsafe_code,
+        reason = "installing a POSIX signal handler requires unsafe"
+    )]
     // SAFETY: libc::signal replaces the default SIGINT handler with our
     // async-signal-safe handler that only performs an atomic store. The
     // function pointer cast is the standard pattern for libc::signal on
     // all supported POSIX platforms.
-    #[allow(unsafe_code, reason = "installing a POSIX signal handler requires unsafe")]
     unsafe {
         libc::signal(libc::SIGINT, sigint_handler as *const () as usize);
     }
@@ -336,13 +338,14 @@ fn format_timedelta(d: chrono::TimeDelta) -> String {
 /// Expand leading `~` to the user's home directory.
 pub(crate) fn expand_tilde(path: &str) -> std::path::PathBuf {
     if (path.starts_with("~/") || path == "~")
-        && let Ok(home) = std::env::var("HOME") {
-            return std::path::PathBuf::from(home).join(&path[2..]);
-        }
-        #[cfg(windows)]
-        if let Ok(profile) = std::env::var("USERPROFILE") {
-            return std::path::PathBuf::from(profile).join(&path[2..]);
-        }
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return std::path::PathBuf::from(home).join(&path[2..]);
+    }
+    #[cfg(windows)]
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        return std::path::PathBuf::from(profile).join(&path[2..]);
+    }
     std::path::PathBuf::from(path)
 }
 
@@ -414,16 +417,12 @@ mod tests {
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
         assert_eq!(
-            deadline_config::config_file::get_setting(
-                "defaults.aws_profile_name",
-                &config
-            )
-            .unwrap(),
+            deadline_config::config_file::get_setting("defaults.aws_profile_name", &config)
+                .unwrap(),
             "my-profile"
         );
         assert_eq!(
-            deadline_config::config_file::get_setting("defaults.farm_id", &config)
-                .unwrap(),
+            deadline_config::config_file::get_setting("defaults.farm_id", &config).unwrap(),
             "farm-abc"
         );
     }
@@ -435,11 +434,8 @@ mod tests {
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
         // aws_profile_name should still be the default "(default)"
-        let val = deadline_config::config_file::get_setting(
-            "defaults.aws_profile_name",
-            &config,
-        )
-        .unwrap();
+        let val = deadline_config::config_file::get_setting("defaults.aws_profile_name", &config)
+            .unwrap();
         assert_eq!(val, "(default)");
     }
 
@@ -485,11 +481,8 @@ mod tests {
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
-        let val = deadline_config::config_file::get_setting(
-            "settings.auto_accept",
-            &config,
-        )
-        .unwrap();
+        let val =
+            deadline_config::config_file::get_setting("settings.auto_accept", &config).unwrap();
         assert_eq!(val, "true");
     }
 
@@ -502,9 +495,8 @@ mod tests {
             ..Default::default()
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
-        let val = deadline_config::config_file::get_setting(
-            "settings.storage_profile_id", &config,
-        ).unwrap();
+        let val = deadline_config::config_file::get_setting("settings.storage_profile_id", &config)
+            .unwrap();
         assert_eq!(val, "sp-abc");
     }
 
@@ -517,9 +509,9 @@ mod tests {
             ..Default::default()
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
-        let val = deadline_config::config_file::get_setting(
-            "settings.conflict_resolution", &config,
-        ).unwrap();
+        let val =
+            deadline_config::config_file::get_setting("settings.conflict_resolution", &config)
+                .unwrap();
         assert_eq!(val, "CREATE_COPY");
     }
 
@@ -557,7 +549,10 @@ mod tests {
         assert!(result.contains("'OFF'"), "OFF should be quoted: {result}");
         assert!(result.contains("'YES'"), "YES should be quoted: {result}");
         assert!(result.contains("'NO'"), "NO should be quoted: {result}");
-        assert!(!result.contains("'hello'"), "normal string should not be quoted: {result}");
+        assert!(
+            !result.contains("'hello'"),
+            "normal string should not be quoted: {result}"
+        );
     }
 
     #[test]
@@ -566,8 +561,14 @@ mod tests {
             "params": {"multiFrame": {"string": "OFF"}, "other": {"string": "ON"}}
         });
         let result = cli_object_repr(&obj);
-        assert!(result.contains("'OFF'"), "nested OFF should be quoted: {result}");
-        assert!(result.contains("'ON'"), "nested ON should be quoted: {result}");
+        assert!(
+            result.contains("'OFF'"),
+            "nested OFF should be quoted: {result}"
+        );
+        assert!(
+            result.contains("'ON'"),
+            "nested ON should be quoted: {result}"
+        );
     }
 
     // -- TimestampFormat --
@@ -576,8 +577,14 @@ mod tests {
     fn timestamp_utc_formats_as_rfc3339_utc() {
         let ts = DateTime::parse_from_rfc3339("2024-06-15T10:30:00-07:00").unwrap();
         let result = TimestampFormat::Utc.format(&ts);
-        assert!(result.contains("17:30:00"), "should be converted to UTC: {result}");
-        assert!(result.ends_with("+00:00"), "should have UTC offset: {result}");
+        assert!(
+            result.contains("17:30:00"),
+            "should be converted to UTC: {result}"
+        );
+        assert!(
+            result.ends_with("+00:00"),
+            "should have UTC offset: {result}"
+        );
     }
 
     #[test]
@@ -599,12 +606,18 @@ mod tests {
     // Negative timedelta should produce "-H:MM:SS"
     #[test]
     fn format_timedelta_negative_thirty_minutes() {
-        assert_eq!(format_timedelta(chrono::TimeDelta::minutes(-30)), "-0:30:00");
+        assert_eq!(
+            format_timedelta(chrono::TimeDelta::minutes(-30)),
+            "-0:30:00"
+        );
     }
 
     #[test]
     fn format_timedelta_negative_one_hour_fifteen() {
-        assert_eq!(format_timedelta(chrono::TimeDelta::minutes(-75)), "-1:15:00");
+        assert_eq!(
+            format_timedelta(chrono::TimeDelta::minutes(-75)),
+            "-1:15:00"
+        );
     }
 
     // Cases 38-39: In Rust, DateTime<FixedOffset> always has a timezone.
@@ -631,7 +644,9 @@ mod tests {
         assert!(should_continue());
 
         // Send SIGINT to ourselves
-        unsafe { libc::raise(libc::SIGINT); }
+        unsafe {
+            libc::raise(libc::SIGINT);
+        }
 
         assert!(!should_continue());
         // Restore for other tests

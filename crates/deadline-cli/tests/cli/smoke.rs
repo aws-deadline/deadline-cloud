@@ -13,7 +13,10 @@ async fn harness_starts_and_cli_binary_runs() {
     // 2. TestHarness creates an isolated config directory
     // 3. assert_cmd finds and runs the compiled `deadline` binary
     // 4. Environment variables are correctly injected
-    let output = harness.cli(&["--help"]).output().expect("failed to run CLI binary");
+    let output = harness
+        .cli(&["--help"])
+        .output()
+        .expect("failed to run CLI binary");
 
     // The binary ran — that's all we need to verify for now.
     // It may exit 0 (if --help works) or non-zero (if not implemented yet).

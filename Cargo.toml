@@ -106,3 +106,7 @@ allow_attributes_without_reason = "warn"
 redundant_clone = "warn"
 debug_assert_with_mut_call = "warn"
 unused_peekable = "warn"
+
+[profile.release]
+lto = "thin"    # Cross-crate link-time optimization — smaller + faster binary
+strip = true    # Remove debug symbols from release binary

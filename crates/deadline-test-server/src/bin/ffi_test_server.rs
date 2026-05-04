@@ -5,8 +5,8 @@
 //!
 //! Usage: cargo run --bin ffi-test-server
 
-use deadline_test_server::deadline_api::{farms, queues, queue_resources, sts};
 use deadline_test_server::TestHarness;
+use deadline_test_server::deadline_api::{farms, queue_resources, queues, sts};
 use serde_json::json;
 
 #[tokio::main]
@@ -89,8 +89,13 @@ async fn main() {
         "endpoint": format!("http://localhost:{port}"),
         "config_path": harness.config_path,
     });
-    #[allow(clippy::print_stdout, reason = "test binary outputs server info for harness to read")]
-    { println!("{info}"); }
+    #[allow(
+        clippy::print_stdout,
+        reason = "test binary outputs server info for harness to read"
+    )]
+    {
+        println!("{info}");
+    }
 
     // Wait for termination
     tokio::signal::ctrl_c().await.ok();

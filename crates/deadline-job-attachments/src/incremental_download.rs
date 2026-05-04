@@ -11,10 +11,10 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tempfile::NamedTempFile;
 
-use crate::asset_manifests::{hash_data, AssetManifest, HashAlgorithm, ManifestPath};
+use crate::asset_manifests::{AssetManifest, HashAlgorithm, ManifestPath, hash_data};
 use crate::errors::JobAttachmentsError;
 use crate::path_mapping::PathMappingRuleApplier;
 
@@ -146,9 +146,9 @@ pub fn add_output_manifests_from_s3(
         Some(a) if !a.is_null() => a,
         _ => return Ok(()),
     };
-    let job_manifests = attachments["manifests"]
-        .as_array()
-        .ok_or_else(|| JobAttachmentsError::AssetSync("Job attachments missing manifests".into()))?;
+    let job_manifests = attachments["manifests"].as_array().ok_or_else(|| {
+        JobAttachmentsError::AssetSync("Job attachments missing manifests".into())
+    })?;
     let job_manifests_len = job_manifests.len();
 
     // Filter to actions that lack a "manifests" field
@@ -164,8 +164,7 @@ pub fn add_output_manifests_from_s3(
 
     // Initialize empty manifests arrays on actions that need them
     for &idx in &needs_manifests {
-        session_action_list[idx]["manifests"] =
-            Value::Array(vec![json!({}); job_manifests_len]);
+        session_action_list[idx]["manifests"] = Value::Array(vec![json!({}); job_manifests_len]);
     }
 
     // Build index of root path hashes → manifest position
@@ -173,7 +172,8 @@ pub fn add_output_manifests_from_s3(
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            let loc_name = m.get("fileSystemLocationName")
+            let loc_name = m
+                .get("fileSystemLocationName")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             let root_path = m["rootPath"].as_str().unwrap_or("");
@@ -203,8 +203,14 @@ pub fn add_output_manifests_from_s3(
         .collect();
 
     let re = session_action_id_regex();
-    let job_name = job.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let job_id = job.get("jobId").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let job_name = job
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let job_id = job
+        .get("jobId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
 
     for key in manifest_keys {
         // Extract session action ID from key
@@ -234,9 +240,10 @@ pub fn add_output_manifests_from_s3(
         // If this session action is in our list, set the manifest path
         if let Some(&sa_idx) = sa_by_id.get(&sa_id)
             && let Some(arr) = session_action_list[sa_idx]["manifests"].as_array_mut()
-                && manifest_index < arr.len() {
-                    arr[manifest_index] = json!({"outputManifestPath": key});
-                }
+            && manifest_index < arr.len()
+        {
+            arr[manifest_index] = json!({"outputManifestPath": key});
+        }
     }
 
     Ok(())
@@ -339,11 +346,7 @@ mod tests {
     fn job_construct_with_all_fields() {
         let ts = utc(2024, 6, 15, 10, 30, 0);
         let indexes = HashMap::from([("session-1".to_owned(), 5i64)]);
-        let job = IncrementalDownloadJob::new(
-            sample_job_dict(),
-            Some(ts),
-            Some(indexes.clone()),
-        );
+        let job = IncrementalDownloadJob::new(sample_job_dict(), Some(ts), Some(indexes.clone()));
         assert_eq!(job.session_ended_timestamp, Some(ts));
         assert_eq!(job.session_completed_indexes, indexes);
     }
@@ -364,11 +367,7 @@ mod tests {
     fn job_round_trip_serde() {
         let ts = utc(2024, 6, 15, 10, 30, 0);
         let indexes = HashMap::from([("session-1".to_owned(), 5i64)]);
-        let original = IncrementalDownloadJob::new(
-            sample_job_dict(),
-            Some(ts),
-            Some(indexes),
-        );
+        let original = IncrementalDownloadJob::new(sample_job_dict(), Some(ts), Some(indexes));
         let json = serde_json::to_string(&original).unwrap();
         let restored: IncrementalDownloadJob = serde_json::from_str(&json).unwrap();
         assert_eq!(original, restored);
@@ -422,16 +421,13 @@ mod tests {
     #[test]
     fn state_construct_required_fields_only() {
         let ts = utc(2024, 6, 15, 10, 0, 0);
-        let state = IncrementalDownloadState::new(
-            Some("sp-123".to_owned()),
-            ts,
-            None,
-            None,
-            None,
-        );
+        let state = IncrementalDownloadState::new(Some("sp-123".to_owned()), ts, None, None, None);
         assert_eq!(state.downloads_completed_timestamp, ts);
         assert!(state.jobs.is_empty());
-        assert_eq!(state.eventual_consistency_max_seconds, EVENTUAL_CONSISTENCY_MAX_SECONDS);
+        assert_eq!(
+            state.eventual_consistency_max_seconds,
+            EVENTUAL_CONSISTENCY_MAX_SECONDS
+        );
     }
 
     #[test]
@@ -497,7 +493,8 @@ mod tests {
         let started = utc(2024, 6, 15, 10, 0, 0);
         let job1 = IncrementalDownloadJob::new(
             json!({"jobId": "job-1", "name": "Job 1", "taskRunStatusCounts": {"SUCCEEDED": 1}}),
-            None, None,
+            None,
+            None,
         );
         let job2 = IncrementalDownloadJob::new(
             json!({"jobId": "job-2", "name": "Job 2", "taskRunStatusCounts": {"SUCCEEDED": 2}}),
@@ -546,12 +543,13 @@ mod tests {
     #[test]
     fn state_save_creates_parent_directories() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("nested").join("dir").join("checkpoint.json");
-        let state = IncrementalDownloadState::new(
-            None,
-            utc(2024, 6, 15, 10, 0, 0),
-            None, None, None,
-        );
+        let path = tmp
+            .path()
+            .join("nested")
+            .join("dir")
+            .join("checkpoint.json");
+        let state =
+            IncrementalDownloadState::new(None, utc(2024, 6, 15, 10, 0, 0), None, None, None);
         state.save_file(&path).unwrap();
         assert!(path.exists());
     }
@@ -564,14 +562,18 @@ mod tests {
         let state1 = IncrementalDownloadState::new(
             Some("sp-1".to_owned()),
             utc(2024, 6, 15, 10, 0, 0),
-            None, None, None,
+            None,
+            None,
+            None,
         );
         state1.save_file(&path).unwrap();
 
         let state2 = IncrementalDownloadState::new(
             Some("sp-2".to_owned()),
             utc(2024, 6, 16, 10, 0, 0),
-            None, None, None,
+            None,
+            None,
+            None,
         );
         state2.save_file(&path).unwrap();
 
@@ -628,17 +630,13 @@ mod tests {
     fn add_manifests_matches_keys_to_session_actions() {
         // session actions lacking manifests get populated
         let job = sample_job_with_attachments();
-        let root_path_hash = hash_data(
-            "/mnt/shared".as_bytes(),
-            HashAlgorithm::Xxh128,
-        );
-        let keys = vec![
-            format!("prefix/Manifests/sessionaction-abc-0/{root_path_hash}/manifest.json"),
-        ];
-        let mut actions = vec![
-            sample_session_action("sessionaction-abc-0", false),
-        ];
-        let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        let root_path_hash = hash_data("/mnt/shared".as_bytes(), HashAlgorithm::Xxh128);
+        let keys = vec![format!(
+            "prefix/Manifests/sessionaction-abc-0/{root_path_hash}/manifest.json"
+        )];
+        let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
         add_output_manifests_from_s3("farm-1", &queue, &job, &keys, &mut actions).unwrap();
         assert!(actions[0].get("manifests").is_some());
     }
@@ -647,13 +645,16 @@ mod tests {
     fn add_manifests_skips_actions_with_existing_manifests() {
         // session action already has manifests → skipped
         let job = sample_job_with_attachments();
-        let mut actions = vec![
-            sample_session_action("sessionaction-abc-0", true),
-        ];
-        let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        let mut actions = vec![sample_session_action("sessionaction-abc-0", true)];
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
         add_output_manifests_from_s3("farm-1", &queue, &job, &[], &mut actions).unwrap();
         // manifests field unchanged
-        assert!(actions[0]["manifests"][0].get("outputManifestPath").is_some());
+        assert!(
+            actions[0]["manifests"][0]
+                .get("outputManifestPath")
+                .is_some()
+        );
     }
 
     #[test]
@@ -661,7 +662,8 @@ mod tests {
         // job has no attachments
         let job = json!({"jobId": "job-1", "name": "No Attachments"});
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
-        let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
         add_output_manifests_from_s3("farm-1", &queue, &job, &[], &mut actions).unwrap();
         assert!(actions[0].get("manifests").is_none());
     }
@@ -674,7 +676,8 @@ mod tests {
             sample_session_action("sessionaction-abc-0", true),
             sample_session_action("sessionaction-abc-1", true),
         ];
-        let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
         add_output_manifests_from_s3("farm-1", &queue, &job, &[], &mut actions).unwrap();
     }
 
@@ -684,8 +687,10 @@ mod tests {
         let job = sample_job_with_attachments();
         let keys = vec!["prefix/Manifests/no-session-action-id/hash/manifest.json".to_owned()];
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
-        let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
-        let err = add_output_manifests_from_s3("farm-1", &queue, &job, &keys, &mut actions).unwrap_err();
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        let err =
+            add_output_manifests_from_s3("farm-1", &queue, &job, &keys, &mut actions).unwrap_err();
         assert!(err.to_string().contains("session action id"), "got: {err}");
     }
 
@@ -693,12 +698,12 @@ mod tests {
     fn add_manifests_key_no_matching_root_hash_returns_error() {
         // key doesn't contain any root path hash
         let job = sample_job_with_attachments();
-        let keys = vec![
-            "prefix/Manifests/sessionaction-abc-0/wronghash/manifest.json".to_owned(),
-        ];
+        let keys = vec!["prefix/Manifests/sessionaction-abc-0/wronghash/manifest.json".to_owned()];
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
-        let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
-        let err = add_output_manifests_from_s3("farm-1", &queue, &job, &keys, &mut actions).unwrap_err();
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        let err =
+            add_output_manifests_from_s3("farm-1", &queue, &job, &keys, &mut actions).unwrap_err();
         assert!(err.to_string().contains("root"), "got: {err}");
     }
 
@@ -707,7 +712,8 @@ mod tests {
         // no manifests found in S3
         let job = sample_job_with_attachments();
         let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
-        let queue = json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
         add_output_manifests_from_s3("farm-1", &queue, &job, &[], &mut actions).unwrap();
         // No manifests field added since no keys to process
         assert!(actions[0].get("manifests").is_none());
@@ -722,13 +728,17 @@ mod tests {
             HashAlgorithm::Xxh128,
             crate::asset_manifests::ManifestVersion::V2023_03_03,
             paths.iter().map(|(_, _, s)| *s).sum(),
-            paths.iter().map(|(p, h, s)| ManifestPath {
-                path: p.to_string(),
-                hash: h.to_string(),
-                size: *s,
-                mtime: 1_000_000,
-            }).collect(),
-        ).unwrap()
+            paths
+                .iter()
+                .map(|(p, h, s)| ManifestPath {
+                    path: p.to_string(),
+                    hash: h.to_string(),
+                    size: *s,
+                    mtime: 1_000_000,
+                })
+                .collect(),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -736,9 +746,8 @@ mod tests {
         // paths made absolute by joining with root path
         let mut manifest = make_manifest(vec![("subdir/file.txt", "aaa", 100)]);
         let mut unmapped = vec![];
-        make_manifest_paths_absolute(
-            "/mnt/shared", &mut manifest, None, None, &mut unmapped,
-        ).unwrap();
+        make_manifest_paths_absolute("/mnt/shared", &mut manifest, None, None, &mut unmapped)
+            .unwrap();
         assert_eq!(manifest.paths[0].path, "/mnt/shared/subdir/file.txt");
         assert!(unmapped.is_empty());
     }
@@ -747,18 +756,22 @@ mod tests {
     fn absolute_paths_with_path_mapping() {
         // path mapping applied after absolutization
         use crate::models::PathMappingRule;
-        let applier = PathMappingRuleApplier::new(vec![
-            PathMappingRule {
-                source_path_format: "posix".to_owned(),
-                source_path: "/mnt/shared".to_owned(),
-                destination_path: "/local/mapped".to_owned(),
-            },
-        ]).unwrap();
+        let applier = PathMappingRuleApplier::new(vec![PathMappingRule {
+            source_path_format: "posix".to_owned(),
+            source_path: "/mnt/shared".to_owned(),
+            destination_path: "/local/mapped".to_owned(),
+        }])
+        .unwrap();
         let mut manifest = make_manifest(vec![("subdir/file.txt", "aaa", 100)]);
         let mut unmapped = vec![];
         make_manifest_paths_absolute(
-            "/mnt/shared", &mut manifest, Some(&applier), Some("posix"), &mut unmapped,
-        ).unwrap();
+            "/mnt/shared",
+            &mut manifest,
+            Some(&applier),
+            Some("posix"),
+            &mut unmapped,
+        )
+        .unwrap();
         assert_eq!(manifest.paths[0].path, "/local/mapped/subdir/file.txt");
         assert!(unmapped.is_empty());
     }
@@ -768,9 +781,7 @@ mod tests {
         // no path mapping → join with root using host OS
         let mut manifest = make_manifest(vec![("a/b.txt", "aaa", 50)]);
         let mut unmapped = vec![];
-        make_manifest_paths_absolute(
-            "/root", &mut manifest, None, None, &mut unmapped,
-        ).unwrap();
+        make_manifest_paths_absolute("/root", &mut manifest, None, None, &mut unmapped).unwrap();
         assert!(manifest.paths[0].path.starts_with("/root/"));
     }
 
@@ -778,18 +789,22 @@ mod tests {
     fn absolute_paths_windows_source_format() {
         // Windows source paths joined with Windows conventions
         use crate::models::PathMappingRule;
-        let applier = PathMappingRuleApplier::new(vec![
-            PathMappingRule {
-                source_path_format: "windows".to_owned(),
-                source_path: "C:\\shared".to_owned(),
-                destination_path: "/local/mapped".to_owned(),
-            },
-        ]).unwrap();
+        let applier = PathMappingRuleApplier::new(vec![PathMappingRule {
+            source_path_format: "windows".to_owned(),
+            source_path: "C:\\shared".to_owned(),
+            destination_path: "/local/mapped".to_owned(),
+        }])
+        .unwrap();
         let mut manifest = make_manifest(vec![("subdir\\file.txt", "aaa", 100)]);
         let mut unmapped = vec![];
         make_manifest_paths_absolute(
-            "C:\\shared", &mut manifest, Some(&applier), Some("windows"), &mut unmapped,
-        ).unwrap();
+            "C:\\shared",
+            &mut manifest,
+            Some(&applier),
+            Some("windows"),
+            &mut unmapped,
+        )
+        .unwrap();
         assert_eq!(manifest.paths[0].path, "/local/mapped/subdir/file.txt");
     }
 
@@ -797,13 +812,12 @@ mod tests {
     fn absolute_paths_unmapped_paths_excluded() {
         // paths that fail mapping are excluded and recorded
         use crate::models::PathMappingRule;
-        let applier = PathMappingRuleApplier::new(vec![
-            PathMappingRule {
-                source_path_format: "posix".to_owned(),
-                source_path: "/mnt/shared".to_owned(),
-                destination_path: "/local/mapped".to_owned(),
-            },
-        ]).unwrap();
+        let applier = PathMappingRuleApplier::new(vec![PathMappingRule {
+            source_path_format: "posix".to_owned(),
+            source_path: "/mnt/shared".to_owned(),
+            destination_path: "/local/mapped".to_owned(),
+        }])
+        .unwrap();
         let _manifest = make_manifest(vec![
             ("subdir/file.txt", "aaa", 100),
             ("other/file.txt", "bbb", 200),
@@ -813,8 +827,13 @@ mod tests {
         let mut manifest2 = make_manifest(vec![("file.txt", "bbb", 200)]);
         let mut unmapped = vec![];
         make_manifest_paths_absolute(
-            "/mnt/other", &mut manifest2, Some(&applier), Some("posix"), &mut unmapped,
-        ).unwrap();
+            "/mnt/other",
+            &mut manifest2,
+            Some(&applier),
+            Some("posix"),
+            &mut unmapped,
+        )
+        .unwrap();
         assert!(manifest2.paths.is_empty());
         assert_eq!(unmapped.len(), 1);
         assert!(unmapped[0].contains("/mnt/other"));
@@ -883,5 +902,4 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].hash, "late_hash"); // later timestamp wins even if provided first
     }
-
 }

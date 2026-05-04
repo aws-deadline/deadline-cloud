@@ -141,24 +141,33 @@ fn divide_numbered_path_group(group: &mut Vec<NumberedPath>) -> BTreeMap<String,
         }
 
         // The largest minimum padding is likely the right padding for the group
-        let padding = group.iter().map(|np| np.padding_min).max().expect("group is non-empty");
+        let padding = group
+            .iter()
+            .map(|np| np.padding_min)
+            .max()
+            .expect("group is non-empty");
         let pattern = if padding > 1 {
             format!("%0{padding}d")
         } else {
             "%d".to_owned()
         };
 
-        let (consistent, remaining): (Vec<_>, Vec<_>) = group
-            .drain(..)
-            .partition(|np| np.padding_max >= padding);
+        let (consistent, remaining): (Vec<_>, Vec<_>) =
+            group.drain(..).partition(|np| np.padding_max >= padding);
 
         if !consistent.is_empty() {
             let parts = consistent[0].parts.as_ref().expect("value set above");
-            let pattern_path = format!("{}{}{}", parts.0, pattern, if parts.2.is_empty() { String::new() } else { format!(".{}", parts.2) });
-            let numbers: BTreeSet<i64> = consistent
-                .iter()
-                .filter_map(|np| np.number)
-                .collect();
+            let pattern_path = format!(
+                "{}{}{}",
+                parts.0,
+                pattern,
+                if parts.2.is_empty() {
+                    String::new()
+                } else {
+                    format!(".{}", parts.2)
+                }
+            );
+            let numbers: BTreeSet<i64> = consistent.iter().filter_map(|np| np.number).collect();
             result.insert(pattern_path, numbers);
         }
 
@@ -260,22 +269,38 @@ pub fn summarize_path_list(
     let mut file_sizes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     for path in paths {
         let p = std::path::Path::new(path);
-        let dir = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
-        let name = p.file_name().map_or_else(|| path.to_string(), |n| n.to_string_lossy().to_string());
+        let dir = p
+            .parent()
+            .map(|d| d.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let name = p
+            .file_name()
+            .map_or_else(|| path.to_string(), |n| n.to_string_lossy().to_string());
         by_dir.entry(dir.clone()).or_default().push(name.clone());
         if let Some(sizes) = total_size_by_path
-            && let Some(&size) = sizes.get(*path) {
-                *dir_sizes.entry(dir.clone()).or_default() += size;
-                file_sizes.insert(format!("{dir}/{name}"), size);
-            }
+            && let Some(&size) = sizes.get(*path)
+        {
+            *dir_sizes.entry(dir.clone()).or_default() += size;
+            file_sizes.insert(format!("{dir}/{name}"), size);
+        }
     }
 
     // Sort directories: by size descending if sizes provided, otherwise by file count descending
     let mut dir_order: Vec<String> = by_dir.keys().cloned().collect();
     if total_size_by_path.is_some() {
-        dir_order.sort_by(|a, b| dir_sizes.get(b).unwrap_or(&0).cmp(dir_sizes.get(a).unwrap_or(&0)));
+        dir_order.sort_by(|a, b| {
+            dir_sizes
+                .get(b)
+                .unwrap_or(&0)
+                .cmp(dir_sizes.get(a).unwrap_or(&0))
+        });
     } else {
-        dir_order.sort_by(|a, b| by_dir.get(b).map_or(0, Vec::len).cmp(&by_dir.get(a).map_or(0, Vec::len)));
+        dir_order.sort_by(|a, b| {
+            by_dir
+                .get(b)
+                .map_or(0, Vec::len)
+                .cmp(&by_dir.get(a).map_or(0, Vec::len))
+        });
     }
 
     let mut lines = Vec::new();
@@ -297,12 +322,18 @@ pub fn summarize_path_list(
         };
 
         if summaries.len() == 1 && summaries[0].index_set.is_empty() && total == 1 {
-            lines.push(format!("{dir_display}/{} (1 file{size_suffix})\n", files[0]));
+            lines.push(format!(
+                "{dir_display}/{} (1 file{size_suffix})\n",
+                files[0]
+            ));
         } else {
-            lines.push(format!("{dir_display}/ ({total} {file_word}{size_suffix}):\n"));
+            lines.push(format!(
+                "{dir_display}/ ({total} {file_word}{size_suffix}):\n"
+            ));
             let show = summaries.len().min(max_entries.saturating_sub(lines.len()));
             for summary in &summaries[..show] {
-                let child_size = file_sizes.get(&format!("{dir}/{}", summary.path))
+                let child_size = file_sizes
+                    .get(&format!("{dir}/{}", summary.path))
                     .map(|&s| format!(", {}", human_readable_file_size(s)))
                     .unwrap_or_default();
                 if summary.index_set.is_empty() {
@@ -311,12 +342,18 @@ pub fn summarize_path_list(
                     let seq = int_set_to_range_expr(&summary.index_set);
                     let count = summary.file_count;
                     let fw = if count == 1 { "file" } else { "files" };
-                    lines.push(format!("  {} ({count} {fw}, sequence {seq})\n", summary.path));
+                    lines.push(format!(
+                        "  {} ({count} {fw}, sequence {seq})\n",
+                        summary.path
+                    ));
                 }
             }
             if summaries.len() > show {
                 let remaining: usize = summaries[show..].iter().map(|s| s.file_count).sum();
-                lines.push(format!("  ... and {} more ({remaining} files)\n", summaries.len() - show));
+                lines.push(format!(
+                    "  ... and {} more ({remaining} files)\n",
+                    summaries.len() - show
+                ));
             }
         }
 
@@ -419,11 +456,7 @@ mod tests {
 
     #[test]
     fn zero_padded_sequence_reflects_padding() {
-        let paths = vec![
-            "frame_001.png",
-            "frame_002.png",
-            "frame_010.png",
-        ];
+        let paths = vec!["frame_001.png", "frame_002.png", "frame_010.png"];
         let result = summarize_paths_by_sequence(&paths);
         assert_eq!(result.len(), 1);
         // The pattern should use %03d padding
@@ -436,11 +469,7 @@ mod tests {
 
     #[test]
     fn variable_width_number_sequence() {
-        let paths = vec![
-            "sequence_v1",
-            "sequence_v2",
-            "sequence_v907",
-        ];
+        let paths = vec!["sequence_v1", "sequence_v2", "sequence_v907"];
         let result = summarize_paths_by_sequence(&paths);
         assert_eq!(result.len(), 1);
         // Non-padded numbers use %d

@@ -1,7 +1,7 @@
 use clap::Subcommand;
-use deadline_api::{api, client, job_monitoring, log_retrieval, session};
 use deadline_api::log_retrieval::SessionAutoSelect;
 use deadline_api::responses::{self, JobResponse};
+use deadline_api::{api, client, job_monitoring, log_retrieval, session};
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
 use regex::Regex;
@@ -27,11 +27,15 @@ fn parse_session_action_id(session_action_id: &str) -> Result<String, CliError> 
 fn parse_trace_format(s: &str) -> Result<String, String> {
     match s.to_lowercase().as_str() {
         "chrome" => Ok("chrome".to_owned()),
-        other => Err(format!("Invalid value '{other}' for --trace-format. Valid values: chrome")),
+        other => Err(format!(
+            "Invalid value '{other}' for --trace-format. Valid values: chrome"
+        )),
     }
 }
 
-fn parse_conflict_resolution(s: &str) -> Result<deadline_job_attachments::models::FileConflictResolution, String> {
+fn parse_conflict_resolution(
+    s: &str,
+) -> Result<deadline_job_attachments::models::FileConflictResolution, String> {
     s.parse()
 }
 
@@ -45,11 +49,17 @@ fn setup_config(
     yes: bool,
     required: &[&str],
 ) -> Result<IniConfig, CliError> {
-    let mut config = config_file::read_config()
-        .map_err(|e| CliError::Operation(e.to_string()))?;
+    let mut config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
-        &crate::common::CliOptions { profile, farm_id, queue_id, job_id, yes, ..Default::default() },
+        &crate::common::CliOptions {
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+            yes,
+            ..Default::default()
+        },
         required,
     )?;
     Ok(config)
@@ -63,9 +73,12 @@ fn get(config: &IniConfig, setting: &str) -> String {
 pub(crate) enum JobAction {
     /// List jobs in a queue
     List {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
         #[arg(long, default_value = "5")]
         page_size: i32,
         #[arg(long, default_value = "0")]
@@ -76,18 +89,26 @@ pub(crate) enum JobAction {
         /// A job ID (job-xxx) or search string to find matching jobs
         #[arg()]
         search_term: Option<String>,
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
     },
 
     /// Wait for a job to complete
     Wait {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
         #[arg(long, default_value = "120")]
         max_poll_interval: u64,
         #[arg(long, default_value = "0")]
@@ -97,17 +118,26 @@ pub(crate) enum JobAction {
     },
     /// Print session logs from `CloudWatch` for a job
     Logs {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
-        #[arg(long)] session_id: Option<String>,
-        #[arg(long)] session_action_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long)]
+        session_action_id: Option<String>,
         #[arg(long, default_value = "100")]
         limit: i32,
-        #[arg(long)] start_time: Option<String>,
-        #[arg(long)] end_time: Option<String>,
-        #[arg(long)] next_token: Option<String>,
+        #[arg(long)]
+        start_time: Option<String>,
+        #[arg(long)]
+        end_time: Option<String>,
+        #[arg(long)]
+        next_token: Option<String>,
         #[arg(long, default_value = "verbose")]
         output: String,
         #[arg(long)]
@@ -118,10 +148,14 @@ pub(crate) enum JobAction {
     },
     /// Cancel a job, optionally marking it with an alternative status
     Cancel {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
         #[arg(long, default_value = "CANCELED")]
         mark_as: String,
         #[arg(long)]
@@ -129,10 +163,14 @@ pub(crate) enum JobAction {
     },
     /// Requeue tasks of a job
     RequeueTasks {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
         #[arg(long)]
         run_status: Vec<String>,
         #[arg(long)]
@@ -141,10 +179,14 @@ pub(crate) enum JobAction {
 
     /// EXPERIMENTAL - Generate statistics from a job with a trace
     TraceSchedule {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
         /// Output verbose trace details
         #[arg(short, long)]
         verbose: bool,
@@ -157,12 +199,18 @@ pub(crate) enum JobAction {
     },
     /// Download the output of a job saved as job attachments
     DownloadOutput {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] job_id: Option<String>,
-        #[arg(long)] step_id: Option<String>,
-        #[arg(long)] task_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        step_id: Option<String>,
+        #[arg(long)]
+        task_id: Option<String>,
         #[arg(long, value_parser = parse_conflict_resolution)]
         conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
         /// Ignore storage profile configuration. Downloads to unmapped paths.
@@ -183,46 +231,175 @@ pub(crate) fn run(action: JobAction) -> Result<(), CliError> {
 
 async fn run_async(action: JobAction) -> Result<(), CliError> {
     match action {
-        JobAction::List { profile, farm_id, queue_id, page_size, item_offset } => {
-            run_list(profile, farm_id, queue_id, page_size, item_offset).await
+        JobAction::List {
+            profile,
+            farm_id,
+            queue_id,
+            page_size,
+            item_offset,
+        } => run_list(profile, farm_id, queue_id, page_size, item_offset).await,
+        JobAction::Get {
+            search_term,
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+        } => run_get(search_term, profile, farm_id, queue_id, job_id).await,
+        JobAction::Wait {
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+            max_poll_interval,
+            timeout,
+            output,
+        } => {
+            run_wait(
+                profile,
+                farm_id,
+                queue_id,
+                job_id,
+                max_poll_interval,
+                timeout,
+                output,
+            )
+            .await
         }
-        JobAction::Get { search_term, profile, farm_id, queue_id, job_id } => {
-            run_get(search_term, profile, farm_id, queue_id, job_id).await
+        JobAction::Logs {
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+            session_id,
+            session_action_id,
+            limit,
+            start_time,
+            end_time,
+            next_token,
+            output,
+            timestamp_format,
+            timezone,
+        } => {
+            run_logs(
+                profile,
+                farm_id,
+                queue_id,
+                job_id,
+                session_id,
+                session_action_id,
+                limit,
+                start_time,
+                end_time,
+                next_token,
+                output,
+                timestamp_format,
+                timezone,
+            )
+            .await
         }
-        JobAction::Wait { profile, farm_id, queue_id, job_id, max_poll_interval, timeout, output } => {
-            run_wait(profile, farm_id, queue_id, job_id, max_poll_interval, timeout, output).await
+        JobAction::Cancel {
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+            mark_as,
+            yes,
+        } => run_cancel(profile, farm_id, queue_id, job_id, mark_as, yes).await,
+        JobAction::RequeueTasks {
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+            run_status,
+            yes,
+        } => run_requeue_tasks(profile, farm_id, queue_id, job_id, run_status, yes).await,
+        JobAction::TraceSchedule {
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+            verbose,
+            trace_format,
+            trace_file,
+        } => {
+            run_trace_schedule(
+                profile,
+                farm_id,
+                queue_id,
+                job_id,
+                verbose,
+                trace_format,
+                trace_file,
+            )
+            .await
         }
-        JobAction::Logs { profile, farm_id, queue_id, job_id, session_id, session_action_id, limit, start_time, end_time, next_token, output, timestamp_format, timezone } => {
-            run_logs(profile, farm_id, queue_id, job_id, session_id, session_action_id, limit, start_time, end_time, next_token, output, timestamp_format, timezone).await
-        }
-        JobAction::Cancel { profile, farm_id, queue_id, job_id, mark_as, yes } => {
-            run_cancel(profile, farm_id, queue_id, job_id, mark_as, yes).await
-        }
-        JobAction::RequeueTasks { profile, farm_id, queue_id, job_id, run_status, yes } => {
-            run_requeue_tasks(profile, farm_id, queue_id, job_id, run_status, yes).await
-        }
-        JobAction::TraceSchedule { profile, farm_id, queue_id, job_id, verbose, trace_format, trace_file } => {
-            run_trace_schedule(profile, farm_id, queue_id, job_id, verbose, trace_format, trace_file).await
-        }
-        JobAction::DownloadOutput { profile, farm_id, queue_id, job_id, step_id, task_id, conflict_resolution, ignore_storage_profiles: _, yes, output } => {
-            run_download_output(profile, farm_id, queue_id, job_id, step_id, task_id, conflict_resolution, yes, output).await
+        JobAction::DownloadOutput {
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+            step_id,
+            task_id,
+            conflict_resolution,
+            ignore_storage_profiles: _,
+            yes,
+            output,
+        } => {
+            run_download_output(
+                profile,
+                farm_id,
+                queue_id,
+                job_id,
+                step_id,
+                task_id,
+                conflict_resolution,
+                yes,
+                output,
+            )
+            .await
         }
     }
 }
 
 async fn run_list(
-    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
-    page_size: i32, item_offset: i32,
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    page_size: i32,
+    item_offset: i32,
 ) -> Result<(), CliError> {
-    let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
+    let config = setup_config(
+        profile,
+        farm_id,
+        queue_id,
+        None,
+        false,
+        &["farm_id", "queue_id"],
+    )?;
     let farm = get(&config, "defaults.farm_id");
     let queue = get(&config, "defaults.queue_id");
-    let resp = match search_jobs_call(&farm, &[&queue], item_offset, page_size, None, None, Some(&config)).await {
+    let resp = match search_jobs_call(
+        &farm,
+        &[&queue],
+        item_offset,
+        page_size,
+        None,
+        None,
+        Some(&config),
+    )
+    .await
+    {
         Ok(r) => r,
         Err(e) => {
             let suggestion = suggest_resources_on_client_error(
-                &e.to_string(), "SearchJobs", Some(&farm), Some(&queue), None, Some(&config),
-            ).await;
+                &e.to_string(),
+                "SearchJobs",
+                Some(&farm),
+                Some(&queue),
+                None,
+                Some(&config),
+            )
+            .await;
             return Err(CliError::Operation(format!(
                 "Failed to get Jobs from Deadline:\n{e}{suggestion}"
             )));
@@ -233,32 +410,53 @@ async fn run_list(
 }
 
 async fn run_get(
-    search_term: Option<String>, profile: Option<String>,
-    farm_id: Option<String>, queue_id: Option<String>, job_id: Option<String>,
+    search_term: Option<String>,
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
 ) -> Result<(), CliError> {
     // If --job-id is provided, it takes precedence over search_term
     let mut effective_job_id = job_id;
     let mut search = None;
 
     if let Some(ref term) = search_term
-        && effective_job_id.is_none() {
-            // Check if search_term is a job ID pattern
-            if Regex::new(r"^job-[0-9a-f]{32}$").expect("valid regex").is_match(term) {
-                effective_job_id = Some(term.clone());
-            } else {
-                search = Some(term.clone());
-            }
+        && effective_job_id.is_none()
+    {
+        // Check if search_term is a job ID pattern
+        if Regex::new(r"^job-[0-9a-f]{32}$")
+            .expect("valid regex")
+            .is_match(term)
+        {
+            effective_job_id = Some(term.clone());
+        } else {
+            search = Some(term.clone());
         }
+    }
 
     if let Some(search_term) = search {
         // Search mode
-        let config = setup_config(profile, farm_id, queue_id, None, false, &["farm_id", "queue_id"])?;
+        let config = setup_config(
+            profile,
+            farm_id,
+            queue_id,
+            None,
+            false,
+            &["farm_id", "queue_id"],
+        )?;
         let farm = get(&config, "defaults.farm_id");
         let queue = get(&config, "defaults.queue_id");
         resolve_job_search(&farm, &queue, &search_term, &config).await
     } else {
         // Direct get mode
-        let config = setup_config(profile, farm_id, queue_id, effective_job_id, false, &["farm_id", "queue_id", "job_id"])?;
+        let config = setup_config(
+            profile,
+            farm_id,
+            queue_id,
+            effective_job_id,
+            false,
+            &["farm_id", "queue_id", "job_id"],
+        )?;
         let farm = get(&config, "defaults.farm_id");
         let queue = get(&config, "defaults.queue_id");
         let job = get(&config, "defaults.job_id");
@@ -267,20 +465,42 @@ async fn run_get(
 }
 
 async fn run_wait(
-    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
-    job_id: Option<String>, max_poll_interval: u64, timeout: u64, output: String,
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    max_poll_interval: u64,
+    timeout: u64,
+    output: String,
 ) -> Result<(), CliError> {
     type JobCb = Box<dyn Fn(&aws_sdk_deadline::operation::get_job::GetJobOutput, f64, u64)>;
-    let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+    let config = setup_config(
+        profile,
+        farm_id,
+        queue_id,
+        job_id,
+        false,
+        &["farm_id", "queue_id", "job_id"],
+    )?;
     let farm = get(&config, "defaults.farm_id");
     let queue = get(&config, "defaults.queue_id");
     let job = get(&config, "defaults.job_id");
     let is_json = output.eq_ignore_ascii_case("json");
 
-    let job_resp = session::deadline_client(Some(&config)).await
-        .get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
-        .send().await
-        .map_err(|e| CliError::Operation(format!("Error waiting for job completion: {}", client::format_sdk_error(&e))))?;
+    let job_resp = session::deadline_client(Some(&config))
+        .await
+        .get_job()
+        .farm_id(&farm)
+        .queue_id(&queue)
+        .job_id(&job)
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Error waiting for job completion: {}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
     let job_name = job_resp.name().to_owned();
 
     let job_cb: JobCb = if is_json {
@@ -296,14 +516,19 @@ async fn run_wait(
                 + get_count(aws_sdk_deadline::types::TaskRunStatus::Starting);
             let ok = get_count(aws_sdk_deadline::types::TaskRunStatus::Succeeded);
             let total: i64 = counts.map_or(0, |m| i64::from(m.values().sum::<i32>()));
-            let s = j.task_run_status.as_ref().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
+            let s = j
+                .task_run_status
+                .as_ref()
+                .map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
             let ti = if t > 0 {
                 let r = (t as f64 - elapsed).max(0.0);
                 format!(" [{elapsed:.1}s elapsed, {r:.1}s remaining]")
             } else {
                 format!(" [{elapsed:.1}s elapsed]")
             };
-            eprint!("\rCurrent status: {s} ({ok}/{total} tasks succeeded, {running} workers running).{ti}");
+            eprint!(
+                "\rCurrent status: {s} ({ok}/{total} tasks succeeded, {running} workers running).{ti}"
+            );
         })
     };
 
@@ -313,23 +538,39 @@ async fn run_wait(
     }
 
     match job_monitoring::wait_for_job_completion(
-        &farm, &queue, &job, max_poll_interval, timeout,
-        Some(&config), None, Some(&*job_cb),
-    ).await {
+        &farm,
+        &queue,
+        &job,
+        max_poll_interval,
+        timeout,
+        Some(&config),
+        None,
+        Some(&*job_cb),
+    )
+    .await
+    {
         Ok(result) => {
-            let failed_json: Vec<serde_json::Value> = result.failed_tasks.iter().map(|t| {
-                serde_json::json!({
-                    "stepId": t.step_id, "taskId": t.task_id,
-                    "stepName": t.step_name, "sessionId": t.session_id,
+            let failed_json: Vec<serde_json::Value> = result
+                .failed_tasks
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "stepId": t.step_id, "taskId": t.task_id,
+                        "stepName": t.step_name, "sessionId": t.session_id,
+                    })
                 })
-            }).collect();
+                .collect();
 
             if is_json {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                    "jobId": job, "jobName": job_name,
-                    "status": result.status, "elapsedTime": result.elapsed_time,
-                    "failedTasks": failed_json,
-                })).expect("JSON serialization"));
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "jobId": job, "jobName": job_name,
+                        "status": result.status, "elapsedTime": result.elapsed_time,
+                        "failedTasks": failed_json,
+                    }))
+                    .expect("JSON serialization")
+                );
             } else {
                 eprintln!();
                 println!("Job ID: {job}");
@@ -339,7 +580,10 @@ async fn run_wait(
                     println!("No failed tasks found.");
                 } else {
                     println!("Found {} failed tasks:", result.failed_tasks.len());
-                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(failed_json)));
+                    println!(
+                        "{}",
+                        crate::common::cli_object_repr(&serde_json::json!(failed_json))
+                    );
                 }
             }
 
@@ -350,37 +594,67 @@ async fn run_wait(
                 "NOT_COMPATIBLE" => 5,
                 _ => 2,
             };
-            if exit_code == 0 { Ok(()) } else {
-                Err(CliError::ExitCode { code: exit_code, message: String::new() })
+            if exit_code == 0 {
+                Ok(())
+            } else {
+                Err(CliError::ExitCode {
+                    code: exit_code,
+                    message: String::new(),
+                })
             }
         }
         Err(e) => {
             let is_timeout = matches!(e, deadline_api::errors::DeadlineError::OperationTimedOut(_));
             if is_json {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                    "error": e.to_string(), "timeout": is_timeout,
-                    "jobId": job, "jobName": job_name,
-                })).expect("JSON serialization"));
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "error": e.to_string(), "timeout": is_timeout,
+                        "jobId": job, "jobName": job_name,
+                    }))
+                    .expect("JSON serialization")
+                );
             } else {
                 println!("Job ID: {job}");
                 println!("Job Name: {job_name}");
                 println!("Error waiting for job completion: {e}");
             }
-            Err(CliError::ExitCode { code: if is_timeout { 1 } else { 2 }, message: String::new() })
+            Err(CliError::ExitCode {
+                code: if is_timeout { 1 } else { 2 },
+                message: String::new(),
+            })
         }
     }
 }
 
-#[allow(clippy::too_many_lines, reason = "log retrieval has many sequential steps: validation, API calls, formatting")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "log retrieval has many sequential steps: validation, API calls, formatting"
+)]
 #[allow(clippy::too_many_arguments, reason = "each param maps to a CLI flag")]
 async fn run_logs(
-    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
-    job_id: Option<String>, session_id: Option<String>, session_action_id: Option<String>,
-    limit: i32, start_time: Option<String>, end_time: Option<String>,
-    next_token: Option<String>, output: String, timestamp_format: Option<String>,
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    session_id: Option<String>,
+    session_action_id: Option<String>,
+    limit: i32,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    next_token: Option<String>,
+    output: String,
+    timestamp_format: Option<String>,
     timezone: Option<String>,
 ) -> Result<(), CliError> {
-    let config = setup_config(profile, farm_id, queue_id, job_id, false, &["farm_id", "queue_id", "job_id"])?;
+    let config = setup_config(
+        profile,
+        farm_id,
+        queue_id,
+        job_id,
+        false,
+        &["farm_id", "queue_id", "job_id"],
+    )?;
     let farm = get(&config, "defaults.farm_id");
     let queue = get(&config, "defaults.queue_id");
     let is_json = output.eq_ignore_ascii_case("json");
@@ -411,30 +685,51 @@ async fn run_logs(
     if let Some(ref said) = session_action_id {
         let derived = parse_session_action_id(said)?;
         if let Some(ref explicit_sid) = session_id
-            && *explicit_sid != derived {
-                return Err(CliError::Operation(format!(
-                    "Session ID mismatch: --session-id '{explicit_sid}' does not match \
+            && *explicit_sid != derived
+        {
+            return Err(CliError::Operation(format!(
+                "Session ID mismatch: --session-id '{explicit_sid}' does not match \
                      session ID '{derived}' derived from --session-action-id '{said}'"
-                )));
-            }
+            )));
+        }
         resolved_session_id_owned = Some(derived);
     }
 
     let dl = session::deadline_client(Some(&config)).await;
 
-    let job_resp = dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
-        .send().await
-        .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?;
+    let job_resp = dl
+        .get_job()
+        .farm_id(&farm)
+        .queue_id(&queue)
+        .job_id(&job)
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to get job: {}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
     let job_name = job_resp.name();
 
     // Get session action details for time bounds (after validation)
     if let Some(ref said) = session_action_id {
-        let sa = dl.get_session_action()
-            .farm_id(&farm).queue_id(&queue).job_id(&job).session_action_id(said)
-            .send().await
-            .map_err(|e| CliError::Operation(format!(
-                "Session action '{}' not found in job '{}':\n{}", said, job, client::format_sdk_error(&e)
-            )))?;
+        let sa = dl
+            .get_session_action()
+            .farm_id(&farm)
+            .queue_id(&queue)
+            .job_id(&job)
+            .session_action_id(said)
+            .send()
+            .await
+            .map_err(|e| {
+                CliError::Operation(format!(
+                    "Session action '{}' not found in job '{}':\n{}",
+                    said,
+                    job,
+                    client::format_sdk_error(&e)
+                ))
+            })?;
         let sa_start = sa.started_at().map(responses::format_datetime);
         if sa_start.is_none() {
             return Err(CliError::Operation(format!(
@@ -445,24 +740,46 @@ async fn run_logs(
         action_end = sa.ended_at().map(responses::format_datetime);
     }
 
-    let sid = resolved_session_id_owned.as_deref().or(session_id.as_deref());
+    let sid = resolved_session_id_owned
+        .as_deref()
+        .or(session_id.as_deref());
 
     // Use action time bounds if available, otherwise use explicit start/end
-    let start = action_start.as_deref().or(start_time.as_deref()).and_then(|s| {
-        chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
+    let start = action_start
+        .as_deref()
+        .or(start_time.as_deref())
+        .and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(
+                &s.replace(' ', "T")
+                    .replace("+00:00", "Z")
+                    .replace('Z', "+00:00"),
+            )
             .ok()
             .map(|dt| dt.with_timezone(&chrono::Utc))
-    });
+        });
     let end = action_end.as_deref().or(end_time.as_deref()).and_then(|s| {
-        chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
-            .ok()
-            .map(|dt| dt.with_timezone(&chrono::Utc))
+        chrono::DateTime::parse_from_rfc3339(
+            &s.replace(' ', "T")
+                .replace("+00:00", "Z")
+                .replace('Z', "+00:00"),
+        )
+        .ok()
+        .map(|dt| dt.with_timezone(&chrono::Utc))
     });
 
     let (result, auto_select) = log_retrieval::get_session_logs(
-        &farm, &queue, sid, Some(&job), limit, start, end,
-        next_token.as_deref(), Some(&config),
-    ).await.map_err(|e| CliError::Operation(format!("{e}")))?;
+        &farm,
+        &queue,
+        sid,
+        Some(&job),
+        limit,
+        start,
+        end,
+        next_token.as_deref(),
+        Some(&config),
+    )
+    .await
+    .map_err(|e| CliError::Operation(format!("{e}")))?;
 
     // Resolve the actual session ID (may have been auto-selected)
     let resolved_session_id = match &auto_select {
@@ -472,21 +789,34 @@ async fn run_logs(
 
     // Get session start time for timestamp formatting (needed for relative mode)
     let reference_start = {
-        let sess = dl.get_session().farm_id(&farm).queue_id(&queue).job_id(&job).session_id(resolved_session_id)
-            .send().await
-            .map_err(|e| CliError::Operation(format!("Failed to get session: {}", client::format_sdk_error(&e))))?;
+        let sess = dl
+            .get_session()
+            .farm_id(&farm)
+            .queue_id(&queue)
+            .job_id(&job)
+            .session_id(resolved_session_id)
+            .send()
+            .await
+            .map_err(|e| {
+                CliError::Operation(format!(
+                    "Failed to get session: {}",
+                    client::format_sdk_error(&e)
+                ))
+            })?;
         let s = responses::format_datetime(&sess.started_at);
-        chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"))
-            .ok()
+        chrono::DateTime::parse_from_rfc3339(
+            &s.replace(' ', "T")
+                .replace("+00:00", "Z")
+                .replace('Z', "+00:00"),
+        )
+        .ok()
     };
 
     // Build timestamp formatter
     let ts_fmt = match timestamp_format.to_lowercase().as_str() {
         "local" => crate::common::TimestampFormat::Local,
         "relative" => {
-            let reference = reference_start.unwrap_or_else(|| {
-                chrono::Utc::now().fixed_offset()
-            });
+            let reference = reference_start.unwrap_or_else(|| chrono::Utc::now().fixed_offset());
             crate::common::TimestampFormat::new_relative(reference)
         }
         _ => crate::common::TimestampFormat::Utc,
@@ -503,12 +833,17 @@ async fn run_logs(
             }
             SessionAutoSelect::Provided => {}
         }
-        println!("Retrieving logs for {} from log group /aws/deadline/{farm}/{queue}...",
+        println!(
+            "Retrieving logs for {} from log group /aws/deadline/{farm}/{queue}...",
             if session_action_id.is_some() {
-                format!("session action {}", session_action_id.as_deref().expect("checked is_some above"))
+                format!(
+                    "session action {}",
+                    session_action_id.as_deref().expect("checked is_some above")
+                )
             } else {
                 format!("session {}", result.log_stream)
-            });
+            }
+        );
         println!("Job ID: {job}");
         println!("Job Name: {job_name}");
 
@@ -519,14 +854,29 @@ async fn run_logs(
                 println!("Session action end: {sa_end}");
                 // Parse and compute duration
                 if let (Ok(start_dt), Ok(end_dt)) = (
-                    chrono::DateTime::parse_from_rfc3339(&sa_start.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")),
-                    chrono::DateTime::parse_from_rfc3339(&sa_end.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")),
+                    chrono::DateTime::parse_from_rfc3339(
+                        &sa_start
+                            .replace(' ', "T")
+                            .replace("+00:00", "Z")
+                            .replace('Z', "+00:00"),
+                    ),
+                    chrono::DateTime::parse_from_rfc3339(
+                        &sa_end
+                            .replace(' ', "T")
+                            .replace("+00:00", "Z")
+                            .replace('Z', "+00:00"),
+                    ),
                 ) {
                     let duration = end_dt.signed_duration_since(start_dt);
                     let secs = duration.num_seconds();
                     let micros = duration.num_microseconds().unwrap_or(0) % 1_000_000;
-                    println!("Session action duration: {}:{:02}:{:02}.{:06}",
-                        secs / 3600, (secs % 3600) / 60, secs % 60, micros);
+                    println!(
+                        "Session action duration: {}:{:02}:{:02}.{:06}",
+                        secs / 3600,
+                        (secs % 3600) / 60,
+                        secs % 60,
+                        micros
+                    );
                 }
             }
         }
@@ -550,7 +900,10 @@ async fn run_logs(
             "logGroup": result.log_group,
             "logStream": result.log_stream,
         });
-        println!("{}", serde_json::to_string_pretty(&response).expect("JSON serialization"));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&response).expect("JSON serialization")
+        );
     } else {
         // Show reference time for relative format
         if let crate::common::TimestampFormat::Relative { ref reference } = ts_fmt {
@@ -569,18 +922,31 @@ async fn run_logs(
             println!("\nRetrieved {} log events.", result.count);
         }
         if let Some(ref token) = result.next_token {
-            println!("More logs are available. Use --next-token \"{token}\" to retrieve the next page.");
+            println!(
+                "More logs are available. Use --next-token \"{token}\" to retrieve the next page."
+            );
         }
     }
     Ok(())
 }
 
 async fn run_cancel(
-    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
-    job_id: Option<String>, mark_as: String, yes: bool,
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    mark_as: String,
+    yes: bool,
 ) -> Result<(), CliError> {
     const VALID_MARK_AS: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED"];
-    let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+    let config = setup_config(
+        profile,
+        farm_id,
+        queue_id,
+        job_id,
+        yes,
+        &["farm_id", "queue_id", "job_id"],
+    )?;
     let farm = get(&config, "defaults.farm_id");
     let queue = get(&config, "defaults.queue_id");
     let job_id = get(&config, "defaults.job_id");
@@ -596,15 +962,27 @@ async fn run_cancel(
     }
     let auto_accept = is_auto_accept(&config);
 
-    let job = match session::deadline_client(Some(&config)).await
-        .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
-        .send().await {
+    let job = match session::deadline_client(Some(&config))
+        .await
+        .get_job()
+        .farm_id(&farm)
+        .queue_id(&queue)
+        .job_id(&job_id)
+        .send()
+        .await
+    {
         Ok(j) => j,
         Err(e) => {
             let err_str = client::format_sdk_error(&e);
             let suggestion = suggest_resources_on_client_error(
-                &err_str, "GetJob", Some(&farm), Some(&queue), None, Some(&config),
-            ).await;
+                &err_str,
+                "GetJob",
+                Some(&farm),
+                Some(&queue),
+                None,
+                Some(&config),
+            )
+            .await;
             return Err(CliError::Operation(format!(
                 "Failed to get Job from Deadline:\n{err_str}{suggestion}"
             )));
@@ -628,18 +1006,43 @@ async fn run_cancel(
     if let Some(s) = job.task_run_status() {
         summary.insert("taskRunStatus".into(), serde_json::json!(s.as_str()));
     }
-    summary.insert("taskRunStatusCounts".into(), serde_json::Value::Object(counts));
-    summary.insert("startedAt".into(), serde_json::json!(job.started_at().map(responses::format_datetime).unwrap_or_default()));
-    summary.insert("endedAt".into(), serde_json::json!(job.ended_at().map(responses::format_datetime).unwrap_or_default()));
+    summary.insert(
+        "taskRunStatusCounts".into(),
+        serde_json::Value::Object(counts),
+    );
+    summary.insert(
+        "startedAt".into(),
+        serde_json::json!(
+            job.started_at()
+                .map(responses::format_datetime)
+                .unwrap_or_default()
+        ),
+    );
+    summary.insert(
+        "endedAt".into(),
+        serde_json::json!(
+            job.ended_at()
+                .map(responses::format_datetime)
+                .unwrap_or_default()
+        ),
+    );
     summary.insert("createdBy".into(), serde_json::json!(job.created_by()));
-    summary.insert("createdAt".into(), serde_json::json!(responses::format_datetime(job.created_at())));
-    println!("{}", crate::common::cli_object_repr(&serde_json::Value::Object(summary)));
+    summary.insert(
+        "createdAt".into(),
+        serde_json::json!(responses::format_datetime(job.created_at())),
+    );
+    println!(
+        "{}",
+        crate::common::cli_object_repr(&serde_json::Value::Object(summary))
+    );
 
     if !auto_accept {
         let msg = if mark_as == "CANCELED" {
             "Are you sure you want to cancel this job?".to_owned()
         } else {
-            format!("Are you sure you want to cancel this job and mark its taskRunStatus as {mark_as}?")
+            format!(
+                "Are you sure you want to cancel this job and mark its taskRunStatus as {mark_as}?"
+            )
         };
         eprint!("{msg} [y/n]: ");
         loop {
@@ -647,13 +1050,19 @@ async fn run_cancel(
             let bytes = std::io::stdin().read_line(&mut input).unwrap_or(0);
             if bytes == 0 {
                 println!("Job not canceled.");
-                return Err(CliError::ExitCode { code: 1, message: String::new() });
+                return Err(CliError::ExitCode {
+                    code: 1,
+                    message: String::new(),
+                });
             }
             match input.trim().to_lowercase().as_str() {
                 "y" | "yes" => break,
                 "n" | "no" => {
                     println!("Job not canceled.");
-                    return Err(CliError::ExitCode { code: 1, message: String::new() });
+                    return Err(CliError::ExitCode {
+                        code: 1,
+                        message: String::new(),
+                    });
                 }
                 _ => {
                     eprintln!("Error: invalid input");
@@ -671,27 +1080,58 @@ async fn run_cancel(
     let dl = session::deadline_client(Some(&config)).await;
     let status: aws_sdk_deadline::types::JobTargetTaskRunStatus = mark_as.as_str().into();
     dl.update_job()
-        .farm_id(&farm).queue_id(&queue).job_id(&job_id)
+        .farm_id(&farm)
+        .queue_id(&queue)
+        .job_id(&job_id)
         .target_task_run_status(status)
-        .send().await
-        .map_err(|e| CliError::Operation(format!("Failed to update job:\n{}", client::format_sdk_error(&e))))?;
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to update job:\n{}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
     Ok(())
 }
 
-#[allow(clippy::too_many_lines, reason = "requeue iterates steps and tasks with user confirmation")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "requeue iterates steps and tasks with user confirmation"
+)]
 async fn run_requeue_tasks(
-    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
-    job_id: Option<String>, run_status: Vec<String>, yes: bool,
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    run_status: Vec<String>,
+    yes: bool,
 ) -> Result<(), CliError> {
-    const VALID_RUN_STATUSES: &[&str] = &["SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE"];
-    let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+    const VALID_RUN_STATUSES: &[&str] = &[
+        "SUSPENDED",
+        "CANCELED",
+        "FAILED",
+        "SUCCEEDED",
+        "NOT_COMPATIBLE",
+    ];
+    let config = setup_config(
+        profile,
+        farm_id,
+        queue_id,
+        job_id,
+        yes,
+        &["farm_id", "queue_id", "job_id"],
+    )?;
     let farm = get(&config, "defaults.farm_id");
     let queue = get(&config, "defaults.queue_id");
     let job_id = get(&config, "defaults.job_id");
     let auto_accept = is_auto_accept(&config);
 
     let run_status_set: std::collections::HashSet<String> = if run_status.is_empty() {
-        ["SUSPENDED", "CANCELED", "FAILED"].iter().map(ToString::to_string).collect()
+        ["SUSPENDED", "CANCELED", "FAILED"]
+            .iter()
+            .map(ToString::to_string)
+            .collect()
     } else {
         run_status.iter().map(|s| s.to_uppercase()).collect()
     };
@@ -707,15 +1147,27 @@ async fn run_requeue_tasks(
         }
     }
 
-    let job = match session::deadline_client(Some(&config)).await
-        .get_job().farm_id(&farm).queue_id(&queue).job_id(&job_id)
-        .send().await {
+    let job = match session::deadline_client(Some(&config))
+        .await
+        .get_job()
+        .farm_id(&farm)
+        .queue_id(&queue)
+        .job_id(&job_id)
+        .send()
+        .await
+    {
         Ok(j) => j,
         Err(e) => {
             let err_str = client::format_sdk_error(&e);
             let suggestion = suggest_resources_on_client_error(
-                &err_str, "GetJob", Some(&farm), Some(&queue), None, Some(&config),
-            ).await;
+                &err_str,
+                "GetJob",
+                Some(&farm),
+                Some(&queue),
+                None,
+                Some(&config),
+            )
+            .await;
             return Err(CliError::Operation(format!(
                 "Failed to get Job from Deadline:\n{err_str}{suggestion}"
             )));
@@ -733,16 +1185,27 @@ async fn run_requeue_tasks(
             counts_map.insert(k.as_str().to_uppercase(), serde_json::json!(v));
         }
     }
-    println!("{}", crate::common::cli_object_repr(&serde_json::json!({"taskRunStatusCounts": counts_map})));
+    println!(
+        "{}",
+        crate::common::cli_object_repr(&serde_json::json!({"taskRunStatusCounts": counts_map}))
+    );
 
     let sorted_statuses: Vec<&String> = {
         let mut v: Vec<&String> = run_status_set.iter().collect();
         v.sort();
         v
     };
-    println!("Requeuing all tasks with run status among: {}", sorted_statuses.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+    println!(
+        "Requeuing all tasks with run status among: {}",
+        sorted_statuses
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
 
-    let (total_to_requeue, summary_by_status) = count_and_summarize(Some(&counts_map), &run_status_set);
+    let (total_to_requeue, summary_by_status) =
+        count_and_summarize(Some(&counts_map), &run_status_set);
 
     if total_to_requeue == 0 {
         println!("No tasks to requeue.");
@@ -752,20 +1215,28 @@ async fn run_requeue_tasks(
     if auto_accept {
         println!("Estimated {total_to_requeue} total tasks ({summary_by_status}) to requeue.");
     } else {
-        println!("This action will requeue an estimated {total_to_requeue} total tasks ({summary_by_status})");
+        println!(
+            "This action will requeue an estimated {total_to_requeue} total tasks ({summary_by_status})"
+        );
         eprint!("Are you sure you want to requeue these tasks? [y/n]: ");
         loop {
             let mut input = String::new();
             let bytes = std::io::stdin().read_line(&mut input).unwrap_or(0);
             if bytes == 0 {
                 println!("No tasks were requeued.");
-                return Err(CliError::ExitCode { code: 1, message: String::new() });
+                return Err(CliError::ExitCode {
+                    code: 1,
+                    message: String::new(),
+                });
             }
             match input.trim().to_lowercase().as_str() {
                 "y" | "yes" => break,
                 "n" | "no" => {
                     println!("No tasks were requeued.");
-                    return Err(CliError::ExitCode { code: 1, message: String::new() });
+                    return Err(CliError::ExitCode {
+                        code: 1,
+                        message: String::new(),
+                    });
                 }
                 _ => {
                     eprintln!("Error: invalid input");
@@ -780,10 +1251,15 @@ async fn run_requeue_tasks(
 
     let dl = session::deadline_client(Some(&config)).await;
     let steps_pages = client::collect_paginated(
-        dl.list_steps().farm_id(&farm).queue_id(&queue).job_id(&job_id)
-            .into_paginator().send()
-    ).await
-        .map_err(|e| CliError::Operation(format!("Failed to list steps:\n{e}")))?;
+        dl.list_steps()
+            .farm_id(&farm)
+            .queue_id(&queue)
+            .job_id(&job_id)
+            .into_paginator()
+            .send(),
+    )
+    .await
+    .map_err(|e| CliError::Operation(format!("Failed to list steps:\n{e}")))?;
 
     for page in &steps_pages {
         for step in page.steps() {
@@ -792,10 +1268,17 @@ async fn run_requeue_tasks(
             println!("\nStep: {step_name} ({step_id})");
 
             let step_counts = step.task_run_status_counts();
-            let step_counts_map: serde_json::Map<String, serde_json::Value> = step_counts.iter()
-                .map(|(k, v)| (k.as_str().to_owned(), serde_json::Value::Number((*v).into())))
+            let step_counts_map: serde_json::Map<String, serde_json::Value> = step_counts
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.as_str().to_owned(),
+                        serde_json::Value::Number((*v).into()),
+                    )
+                })
                 .collect();
-            let (step_to_requeue, step_summary) = count_and_summarize(Some(&step_counts_map), &run_status_set);
+            let (step_to_requeue, step_summary) =
+                count_and_summarize(Some(&step_counts_map), &run_status_set);
 
             if step_to_requeue == 0 {
                 println!("  Step has no tasks to requeue.");
@@ -804,10 +1287,16 @@ async fn run_requeue_tasks(
             println!("  Requeuing an estimated {step_to_requeue} total tasks ({step_summary})...");
 
             let tasks_pages = client::collect_paginated(
-                dl.list_tasks().farm_id(&farm).queue_id(&queue).job_id(&job_id).step_id(step_id)
-                    .into_paginator().send()
-            ).await
-                .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
+                dl.list_tasks()
+                    .farm_id(&farm)
+                    .queue_id(&queue)
+                    .job_id(&job_id)
+                    .step_id(step_id)
+                    .into_paginator()
+                    .send(),
+            )
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to list tasks:\n{e}")))?;
 
             for tpage in &tasks_pages {
                 for task in tpage.tasks() {
@@ -818,16 +1307,27 @@ async fn run_requeue_tasks(
                     let task_id = task.task_id();
                     let params = task.parameters();
                     let task_summary = if let Some(p) = params.filter(|p| !p.is_empty()) {
-                        let mut param_pairs: Vec<_> = p.iter().map(|(name, val)| {
-                            let extracted = match val {
-                                aws_sdk_deadline::types::TaskParameterValue::Int(i) => i.clone(),
-                                aws_sdk_deadline::types::TaskParameterValue::Float(f) => f.clone(),
-                                aws_sdk_deadline::types::TaskParameterValue::String(s) => s.clone(),
-                                aws_sdk_deadline::types::TaskParameterValue::Path(p) => p.clone(),
-                                _ => String::new(),
-                            };
-                            format!("{name}={extracted}")
-                        }).collect();
+                        let mut param_pairs: Vec<_> = p
+                            .iter()
+                            .map(|(name, val)| {
+                                let extracted = match val {
+                                    aws_sdk_deadline::types::TaskParameterValue::Int(i) => {
+                                        i.clone()
+                                    }
+                                    aws_sdk_deadline::types::TaskParameterValue::Float(f) => {
+                                        f.clone()
+                                    }
+                                    aws_sdk_deadline::types::TaskParameterValue::String(s) => {
+                                        s.clone()
+                                    }
+                                    aws_sdk_deadline::types::TaskParameterValue::Path(p) => {
+                                        p.clone()
+                                    }
+                                    _ => String::new(),
+                                };
+                                format!("{name}={extracted}")
+                            })
+                            .collect();
                         param_pairs.sort();
                         format!("{} ({task_id})", param_pairs.join(","))
                     } else {
@@ -835,16 +1335,27 @@ async fn run_requeue_tasks(
                     };
                     println!("    {status} {task_summary}");
 
-                    session::deadline_client(Some(&config)).await
+                    session::deadline_client(Some(&config))
+                        .await
                         .update_task()
-                        .farm_id(&farm).queue_id(&queue).job_id(&job_id)
-                        .step_id(step_id).task_id(task_id)
+                        .farm_id(&farm)
+                        .queue_id(&queue)
+                        .job_id(&job_id)
+                        .step_id(step_id)
+                        .task_id(task_id)
                         .target_run_status(aws_sdk_deadline::types::TaskTargetRunStatus::Pending)
                         .customize()
-                        .config_override(aws_sdk_deadline::config::Builder::default()
-                            .retry_config(aws_config::retry::RetryConfig::adaptive().with_max_attempts(5)))
-                        .send().await
-                        .map_err(|e| CliError::Operation(format!("Failed to update task:\n{}", client::format_sdk_error(&e))))?;
+                        .config_override(aws_sdk_deadline::config::Builder::default().retry_config(
+                            aws_config::retry::RetryConfig::adaptive().with_max_attempts(5),
+                        ))
+                        .send()
+                        .await
+                        .map_err(|e| {
+                            CliError::Operation(format!(
+                                "Failed to update task:\n{}",
+                                client::format_sdk_error(&e)
+                            ))
+                        })?;
                     total_requeued += 1;
                 }
             }
@@ -856,10 +1367,15 @@ async fn run_requeue_tasks(
 }
 
 async fn run_download_output(
-    profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>,
-    job_id: Option<String>, step_id: Option<String>, task_id: Option<String>,
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    step_id: Option<String>,
+    task_id: Option<String>,
     conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
-    yes: bool, output: String,
+    yes: bool,
+    output: String,
 ) -> Result<(), CliError> {
     let is_json = output.eq_ignore_ascii_case("json");
 
@@ -871,16 +1387,30 @@ async fn run_download_output(
         });
     }
 
-    let config = setup_config(profile, farm_id, queue_id, job_id, yes, &["farm_id", "queue_id", "job_id"])?;
+    let config = setup_config(
+        profile,
+        farm_id,
+        queue_id,
+        job_id,
+        yes,
+        &["farm_id", "queue_id", "job_id"],
+    )?;
     let farm = get(&config, "defaults.farm_id");
     let queue_id_val = get(&config, "defaults.queue_id");
     let job_id_val = get(&config, "defaults.job_id");
 
     let result = download_output_impl(
-        &config, &farm, &queue_id_val, &job_id_val,
-        step_id.as_deref(), task_id.as_deref(),
-        conflict_resolution, is_json, is_auto_accept(&config),
-    ).await;
+        &config,
+        &farm,
+        &queue_id_val,
+        &job_id_val,
+        step_id.as_deref(),
+        task_id.as_deref(),
+        conflict_resolution,
+        is_json,
+        is_auto_accept(&config),
+    )
+    .await;
 
     match result {
         Ok(()) => Ok(()),
@@ -889,8 +1419,14 @@ async fn run_download_output(
             // We exit directly to prevent the error handler in main.rs from
             // printing the same error again in human-readable format.
             let error_one_liner = e.to_string().replace('\n', ". ");
-            println!("{}", serde_json::json!({"messageType": "error", "value": error_one_liner}));
-            #[allow(clippy::exit, reason = "JSON error already printed; returning Err would double-print")]
+            println!(
+                "{}",
+                serde_json::json!({"messageType": "error", "value": error_one_liner})
+            );
+            #[allow(
+                clippy::exit,
+                reason = "JSON error already printed; returning Err would double-print"
+            )]
             std::process::exit(1);
         }
         Err(e) => Err(e),
@@ -917,7 +1453,8 @@ fn count_and_summarize(
             .sum()
     });
     let summary = counts.map_or(String::new(), |obj| {
-        let mut items: Vec<_> = obj.iter()
+        let mut items: Vec<_> = obj
+            .iter()
             .filter(|(k, v)| statuses.contains(&k.to_uppercase()) && v.as_i64().unwrap_or(0) != 0)
             .map(|(k, v)| format!("{} {} tasks", v.as_i64().unwrap_or(0), k.to_uppercase()))
             .collect();
@@ -935,16 +1472,23 @@ fn estimate_remaining_time(job: &serde_json::Value) -> Option<String> {
     let started_at = job.get("startedAt").and_then(|v| v.as_str())?;
 
     let started = chrono::DateTime::parse_from_rfc3339(
-        &started_at.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00"),
-    ).ok()?;
+        &started_at
+            .replace(' ', "T")
+            .replace("+00:00", "Z")
+            .replace('Z', "+00:00"),
+    )
+    .ok()?;
 
-    let completed = ["SUCCEEDED", "FAILED", "CANCELED"].iter()
+    let completed = ["SUCCEEDED", "FAILED", "CANCELED"]
+        .iter()
         .filter_map(|s| counts.get(*s).and_then(serde_json::Value::as_i64))
         .sum::<i64>();
-    let in_progress = ["RUNNING", "STARTING", "ASSIGNED"].iter()
+    let in_progress = ["RUNNING", "STARTING", "ASSIGNED"]
+        .iter()
         .filter_map(|s| counts.get(*s).and_then(serde_json::Value::as_i64))
         .sum::<i64>();
-    let pending = ["PENDING", "READY", "SCHEDULED"].iter()
+    let pending = ["PENDING", "READY", "SCHEDULED"]
+        .iter()
         .filter_map(|s| counts.get(*s).and_then(serde_json::Value::as_i64))
         .sum::<i64>();
 
@@ -983,23 +1527,44 @@ fn format_duration(seconds: f64) -> String {
 }
 
 /// Print full job details (used by `job get` in direct mode).
-async fn print_job_details(farm: &str, queue: &str, job_id: &str, config: &IniConfig) -> Result<(), CliError> {
-    match session::deadline_client(Some(config)).await
-        .get_job().farm_id(farm).queue_id(queue).job_id(job_id)
-        .send().await {
+async fn print_job_details(
+    farm: &str,
+    queue: &str,
+    job_id: &str,
+    config: &IniConfig,
+) -> Result<(), CliError> {
+    match session::deadline_client(Some(config))
+        .await
+        .get_job()
+        .farm_id(farm)
+        .queue_id(queue)
+        .job_id(job_id)
+        .send()
+        .await
+    {
         Ok(output) => {
             let resp = JobResponse::from(output);
-            let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
+            let val =
+                serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
             println!("{}", crate::common::cli_object_repr(&val));
             let est = estimate_remaining_time(&val);
-            println!("estimatedTimeRemaining: {}", est.as_deref().unwrap_or("N/A"));
+            println!(
+                "estimatedTimeRemaining: {}",
+                est.as_deref().unwrap_or("N/A")
+            );
             Ok(())
         }
         Err(e) => {
             let err_str = client::format_sdk_error(&e);
             let suggestion = suggest_resources_on_client_error(
-                &err_str, "GetJob", Some(farm), Some(queue), None, Some(config),
-            ).await;
+                &err_str,
+                "GetJob",
+                Some(farm),
+                Some(queue),
+                None,
+                Some(config),
+            )
+            .await;
             Err(CliError::Operation(format!(
                 "Failed to get Job from Deadline:\n{err_str}{suggestion}"
             )))
@@ -1008,7 +1573,12 @@ async fn print_job_details(farm: &str, queue: &str, job_id: &str, config: &IniCo
 }
 
 /// Search for jobs matching a term. Single match → show details. Multiple → summary list.
-async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: &IniConfig) -> Result<(), CliError> {
+async fn resolve_job_search(
+    farm: &str,
+    queue: &str,
+    search_term: &str,
+    config: &IniConfig,
+) -> Result<(), CliError> {
     let filter = serde_json::json!({
         "filters": [{
             "searchTermFilter": {
@@ -1018,9 +1588,8 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
         }],
         "operator": "AND"
     });
-    let resp = match search_jobs_call(
-        farm, &[queue], 0, 5, Some(&filter), None, Some(config),
-    ).await {
+    let resp = match search_jobs_call(farm, &[queue], 0, 5, Some(&filter), None, Some(config)).await
+    {
         Ok(r) => r,
         Err(e) => {
             return Err(CliError::Operation(format!("Failed to search jobs:\n{e}")));
@@ -1041,18 +1610,45 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
     }
 
     // Multiple results — show summary
-    println!("Found {total} job(s) matching \"{search_term}\", showing most recent {}:\n", jobs.len());
+    println!(
+        "Found {total} job(s) matching \"{search_term}\", showing most recent {}:\n",
+        jobs.len()
+    );
     for job in jobs {
         let name = job.name().unwrap_or("");
         let name = truncate_middle(name, 80);
         let job_id = job.job_id().unwrap_or("");
-        let status = job.task_run_status().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
-        let created = job.created_at().map(|dt| {
-            let s = format_datetime(dt);
-            chrono::DateTime::parse_from_rfc3339(&s.replace(' ', "T").replace("+00:00", "Z").replace('Z', "+00:00")).map_or_else(|_| s, |dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S %z").to_string())
-        }).unwrap_or_default();
+        let status = job
+            .task_run_status()
+            .map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
+        let created = job
+            .created_at()
+            .map(|dt| {
+                let s = format_datetime(dt);
+                chrono::DateTime::parse_from_rfc3339(
+                    &s.replace(' ', "T")
+                        .replace("+00:00", "Z")
+                        .replace('Z', "+00:00"),
+                )
+                .map_or_else(
+                    |_| s,
+                    |dt| {
+                        dt.with_timezone(&chrono::Local)
+                            .format("%Y-%m-%d %H:%M:%S %z")
+                            .to_string()
+                    },
+                )
+            })
+            .unwrap_or_default();
         let counts = job.task_run_status_counts().map(|c| {
-            c.iter().map(|(k, v)| (k.as_str().to_owned(), serde_json::Value::Number((*v).into()))).collect::<serde_json::Map<String, serde_json::Value>>()
+            c.iter()
+                .map(|(k, v)| {
+                    (
+                        k.as_str().to_owned(),
+                        serde_json::Value::Number((*v).into()),
+                    )
+                })
+                .collect::<serde_json::Map<String, serde_json::Value>>()
         });
         let task_summary = format_task_summary(counts.as_ref());
 
@@ -1070,7 +1666,9 @@ async fn resolve_job_search(farm: &str, queue: &str, search_term: &str, config: 
 }
 
 fn truncate_middle(text: &str, max_length: usize) -> String {
-    if text.len() <= max_length { return text.to_owned(); }
+    if text.len() <= max_length {
+        return text.to_owned();
+    }
     let keep = max_length - 3;
     let start = (keep * 2) / 3;
     let end = keep - start;
@@ -1078,9 +1676,13 @@ fn truncate_middle(text: &str, max_length: usize) -> String {
 }
 
 fn format_task_summary(counts: Option<&serde_json::Map<String, serde_json::Value>>) -> String {
-    let Some(counts) = counts else { return "no tasks".into() };
+    let Some(counts) = counts else {
+        return "no tasks".into();
+    };
     let get = |keys: &[&str]| -> i64 {
-        keys.iter().filter_map(|k| counts.get(*k).and_then(serde_json::Value::as_i64)).sum()
+        keys.iter()
+            .filter_map(|k| counts.get(*k).and_then(serde_json::Value::as_i64))
+            .sum()
     };
     let mut parts = Vec::new();
     let ready = get(&["READY"]);
@@ -1092,16 +1694,38 @@ fn format_task_summary(counts: Option<&serde_json::Map<String, serde_json::Value
     let canceled = get(&["CANCELED"]);
     let suspended = get(&["SUSPENDED"]);
     let not_compatible = get(&["NOT_COMPATIBLE"]);
-    if ready > 0 { parts.push(format!("{ready} ready")); }
-    if running > 0 { parts.push(format!("{running} running")); }
-    if interrupting > 0 { parts.push(format!("{interrupting} interrupting")); }
-    if pending > 0 { parts.push(format!("{pending} pending")); }
-    if suspended > 0 { parts.push(format!("{suspended} suspended")); }
-    if succeeded > 0 { parts.push(format!("{succeeded} succeeded")); }
-    if failed > 0 { parts.push(format!("{failed} failed")); }
-    if canceled > 0 { parts.push(format!("{canceled} canceled")); }
-    if not_compatible > 0 { parts.push(format!("{not_compatible} not compatible")); }
-    if parts.is_empty() { "no tasks".into() } else { parts.join(", ") }
+    if ready > 0 {
+        parts.push(format!("{ready} ready"));
+    }
+    if running > 0 {
+        parts.push(format!("{running} running"));
+    }
+    if interrupting > 0 {
+        parts.push(format!("{interrupting} interrupting"));
+    }
+    if pending > 0 {
+        parts.push(format!("{pending} pending"));
+    }
+    if suspended > 0 {
+        parts.push(format!("{suspended} suspended"));
+    }
+    if succeeded > 0 {
+        parts.push(format!("{succeeded} succeeded"));
+    }
+    if failed > 0 {
+        parts.push(format!("{failed} failed"));
+    }
+    if canceled > 0 {
+        parts.push(format!("{canceled} canceled"));
+    }
+    if not_compatible > 0 {
+        parts.push(format!("{not_compatible} not compatible"));
+    }
+    if parts.is_empty() {
+        "no tasks".into()
+    } else {
+        parts.join(", ")
+    }
 }
 
 /// Print job list output (shared between `job list` and `job search`).
@@ -1124,11 +1748,18 @@ async fn search_jobs_call(
     filter_expressions: Option<&serde_json::Value>,
     sort_expressions: Option<&serde_json::Value>,
     config: Option<&IniConfig>,
-) -> Result<aws_sdk_deadline::operation::search_jobs::SearchJobsOutput, deadline_api::errors::DeadlineError> {
+) -> Result<
+    aws_sdk_deadline::operation::search_jobs::SearchJobsOutput,
+    deadline_api::errors::DeadlineError,
+> {
     use deadline_api::errors::DeadlineError;
 
-    let filter = filter_expressions.map(api::build_filter_expressions).transpose()?;
-    let sort = sort_expressions.map(api::build_sort_expressions).transpose()?;
+    let filter = filter_expressions
+        .map(api::build_filter_expressions)
+        .transpose()?;
+    let sort = sort_expressions
+        .map(api::build_sort_expressions)
+        .transpose()?;
     let client = session::deadline_client(config).await;
 
     let mut req = client
@@ -1147,22 +1778,25 @@ async fn search_jobs_call(
             req = req.sort_expressions(s.clone());
         }
     } else {
-        req = req.sort_expressions(
-            aws_sdk_deadline::types::SearchSortExpression::FieldSort(
-                aws_sdk_deadline::types::FieldSortExpression::builder()
-                    .name("CREATED_AT")
-                    .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
-                    .build()
-                    .expect("required fields set"),
-            ),
-        );
+        req = req.sort_expressions(aws_sdk_deadline::types::SearchSortExpression::FieldSort(
+            aws_sdk_deadline::types::FieldSortExpression::builder()
+                .name("CREATED_AT")
+                .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
+                .build()
+                .expect("required fields set"),
+        ));
     }
 
-    req.send().await.map_err(|e| DeadlineError::OperationError(client::format_sdk_error(&e)))
+    req.send()
+        .await
+        .map_err(|e| DeadlineError::OperationError(client::format_sdk_error(&e)))
 }
 
 /// Print `SearchJobs` output in the standard job list format.
-fn print_search_jobs_output(resp: &aws_sdk_deadline::operation::search_jobs::SearchJobsOutput, item_offset: i32) {
+fn print_search_jobs_output(
+    resp: &aws_sdk_deadline::operation::search_jobs::SearchJobsOutput,
+    item_offset: i32,
+) {
     let total = i64::from(resp.total_results());
     let jobs = resp.jobs();
 
@@ -1190,9 +1824,17 @@ fn print_search_jobs_output(resp: &aws_sdk_deadline::operation::search_jobs::Sea
         serde_json::Value::Object(m)
     }).collect();
 
-    println!("Displaying {} of {} Jobs starting at {}", structured.len(), total, item_offset);
+    println!(
+        "Displaying {} of {} Jobs starting at {}",
+        structured.len(),
+        total,
+        item_offset
+    );
     println!();
-    println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+    println!(
+        "{}",
+        crate::common::cli_object_repr(&serde_json::json!(structured))
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1214,13 +1856,17 @@ fn download_start_message(
                 if obj.is_empty() {
                     "{}".to_owned()
                 } else {
-                    let inner: Vec<String> = obj.iter().map(|(k, v)| {
-                        let val = v.as_object()
-                            .and_then(|m| m.values().next())
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
-                        format!("{k}={val}")
-                    }).collect();
+                    let inner: Vec<String> = obj
+                        .iter()
+                        .map(|(k, v)| {
+                            let val = v
+                                .as_object()
+                                .and_then(|m| m.values().next())
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            format!("{k}={val}")
+                        })
+                        .collect();
                     format!("{{{}}}", inner.join(","))
                 }
             } else {
@@ -1254,10 +1900,13 @@ fn check_windows_long_paths(output_paths_by_root: &std::collections::HashMap<Str
     // Check if LongPathsEnabled registry key is set
     let long_paths_enabled = (|| -> bool {
         let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
-        let key = hklm.open_subkey(r"SYSTEM\CurrentControlSet\Control\FileSystem").ok()?;
+        let key = hklm
+            .open_subkey(r"SYSTEM\CurrentControlSet\Control\FileSystem")
+            .ok()?;
         let val: u32 = key.get_value("LongPathsEnabled").ok()?;
         Some(val != 0)
-    })().unwrap_or(false);
+    })()
+    .unwrap_or(false);
 
     if long_paths_enabled {
         return;
@@ -1278,12 +1927,17 @@ fn check_windows_long_paths(output_paths_by_root: &std::collections::HashMap<Str
 }
 
 #[cfg(not(windows))]
-fn check_windows_long_paths(_output_paths_by_root: &std::collections::HashMap<String, Vec<String>>) {
+fn check_windows_long_paths(
+    _output_paths_by_root: &std::collections::HashMap<String, Vec<String>>,
+) {
     // No-op on non-Windows
 }
 
 /// Core implementation of `job download-output`.
-#[allow(clippy::too_many_lines, reason = "interactive download pipeline with user prompts and path mapping")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "interactive download pipeline with user prompts and path mapping"
+)]
 pub(crate) async fn download_output_impl(
     config: &IniConfig,
     farm_id: &str,
@@ -1295,23 +1949,46 @@ pub(crate) async fn download_output_impl(
     is_json: bool,
     auto_accept: bool,
 ) -> Result<(), CliError> {
-    use deadline_job_attachments::download::OutputDownloader;
-    use deadline_job_attachments::models::{FileConflictResolution, JobAttachmentS3Settings, PathFormat};
-    use deadline_job_attachments::s3;
     use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
+    use deadline_job_attachments::download::OutputDownloader;
+    use deadline_job_attachments::models::{
+        FileConflictResolution, JobAttachmentS3Settings, PathFormat,
+    };
+    use deadline_job_attachments::s3;
 
     // Get job
     let dl = session::deadline_client(Some(config)).await;
-    let job = dl.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-        .send().await
-        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
+    let job = dl
+        .get_job()
+        .farm_id(farm_id)
+        .queue_id(queue_id)
+        .job_id(job_id)
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to download output:\n{}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
     let job_name = job.name().to_owned();
 
     // Get optional step/task
     let step_name = if let Some(sid) = step_id {
-        let step = dl.get_step().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(sid)
-            .send().await
-            .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
+        let step = dl
+            .get_step()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .job_id(job_id)
+            .step_id(sid)
+            .send()
+            .await
+            .map_err(|e| {
+                CliError::Operation(format!(
+                    "Failed to download output:\n{}",
+                    client::format_sdk_error(&e)
+                ))
+            })?;
         Some(step.name().to_owned())
     } else {
         None
@@ -1320,12 +1997,30 @@ pub(crate) async fn download_output_impl(
     let task_params;
     let session_action_id;
     if let (Some(sid), Some(tid)) = (step_id, task_id) {
-        let task = dl.get_task().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(sid).task_id(tid)
-            .send().await
-            .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
+        let task = dl
+            .get_task()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .job_id(job_id)
+            .step_id(sid)
+            .task_id(tid)
+            .send()
+            .await
+            .map_err(|e| {
+                CliError::Operation(format!(
+                    "Failed to download output:\n{}",
+                    client::format_sdk_error(&e)
+                ))
+            })?;
         task_params = task.parameters.as_ref().map(|m| {
-            let obj: serde_json::Map<String, serde_json::Value> = m.iter()
-                .map(|(k, v)| (k.clone(), deadline_api::type_conversions::task_parameter_value_to_value(v)))
+            let obj: serde_json::Map<String, serde_json::Value> = m
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        deadline_api::type_conversions::task_parameter_value_to_value(v),
+                    )
+                })
                 .collect();
             serde_json::Value::Object(obj)
         });
@@ -1342,24 +2037,37 @@ pub(crate) async fn download_output_impl(
     } else {
         None
     };
-    println!("{}", download_start_message(
-        &job_name,
-        step_name.as_deref(),
-        task_params_for_msg,
-        is_json,
-    ));
+    println!(
+        "{}",
+        download_start_message(
+            &job_name,
+            step_name.as_deref(),
+            task_params_for_msg,
+            is_json,
+        )
+    );
 
     // Get queue for jobAttachmentSettings
-    let queue = session::deadline_client(Some(config)).await
-        .get_queue().farm_id(farm_id).queue_id(queue_id)
-        .send().await
-        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{}", client::format_sdk_error(&e))))?;
+    let queue = session::deadline_client(Some(config))
+        .await
+        .get_queue()
+        .farm_id(farm_id)
+        .queue_id(queue_id)
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to download output:\n{}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
 
-    let attachment_settings = queue.job_attachment_settings()
-        .ok_or_else(|| CliError::Operation(format!(
+    let attachment_settings = queue.job_attachment_settings().ok_or_else(|| {
+        CliError::Operation(format!(
             "Queue '{}' does not have job attachments configured.",
             queue.display_name()
-        )))?;
+        ))
+    })?;
 
     let bucket = attachment_settings.s3_bucket_name();
     let prefix = attachment_settings.root_prefix();
@@ -1369,9 +2077,9 @@ pub(crate) async fn download_output_impl(
     };
 
     // Build S3 client with queue-scoped credentials
-    let sdk_config = session::get_queue_scoped_config(
-        farm_id, queue_id, Some(config),
-    ).await.map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, Some(config))
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
     let s3_client = s3::build_s3_client(&sdk_config, Some(config));
     let account_id = s3::get_account_id(&sdk_config)
@@ -1380,10 +2088,18 @@ pub(crate) async fn download_output_impl(
 
     // Create OutputDownloader
     let mut downloader = OutputDownloader::new(
-        s3_settings, farm_id, queue_id, job_id,
-        step_id, task_id, session_action_id.as_deref(),
-        s3_client, account_id,
-    ).await.map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+        s3_settings,
+        farm_id,
+        queue_id,
+        job_id,
+        step_id,
+        task_id,
+        session_action_id.as_deref(),
+        s3_client,
+        account_id,
+    )
+    .await
+    .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
     let output_paths = downloader.get_output_paths_by_root();
 
@@ -1396,7 +2112,8 @@ pub(crate) async fn download_output_impl(
     check_windows_long_paths(&output_paths);
 
     // F7: Build root_path_format_mapping from job attachments
-    let mut root_path_format_mapping: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut root_path_format_mapping: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     if let Some(attachments) = job.attachments() {
         for manifest in attachments.manifests() {
             let root = manifest.root_path();
@@ -1409,18 +2126,24 @@ pub(crate) async fn download_output_impl(
     let host_format = PathFormat::get_host_path_format_string();
     let asset_roots: Vec<String> = output_paths.keys().cloned().collect();
     for asset_root in &asset_roots {
-        let root_format = root_path_format_mapping.get(asset_root).map_or("", String::as_str);
+        let root_format = root_path_format_mapping
+            .get(asset_root)
+            .map_or("", String::as_str);
         if !root_format.is_empty() && host_format != root_format {
             if is_json {
-                println!("{}", serde_json::json!({"messageType": "path", "value": [asset_root]}));
+                println!(
+                    "{}",
+                    serde_json::json!({"messageType": "path", "value": [asset_root]})
+                );
                 let mut line = String::new();
                 std::io::stdin().read_line(&mut line).unwrap_or(0);
                 let line = line.trim();
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line)
                     && let Some(vals) = parsed.get("value").and_then(|v| v.as_array())
-                        && let Some(new_root) = vals.first().and_then(|v| v.as_str()) {
-                            downloader.set_root_path(asset_root, new_root);
-                        }
+                    && let Some(new_root) = vals.first().and_then(|v| v.as_str())
+                {
+                    downloader.set_root_path(asset_root, new_root);
+                }
             } else {
                 use std::io::Write;
                 let fmt_cap = format!("{}{}", &root_format[..1].to_uppercase(), &root_format[1..]);
@@ -1450,39 +2173,54 @@ pub(crate) async fn download_output_impl(
         if is_json {
             // JSON mode: emit paths, read pathConfirm response
             let roots: Vec<String> = output_paths.keys().cloned().collect();
-            println!("{}", serde_json::json!({"messageType": "path", "value": roots}));
+            println!(
+                "{}",
+                serde_json::json!({"messageType": "path", "value": roots})
+            );
             let mut line = String::new();
             std::io::stdin().read_line(&mut line).unwrap_or(0);
             let line = line.trim();
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line)
-                && let Some(vals) = parsed.get("value").and_then(|v| v.as_array()) {
-                    for (i, val) in vals.iter().enumerate() {
-                        if let Some(new_root) = val.as_str()
-                            && i < roots.len() {
-                                downloader.set_root_path(&roots[i], new_root);
-                            }
+                && let Some(vals) = parsed.get("value").and_then(|v| v.as_array())
+            {
+                for (i, val) in vals.iter().enumerate() {
+                    if let Some(new_root) = val.as_str()
+                        && i < roots.len()
+                    {
+                        downloader.set_root_path(&roots[i], new_root);
                     }
-                    output_paths = downloader.get_output_paths_by_root();
                 }
+                output_paths = downloader.get_output_paths_by_root();
+            }
         } else {
             loop {
                 // Show summary
                 use std::io::Write;
-                let summary_lines: Vec<String> = output_paths.iter().map(|(dir, paths)| {
-                    let count = paths.len();
-                    let s = if count > 1 { "s" } else { "" };
-                    format!("    {dir} ({count} file{s})")
-                }).collect();
-                println!("\nSummary of files to download:\n{}", summary_lines.join("\n"));
+                let summary_lines: Vec<String> = output_paths
+                    .iter()
+                    .map(|(dir, paths)| {
+                        let count = paths.len();
+                        let s = if count > 1 { "s" } else { "" };
+                        format!("    {dir} ({count} file{s})")
+                    })
+                    .collect();
+                println!(
+                    "\nSummary of files to download:\n{}",
+                    summary_lines.join("\n")
+                );
 
                 // Show roots with indices
                 let roots: Vec<String> = output_paths.keys().cloned().collect();
-                println!("You are about to download files which may come from multiple root directories. Here are a list of the current root directories:");
+                println!(
+                    "You are about to download files which may come from multiple root directories. Here are a list of the current root directories:"
+                );
                 for (i, root) in roots.iter().enumerate() {
                     println!("[{i}] {root}");
                 }
 
-                print!("> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download: ");
+                print!(
+                    "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download: "
+                );
                 std::io::stdout().flush().ok();
                 let mut choice = String::new();
                 if std::io::stdin().read_line(&mut choice).unwrap_or(0) == 0 {
@@ -1495,17 +2233,20 @@ pub(crate) async fn download_output_impl(
                 } else if choice == "y" || choice.is_empty() {
                     break;
                 } else if let Ok(idx) = choice.parse::<usize>()
-                    && idx < roots.len() {
-                        print!("> Please enter the new root directory path, or press Enter to keep it unchanged: ");
-                        std::io::stdout().flush().ok();
-                        let mut new_root = String::new();
-                        std::io::stdin().read_line(&mut new_root).unwrap_or(0);
-                        let new_root = new_root.trim();
-                        if !new_root.is_empty() && new_root != roots[idx] {
-                            downloader.set_root_path(&roots[idx], new_root);
-                            output_paths = downloader.get_output_paths_by_root();
-                        }
+                    && idx < roots.len()
+                {
+                    print!(
+                        "> Please enter the new root directory path, or press Enter to keep it unchanged: "
+                    );
+                    std::io::stdout().flush().ok();
+                    let mut new_root = String::new();
+                    std::io::stdin().read_line(&mut new_root).unwrap_or(0);
+                    let new_root = new_root.trim();
+                    if !new_root.is_empty() && new_root != roots[idx] {
+                        downloader.set_root_path(&roots[idx], new_root);
+                        output_paths = downloader.get_output_paths_by_root();
                     }
+                }
             }
         }
     }
@@ -1514,7 +2255,8 @@ pub(crate) async fn download_output_impl(
 
     // Build path summary for verbose output
     if !is_json {
-        let all_paths: Vec<String> = output_paths.iter()
+        let all_paths: Vec<String> = output_paths
+            .iter()
             .flat_map(|(root, paths)| {
                 paths.iter().map(move |p| {
                     let full = std::path::PathBuf::from(root).join(p);
@@ -1531,7 +2273,9 @@ pub(crate) async fn download_output_impl(
     }
 
     // Resolve conflict resolution — check for existing files if not explicitly set
-    let resolution = if let Some(r) = conflict_resolution { r } else {
+    let resolution = if let Some(r) = conflict_resolution {
+        r
+    } else {
         // Check for conflicting files
         let mut conflicting: Vec<String> = Vec::new();
         for (root, paths) in &output_paths {
@@ -1552,8 +2296,8 @@ pub(crate) async fn download_output_impl(
             }
             println!("Defaulting to Create a copy (appending '(1)' to conflicting files).");
         }
-        let setting = config_file::get_setting("settings.conflict_resolution", config)
-            .unwrap_or_default();
+        let setting =
+            config_file::get_setting("settings.conflict_resolution", config).unwrap_or_default();
         match setting.to_uppercase().as_str() {
             "SKIP" => FileConflictResolution::Skip,
             "OVERWRITE" => FileConflictResolution::Overwrite,
@@ -1562,29 +2306,41 @@ pub(crate) async fn download_output_impl(
     };
 
     // Download with progress
-    let progress_mgr = std::sync::Mutex::new(
-        crate::common::ProgressBarManager::new(100, "Downloading Outputs"),
-    );
+    let progress_mgr = std::sync::Mutex::new(crate::common::ProgressBarManager::new(
+        100,
+        "Downloading Outputs",
+    ));
 
-    let download_summary = downloader.download_job_output(
-        resolution,
-        Some(Box::new(move |meta| {
-            let new_progress = meta.progress as u64;
-            progress_mgr.lock().expect("lock poisoned").callback(new_progress);
-            crate::common::should_continue()
-        })),
-    ).await.map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
+    let download_summary = downloader
+        .download_job_output(
+            resolution,
+            Some(Box::new(move |meta| {
+                let new_progress = meta.progress as u64;
+                progress_mgr
+                    .lock()
+                    .expect("lock poisoned")
+                    .callback(new_progress);
+                crate::common::should_continue()
+            })),
+        )
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
     // Print summary
     if is_json {
-        println!("{}", serde_json::json!({
-            "messageType": "summary",
-            "value": format!("Downloaded {} files", download_summary.stats.processed_files),
-            "fileCount": download_summary.stats.processed_files,
-            "files": download_summary.downloaded_files,
-        }));
+        println!(
+            "{}",
+            serde_json::json!({
+                "messageType": "summary",
+                "value": format!("Downloaded {} files", download_summary.stats.processed_files),
+                "fileCount": download_summary.stats.processed_files,
+                "files": download_summary.downloaded_files,
+            })
+        );
     } else {
-        let paths_joined: String = download_summary.file_counts_by_root_directory.iter()
+        let paths_joined: String = download_summary
+            .file_counts_by_root_directory
+            .iter()
             .map(|(dir, count)| {
                 let file_word = if *count > 1 { "files" } else { "file" };
                 format!("{dir} ({count} {file_word})")
@@ -1627,7 +2383,13 @@ async fn batch_get<F, Fut>(
     items_field: &str,
     id_fields: &[&str],
     max_attempts: usize,
-) -> Result<(std::collections::HashMap<String, serde_json::Value>, Vec<serde_json::Value>), CliError>
+) -> Result<
+    (
+        std::collections::HashMap<String, serde_json::Value>,
+        Vec<serde_json::Value>,
+    ),
+    CliError,
+>
 where
     F: Fn(Vec<serde_json::Value>) -> Fut,
     Fut: Future<Output = Result<serde_json::Value, deadline_api::errors::DeadlineError>>,
@@ -1639,7 +2401,8 @@ where
     for attempt in 0..max_attempts {
         let mut next_round = Vec::new();
         for chunk in remaining.chunks(MAX_BATCH_SIZE) {
-            let response = send_batch(chunk.to_vec()).await
+            let response = send_batch(chunk.to_vec())
+                .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
             if let Some(items) = response[items_field].as_array() {
                 for item in items {
@@ -1676,7 +2439,10 @@ where
     }
     for ident in &remaining {
         let mut err = ident.as_object().cloned().unwrap_or_default();
-        err.insert("code".to_owned(), serde_json::Value::String("ExhaustedRetries".to_owned()));
+        err.insert(
+            "code".to_owned(),
+            serde_json::Value::String("ExhaustedRetries".to_owned()),
+        );
         terminal.push(serde_json::Value::Object(err));
     }
     Ok((results, terminal))
@@ -1688,11 +2454,17 @@ fn warn_on_errors(resource_type: &str, errors: &[serde_json::Value]) {
     }
     eprintln!(
         "Warning: could not retrieve {} {}(s); the trace will exclude their details.",
-        errors.len(), resource_type,
+        errors.len(),
+        resource_type,
     );
     for err in errors.iter().take(5) {
-        eprintln!("  {}: {}", err.get("code").and_then(|c| c.as_str()).unwrap_or("Unknown"),
-            err.get("message").and_then(|m| m.as_str()).unwrap_or(""));
+        eprintln!(
+            "  {}: {}",
+            err.get("code")
+                .and_then(|c| c.as_str())
+                .unwrap_or("Unknown"),
+            err.get("message").and_then(|m| m.as_str()).unwrap_or("")
+        );
     }
     if errors.len() > 5 {
         eprintln!("  ... and {} more.", errors.len() - 5);
@@ -1716,13 +2488,17 @@ fn format_timedelta(us: i64) -> String {
 fn parse_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     // Handle: "2025-01-27T07:37:53Z", "2025-01-27 07:37:53+00:00",
     // "2025-01-27 07:37:53.238+00:00" (fractional seconds from some API responses)
-    chrono::DateTime::parse_from_rfc3339(s).ok()
+    chrono::DateTime::parse_from_rfc3339(s)
+        .ok()
         .or_else(|| chrono::DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f%:z").ok())
         .or_else(|| chrono::DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%:z").ok())
         .map(|dt| dt.with_timezone(&chrono::Utc))
 }
 
-#[allow(clippy::too_many_lines, reason = "trace schedule analysis is a single coherent pipeline")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "trace schedule analysis is a single coherent pipeline"
+)]
 async fn run_trace_schedule(
     profile: Option<String>,
     farm_id: Option<String>,
@@ -1734,53 +2510,81 @@ async fn run_trace_schedule(
 ) -> Result<(), CliError> {
     use serde_json::json;
 
-    let config = setup_config(profile, farm_id, queue_id, job_id, false,
-        &["farm_id", "queue_id", "job_id"])?;
+    let config = setup_config(
+        profile,
+        farm_id,
+        queue_id,
+        job_id,
+        false,
+        &["farm_id", "queue_id", "job_id"],
+    )?;
     let farm = get(&config, "defaults.farm_id");
     let queue = get(&config, "defaults.queue_id");
     let job = get(&config, "defaults.job_id");
 
     if trace_file.is_some() && trace_format.is_none() {
         return Err(CliError::Operation(
-            "Error: Must provide --trace-format with --trace-file.".to_owned()
+            "Error: Must provide --trace-format with --trace-file.".to_owned(),
         ));
     }
 
     println!("Getting the job...");
     let dl = session::deadline_client(Some(&config)).await;
-    let job_data = dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
-        .send().await
-        .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?;
+    let job_data = dl
+        .get_job()
+        .farm_id(&farm)
+        .queue_id(&queue)
+        .job_id(&job)
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to get job: {}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
 
     let started_at = match job_data.started_at() {
         Some(dt) => {
             let s = responses::format_datetime(dt);
-            parse_datetime(&s).ok_or_else(|| {
-                CliError::Operation(format!("Failed to parse job startedAt: {s}"))
-            })?
+            parse_datetime(&s)
+                .ok_or_else(|| CliError::Operation(format!("Failed to parse job startedAt: {s}")))?
         }
-        None => return Err(CliError::Operation(
-            "No trace available - Job hasn't started yet, exiting".to_owned()
-        )),
+        None => {
+            return Err(CliError::Operation(
+                "No trace available - Job hasn't started yet, exiting".to_owned(),
+            ));
+        }
     };
     let trace_end_utc = chrono::Utc::now();
 
     // Fetch all sessions
     let sessions_pages = client::collect_paginated(
-        dl.list_sessions().farm_id(&farm).queue_id(&queue).job_id(&job)
-            .into_paginator().send()
-    ).await
-        .map_err(|e| CliError::Operation(format!("Failed to list sessions: {e}")))?;
-    let mut sessions: Vec<serde_json::Value> = sessions_pages.iter()
+        dl.list_sessions()
+            .farm_id(&farm)
+            .queue_id(&queue)
+            .job_id(&job)
+            .into_paginator()
+            .send(),
+    )
+    .await
+    .map_err(|e| CliError::Operation(format!("Failed to list sessions: {e}")))?;
+    let mut sessions: Vec<serde_json::Value> = sessions_pages
+        .iter()
         .flat_map(aws_sdk_deadline::operation::list_sessions::ListSessionsOutput::sessions)
         .map(|s| {
             let mut m = serde_json::Map::new();
             m.insert("sessionId".into(), json!(s.session_id()));
             m.insert("workerId".into(), json!(s.worker_id()));
             m.insert("fleetId".into(), json!(s.fleet_id()));
-            m.insert("lifecycleStatus".into(), json!(s.lifecycle_status().as_str()));
+            m.insert(
+                "lifecycleStatus".into(),
+                json!(s.lifecycle_status().as_str()),
+            );
             m.insert("startedAt".into(), json!(format_datetime(s.started_at())));
-            if let Some(ended) = s.ended_at() { m.insert("endedAt".into(), json!(format_datetime(ended))); }
+            if let Some(ended) = s.ended_at() {
+                m.insert("endedAt".into(), json!(format_datetime(ended)));
+            }
             serde_json::Value::Object(m)
         })
         .collect();
@@ -1795,7 +2599,8 @@ async fn run_trace_schedule(
     println!("Getting all the session actions for the job...");
     for session in &mut sessions {
         let sid = session["sessionId"].as_str().unwrap_or("").to_owned();
-        let action_pages = collect_paginated_session_actions(&dl, &farm, &queue, &job, &sid).await
+        let action_pages = collect_paginated_session_actions(&dl, &farm, &queue, &job, &sid)
+            .await
             .map_err(|e| CliError::Operation(format!("Failed to list session actions: {e}")))?;
         let actions: Vec<serde_json::Value> = action_pages.iter()
             .flat_map(aws_sdk_deadline::operation::list_session_actions::ListSessionActionsOutput::session_actions)
@@ -1813,27 +2618,34 @@ async fn run_trace_schedule(
                 && let (Some(sid), Some(tid)) = (
                     task_run.get("stepId").and_then(|v| v.as_str()),
                     task_run.get("taskId").and_then(|v| v.as_str()),
-                ) {
-                    step_ids.insert(sid.to_owned());
-                    task_refs.insert((sid.to_owned(), tid.to_owned()));
-                }
+                )
+            {
+                step_ids.insert(sid.to_owned());
+                task_refs.insert((sid.to_owned(), tid.to_owned()));
+            }
         }
     }
 
     // BatchGetStep
     println!("Getting {} step(s) via BatchGetStep...", step_ids.len());
-    let step_identifiers: Vec<serde_json::Value> = step_ids.iter().map(|s| {
-        json!({"farmId": farm, "queueId": queue, "jobId": job, "stepId": s})
-    }).collect();
+    let step_identifiers: Vec<serde_json::Value> = step_ids
+        .iter()
+        .map(|s| json!({"farmId": farm, "queueId": queue, "jobId": job, "stepId": s}))
+        .collect();
     let config_ref = &config;
     let (steps, step_errors) = batch_get(
         |chunk| async move { api::batch_get_steps_page(&chunk, Some(config_ref)).await },
         step_identifiers,
-        |item| item.get("stepId").and_then(|v| v.as_str()).map(ToOwned::to_owned),
+        |item| {
+            item.get("stepId")
+                .and_then(|v| v.as_str())
+                .map(ToOwned::to_owned)
+        },
         "steps",
         &["farmId", "queueId", "jobId", "stepId"],
         3,
-    ).await?;
+    )
+    .await?;
     warn_on_errors("step", &step_errors);
 
     // BatchGetTask
@@ -1844,11 +2656,16 @@ async fn run_trace_schedule(
     let (tasks, task_errors) = batch_get(
         |chunk| async move { api::batch_get_tasks_page(&chunk, Some(config_ref)).await },
         task_identifiers,
-        |item| item.get("taskId").and_then(|v| v.as_str()).map(ToOwned::to_owned),
+        |item| {
+            item.get("taskId")
+                .and_then(|v| v.as_str())
+                .map(ToOwned::to_owned)
+        },
         "tasks",
         &["farmId", "queueId", "jobId", "stepId", "taskId"],
         3,
-    ).await?;
+    )
+    .await?;
     warn_on_errors("task", &task_errors);
 
     // Attach step/task records to sessions and actions
@@ -1858,13 +2675,22 @@ async fn run_trace_schedule(
         let mut new_actions = Vec::new();
         for mut action in actions {
             if let Some(task_run) = action.get("definition").and_then(|d| d.get("taskRun")) {
-                let step_id = task_run.get("stepId").and_then(|v| v.as_str()).unwrap_or("");
-                let task_id = task_run.get("taskId").and_then(|v| v.as_str()).unwrap_or("");
+                let step_id = task_run
+                    .get("stepId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let task_id = task_run
+                    .get("taskId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if let Some(step) = steps.get(step_id) {
                     if session.get("step").is_none() {
                         session["step"] = step.clone();
                     } else if session["step"]["stepId"].as_str() != Some(step_id) {
-                        let sid = session.get("sessionId").and_then(|v| v.as_str()).unwrap_or("");
+                        let sid = session
+                            .get("sessionId")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
                         return Err(CliError::Operation(format!(
                             "Session {sid} ran more than one step! When this code was written that wasn't possible."
                         )));
@@ -1880,12 +2706,22 @@ async fn run_trace_schedule(
     }
 
     // Build worker index map (sorted for deterministic pid assignment)
-    let mut worker_list: Vec<String> = sessions.iter()
-        .filter_map(|s| s.get("workerId").and_then(|v| v.as_str()).map(ToOwned::to_owned))
-        .collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let mut worker_list: Vec<String> = sessions
+        .iter()
+        .filter_map(|s| {
+            s.get("workerId")
+                .and_then(|v| v.as_str())
+                .map(ToOwned::to_owned)
+        })
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     worker_list.sort();
-    let workers: std::collections::HashMap<String, usize> = worker_list.iter()
-        .enumerate().map(|(i, w)| (w.clone(), i)).collect();
+    let workers: std::collections::HashMap<String, usize> = worker_list
+        .iter()
+        .enumerate()
+        .map(|(i, w)| (w.clone(), i))
+        .collect();
 
     println!("Processing the trace data...");
 
@@ -1895,7 +2731,10 @@ async fn run_trace_schedule(
     };
     let trace_end_str = trace_end_utc.to_rfc3339();
     let duration_of = |resource: &serde_json::Value| -> i64 {
-        let end = resource.get("endedAt").and_then(|v| v.as_str()).unwrap_or(&trace_end_str);
+        let end = resource
+            .get("endedAt")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&trace_end_str);
         match resource.get("startedAt").and_then(|v| v.as_str()) {
             Some(start) => time_int(end) - time_int(start),
             None => 0,
@@ -1904,20 +2743,37 @@ async fn run_trace_schedule(
 
     let mut trace_events: Vec<serde_json::Value> = Vec::new();
     let mut acc = std::collections::HashMap::from([
-        ("sessionCount", 0i64), ("sessionActionCount", 0), ("taskRunCount", 0),
-        ("envActionCount", 0), ("syncJobAttachmentsCount", 0),
-        ("sessionDuration", 0), ("sessionActionDuration", 0), ("taskRunDuration", 0),
-        ("envActionDuration", 0), ("syncJobAttachmentsDuration", 0),
+        ("sessionCount", 0i64),
+        ("sessionActionCount", 0),
+        ("taskRunCount", 0),
+        ("envActionCount", 0),
+        ("syncJobAttachmentsCount", 0),
+        ("sessionDuration", 0),
+        ("sessionActionDuration", 0),
+        ("taskRunDuration", 0),
+        ("envActionDuration", 0),
+        ("syncJobAttachmentsDuration", 0),
     ]);
 
     for session in &sessions {
         *acc.get_mut("sessionCount").expect("key initialized above") += 1;
-        *acc.get_mut("sessionDuration").expect("key initialized above") += duration_of(session);
+        *acc.get_mut("sessionDuration")
+            .expect("key initialized above") += duration_of(session);
 
-        let worker_id = session.get("workerId").and_then(|v| v.as_str()).unwrap_or("");
+        let worker_id = session
+            .get("workerId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let pid = workers.get(worker_id).copied().unwrap_or(0);
-        let step_name = session.get("step").and_then(|s| s.get("name")).and_then(|n| n.as_str()).unwrap_or("Unknown");
-        let index = session.get("index").and_then(serde_json::Value::as_i64).unwrap_or(0);
+        let step_name = session
+            .get("step")
+            .and_then(|s| s.get("name"))
+            .and_then(|n| n.as_str())
+            .unwrap_or("Unknown");
+        let index = session
+            .get("index")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
         let mut session_event_name = format!("{step_name} - {index}");
         if session.get("endedAt").is_none() {
             session_event_name = format!("{session_event_name} - In Progress");
@@ -1939,49 +2795,71 @@ async fn run_trace_schedule(
         }));
 
         for action in session["actions"].as_array().unwrap_or(&vec![]) {
-            *acc.get_mut("sessionActionCount").expect("key initialized above") += 1;
-            *acc.get_mut("sessionActionDuration").expect("key initialized above") += duration_of(action);
+            *acc.get_mut("sessionActionCount")
+                .expect("key initialized above") += 1;
+            *acc.get_mut("sessionActionDuration")
+                .expect("key initialized above") += duration_of(action);
 
             let empty_obj = json!({});
             let definition = action.get("definition").unwrap_or(&empty_obj);
-            let action_type = definition.as_object()
-                .and_then(|m| m.keys().next()).map_or("", String::as_str);
+            let action_type = definition
+                .as_object()
+                .and_then(|m| m.keys().next())
+                .map_or("", String::as_str);
 
-            let mut name = action.get("sessionActionId").and_then(|v| v.as_str()).unwrap_or("").to_owned();
+            let mut name = action
+                .get("sessionActionId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned();
 
             match action_type {
                 "taskRun" => {
                     *acc.get_mut("taskRunCount").expect("key initialized above") += 1;
-                    *acc.get_mut("taskRunDuration").expect("key initialized above") += duration_of(action);
+                    *acc.get_mut("taskRunDuration")
+                        .expect("key initialized above") += duration_of(action);
 
                     let empty_task = json!({});
                     let task = action.get("task").unwrap_or(&empty_task);
                     let parameters = task.get("parameters").and_then(|p| p.as_object());
                     name = match parameters {
-                        Some(params) if !params.is_empty() => {
-                            params.iter().map(|(k, v)| {
-                                let val = v.as_object()
+                        Some(params) if !params.is_empty() => params
+                            .iter()
+                            .map(|(k, v)| {
+                                let val = v
+                                    .as_object()
                                     .and_then(|m| m.values().next())
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("");
                                 format!("{k}={val}")
-                            }).collect::<Vec<_>>().join(",")
-                        }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(","),
                         _ => "<No Task Params>".to_owned(),
                     };
                 }
                 "envEnter" | "envExit" => {
-                    *acc.get_mut("envActionCount").expect("key initialized above") += 1;
-                    *acc.get_mut("envActionDuration").expect("key initialized above") += duration_of(action);
+                    *acc.get_mut("envActionCount")
+                        .expect("key initialized above") += 1;
+                    *acc.get_mut("envActionDuration")
+                        .expect("key initialized above") += duration_of(action);
 
-                    let env_id = definition.get(action_type)
+                    let env_id = definition
+                        .get(action_type)
                         .and_then(|e| e.get("environmentId"))
-                        .and_then(|v| v.as_str()).unwrap_or("");
-                    env_id.rsplit(':').next().unwrap_or(env_id).clone_into(&mut name);
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    env_id
+                        .rsplit(':')
+                        .next()
+                        .unwrap_or(env_id)
+                        .clone_into(&mut name);
                 }
                 "syncInputJobAttachments" => {
-                    *acc.get_mut("syncJobAttachmentsCount").expect("key initialized above") += 1;
-                    *acc.get_mut("syncJobAttachmentsDuration").expect("key initialized above") += duration_of(action);
+                    *acc.get_mut("syncJobAttachmentsCount")
+                        .expect("key initialized above") += 1;
+                    *acc.get_mut("syncJobAttachmentsDuration")
+                        .expect("key initialized above") += duration_of(action);
 
                     let empty_sync = json!({});
                     let sync_def = definition.get(action_type).unwrap_or(&empty_sync);
@@ -2016,7 +2894,10 @@ async fn run_trace_schedule(
             }
         }
 
-        let session_end = session.get("endedAt").and_then(|v| v.as_str()).unwrap_or(&trace_end_str);
+        let session_end = session
+            .get("endedAt")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&trace_end_str);
         trace_events.push(json!({
             "name": session_event_name,
             "cat": "SESSION",
@@ -2029,10 +2910,26 @@ async fn run_trace_schedule(
 
     if verbose {
         println!(" ==== TRACE DATA ====");
-        let job_resp = JobResponse::from(dl.get_job().farm_id(&farm).queue_id(&queue).job_id(&job)
-            .send().await
-            .map_err(|e| CliError::Operation(format!("Failed to get job: {}", client::format_sdk_error(&e))))?);
-        println!("{}", crate::common::cli_object_repr(&serde_json::to_value(&job_resp).expect("JSON serialization")));
+        let job_resp = JobResponse::from(
+            dl.get_job()
+                .farm_id(&farm)
+                .queue_id(&queue)
+                .job_id(&job)
+                .send()
+                .await
+                .map_err(|e| {
+                    CliError::Operation(format!(
+                        "Failed to get job: {}",
+                        client::format_sdk_error(&e)
+                    ))
+                })?,
+        );
+        println!(
+            "{}",
+            crate::common::cli_object_repr(
+                &serde_json::to_value(&job_resp).expect("JSON serialization")
+            )
+        );
         println!("{}", crate::common::cli_object_repr(&json!(sessions)));
     }
 
@@ -2045,41 +2942,82 @@ async fn run_trace_schedule(
     let session_action_count = acc["sessionActionCount"];
 
     let pct = |part: i64| -> String {
-        if session_duration == 0 { "0.0".to_owned() }
-        else { format!("{:.1}", 100.0 * part as f64 / session_duration as f64) }
+        if session_duration == 0 {
+            "0.0".to_owned()
+        } else {
+            format!("{:.1}", 100.0 * part as f64 / session_duration as f64)
+        }
     };
 
     println!();
     println!(" ==== SUMMARY ====");
     println!();
     println!("Session Count: {}", acc["sessionCount"]);
-    println!("Session Total Duration: {}", format_timedelta(session_duration));
+    println!(
+        "Session Total Duration: {}",
+        format_timedelta(session_duration)
+    );
     println!("Session Action Count: {session_action_count}");
-    println!("Session Action Total Duration: {}", format_timedelta(session_action_duration));
+    println!(
+        "Session Action Total Duration: {}",
+        format_timedelta(session_action_duration)
+    );
     println!("Task Run Count: {}", acc["taskRunCount"]);
-    println!("Task Run Total Duration: {} ({}%)", format_timedelta(task_run_duration), pct(task_run_duration));
+    println!(
+        "Task Run Total Duration: {} ({}%)",
+        format_timedelta(task_run_duration),
+        pct(task_run_duration)
+    );
     let non_task_count = session_action_count - acc["taskRunCount"];
     let non_task_duration = session_action_duration - task_run_duration;
     println!("Non-Task Run Count: {non_task_count}");
-    println!("Non-Task Run Total Duration: {} ({}%)", format_timedelta(non_task_duration), pct(non_task_duration));
-    println!("Sync Job Attachments Count: {}", acc["syncJobAttachmentsCount"]);
-    println!("Sync Job Attachments Total Duration: {} ({}%)", format_timedelta(sync_duration), pct(sync_duration));
+    println!(
+        "Non-Task Run Total Duration: {} ({}%)",
+        format_timedelta(non_task_duration),
+        pct(non_task_duration)
+    );
+    println!(
+        "Sync Job Attachments Count: {}",
+        acc["syncJobAttachmentsCount"]
+    );
+    println!(
+        "Sync Job Attachments Total Duration: {} ({}%)",
+        format_timedelta(sync_duration),
+        pct(sync_duration)
+    );
     println!("Env Action Count: {}", acc["envActionCount"]);
-    println!("Env Action Total Duration: {} ({}%)", format_timedelta(env_action_duration), pct(env_action_duration));
+    println!(
+        "Env Action Total Duration: {} ({}%)",
+        format_timedelta(env_action_duration),
+        pct(env_action_duration)
+    );
     println!();
     let overhead = session_duration - session_action_duration;
-    println!("Within-session Overhead Duration: {} ({}%)", format_timedelta(overhead), pct(overhead));
+    println!(
+        "Within-session Overhead Duration: {} ({}%)",
+        format_timedelta(overhead),
+        pct(overhead)
+    );
     if session_action_count > 0 {
-        println!("Within-session Overhead Duration Per Action: {}", format_timedelta((overhead as f64 / session_action_count as f64).round() as i64));
+        println!(
+            "Within-session Overhead Duration Per Action: {}",
+            format_timedelta((overhead as f64 / session_action_count as f64).round() as i64)
+        );
     }
 
     // Write trace file
     if let Some(ref trace_path) = trace_file {
         // Python uses datetime.isoformat(sep="T") for trace file timestamps
         let to_iso = |s: &str| -> String {
-            parse_datetime(s).map_or_else(|| s.to_owned(), |dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Micros, false))
+            parse_datetime(s).map_or_else(
+                || s.to_owned(),
+                |dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Micros, false),
+            )
         };
-        let job_started = job_data.started_at().map(responses::format_datetime).unwrap_or_default();
+        let job_started = job_data
+            .started_at()
+            .map(responses::format_datetime)
+            .unwrap_or_default();
         let mut other_data = json!({
             "farmId": farm,
             "queueId": queue,
@@ -2100,9 +3038,12 @@ async fn run_trace_schedule(
             "otherData": other_data,
         });
 
-        std::fs::write(trace_path, serde_json::to_string_pretty(&tracing_data)
-            .map_err(|e| CliError::Operation(e.to_string()))?)
-            .map_err(|e| CliError::Operation(format!("Failed to write trace file: {e}")))?;
+        std::fs::write(
+            trace_path,
+            serde_json::to_string_pretty(&tracing_data)
+                .map_err(|e| CliError::Operation(e.to_string()))?,
+        )
+        .map_err(|e| CliError::Operation(format!("Failed to write trace file: {e}")))?;
     }
 
     Ok(())
@@ -2115,42 +3056,66 @@ async fn collect_paginated_session_actions(
     queue_id: &str,
     job_id: &str,
     session_id: &str,
-) -> Result<Vec<aws_sdk_deadline::operation::list_session_actions::ListSessionActionsOutput>, deadline_api::errors::DeadlineError> {
+) -> Result<
+    Vec<aws_sdk_deadline::operation::list_session_actions::ListSessionActionsOutput>,
+    deadline_api::errors::DeadlineError,
+> {
     client::collect_paginated(
-        client.list_session_actions()
-            .farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
-            .into_paginator().send()
-    ).await
+        client
+            .list_session_actions()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .job_id(job_id)
+            .session_id(session_id)
+            .into_paginator()
+            .send(),
+    )
+    .await
 }
 
 /// Convert a `SessionActionSummary` to a `serde_json::Value` for the trace-schedule consumer.
-fn session_action_summary_to_value(a: &aws_sdk_deadline::types::SessionActionSummary) -> serde_json::Value {
+fn session_action_summary_to_value(
+    a: &aws_sdk_deadline::types::SessionActionSummary,
+) -> serde_json::Value {
     use serde_json::json;
     let mut m = serde_json::Map::new();
     m.insert("sessionActionId".into(), json!(a.session_action_id()));
     m.insert("status".into(), json!(a.status().as_str()));
-    if let Some(dt) = a.started_at() { m.insert("startedAt".into(), json!(responses::format_datetime(dt))); }
-    if let Some(dt) = a.ended_at() { m.insert("endedAt".into(), json!(responses::format_datetime(dt))); }
+    if let Some(dt) = a.started_at() {
+        m.insert("startedAt".into(), json!(responses::format_datetime(dt)));
+    }
+    if let Some(dt) = a.ended_at() {
+        m.insert("endedAt".into(), json!(responses::format_datetime(dt)));
+    }
     // Convert definition to match the JSON structure callers expect
     if let Some(def) = a.definition() {
         use aws_sdk_deadline::types::SessionActionDefinitionSummary;
         match def {
             SessionActionDefinitionSummary::TaskRun(tr) => {
-                m.insert("definition".into(), json!({
-                    "taskRun": {
-                        "stepId": tr.step_id(),
-                        "taskId": tr.task_id(),
-                    }
-                }));
+                m.insert(
+                    "definition".into(),
+                    json!({
+                        "taskRun": {
+                            "stepId": tr.step_id(),
+                            "taskId": tr.task_id(),
+                        }
+                    }),
+                );
             }
             SessionActionDefinitionSummary::SyncInputJobAttachments(_) => {
                 m.insert("definition".into(), json!({"syncInputJobAttachments": {}}));
             }
             SessionActionDefinitionSummary::EnvEnter(ee) => {
-                m.insert("definition".into(), json!({"envEnter": {"environmentId": ee.environment_id()}}));
+                m.insert(
+                    "definition".into(),
+                    json!({"envEnter": {"environmentId": ee.environment_id()}}),
+                );
             }
             SessionActionDefinitionSummary::EnvExit(ee) => {
-                m.insert("definition".into(), json!({"envExit": {"environmentId": ee.environment_id()}}));
+                m.insert(
+                    "definition".into(),
+                    json!({"envExit": {"environmentId": ee.environment_id()}}),
+                );
             }
             _ => {}
         }

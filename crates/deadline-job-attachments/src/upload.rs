@@ -1,19 +1,25 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use crate::errors::JobAttachmentsError;
+use crate::models::PathFormat;
 use aws_sdk_s3::error::ProvideErrorMetadata;
 use aws_sdk_s3::primitives::ByteStream;
 use deadline_config::ini::IniConfig;
-use crate::errors::JobAttachmentsError;
-use crate::models::PathFormat;
 
-use crate::asset_manifests::{hash_data, hash_file, AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion};
-use crate::caches::{HashCache, HashCacheEntry, S3CheckCache, S3CheckCacheEntry, format_mtime_for_cache};
+use crate::asset_manifests::{
+    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, hash_data, hash_file,
+};
+use crate::caches::{
+    HashCache, HashCacheEntry, S3CheckCache, S3CheckCacheEntry, format_mtime_for_cache,
+};
 use crate::models::{
     AssetRootGroup, AssetRootManifest, AssetUploadGroup, Attachments, FileSystemLocationType,
     JobAttachmentS3Settings, ManifestProperties, StorageProfile, join_s3_paths,
 };
-use crate::progress_tracker::{ProgressReportMetadata, ProgressStatus, ProgressTracker, SummaryStatistics};
+use crate::progress_tracker::{
+    ProgressReportMetadata, ProgressStatus, ProgressTracker, SummaryStatistics,
+};
 use crate::s3::compute_upload_config;
 
 fn is_relative_to(path: &Path, base: &str) -> bool {
@@ -28,7 +34,10 @@ fn resolve_and_filter(p: &str, shared_locations: &[&str]) -> Option<PathBuf> {
         return None;
     }
     let abs_path = normalize_absolute(p);
-    if shared_locations.iter().any(|s| is_relative_to(&abs_path, s)) {
+    if shared_locations
+        .iter()
+        .any(|s| is_relative_to(&abs_path, s))
+    {
         return None;
     }
     Some(abs_path)
@@ -46,7 +55,9 @@ fn normalize_absolute(p: &str) -> PathBuf {
     let mut components = Vec::new();
     for c in abs.components() {
         match c {
-            Component::ParentDir => { components.pop(); }
+            Component::ParentDir => {
+                components.pop();
+            }
             Component::CurDir => {}
             _ => components.push(c),
         }
@@ -106,7 +117,10 @@ pub fn prepare_paths_for_upload(
             misconfigured_dirs.insert(abs_path);
             continue;
         }
-        if shared_locations.iter().any(|s| is_relative_to(&abs_path, s)) {
+        if shared_locations
+            .iter()
+            .any(|s| is_relative_to(&abs_path, s))
+        {
             continue;
         }
         let key = find_group_key(&abs_path, &local_locations, &mut groupings);
@@ -118,12 +132,22 @@ pub fn prepare_paths_for_upload(
         use std::fmt::Write;
         let mut msg = "Job submission contains missing input files or directories specified as files. All inputs must exist and be classified properly.".to_owned();
         if !missing_inputs.is_empty() {
-            let list: Vec<String> = missing_inputs.iter().map(|p| p.display().to_string()).collect();
+            let list: Vec<String> = missing_inputs
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect();
             let _ = write!(msg, "\nMissing input files:\n\t{}", list.join("\n\t"));
         }
         if !misconfigured_dirs.is_empty() {
-            let list: Vec<String> = misconfigured_dirs.iter().map(|p| p.display().to_string()).collect();
-            let _ = write!(msg, "\nDirectories classified as files:\n\t{}", list.join("\n\t"));
+            let list: Vec<String> = misconfigured_dirs
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect();
+            let _ = write!(
+                msg,
+                "\nDirectories classified as files:\n\t{}",
+                list.join("\n\t")
+            );
         }
         return Err(JobAttachmentsError::MisconfiguredInputs(msg));
     }
@@ -141,7 +165,9 @@ pub fn prepare_paths_for_upload(
     for p in all_referenced {
         if let Some(abs_path) = resolve_and_filter(p, &shared_locations) {
             let key = find_group_key(&abs_path, &local_locations, &mut groupings);
-            get_group_mut(&key, &mut groupings).references.insert(abs_path);
+            get_group_mut(&key, &mut groupings)
+                .references
+                .insert(abs_path);
         }
     }
 
@@ -199,9 +225,11 @@ fn find_group_key(
     let mut best_match: Option<(&str, &str)> = None;
     for &(loc_path, loc_name) in local_locations {
         if is_relative_to(abs_path, loc_path)
-            && (best_match.is_none() || loc_path.len() > best_match.expect("checked is_none above").0.len()) {
-                best_match = Some((loc_path, loc_name));
-            }
+            && (best_match.is_none()
+                || loc_path.len() > best_match.expect("checked is_none above").0.len())
+        {
+            best_match = Some((loc_path, loc_name));
+        }
     }
 
     if let Some((loc_path, loc_name)) = best_match {
@@ -238,7 +266,10 @@ fn find_group_key(
     }
 }
 
-fn get_group_mut<'a>(key: &str, groupings: &'a mut [(String, AssetRootGroup)]) -> &'a mut AssetRootGroup {
+fn get_group_mut<'a>(
+    key: &str,
+    groupings: &'a mut [(String, AssetRootGroup)],
+) -> &'a mut AssetRootGroup {
     let idx = groupings
         .iter()
         .position(|(k, _)| k.eq_ignore_ascii_case(key))
@@ -286,10 +317,11 @@ fn hash_with_cache(
     was_cached: &mut bool,
 ) -> Result<String, JobAttachmentsError> {
     if let Some(entry) = cache.get_entry(full_path, hash_alg, 0, -1)
-        && entry.last_modified_time == mtime_str {
-            *was_cached = true;
-            return Ok(entry.file_hash);
-        }
+        && entry.last_modified_time == mtime_str
+    {
+        *was_cached = true;
+        return Ok(entry.file_hash);
+    }
     let h = hash_file(file_path, hash_alg)?;
     cache.put_entry(&HashCacheEntry {
         file_path: full_path.to_owned(),
@@ -328,10 +360,7 @@ pub fn hash_assets_and_create_manifest(
         let asset_manifest = if group.inputs.is_empty() {
             None
         } else {
-            let cache = cache_dir
-                .as_deref()
-                .map(HashCache::new)
-                .transpose()?;
+            let cache = cache_dir.as_deref().map(HashCache::new).transpose()?;
 
             let mut paths = Vec::new();
             let sorted_inputs: Vec<_> = group.inputs.iter().cloned().collect();
@@ -360,7 +389,8 @@ pub fn hash_assets_and_create_manifest(
                 };
                 #[cfg(not(unix))]
                 let (mtime_secs, mtime_nsec) = {
-                    let dur = meta.modified()
+                    let dur = meta
+                        .modified()
                         .unwrap_or(std::time::UNIX_EPOCH)
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default();
@@ -375,9 +405,14 @@ pub fn hash_assets_and_create_manifest(
                 let mut was_cached = false;
 
                 let file_hash = match cache {
-                    Some(ref cache) => {
-                        hash_with_cache(cache, &full_path, input_path, hash_alg, &mtime_str, &mut was_cached)?
-                    }
+                    Some(ref cache) => hash_with_cache(
+                        cache,
+                        &full_path,
+                        input_path,
+                        hash_alg,
+                        &mtime_str,
+                        &mut was_cached,
+                    )?,
                     None => hash_file(input_path, hash_alg)?,
                 };
 
@@ -428,7 +463,10 @@ pub fn hash_assets_and_create_manifest(
     let elapsed = start.elapsed().as_secs_f64();
     progress_tracker.set_total_time(elapsed);
 
-    Ok((progress_tracker.get_summary_statistics(), asset_root_manifests))
+    Ok((
+        progress_tracker.get_summary_statistics(),
+        asset_root_manifests,
+    ))
 }
 
 // =====================================================================
@@ -543,12 +581,18 @@ impl S3UploadContext {
         bucket: &str,
         key: &str,
     ) -> Result<bool, JobAttachmentsError> {
-        match self.s3_client.head_object().bucket(bucket).key(key).send().await {
+        match self
+            .s3_client
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+        {
             Ok(_) => Ok(true),
             Err(sdk_err) => {
                 // Extract HTTP status from the raw response if available
-                let status = sdk_err.raw_response()
-                    .map_or(0, |r| r.status().as_u16());
+                let status = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
 
                 if status == 404 {
                     return Ok(false);
@@ -609,9 +653,14 @@ impl S3UploadContext {
             }
             Ok(meta) => {
                 if meta.len() as usize > self.small_file_threshold {
-                    return self.multipart_upload_file(
-                        local_path, s3_bucket, s3_upload_key, progress_tracker,
-                    ).await;
+                    return self
+                        .multipart_upload_file(
+                            local_path,
+                            s3_bucket,
+                            s3_upload_key,
+                            progress_tracker,
+                        )
+                        .await;
                 }
             }
         }
@@ -638,8 +687,7 @@ impl S3UploadContext {
                 Ok(())
             }
             Err(sdk_err) => {
-                let status_code = sdk_err.raw_response()
-                    .map_or(0, |r| r.status().as_u16());
+                let status_code = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
                 let service_err = sdk_err.into_service_error();
                 let raw = format!("{service_err}");
                 let msg = service_err.message().unwrap_or_default();
@@ -666,12 +714,13 @@ impl S3UploadContext {
         s3_upload_key: &str,
         progress_tracker: Option<&ProgressTracker>,
     ) -> Result<(), JobAttachmentsError> {
-        use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
         use crate::s3::S3_MULTIPART_UPLOAD_CHUNK_SIZE;
+        use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
         use futures::stream::{self, StreamExt, TryStreamExt};
 
         // Initiate multipart upload
-        let create_resp = self.s3_client
+        let create_resp = self
+            .s3_client
             .create_multipart_upload()
             .bucket(s3_bucket)
             .key(s3_upload_key)
@@ -679,12 +728,16 @@ impl S3UploadContext {
             .send()
             .await
             .map_err(|sdk_err| {
-                let status_code = sdk_err.raw_response()
-                    .map_or(0, |r| r.status().as_u16());
+                let status_code = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
                 let service_err = sdk_err.into_service_error();
                 let msg = service_err.message().unwrap_or_default();
-                s3_upload_error(status_code, &format!("{service_err} {msg}"),
-                    "initiating multipart upload", s3_bucket, s3_upload_key)
+                s3_upload_error(
+                    status_code,
+                    &format!("{service_err} {msg}"),
+                    "initiating multipart upload",
+                    s3_bucket,
+                    s3_upload_key,
+                )
             })?;
 
         let upload_id = create_resp.upload_id().unwrap_or_default().to_owned();
@@ -700,8 +753,8 @@ impl S3UploadContext {
             .collect();
 
         // Upload parts concurrently using buffer_unordered
-        let part_results: Result<Vec<CompletedPart>, JobAttachmentsError> = stream::iter(
-            chunks.into_iter().map(|(idx, chunk)| {
+        let part_results: Result<Vec<CompletedPart>, JobAttachmentsError> =
+            stream::iter(chunks.into_iter().map(|(idx, chunk)| {
                 let part_number = (idx + 1) as i32;
                 let body = ByteStream::from(chunk.to_vec());
                 let client = &self.s3_client;
@@ -719,23 +772,27 @@ impl S3UploadContext {
                         .send()
                         .await
                         .map_err(|sdk_err| {
-                            let status_code = sdk_err.raw_response()
-                                .map_or(0, |r| r.status().as_u16());
+                            let status_code =
+                                sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
                             let service_err = sdk_err.into_service_error();
                             let msg = service_err.message().unwrap_or_default();
-                            s3_upload_error(status_code, &format!("{service_err} {msg}"),
-                                "uploading part", s3_bucket, s3_upload_key)
+                            s3_upload_error(
+                                status_code,
+                                &format!("{service_err} {msg}"),
+                                "uploading part",
+                                s3_bucket,
+                                s3_upload_key,
+                            )
                         })?;
                     Ok(CompletedPart::builder()
                         .part_number(part_number)
                         .e_tag(resp.e_tag().unwrap_or_default())
                         .build())
                 }
-            })
-        )
-        .buffer_unordered(crate::s3::S3_UPLOAD_MAX_CONCURRENCY)
-        .try_collect()
-        .await;
+            }))
+            .buffer_unordered(crate::s3::S3_UPLOAD_MAX_CONCURRENCY)
+            .try_collect()
+            .await;
 
         match part_results {
             Ok(mut parts) => {
@@ -756,12 +813,16 @@ impl S3UploadContext {
                     .send()
                     .await
                     .map_err(|sdk_err| {
-                        let status_code = sdk_err.raw_response()
-                            .map_or(0, |r| r.status().as_u16());
+                        let status_code = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
                         let service_err = sdk_err.into_service_error();
                         let msg = service_err.message().unwrap_or_default();
-                        s3_upload_error(status_code, &format!("{service_err} {msg}"),
-                            "completing multipart upload", s3_bucket, s3_upload_key)
+                        s3_upload_error(
+                            status_code,
+                            &format!("{service_err} {msg}"),
+                            "completing multipart upload",
+                            s3_bucket,
+                            s3_upload_key,
+                        )
                     })?;
 
                 if let Some(tracker) = progress_tracker {
@@ -771,7 +832,8 @@ impl S3UploadContext {
             }
             Err(e) => {
                 // Abort the multipart upload on failure
-                let _ = self.s3_client
+                let _ = self
+                    .s3_client
                     .abort_multipart_upload()
                     .bucket(s3_bucket)
                     .key(s3_upload_key)
@@ -808,13 +870,18 @@ impl S3UploadContext {
         }
 
         req.send().await.map_err(|sdk_err| {
-            let status_code = sdk_err.raw_response()
-                .map_or(0, |r| r.status().as_u16());
+            let status_code = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
             let msg = service_err.message().unwrap_or_default();
             let full_text = format!("{raw} {msg}");
-            s3_upload_error(status_code, &full_text, "uploading binary file", bucket, key)
+            s3_upload_error(
+                status_code,
+                &full_text,
+                "uploading binary file",
+                bucket,
+                key,
+            )
         })?;
         Ok(())
     }
@@ -931,9 +998,15 @@ impl S3UploadContext {
             let cache = &cache;
             async move {
                 self.upload_one_file(
-                    file, s3_bucket, source_root, s3_cas_prefix,
-                    progress_tracker, cache, force,
-                ).await
+                    file,
+                    s3_bucket,
+                    source_root,
+                    s3_cas_prefix,
+                    progress_tracker,
+                    cache,
+                    force,
+                )
+                .await
             }
         }))
         .buffer_unordered(self.num_upload_workers)
@@ -943,9 +1016,15 @@ impl S3UploadContext {
         // Upload large files serially
         for file in large_files {
             self.upload_one_file(
-                file, s3_bucket, source_root, s3_cas_prefix,
-                progress_tracker, &cache, force,
-            ).await?;
+                file,
+                s3_bucket,
+                source_root,
+                s3_cas_prefix,
+                progress_tracker,
+                &cache,
+                force,
+            )
+            .await?;
         }
 
         // Final progress report + cancellation check
@@ -964,7 +1043,10 @@ impl S3UploadContext {
     /// Upload a single file: check cache, check S3, upload if needed, update cache.
     // Changing &Option<T> → Option<&T> would require restructuring callers
     // that hold the Option in a variable and pass a reference to it.
-    #[allow(clippy::ref_option, reason = "callers pass &Option from local bindings")]
+    #[allow(
+        clippy::ref_option,
+        reason = "callers pass &Option from local bindings"
+    )]
     async fn upload_one_file(
         &self,
         file: &ManifestPath,
@@ -982,12 +1064,13 @@ impl S3UploadContext {
         // Check cache unless force
         if !force
             && let Some(c) = cache
-                && c.get_entry(&cache_key).is_some() {
-                    if let Some(tracker) = progress_tracker {
-                        tracker.increase_skipped(1, file.size);
-                    }
-                    return Ok(());
-                }
+            && c.get_entry(&cache_key).is_some()
+        {
+            if let Some(tracker) = progress_tracker {
+                tracker.increase_skipped(1, file.size);
+            }
+            return Ok(());
+        }
 
         // HeadObject check
         if self.file_already_uploaded(s3_bucket, &s3_key).await? {
@@ -1101,22 +1184,31 @@ pub async fn upload_assets(
             let manifest_name_prefix = hash_data(arm.root_path.as_bytes(), hash_alg);
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
-            let full_key = job_attachment_settings.add_root_and_manifest_folder_prefix(&partial_key)?;
+            let full_key =
+                job_attachment_settings.add_root_and_manifest_folder_prefix(&partial_key)?;
 
-            ctx.upload_bytes_to_s3(&manifest_bytes, &job_attachment_settings.s3_bucket_name, &full_key, None)
-                .await?;
+            ctx.upload_bytes_to_s3(
+                &manifest_bytes,
+                &job_attachment_settings.s3_bucket_name,
+                &full_key,
+                None,
+            )
+            .await?;
 
             // Verify S3 check cache integrity before uploading files.
             // Skip when force_s3_check is True — we'll HEAD every file anyway.
             if force_s3_check != Some(true)
-                && !ctx.verify_hash_cache_integrity(
-                    s3_check_cache_dir,
-                    manifest,
-                    &cas_prefix,
-                    &job_attachment_settings.s3_bucket_name,
-                ).await {
-                    ctx.reset_s3_check_cache(s3_check_cache_dir);
-                }
+                && !ctx
+                    .verify_hash_cache_integrity(
+                        s3_check_cache_dir,
+                        manifest,
+                        &cas_prefix,
+                        &job_attachment_settings.s3_bucket_name,
+                    )
+                    .await
+            {
+                ctx.reset_s3_check_cache(s3_check_cache_dir);
+            }
 
             // Upload input files
             ctx.upload_input_files(
@@ -1275,13 +1367,12 @@ pub fn snapshot_assets(
 mod tests {
     use super::*;
     use crate::models::{
-        AssetRootGroup, FileSystemLocation, FileSystemLocationType,
-        StorageProfile,
+        AssetRootGroup, FileSystemLocation, FileSystemLocationType, StorageProfile,
     };
     use crate::progress_tracker::ProgressReportMetadata;
     use std::fs;
-    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
     use tempfile::TempDir;
 
     fn create_test_file(dir: &TempDir, name: &str, content: &[u8]) -> PathBuf {
@@ -1414,13 +1505,8 @@ mod tests {
 
     #[test]
     fn prepare_paths_missing_input_require_exist_errors() {
-        let result = prepare_paths_for_upload(
-            &["/nonexistent/file.txt".into()],
-            &[],
-            &[],
-            None,
-            true,
-        );
+        let result =
+            prepare_paths_for_upload(&["/nonexistent/file.txt".into()], &[], &[], None, true);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
@@ -1460,13 +1546,8 @@ mod tests {
         let sub = dir.path().join("subdir");
         fs::create_dir_all(&sub).unwrap();
 
-        let result = prepare_paths_for_upload(
-            &[sub.to_string_lossy().into()],
-            &[],
-            &[],
-            None,
-            true,
-        );
+        let result =
+            prepare_paths_for_upload(&[sub.to_string_lossy().into()], &[], &[], None, true);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
@@ -1489,14 +1570,9 @@ mod tests {
 
     #[test]
     fn prepare_paths_empty_strings_filtered() {
-        let result = prepare_paths_for_upload(
-            &[String::new(), String::new()],
-            &[],
-            &[],
-            None,
-            false,
-        )
-        .unwrap();
+        let result =
+            prepare_paths_for_upload(&[String::new(), String::new()], &[], &[], None, false)
+                .unwrap();
         assert!(result.asset_groups.is_empty());
         assert_eq!(result.total_input_files, 0);
     }
@@ -1887,10 +1963,7 @@ mod tests {
             path.contains('/') || !path.contains('\\'),
             "path should use forward slashes: {path}"
         );
-        assert!(
-            !path.starts_with('/'),
-            "path should be relative: {path}"
-        );
+        assert!(!path.starts_with('/'), "path should be relative: {path}");
     }
 
     // === File mtime stored as microseconds (integer) ===

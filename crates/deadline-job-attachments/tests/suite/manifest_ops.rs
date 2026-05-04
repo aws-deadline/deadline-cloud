@@ -4,8 +4,8 @@ use deadline_job_attachments::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
 };
 use deadline_job_attachments::manifest_ops::{
-    glob_files, manifest_diff, manifest_merge, manifest_snapshot, resolve_glob_config,
-    write_manifest, GlobConfig,
+    GlobConfig, glob_files, manifest_diff, manifest_merge, manifest_snapshot, resolve_glob_config,
+    write_manifest,
 };
 use std::fs;
 use tempfile::TempDir;
@@ -21,8 +21,13 @@ fn make_manifest(entries: &[(&str, &str, u64, i64)]) -> AssetManifest {
         })
         .collect();
     let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    AssetManifest::new(HashAlgorithm::Xxh128, ManifestVersion::V2023_03_03, total_size, paths)
-        .unwrap()
+    AssetManifest::new(
+        HashAlgorithm::Xxh128,
+        ManifestVersion::V2023_03_03,
+        total_size,
+        paths,
+    )
+    .unwrap()
 }
 
 fn create_file(dir: &TempDir, name: &str, content: &[u8]) -> String {
@@ -66,8 +71,7 @@ fn resolve_glob_config_json_file_parsed() {
     let dir = TempDir::new().unwrap();
     let config_path = dir.path().join("glob.json");
     fs::write(&config_path, r#"{"include": ["*.exr"]}"#).unwrap();
-    let config =
-        resolve_glob_config(&[], &[], Some(config_path.to_str().unwrap())).unwrap();
+    let config = resolve_glob_config(&[], &[], Some(config_path.to_str().unwrap())).unwrap();
     assert_eq!(config.include, vec!["*.exr"]);
 }
 
@@ -135,7 +139,13 @@ fn glob_files_empty_dir_returns_empty() {
 fn write_manifest_creates_file_with_name() {
     let dir = TempDir::new().unwrap();
     let manifest = make_manifest(&[("a.txt", "aa".repeat(16).as_str(), 10, 1000)]);
-    let path = write_manifest("/some/root", &manifest, dir.path().to_str().unwrap(), Some("myname")).unwrap();
+    let path = write_manifest(
+        "/some/root",
+        &manifest,
+        dir.path().to_str().unwrap(),
+        Some("myname"),
+    )
+    .unwrap();
     assert!(std::path::Path::new(&path).is_file());
     assert!(path.contains("myname-"));
     assert!(path.ends_with(".manifest"));
@@ -154,8 +164,18 @@ fn write_manifest_derives_name_from_root() {
 fn write_manifest_replaces_slashes_backslashes_colons() {
     let dir = TempDir::new().unwrap();
     let manifest = make_manifest(&[("a.txt", "aa".repeat(16).as_str(), 10, 1000)]);
-    let path = write_manifest("C:\\Users\\test:data/files", &manifest, dir.path().to_str().unwrap(), None).unwrap();
-    let filename = std::path::Path::new(&path).file_name().unwrap().to_str().unwrap();
+    let path = write_manifest(
+        "C:\\Users\\test:data/files",
+        &manifest,
+        dir.path().to_str().unwrap(),
+        None,
+    )
+    .unwrap();
+    let filename = std::path::Path::new(&path)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert!(!filename.contains('/'));
     assert!(!filename.contains('\\'));
     assert!(!filename.contains(':'));
@@ -248,7 +268,14 @@ fn manifest_diff_detects_new_file() {
     // Add another file
     create_file(&dir, "added.txt", b"added");
 
-    let diff = manifest_diff(&snap.manifest, dir.path().to_str().unwrap(), &config, false, None).unwrap();
+    let diff = manifest_diff(
+        &snap.manifest,
+        dir.path().to_str().unwrap(),
+        &config,
+        false,
+        None,
+    )
+    .unwrap();
     assert!(diff.new.iter().any(|p| p.contains("added")));
 }
 
@@ -274,7 +301,10 @@ fn manifest_merge_two_files_produces_result() {
 
     let result = manifest_merge(
         "/root",
-        &[m1_path.to_str().unwrap().into(), m2_path.to_str().unwrap().into()],
+        &[
+            m1_path.to_str().unwrap().into(),
+            m2_path.to_str().unwrap().into(),
+        ],
         dest.to_str().unwrap(),
         Some("merged"),
         None,

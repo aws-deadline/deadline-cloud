@@ -6,8 +6,14 @@ use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
 fn setup_config(harness: &TestHarness) {
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 }
 
 fn env_template(name: &str, params: &[serde_json::Value]) -> String {
@@ -32,12 +38,18 @@ async fn queue_paramdefs_one_env_one_param() {
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
     queue_resources::mock_list_queue_environments(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[json!({"queueEnvironmentId": "env-001", "name": "Render Env", "priority": 10})],
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
-        &harness.server, "farm-abc", "queue-abc", "env-001",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "env-001",
         json!({
             "queueEnvironmentId": "env-001",
             "name": "Render Env",
@@ -49,7 +61,8 @@ async fn queue_paramdefs_one_env_one_param() {
                 "default": "4",
             })]),
         }),
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "paramdefs"]));
 }
@@ -65,15 +78,21 @@ async fn queue_paramdefs_multiple_envs_sorted_by_priority() {
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
     queue_resources::mock_list_queue_environments(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[
             json!({"queueEnvironmentId": "env-low", "name": "Low Priority", "priority": 50}),
             json!({"queueEnvironmentId": "env-high", "name": "High Priority", "priority": 10}),
         ],
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
-        &harness.server, "farm-abc", "queue-abc", "env-high",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "env-high",
         json!({
             "queueEnvironmentId": "env-high",
             "name": "High Priority",
@@ -85,10 +104,14 @@ async fn queue_paramdefs_multiple_envs_sorted_by_priority() {
                 "default": "8",
             })]),
         }),
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
-        &harness.server, "farm-abc", "queue-abc", "env-low",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "env-low",
         json!({
             "queueEnvironmentId": "env-low",
             "name": "Low Priority",
@@ -100,7 +123,8 @@ async fn queue_paramdefs_multiple_envs_sorted_by_priority() {
                 "default": "nvidia",
             })]),
         }),
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "paramdefs"]));
 }
@@ -115,9 +139,8 @@ async fn queue_paramdefs_no_environments_returns_empty() {
     setup_config(&harness);
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
-    queue_resources::mock_list_queue_environments(
-        &harness.server, "farm-abc", "queue-abc", &[],
-    ).await;
+    queue_resources::mock_list_queue_environments(&harness.server, "farm-abc", "queue-abc", &[])
+        .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "paramdefs"]));
 }
@@ -135,30 +158,41 @@ async fn queue_paramdefs_duplicate_identical_keeps_one() {
     let shared_param = json!({"name": "Cores", "type": "INT", "default": "4"});
 
     queue_resources::mock_list_queue_environments(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[
             json!({"queueEnvironmentId": "env-a", "name": "Env A", "priority": 10}),
             json!({"queueEnvironmentId": "env-b", "name": "Env B", "priority": 20}),
         ],
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
-        &harness.server, "farm-abc", "queue-abc", "env-a",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "env-a",
         json!({
             "queueEnvironmentId": "env-a", "name": "Env A", "priority": 10,
             "templateType": "YAML",
             "template": env_template("Env A", &[shared_param.clone()]),
         }),
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
-        &harness.server, "farm-abc", "queue-abc", "env-b",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "env-b",
         json!({
             "queueEnvironmentId": "env-b", "name": "Env B", "priority": 20,
             "templateType": "YAML",
             "template": env_template("Env B", &[shared_param]),
         }),
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "paramdefs"]));
 }
@@ -174,12 +208,15 @@ async fn queue_paramdefs_duplicate_different_errors() {
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
     queue_resources::mock_list_queue_environments(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[
             json!({"queueEnvironmentId": "env-a", "name": "Env A", "priority": 10}),
             json!({"queueEnvironmentId": "env-b", "name": "Env B", "priority": 20}),
         ],
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
         &harness.server, "farm-abc", "queue-abc", "env-a",
@@ -213,12 +250,18 @@ async fn queue_paramdefs_existing_group_label_preserved() {
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
     queue_resources::mock_list_queue_environments(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[json!({"queueEnvironmentId": "env-001", "name": "My Env", "priority": 10})],
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
-        &harness.server, "farm-abc", "queue-abc", "env-001",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "env-001",
         json!({
             "queueEnvironmentId": "env-001", "name": "My Env", "priority": 10,
             "templateType": "YAML",
@@ -232,7 +275,8 @@ async fn queue_paramdefs_existing_group_label_preserved() {
                 },
             })]),
         }),
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "paramdefs"]));
 }
@@ -251,27 +295,38 @@ async fn queue_paramdefs_env_with_no_params_contributes_nothing() {
     let template_no_params = serde_yaml::to_string(&serde_json::json!({
         "specificationVersion": "environment-2023-09",
         "environment": {"name": "Empty Env"},
-    })).unwrap();
+    }))
+    .unwrap();
 
     queue_resources::mock_list_queue_environments(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[
             json!({"queueEnvironmentId": "env-empty", "name": "Empty Env", "priority": 10}),
             json!({"queueEnvironmentId": "env-real", "name": "Real Env", "priority": 20}),
         ],
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
-        &harness.server, "farm-abc", "queue-abc", "env-empty",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "env-empty",
         json!({
             "queueEnvironmentId": "env-empty", "name": "Empty Env", "priority": 10,
             "templateType": "YAML",
             "template": template_no_params,
         }),
-    ).await;
+    )
+    .await;
 
     queue_resources::mock_get_queue_environment(
-        &harness.server, "farm-abc", "queue-abc", "env-real",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "env-real",
         json!({
             "queueEnvironmentId": "env-real", "name": "Real Env", "priority": 20,
             "templateType": "YAML",
@@ -281,7 +336,8 @@ async fn queue_paramdefs_env_with_no_params_contributes_nothing() {
                 "default": "2",
             })]),
         }),
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "paramdefs"]));
 }

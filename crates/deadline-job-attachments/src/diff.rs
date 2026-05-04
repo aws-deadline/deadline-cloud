@@ -98,11 +98,8 @@ pub fn hash_diff(
         .iter()
         .map(|p| (p.path.as_str(), p))
         .collect();
-    let cmp_map: HashMap<&str, &ManifestPath> = compare
-        .paths
-        .iter()
-        .map(|p| (p.path.as_str(), p))
-        .collect();
+    let cmp_map: HashMap<&str, &ManifestPath> =
+        compare.paths.iter().map(|p| (p.path.as_str(), p)).collect();
 
     let mut results = Vec::new();
 

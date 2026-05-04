@@ -26,7 +26,10 @@ where
             let msg = inner.message().unwrap_or("No message");
             format!("{code}: {msg}")
         }
-        other => format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other)),
+        other => format!(
+            "{}",
+            aws_smithy_types::error::display::DisplayErrorContext(other)
+        ),
     }
 }
 
@@ -65,7 +68,9 @@ impl WithPrincipalId for aws_sdk_deadline::operation::list_farms::builders::List
     }
 }
 
-impl WithPrincipalId for aws_sdk_deadline::operation::list_queues::builders::ListQueuesFluentBuilder {
+impl WithPrincipalId
+    for aws_sdk_deadline::operation::list_queues::builders::ListQueuesFluentBuilder
+{
     fn principal_id(self, id: impl Into<String>) -> Self {
         self.principal_id(id)
     }
@@ -77,7 +82,9 @@ impl WithPrincipalId for aws_sdk_deadline::operation::list_jobs::builders::ListJ
     }
 }
 
-impl WithPrincipalId for aws_sdk_deadline::operation::list_fleets::builders::ListFleetsFluentBuilder {
+impl WithPrincipalId
+    for aws_sdk_deadline::operation::list_fleets::builders::ListFleetsFluentBuilder
+{
     fn principal_id(self, id: impl Into<String>) -> Self {
         self.principal_id(id)
     }
@@ -121,9 +128,15 @@ mod tests {
 
     async fn setup_env(server: &MockServer) {
         unsafe {
-            std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", format!("http://localhost:{}", server.address().port()));
+            std::env::set_var(
+                "AWS_ENDPOINT_URL_DEADLINE",
+                format!("http://localhost:{}", server.address().port()),
+            );
             std::env::set_var("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
-            std::env::set_var("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+            std::env::set_var(
+                "AWS_SECRET_ACCESS_KEY",
+                "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            );
             std::env::set_var("AWS_DEFAULT_REGION", "us-west-2");
             std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
         }
@@ -139,10 +152,22 @@ mod tests {
         assert_eq!(pascal_to_snake("UpdateJob"), "update_job");
         assert_eq!(pascal_to_snake("SearchJobs"), "search_jobs");
         assert_eq!(pascal_to_snake("BatchGetStep"), "batch_get_step");
-        assert_eq!(pascal_to_snake("ListQueueFleetAssociations"), "list_queue_fleet_associations");
-        assert_eq!(pascal_to_snake("AssumeQueueRoleForUser"), "assume_queue_role_for_user");
-        assert_eq!(pascal_to_snake("GetStorageProfileForQueue"), "get_storage_profile_for_queue");
-        assert_eq!(pascal_to_snake("ListSessionActions"), "list_session_actions");
+        assert_eq!(
+            pascal_to_snake("ListQueueFleetAssociations"),
+            "list_queue_fleet_associations"
+        );
+        assert_eq!(
+            pascal_to_snake("AssumeQueueRoleForUser"),
+            "assume_queue_role_for_user"
+        );
+        assert_eq!(
+            pascal_to_snake("GetStorageProfileForQueue"),
+            "get_storage_profile_for_queue"
+        );
+        assert_eq!(
+            pascal_to_snake("ListSessionActions"),
+            "list_session_actions"
+        );
     }
 
     #[test]
@@ -180,10 +205,13 @@ mod tests {
 
         let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .endpoint_url(format!("http://localhost:{}", server.address().port()))
-            .load().await;
+            .load()
+            .await;
         let client = aws_sdk_deadline::Client::new(&sdk_config);
 
-        let pages = collect_paginated(client.list_farms().into_paginator().send()).await.unwrap();
+        let pages = collect_paginated(client.list_farms().into_paginator().send())
+            .await
+            .unwrap();
         assert_eq!(pages.len(), 2);
         let total: usize = pages.iter().map(|p| p.farms().len()).sum();
         assert_eq!(total, 3);
@@ -204,22 +232,28 @@ mod tests {
             })))
             .up_to_n_times(1).mount(&server).await;
 
-        Mock::given(method("GET")).and(path_regex(".*/farms$"))
+        Mock::given(method("GET"))
+            .and(path_regex(".*/farms$"))
             .respond_with(ResponseTemplate::new(403).set_body_json(json!({
                 "__type": "AccessDeniedException",
                 "message": "User is not authorized"
             })))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .endpoint_url(format!("http://localhost:{}", server.address().port()))
-            .load().await;
+            .load()
+            .await;
         let client = aws_sdk_deadline::Client::new(&sdk_config);
 
         let result = collect_paginated(client.list_farms().into_paginator().send()).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("AccessDeniedException") || err.contains("403"), "got: {err}");
+        assert!(
+            err.contains("AccessDeniedException") || err.contains("403"),
+            "got: {err}"
+        );
     }
 
     // --- apply_dcm_principal ---
@@ -227,10 +261,17 @@ mod tests {
     #[test]
     #[serial]
     fn apply_dcm_principal_noop_when_no_config() {
-        unsafe { std::env::set_var("AWS_CONFIG_FILE", "/dev/null"); }
-        struct Fake { id: Option<String> }
+        unsafe {
+            std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
+        }
+        struct Fake {
+            id: Option<String>,
+        }
         impl WithPrincipalId for Fake {
-            fn principal_id(mut self, id: impl Into<String>) -> Self { self.id = Some(id.into()); self }
+            fn principal_id(mut self, id: impl Into<String>) -> Self {
+                self.id = Some(id.into());
+                self
+            }
         }
         let result = apply_dcm_principal(Fake { id: None }, None);
         assert!(result.id.is_none());
@@ -239,10 +280,17 @@ mod tests {
     #[test]
     #[serial]
     fn apply_dcm_principal_noop_when_not_dcm_user() {
-        unsafe { std::env::set_var("AWS_CONFIG_FILE", "/dev/null"); }
-        struct Fake { id: Option<String> }
+        unsafe {
+            std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
+        }
+        struct Fake {
+            id: Option<String>,
+        }
         impl WithPrincipalId for Fake {
-            fn principal_id(mut self, id: impl Into<String>) -> Self { self.id = Some(id.into()); self }
+            fn principal_id(mut self, id: impl Into<String>) -> Self {
+                self.id = Some(id.into());
+                self
+            }
         }
         let config = deadline_config::ini::IniConfig::new();
         let result = apply_dcm_principal(Fake { id: None }, Some(&config));
@@ -257,21 +305,32 @@ mod tests {
         let server = MockServer::start().await;
         setup_env(&server).await;
 
-        Mock::given(method("GET")).and(path_regex(".*/farms/farm-nope"))
+        Mock::given(method("GET"))
+            .and(path_regex(".*/farms/farm-nope"))
             .respond_with(ResponseTemplate::new(404).set_body_json(json!({
                 "__type": "ResourceNotFoundException",
                 "message": "Farm not found: farm-nope"
             })))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .endpoint_url(format!("http://localhost:{}", server.address().port()))
-            .load().await;
+            .load()
+            .await;
         let client = aws_sdk_deadline::Client::new(&sdk_config);
 
-        let err = client.get_farm().farm_id("farm-nope").send().await.unwrap_err();
+        let err = client
+            .get_farm()
+            .farm_id("farm-nope")
+            .send()
+            .await
+            .unwrap_err();
         let formatted = format_sdk_error(&err);
-        assert!(formatted.contains("ResourceNotFoundException"), "got: {formatted}");
+        assert!(
+            formatted.contains("ResourceNotFoundException"),
+            "got: {formatted}"
+        );
         assert!(formatted.contains("Farm not found"), "got: {formatted}");
 
         let deadline_err = deadline_error(err);

@@ -22,7 +22,7 @@
 
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::mpsc::{self, SyncSender};
 use std::thread;
@@ -54,11 +54,7 @@ pub struct TelemetryClient {
 }
 
 impl TelemetryClient {
-    pub fn new(
-        package_name: &str,
-        package_ver: &str,
-        config: Option<&IniConfig>,
-    ) -> Self {
+    pub fn new(package_name: &str, package_ver: &str, config: Option<&IniConfig>) -> Self {
         let ver = truncate_version(package_ver);
         let telemetry_id = get_or_create_identifier(config);
         let mut common_details = HashMap::new();
@@ -109,13 +105,16 @@ impl TelemetryClient {
         );
 
         if let Some(uid) = user_id {
-            self.system_metadata.insert("user_id".into(), Value::String(uid.to_owned()));
+            self.system_metadata
+                .insert("user_id".into(), Value::String(uid.to_owned()));
         }
         if let Some(mid) = monitor_id {
-            self.system_metadata.insert("monitor_id".into(), Value::String(mid.to_owned()));
+            self.system_metadata
+                .insert("monitor_id".into(), Value::String(mid.to_owned()));
         }
         if let Some(aid) = account_id {
-            self.common_details.insert("accountId".into(), Value::String(aid.to_owned()));
+            self.common_details
+                .insert("accountId".into(), Value::String(aid.to_owned()));
         }
 
         let (tx, rx) = mpsc::sync_channel::<TelemetryEvent>(MAX_QUEUE_SIZE);
@@ -238,10 +237,12 @@ fn send_with_retry(endpoint: &str, body: &Value) -> Result<(), String> {
 fn rand_backoff(attempt: u32) -> f64 {
     let max = MAX_BACKOFF_SECONDS.min(BASE_TIME * 2.0_f64.powi(attempt as i32));
     // Simple pseudo-random: use thread ID + time as seed
-    let nanos = f64::from(std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos());
+    let nanos = f64::from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos(),
+    );
     (nanos % 1000.0) / 1000.0 * max
 }
 
@@ -270,8 +271,7 @@ pub fn resolve_opt_out(config: Option<&IniConfig>) -> bool {
         return config_file::str2bool(&env_val).unwrap_or(false);
     }
     let val = match config {
-        Some(c) => config_file::get_setting("telemetry.opt_out", c)
-            .unwrap_or_default(),
+        Some(c) => config_file::get_setting("telemetry.opt_out", c).unwrap_or_default(),
         None => config_file::get_setting_from_disk("telemetry.opt_out").unwrap_or_default(),
     };
     config_file::str2bool(&val).unwrap_or(false)
@@ -280,9 +280,10 @@ pub fn resolve_opt_out(config: Option<&IniConfig>) -> bool {
 /// Validate existing identifier or generate a new UUID4.
 pub fn validate_or_generate_identifier(existing: Option<&str>) -> String {
     if let Some(id) = existing
-        && Uuid::parse_str(id).is_ok() {
-            return id.to_owned();
-        }
+        && Uuid::parse_str(id).is_ok()
+    {
+        return id.to_owned();
+    }
     Uuid::new_v4().to_string()
 }
 
@@ -303,12 +304,19 @@ fn build_system_metadata(package_name: &str, package_ver: &str) -> HashMap<Strin
     let mut m = HashMap::new();
     m.insert("service".into(), Value::String(package_name.into()));
     m.insert("version".into(), Value::String(package_ver.into()));
-    m.insert("osName".into(), Value::String(
-        if cfg!(target_os = "macos") { "macOS" }
-        else if cfg!(target_os = "windows") { "Windows" }
-        else { "Linux" }
-        .into(),
-    ));
+    m.insert(
+        "osName".into(),
+        Value::String(
+            if cfg!(target_os = "macos") {
+                "macOS"
+            } else if cfg!(target_os = "windows") {
+                "Windows"
+            } else {
+                "Linux"
+            }
+            .into(),
+        ),
+    );
     m
 }
 
@@ -323,7 +331,10 @@ pub async fn resolve_account_id(sdk_config: &aws_config::SdkConfig) -> Option<St
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(2),
         sts.get_caller_identity().send(),
-    ).await.ok()?.ok()?;
+    )
+    .await
+    .ok()?
+    .ok()?;
     result.account().map(String::from)
 }
 
@@ -342,7 +353,8 @@ pub fn create_telemetry_with_metadata(
     monitor_id: Option<&str>,
     account_id: Option<&str>,
 ) -> TelemetryClient {
-    let mut client = TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config);
+    let mut client =
+        TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config);
     if let Ok(ep) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
         client.initialize_with_metadata(&ep, user_id, monitor_id, account_id);
     }
@@ -352,7 +364,10 @@ pub fn create_telemetry_with_metadata(
 /// Record a latency event matching Python's @`record_function_latency_telemetry_event`.
 pub fn record_latency(client: &TelemetryClient, function_call: &str, start: std::time::Instant) {
     let mut details = HashMap::new();
-    details.insert("latency".into(), serde_json::json!(start.elapsed().as_nanos() as u64));
+    details.insert(
+        "latency".into(),
+        serde_json::json!(start.elapsed().as_nanos() as u64),
+    );
     details.insert("function_call".into(), serde_json::json!(function_call));
     client.record_event("com.amazon.rum.deadline.latency", details, false);
 }
@@ -369,7 +384,12 @@ where
     F: FnOnce() -> T,
 {
     let ephemeral;
-    let tc = if let Some(t) = telemetry { t } else { ephemeral = create_telemetry(config); &ephemeral };
+    let tc = if let Some(t) = telemetry {
+        t
+    } else {
+        ephemeral = create_telemetry(config);
+        &ephemeral
+    };
     let start = std::time::Instant::now();
     let result = f();
     record_latency(tc, function_call, start);
@@ -437,12 +457,7 @@ mod tests {
     fn initialize_with_user_id_adds_to_system_metadata() {
         let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
         client.opted_out = false; // override disk config for test isolation
-        client.initialize_with_metadata(
-            "http://localhost:9999",
-            Some("user-abc-123"),
-            None,
-            None,
-        );
+        client.initialize_with_metadata("http://localhost:9999", Some("user-abc-123"), None, None);
         assert_eq!(
             client.system_metadata.get("user_id"),
             Some(&Value::String("user-abc-123".into()))
@@ -502,12 +517,7 @@ mod tests {
     fn initialize_with_account_id_adds_to_common_details() {
         let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
         client.opted_out = false;
-        client.initialize_with_metadata(
-            "http://localhost:9999",
-            None,
-            None,
-            Some("123456789012"),
-        );
+        client.initialize_with_metadata("http://localhost:9999", None, None, Some("123456789012"));
         assert_eq!(
             client.common_details.get("accountId"),
             Some(&Value::String("123456789012".into()))
@@ -520,8 +530,8 @@ mod tests {
     // resolve_account_id returns the account from STS.
     #[tokio::test]
     async fn account_id_resolved_from_sts_when_not_provided() {
-        use wiremock::{MockServer, Mock, ResponseTemplate};
-        use wiremock::matchers::{method, body_string_contains};
+        use wiremock::matchers::{body_string_contains, method};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
 
         let server = MockServer::start().await;
         Mock::given(method("POST"))
@@ -542,8 +552,11 @@ mod tests {
         let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .endpoint_url(&endpoint)
             .credentials_provider(aws_sdk_sts::config::Credentials::new(
-                "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-                None, None, "test",
+                "AKIAIOSFODNN7EXAMPLE",
+                "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                None,
+                None,
+                "test",
             ))
             .region(aws_config::Region::new("us-west-2"))
             .load()

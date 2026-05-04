@@ -48,9 +48,10 @@ fn expand_tilde(path: &str) -> PathBuf {
             return home.join(rest);
         }
     } else if path == "~"
-        && let Some(home) = home_dir() {
-            return home;
-        }
+        && let Some(home) = home_dir()
+    {
+        return home;
+    }
     PathBuf::from(path)
 }
 
@@ -97,9 +98,10 @@ pub fn read_config() -> Result<IniConfig, ConfigError> {
 /// Creates parent directories if needed. On POSIX, sets file permissions to 0o600.
 pub fn write_config_to(config: &IniConfig, path: &Path) -> Result<(), ConfigError> {
     if let Some(parent) = path.parent()
-        && !parent.exists() {
-            fs::create_dir_all(parent)?;
-        }
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent)?;
+    }
 
     // Temp file in the same directory ensures atomic rename works
     let parent = path.parent().unwrap_or(Path::new("."));
@@ -148,7 +150,8 @@ fn get_section_prefixes(setting_def: &SettingDef, config: &IniConfig) -> Vec<Str
             };
 
             let dep_value = config
-                .get(&dep_full_section, dep_key).map_or_else(|| resolve_default(dep_def, config), ToOwned::to_owned);
+                .get(&dep_full_section, dep_key)
+                .map_or_else(|| resolve_default(dep_def, config), ToOwned::to_owned);
 
             let formatted = dep_section_format.replace("{}", &dep_value);
 
@@ -174,7 +177,10 @@ fn resolve_default(setting_def: &SettingDef, config: &IniConfig) -> String {
 
 /// Build the full INI section name for a setting.
 fn full_section_name(setting_name: &str, setting_def: &SettingDef, config: &IniConfig) -> String {
-    let section_part = setting_name.split('.').next().expect("split yields at least one");
+    let section_part = setting_name
+        .split('.')
+        .next()
+        .expect("split yields at least one");
     let prefixes = get_section_prefixes(setting_def, config);
     if prefixes.is_empty() {
         section_part.to_owned()
@@ -202,12 +208,12 @@ fn validate_setting(setting_name: &str) -> Result<&'static SettingDef, ConfigErr
 
 /// Get a setting value using an already-loaded config.
 /// This is the primary API — most callers should use this.
-pub fn get_setting(
-    setting_name: &str,
-    config: &IniConfig,
-) -> Result<String, ConfigError> {
+pub fn get_setting(setting_name: &str, config: &IniConfig) -> Result<String, ConfigError> {
     let setting_def = validate_setting(setting_name)?;
-    let key = setting_name.split('.').nth(1).expect("validated format section.key");
+    let key = setting_name
+        .split('.')
+        .nth(1)
+        .expect("validated format section.key");
     let section = full_section_name(setting_name, setting_def, config);
 
     match config.get(&section, key) {
@@ -223,10 +229,7 @@ pub fn get_setting_from_disk(setting_name: &str) -> Result<String, ConfigError> 
 }
 
 /// Get the default value using an already-loaded config.
-pub fn get_setting_default(
-    setting_name: &str,
-    config: &IniConfig,
-) -> Result<String, ConfigError> {
+pub fn get_setting_default(setting_name: &str, config: &IniConfig) -> Result<String, ConfigError> {
     let setting_def = validate_setting(setting_name)?;
     Ok(resolve_default(setting_def, config))
 }
@@ -245,7 +248,10 @@ pub fn set_setting(
     config: &mut IniConfig,
 ) -> Result<(), ConfigError> {
     let setting_def = validate_setting(setting_name)?;
-    let key = setting_name.split('.').nth(1).expect("validated format section.key");
+    let key = setting_name
+        .split('.')
+        .nth(1)
+        .expect("validated format section.key");
     let section = full_section_name(setting_name, setting_def, config);
     config.set(&section, key, value);
     Ok(())
@@ -260,10 +266,7 @@ pub fn set_setting_to_disk(setting_name: &str, value: &str) -> Result<(), Config
 }
 
 /// Clear a setting in a config object without writing to disk.
-pub fn clear_setting(
-    setting_name: &str,
-    config: &mut IniConfig,
-) -> Result<(), ConfigError> {
+pub fn clear_setting(setting_name: &str, config: &mut IniConfig) -> Result<(), ConfigError> {
     let default = get_setting_default(setting_name, config)?;
     set_setting(setting_name, &default, config)
 }
@@ -298,8 +301,7 @@ pub fn get_best_profile_for_farm(
     // Work on a copy so we don't mutate the caller's config
     let mut scratch = config.clone();
 
-    let default_profile =
-        get_setting("defaults.aws_profile_name", &scratch).unwrap_or_default();
+    let default_profile = get_setting("defaults.aws_profile_name", &scratch).unwrap_or_default();
 
     // Priority 1: default profile's farm matches
     if get_setting("defaults.farm_id", &scratch).unwrap_or_default() == farm_id {
@@ -312,13 +314,11 @@ pub fn get_best_profile_for_farm(
     for &profile in aws_profile_names {
         let _ = set_setting("defaults.aws_profile_name", profile, &mut scratch);
 
-        let profile_farm =
-            get_setting("defaults.farm_id", &scratch).unwrap_or_default();
+        let profile_farm = get_setting("defaults.farm_id", &scratch).unwrap_or_default();
         if profile_farm == farm_id {
             // Priority 2: farm + queue match
             if let Some(qid) = queue_id {
-                let profile_queue =
-                    get_setting("defaults.queue_id", &scratch).unwrap_or_default();
+                let profile_queue = get_setting("defaults.queue_id", &scratch).unwrap_or_default();
                 if profile_queue == qid {
                     return profile.to_owned();
                 }
@@ -361,8 +361,7 @@ pub fn setting_names() -> impl Iterator<Item = &'static str> {
 
 /// Get the description for a setting.
 pub fn setting_description(setting_name: &str) -> &'static str {
-    find_setting(setting_name)
-        .map_or("", |d| d.description)
+    find_setting(setting_name).map_or("", |d| d.description)
 }
 
 // ---------------------------------------------------------------------------
@@ -374,7 +373,6 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use test_case::test_case;
-
 
     #[test_case("true", Ok(true) ; "literal_true")]
     #[test_case("false", Ok(false) ; "literal_false")]
@@ -469,7 +467,6 @@ mod tests {
         assert!(path.to_str().unwrap().ends_with(".deadline/config"));
     }
 
-
     #[test]
     fn read_config_from_valid_ini() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -507,7 +504,6 @@ mod tests {
 
         assert!(read_config_from(&path).is_err());
     }
-
 
     #[test]
     fn write_config_to_writes_content() {
@@ -665,10 +661,7 @@ mod tests {
         set_setting("defaults.farm_id", "farm-1", &mut config).unwrap();
         set_setting("defaults.queue_id", "queue-1", &mut config).unwrap();
         set_setting("defaults.job_id", "job-1", &mut config).unwrap();
-        assert_eq!(
-            get_setting("defaults.job_id", &config).unwrap(),
-            "job-1"
-        );
+        assert_eq!(get_setting("defaults.job_id", &config).unwrap(), "job-1");
     }
 
     #[test]
@@ -703,10 +696,7 @@ mod tests {
         // Switch to profile B
         set_setting("defaults.aws_profile_name", "ProfileB", &mut config).unwrap();
         // farm_id should be empty under profile B
-        assert_eq!(
-            get_setting("defaults.farm_id", &config).unwrap(),
-            ""
-        );
+        assert_eq!(get_setting("defaults.farm_id", &config).unwrap(), "");
     }
 
     #[test]
@@ -716,10 +706,7 @@ mod tests {
         set_setting("defaults.queue_id", "queue-X", &mut config).unwrap();
         // Switch farm
         set_setting("defaults.farm_id", "farm-Y", &mut config).unwrap();
-        assert_eq!(
-            get_setting("defaults.queue_id", &config).unwrap(),
-            ""
-        );
+        assert_eq!(get_setting("defaults.queue_id", &config).unwrap(), "");
     }
 
     #[test]
@@ -740,7 +727,10 @@ mod tests {
         set_setting("defaults.aws_profile_name", "NewProf", &mut config).unwrap();
         set_setting("defaults.farm_id", "farm-new", &mut config).unwrap();
         // The section "profile-NewProf defaults" should exist
-        assert_eq!(config.get("profile-NewProf defaults", "farm_id"), Some("farm-new"));
+        assert_eq!(
+            config.get("profile-NewProf defaults", "farm_id"),
+            Some("farm-new")
+        );
     }
 
     #[test]
@@ -789,10 +779,7 @@ mod tests {
         set_setting("defaults.farm_id", "farm-B", &mut config).unwrap();
         // Switch back to A
         set_setting("defaults.aws_profile_name", "A", &mut config).unwrap();
-        assert_eq!(
-            get_setting("defaults.farm_id", &config).unwrap(),
-            "farm-A"
-        );
+        assert_eq!(get_setting("defaults.farm_id", &config).unwrap(), "farm-A");
     }
 
     #[test]
@@ -802,10 +789,7 @@ mod tests {
         set_setting("defaults.queue_id", "queue-1", &mut config).unwrap();
         // Clear farm → queue should now resolve under default empty farm
         clear_setting("defaults.farm_id", &mut config).unwrap();
-        assert_eq!(
-            get_setting("defaults.queue_id", &config).unwrap(),
-            ""
-        );
+        assert_eq!(get_setting("defaults.queue_id", &config).unwrap(), "");
     }
 
     #[test]
@@ -898,7 +882,10 @@ mod tests {
     fn best_profile_farm_only_match() {
         let config = config_with_profiles(
             "Default",
-            &[("Default", "farm-X", ""), ("FarmMatch", "farm-1", "queue-other")],
+            &[
+                ("Default", "farm-X", ""),
+                ("FarmMatch", "farm-1", "queue-other"),
+            ],
         );
         let profiles = ["Default", "FarmMatch"];
         assert_eq!(

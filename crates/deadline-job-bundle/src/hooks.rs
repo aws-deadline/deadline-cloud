@@ -33,14 +33,24 @@ impl HookDefinition {
     pub fn from_dict(data: &Value) -> Self {
         Self {
             command: data["command"].as_str().unwrap_or("").to_owned(),
-            args: data.get("args")
+            args: data
+                .get("args")
                 .and_then(|a| a.as_array())
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default(),
             timeout: data.get("timeout").and_then(Value::as_u64).unwrap_or(60),
-            env: data.get("env")
+            env: data
+                .get("env")
                 .and_then(|e| e.as_object())
-                .map(|m| m.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_owned())).collect())
+                .map(|m| {
+                    m.iter()
+                        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_owned()))
+                        .collect()
+                })
                 .unwrap_or_default(),
         }
     }
@@ -62,7 +72,11 @@ impl HookConfiguration {
                 .unwrap_or_default()
         };
         Self {
-            version: data.get("version").and_then(|v| v.as_str()).unwrap_or("1.0").to_owned(),
+            version: data
+                .get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("1.0")
+                .to_owned(),
             pre_submission: parse_hooks("preSubmission"),
             post_submission: parse_hooks("postSubmission"),
         }
@@ -91,9 +105,15 @@ impl HookMetadata {
         m.insert("priority".into(), serde_json::json!(self.priority));
         m.insert("farmId".into(), Value::String(self.farm_id.clone()));
         m.insert("queueId".into(), Value::String(self.queue_id.clone()));
-        m.insert("jobBundleDir".into(), Value::String(self.job_bundle_dir.clone()));
+        m.insert(
+            "jobBundleDir".into(),
+            Value::String(self.job_bundle_dir.clone()),
+        );
         m.insert("parameters".into(), serde_json::json!(self.parameters));
-        m.insert("submitterName".into(), Value::String(self.submitter_name.clone()));
+        m.insert(
+            "submitterName".into(),
+            Value::String(self.submitter_name.clone()),
+        );
         m.insert("assetReferences".into(), self.asset_references.clone());
         m.insert("submissionPayload".into(), self.submission_payload.clone());
         if let Some(ref sp) = self.storage_profile_id {
@@ -115,7 +135,10 @@ impl HookMetadata {
         env.insert("DEADLINE_PRIORITY".into(), self.priority.to_string());
         env.insert("DEADLINE_FARM_ID".into(), self.farm_id.clone());
         env.insert("DEADLINE_QUEUE_ID".into(), self.queue_id.clone());
-        env.insert("DEADLINE_JOB_BUNDLE_DIR".into(), self.job_bundle_dir.clone());
+        env.insert(
+            "DEADLINE_JOB_BUNDLE_DIR".into(),
+            self.job_bundle_dir.clone(),
+        );
         if let Some(ref sp) = self.storage_profile_id {
             env.insert("DEADLINE_STORAGE_PROFILE_ID".into(), sp.clone());
         }
@@ -146,7 +169,10 @@ impl HookResult {
 // ---------------------------------------------------------------------------
 
 pub fn validate_configuration(config: &Value) -> Result<(), DeadlineError> {
-    let version = config.get("version").and_then(|v| v.as_str()).unwrap_or("1.0");
+    let version = config
+        .get("version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("1.0");
     if version != "1.0" {
         return Err(op_err(format!(
             "Unsupported hooks version '{version}'. Supported: 1.0"
@@ -154,9 +180,9 @@ pub fn validate_configuration(config: &Value) -> Result<(), DeadlineError> {
     }
     for key in &["preSubmission", "postSubmission"] {
         if let Some(val) = config.get(*key) {
-            let arr = val.as_array().ok_or_else(|| {
-                op_err(format!("Hook configuration '{key}' must be a list"))
-            })?;
+            let arr = val
+                .as_array()
+                .ok_or_else(|| op_err(format!("Hook configuration '{key}' must be a list")))?;
             for (i, hook) in arr.iter().enumerate() {
                 validate_hook(hook, i, key)?;
             }
@@ -170,46 +196,74 @@ fn validate_hook(hook: &Value, index: usize, key: &str) -> Result<(), DeadlineEr
         return Err(op_err(format!("Hook {index} in '{key}' must be an object")));
     }
     match hook.get("command") {
-        None => return Err(op_err(format!("Hook {index} in '{key}' missing required 'command' field"))),
-        Some(c) if !c.is_string() => return Err(op_err(format!("Hook {index} in '{key}' 'command' must be a string"))),
+        None => {
+            return Err(op_err(format!(
+                "Hook {index} in '{key}' missing required 'command' field"
+            )));
+        }
+        Some(c) if !c.is_string() => {
+            return Err(op_err(format!(
+                "Hook {index} in '{key}' 'command' must be a string"
+            )));
+        }
         _ => {}
     }
     if let Some(a) = hook.get("args")
-        && !a.is_array() {
-            return Err(op_err(format!("Hook {index} in '{key}' 'args' must be a list")));
-        }
+        && !a.is_array()
+    {
+        return Err(op_err(format!(
+            "Hook {index} in '{key}' 'args' must be a list"
+        )));
+    }
     if let Some(t) = hook.get("timeout") {
         let valid = t.as_i64().is_some_and(|v| v > 0);
         if !valid {
-            return Err(op_err(format!("Hook {index} in '{key}' 'timeout' must be a positive integer")));
+            return Err(op_err(format!(
+                "Hook {index} in '{key}' 'timeout' must be a positive integer"
+            )));
         }
     }
     if let Some(e) = hook.get("env")
-        && !e.is_object() {
-            return Err(op_err(format!("Hook {index} in '{key}' 'env' must be an object")));
-        }
+        && !e.is_object()
+    {
+        return Err(op_err(format!(
+            "Hook {index} in '{key}' 'env' must be an object"
+        )));
+    }
     Ok(())
 }
 
 pub fn validate_modified_payload(payload: &Value, hook_name: &str) -> Result<(), DeadlineError> {
     if !payload.is_object() {
-        return Err(op_err(format!("Hook '{hook_name}' output must be a JSON object")));
+        return Err(op_err(format!(
+            "Hook '{hook_name}' output must be a JSON object"
+        )));
     }
     if let Some(att) = payload.get("attachments") {
         if !att.is_object() {
-            return Err(op_err(format!("Hook '{hook_name}' 'attachments' must be an object")));
+            return Err(op_err(format!(
+                "Hook '{hook_name}' 'attachments' must be an object"
+            )));
         }
         if let Some(refs) = att.get("assetReferences") {
             if !refs.is_object() {
-                return Err(op_err(format!("Hook '{hook_name}' 'assetReferences' must be an object")));
+                return Err(op_err(format!(
+                    "Hook '{hook_name}' 'assetReferences' must be an object"
+                )));
             }
-            for field in &["inputFilenames", "inputDirectories", "outputDirectories", "referencedPaths"] {
+            for field in &[
+                "inputFilenames",
+                "inputDirectories",
+                "outputDirectories",
+                "referencedPaths",
+            ] {
                 if let Some(v) = refs.get(*field)
-                    && !v.is_array() {
-                        return Err(op_err(format!(
-                            "Hook '{hook_name}' 'assetReferences.{field}' must be a list"
-                        )));
-                    }
+                    && !v.is_array()
+                {
+                    return Err(op_err(format!(
+                        "Hook '{hook_name}' 'assetReferences.{field}' must be a list"
+                    )));
+                }
             }
         }
     }
@@ -237,13 +291,19 @@ pub fn merge_payload(original: &Value, modified: &Value) -> Value {
     if let Some(mod_obj) = modified.as_object() {
         for (key, value) in mod_obj {
             if key == "attachments" && value.is_object() && value.get("assetReferences").is_some() {
-                let orig_att = result_obj.get("attachments")
-                    .and_then(|a| a.as_object()).cloned().unwrap_or_default();
+                let orig_att = result_obj
+                    .get("attachments")
+                    .and_then(|a| a.as_object())
+                    .cloned()
+                    .unwrap_or_default();
                 let mut new_att = orig_att.clone();
-                new_att.insert("assetReferences".into(), merge_asset_references(
-                    orig_att.get("assetReferences"),
-                    value.get("assetReferences"),
-                ));
+                new_att.insert(
+                    "assetReferences".into(),
+                    merge_asset_references(
+                        orig_att.get("assetReferences"),
+                        value.get("assetReferences"),
+                    ),
+                );
                 // Merge other attachment fields from modified
                 if let Some(mod_att) = value.as_object() {
                     for (k, v) in mod_att {
@@ -284,10 +344,11 @@ impl HookManager {
     }
 
     pub fn load_hooks(&mut self) -> Result<Option<&HookConfiguration>, DeadlineError> {
-        let config_data = crate::loader::read_yaml_or_json_object(
-            &self.job_bundle_dir, "hooks", false,
-        )?;
-        let Some(data) = config_data else { return Ok(None) };
+        let config_data =
+            crate::loader::read_yaml_or_json_object(&self.job_bundle_dir, "hooks", false)?;
+        let Some(data) = config_data else {
+            return Ok(None);
+        };
         validate_configuration(&data)?;
         self.hooks = Some(HookConfiguration::from_dict(&data));
         Ok(self.hooks.as_ref())
@@ -306,26 +367,35 @@ impl HookManager {
         let mut current = payload;
         for (i, hook) in hooks.iter().enumerate() {
             let hook_name = format_hook_name(hook);
-            (self.print_callback)(&format!("Running pre-submission hook [{}]: {hook_name}", i + 1));
+            (self.print_callback)(&format!(
+                "Running pre-submission hook [{}]: {hook_name}",
+                i + 1
+            ));
             metadata.submission_payload = current.clone();
             let result = execute_hook(hook, metadata, &self.script_resolve_dir)?;
             if result.timed_out {
                 report_failure(hook, &result, i + 1, "pre-submission", &self.print_callback);
                 return Err(op_err(format!(
-                    "Pre-submission hook [{}] timed out after {}s: {hook_name}", i + 1, hook.timeout
+                    "Pre-submission hook [{}] timed out after {}s: {hook_name}",
+                    i + 1,
+                    hook.timeout
                 )));
             }
             if !result.is_success() {
                 report_failure(hook, &result, i + 1, "pre-submission", &self.print_callback);
                 return Err(op_err(format!(
-                    "Pre-submission hook [{}] failed with exit code {}: {hook_name}", i + 1, result.exit_code
+                    "Pre-submission hook [{}] failed with exit code {}: {hook_name}",
+                    i + 1,
+                    result.exit_code
                 )));
             }
             if !result.stdout.trim().is_empty() {
-                let modified: Value = serde_json::from_str(result.stdout.trim())
-                    .map_err(|e| op_err(format!(
-                        "Pre-submission hook [{}] produced invalid JSON: {e}", i + 1
-                    )))?;
+                let modified: Value = serde_json::from_str(result.stdout.trim()).map_err(|e| {
+                    op_err(format!(
+                        "Pre-submission hook [{}] produced invalid JSON: {e}",
+                        i + 1
+                    ))
+                })?;
                 validate_modified_payload(&modified, &hook_name)?;
                 current = merge_payload(&current, &modified);
             }
@@ -340,13 +410,24 @@ impl HookManager {
         };
         for (i, hook) in hooks.iter().enumerate() {
             let hook_name = format_hook_name(hook);
-            (self.print_callback)(&format!("Running post-submission hook [{}]: {hook_name}", i + 1));
+            (self.print_callback)(&format!(
+                "Running post-submission hook [{}]: {hook_name}",
+                i + 1
+            ));
             match execute_hook(hook, metadata, &self.script_resolve_dir) {
                 Ok(result) if result.timed_out => {
-                    log::warn!("Post-submission hook [{}] timed out after {}s: {hook_name}", i + 1, hook.timeout);
+                    log::warn!(
+                        "Post-submission hook [{}] timed out after {}s: {hook_name}",
+                        i + 1,
+                        hook.timeout
+                    );
                 }
                 Ok(result) if !result.is_success() => {
-                    log::warn!("Post-submission hook [{}] failed with exit code {}: {hook_name}", i + 1, result.exit_code);
+                    log::warn!(
+                        "Post-submission hook [{}] failed with exit code {}: {hook_name}",
+                        i + 1,
+                        result.exit_code
+                    );
                 }
                 Ok(_) => {}
                 Err(e) => {
@@ -358,7 +439,9 @@ impl HookManager {
 }
 
 pub fn generate_hooks_confirmation_message(hooks: &HookConfiguration, bundle_dir: &str) -> String {
-    let mut lines = vec!["This job bundle contains submission hooks that will execute on your machine:\n".into()];
+    let mut lines = vec![
+        "This job bundle contains submission hooks that will execute on your machine:\n".into(),
+    ];
     if !hooks.pre_submission.is_empty() {
         lines.push("  Pre-submission hooks:".into());
         for (i, hook) in hooks.pre_submission.iter().enumerate() {
@@ -389,12 +472,13 @@ fn format_hook_name(hook: &HookDefinition) -> String {
 fn get_script_resolve_dir(job_bundle_dir: &str) -> String {
     let origin_file = Path::new(job_bundle_dir).join(".hooks_origin");
     if origin_file.is_file()
-        && let Ok(content) = std::fs::read_to_string(&origin_file) {
-            let origin = content.trim().to_owned();
-            if Path::new(&origin).is_dir() {
-                return origin;
-            }
+        && let Ok(content) = std::fs::read_to_string(&origin_file)
+    {
+        let origin = content.trim().to_owned();
+        if Path::new(&origin).is_dir() {
+            return origin;
         }
+    }
     job_bundle_dir.to_owned()
 }
 
@@ -410,7 +494,8 @@ fn resolve_command(command: &str, script_dir: &str) -> Result<String, DeadlineEr
     if relative.is_file() {
         return Ok(std::fs::canonicalize(&relative)
             .unwrap_or(relative)
-            .to_string_lossy().into_owned());
+            .to_string_lossy()
+            .into_owned());
     }
     // Try PATH lookup
     if let Some(resolved) = find_in_path(command) {
@@ -432,17 +517,20 @@ fn find_in_path(command: &str) -> Option<String> {
 }
 
 fn resolve_args(args: &[String], script_dir: &str) -> Vec<String> {
-    args.iter().map(|arg| {
-        if !Path::new(arg).is_absolute() {
-            let relative = Path::new(script_dir).join(arg);
-            if relative.exists() {
-                return std::fs::canonicalize(&relative)
-                    .unwrap_or(relative)
-                    .to_string_lossy().into_owned();
+    args.iter()
+        .map(|arg| {
+            if !Path::new(arg).is_absolute() {
+                let relative = Path::new(script_dir).join(arg);
+                if relative.exists() {
+                    return std::fs::canonicalize(&relative)
+                        .unwrap_or(relative)
+                        .to_string_lossy()
+                        .into_owned();
+                }
             }
-        }
-        arg.clone()
-    }).collect()
+            arg.clone()
+        })
+        .collect()
 }
 
 fn execute_hook(
@@ -488,16 +576,24 @@ fn execute_hook(
             execution_time: start.elapsed().as_secs_f64(),
             timed_out: false,
         }),
-        Ok(Err(e)) => Err(op_err(format!("Failed to execute hook: {}\n{e}", hook.command))),
+        Ok(Err(e)) => Err(op_err(format!(
+            "Failed to execute hook: {}\n{e}",
+            hook.command
+        ))),
         Err(_) => {
             // Timed out — force-kill the child process via its PID.
+            #[cfg(unix)]
+            #[allow(
+                unsafe_code,
+                reason = "force-killing a timed-out child process requires POSIX kill"
+            )]
             // SAFETY: SIGKILL is sent to a child process we spawned. The pid
             // is from Child::id() (a u32 cast to i32, safe for valid PIDs).
             // SIGKILL cannot be caught or ignored, so this is a last-resort
             // cleanup after the hook exceeded its timeout.
-            #[cfg(unix)]
-            #[allow(unsafe_code, reason = "force-killing a timed-out child process requires POSIX kill")]
-            unsafe { libc::kill(pid as i32, libc::SIGKILL); }
+            unsafe {
+                libc::kill(pid as i32, libc::SIGKILL);
+            }
             #[cfg(not(unix))]
             { /* On non-unix, the thread's Child will be dropped eventually */ }
             Ok(HookResult {
@@ -511,9 +607,18 @@ fn execute_hook(
     }
 }
 
-fn report_failure(hook: &HookDefinition, result: &HookResult, index: usize, hook_type: &str, print: &dyn Fn(&str)) {
+fn report_failure(
+    hook: &HookDefinition,
+    result: &HookResult,
+    index: usize,
+    hook_type: &str,
+    print: &dyn Fn(&str),
+) {
     let hook_name = format_hook_name(hook);
-    print(&format!("\n{} hook [{index}] failed: {hook_name}", capitalize(hook_type)));
+    print(&format!(
+        "\n{} hook [{index}] failed: {hook_name}",
+        capitalize(hook_type)
+    ));
     print(&format!("Exit code: {}", result.exit_code));
     if result.timed_out {
         print(&format!("Timed out after {}s", hook.timeout));
@@ -538,7 +643,7 @@ fn capitalize(s: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
-    
+
     use tempfile::TempDir;
 
     // ---------------------------------------------------------------
@@ -647,19 +752,37 @@ mod tests {
 
     #[test]
     fn hook_result_success() {
-        let r = HookResult { exit_code: 0, stdout: String::new(), stderr: String::new(), execution_time: 1.0, timed_out: false };
+        let r = HookResult {
+            exit_code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+            execution_time: 1.0,
+            timed_out: false,
+        };
         assert!(r.is_success());
     }
 
     #[test]
     fn hook_result_failure_exit_code() {
-        let r = HookResult { exit_code: 1, stdout: String::new(), stderr: String::new(), execution_time: 1.0, timed_out: false };
+        let r = HookResult {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: String::new(),
+            execution_time: 1.0,
+            timed_out: false,
+        };
         assert!(!r.is_success());
     }
 
     #[test]
     fn hook_result_failure_timeout() {
-        let r = HookResult { exit_code: 0, stdout: String::new(), stderr: String::new(), execution_time: 1.0, timed_out: true };
+        let r = HookResult {
+            exit_code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+            execution_time: 1.0,
+            timed_out: true,
+        };
         assert!(!r.is_success());
     }
 
@@ -715,14 +838,20 @@ mod tests {
     fn validate_config_timeout_zero() {
         let config = json!({"preSubmission": [{"command": "echo", "timeout": 0}]});
         let err = validate_configuration(&config).unwrap_err().to_string();
-        assert!(err.contains("'timeout' must be a positive integer"), "got: {err}");
+        assert!(
+            err.contains("'timeout' must be a positive integer"),
+            "got: {err}"
+        );
     }
 
     #[test]
     fn validate_config_timeout_negative() {
         let config = json!({"preSubmission": [{"command": "echo", "timeout": -1}]});
         let err = validate_configuration(&config).unwrap_err().to_string();
-        assert!(err.contains("'timeout' must be a positive integer"), "got: {err}");
+        assert!(
+            err.contains("'timeout' must be a positive integer"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -754,27 +883,41 @@ mod tests {
 
     #[test]
     fn validate_payload_not_dict() {
-        let err = validate_modified_payload(&json!("not a dict"), "test_hook").unwrap_err().to_string();
+        let err = validate_modified_payload(&json!("not a dict"), "test_hook")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("must be a JSON object"), "got: {err}");
     }
 
     #[test]
     fn validate_payload_attachments_not_dict() {
-        let err = validate_modified_payload(&json!({"attachments": "not dict"}), "test_hook").unwrap_err().to_string();
-        assert!(err.contains("'attachments' must be an object"), "got: {err}");
+        let err = validate_modified_payload(&json!({"attachments": "not dict"}), "test_hook")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("'attachments' must be an object"),
+            "got: {err}"
+        );
     }
 
     #[test]
     fn validate_payload_asset_refs_not_dict() {
         let payload = json!({"attachments": {"assetReferences": "not dict"}});
-        let err = validate_modified_payload(&payload, "test_hook").unwrap_err().to_string();
-        assert!(err.contains("'assetReferences' must be an object"), "got: {err}");
+        let err = validate_modified_payload(&payload, "test_hook")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("'assetReferences' must be an object"),
+            "got: {err}"
+        );
     }
 
     #[test]
     fn validate_payload_input_filenames_not_list() {
         let payload = json!({"attachments": {"assetReferences": {"inputFilenames": "not list"}}});
-        let err = validate_modified_payload(&payload, "test_hook").unwrap_err().to_string();
+        let err = validate_modified_payload(&payload, "test_hook")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("must be a list"), "got: {err}");
     }
 
@@ -859,7 +1002,10 @@ mod tests {
         });
         let modified = json!({"attachments": {"assetReferences": {"inputFilenames": ["/b.txt"]}}});
         let result = merge_payload(&original, &modified);
-        assert_eq!(result["attachments"]["assetReferences"]["inputFilenames"], json!(["/b.txt"]));
+        assert_eq!(
+            result["attachments"]["assetReferences"]["inputFilenames"],
+            json!(["/b.txt"])
+        );
         assert_eq!(result["attachments"]["fileSystem"], "COPIED");
     }
 
@@ -878,9 +1024,11 @@ mod tests {
     #[test]
     fn load_hooks_yaml() {
         let dir = TempDir::new().unwrap();
-        std::fs::write(dir.path().join("hooks.yaml"),
-            "preSubmission:\n  - command: python\n    args: [\"-c\", \"pass\"]\n"
-        ).unwrap();
+        std::fs::write(
+            dir.path().join("hooks.yaml"),
+            "preSubmission:\n  - command: python\n    args: [\"-c\", \"pass\"]\n",
+        )
+        .unwrap();
         let mut mgr = HookManager::new(dir.path().to_str().unwrap(), Box::new(|_| {}));
         let hooks = mgr.load_hooks().unwrap().unwrap();
         assert_eq!(hooks.pre_submission.len(), 1);
@@ -890,9 +1038,11 @@ mod tests {
     #[test]
     fn load_hooks_json() {
         let dir = TempDir::new().unwrap();
-        std::fs::write(dir.path().join("hooks.json"),
-            r#"{"postSubmission": [{"command": "echo", "args": ["done"]}]}"#
-        ).unwrap();
+        std::fs::write(
+            dir.path().join("hooks.json"),
+            r#"{"postSubmission": [{"command": "echo", "args": ["done"]}]}"#,
+        )
+        .unwrap();
         let mut mgr = HookManager::new(dir.path().to_str().unwrap(), Box::new(|_| {}));
         let hooks = mgr.load_hooks().unwrap().unwrap();
         assert_eq!(hooks.post_submission.len(), 1);
@@ -951,18 +1101,30 @@ mod tests {
     fn pre_hook_success_no_output() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: {}\n    args: [\"-c\", \"exit 0\"]\n", sh_cmd()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"exit 0\"]\n",
+                sh_cmd()
+            ),
+        );
         let messages: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
         let msgs = messages.clone();
-        let mut mgr = HookManager::new(dir_str, Box::new(move |s| msgs.lock().unwrap().push(s.to_owned())));
+        let mut mgr = HookManager::new(
+            dir_str,
+            Box::new(move |s| msgs.lock().unwrap().push(s.to_owned())),
+        );
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
-        let result = mgr.execute_pre_submission_hooks(&mut meta, json!({"priority": 50})).unwrap();
+        let result = mgr
+            .execute_pre_submission_hooks(&mut meta, json!({"priority": 50}))
+            .unwrap();
         assert_eq!(result["priority"], 50);
         let msgs = messages.lock().unwrap();
-        assert!(msgs.iter().any(|m| m.contains("Running pre-submission hook")));
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("Running pre-submission hook"))
+        );
     }
 
     #[test]
@@ -970,13 +1132,19 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
         // Hook outputs JSON to stdout that changes priority
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: {}\n    args: [\"-c\", \"echo '{{\\\"priority\\\": 100}}'\"]\n", sh_cmd()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"echo '{{\\\"priority\\\": 100}}'\"]\n",
+                sh_cmd()
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
-        let result = mgr.execute_pre_submission_hooks(&mut meta, json!({"priority": 50})).unwrap();
+        let result = mgr
+            .execute_pre_submission_hooks(&mut meta, json!({"priority": 50}))
+            .unwrap();
         assert_eq!(result["priority"], 100);
     }
 
@@ -984,13 +1152,20 @@ mod tests {
     fn pre_hook_failure_blocks() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: {}\n    args: [\"-c\", \"exit 1\"]\n", sh_cmd()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"exit 1\"]\n",
+                sh_cmd()
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
-        let err = mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap_err().to_string();
+        let err = mgr
+            .execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("failed with exit code"), "got: {err}");
     }
 
@@ -998,13 +1173,20 @@ mod tests {
     fn pre_hook_timeout() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: {}\n    args: [\"-c\", \"sleep 10\"]\n    timeout: 1\n", sh_cmd()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"sleep 10\"]\n    timeout: 1\n",
+                sh_cmd()
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
-        let err = mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap_err().to_string();
+        let err = mgr
+            .execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("timed out"), "got: {err}");
     }
 
@@ -1012,13 +1194,20 @@ mod tests {
     fn pre_hook_invalid_json() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: {}\n    args: [\"-c\", \"echo 'not json'\"]\n", sh_cmd()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"echo 'not json'\"]\n",
+                sh_cmd()
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
-        let err = mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap_err().to_string();
+        let err = mgr
+            .execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("invalid JSON"), "got: {err}");
     }
 
@@ -1028,14 +1217,18 @@ mod tests {
         let dir_str = dir.path().to_str().unwrap();
         let output_file = dir.path().join("output.txt");
         let escaped = output_file.to_str().unwrap().replace('\\', "\\\\");
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: python3\n    args: [\"-c\", \"import sys,json; d=json.load(sys.stdin); open('{escaped}', 'w').write(d['jobName'])\"]\n"
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "preSubmission:\n  - command: python3\n    args: [\"-c\", \"import sys,json; d=json.load(sys.stdin); open('{escaped}', 'w').write(d['jobName'])\"]\n"
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         meta.job_name = "StdinTestJob".into();
-        mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap();
+        mgr.execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap();
         let content = std::fs::read_to_string(&output_file).unwrap();
         assert_eq!(content, "StdinTestJob");
     }
@@ -1046,15 +1239,22 @@ mod tests {
         let dir_str = dir.path().to_str().unwrap();
         let output_file = dir.path().join("env_out.txt");
         let escaped = output_file.to_str().unwrap().replace('\\', "\\\\");
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo $DEADLINE_JOB_NAME > '{escaped}'\"]\n"
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo $DEADLINE_JOB_NAME > '{escaped}'\"]\n"
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         meta.job_name = "MyTestJob".into();
-        mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap();
-        let content = std::fs::read_to_string(&output_file).unwrap().trim().to_owned();
+        mgr.execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap();
+        let content = std::fs::read_to_string(&output_file)
+            .unwrap()
+            .trim()
+            .to_owned();
         assert_eq!(content, "MyTestJob");
     }
 
@@ -1064,14 +1264,21 @@ mod tests {
         let dir_str = dir.path().to_str().unwrap();
         let output_file = dir.path().join("custom_env.txt");
         let escaped = output_file.to_str().unwrap().replace('\\', "\\\\");
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo $CUSTOM_VAR > '{escaped}'\"]\n    env:\n      CUSTOM_VAR: custom_value\n"
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo $CUSTOM_VAR > '{escaped}'\"]\n    env:\n      CUSTOM_VAR: custom_value\n"
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
-        mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap();
-        let content = std::fs::read_to_string(&output_file).unwrap().trim().to_owned();
+        mgr.execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap();
+        let content = std::fs::read_to_string(&output_file)
+            .unwrap()
+            .trim()
+            .to_owned();
         assert_eq!(content, "custom_value");
     }
 
@@ -1079,11 +1286,17 @@ mod tests {
     fn pre_hook_command_not_found() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        write_hooks_yaml(dir.path(), "preSubmission:\n  - command: nonexistent_command_xyz\n");
+        write_hooks_yaml(
+            dir.path(),
+            "preSubmission:\n  - command: nonexistent_command_xyz\n",
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
-        let err = mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap_err().to_string();
+        let err = mgr
+            .execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("not found"), "got: {err}");
     }
 
@@ -1092,14 +1305,20 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
         // Use sh with absolute path
-        let sh_path = if cfg!(windows) { "C:\\Windows\\System32\\cmd.exe" } else { "/bin/sh" };
-        write_hooks_yaml(dir.path(), &format!(
-            "preSubmission:\n  - command: {sh_path}\n    args: [\"-c\", \"exit 0\"]\n"
-        ));
+        let sh_path = if cfg!(windows) {
+            "C:\\Windows\\System32\\cmd.exe"
+        } else {
+            "/bin/sh"
+        };
+        write_hooks_yaml(
+            dir.path(),
+            &format!("preSubmission:\n  - command: {sh_path}\n    args: [\"-c\", \"exit 0\"]\n"),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
-        mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap();
+        mgr.execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap();
     }
 
     #[test]
@@ -1119,14 +1338,19 @@ mod tests {
         let history_dir = dir.path().join("history");
         std::fs::create_dir_all(&history_dir).unwrap();
         write_hooks_yaml(&history_dir, "preSubmission:\n  - command: myscript.sh\n");
-        std::fs::write(history_dir.join(".hooks_origin"), original_dir.to_str().unwrap()).unwrap();
+        std::fs::write(
+            history_dir.join(".hooks_origin"),
+            original_dir.to_str().unwrap(),
+        )
+        .unwrap();
 
         let history_str = history_dir.to_str().unwrap();
         let mut mgr = HookManager::new(history_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(history_str);
         // Should resolve myscript.sh from original_dir via .hooks_origin
-        mgr.execute_pre_submission_hooks(&mut meta, json!({})).unwrap();
+        mgr.execute_pre_submission_hooks(&mut meta, json!({}))
+            .unwrap();
     }
 
     // --- Post-submission hook execution ---
@@ -1135,9 +1359,13 @@ mod tests {
     fn post_hook_failure_warns() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        write_hooks_yaml(dir.path(), &format!(
-            "postSubmission:\n  - command: {}\n    args: [\"-c\", \"exit 1\"]\n", sh_cmd()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "postSubmission:\n  - command: {}\n    args: [\"-c\", \"exit 1\"]\n",
+                sh_cmd()
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let meta = make_metadata_for_dir(dir_str);
@@ -1149,9 +1377,13 @@ mod tests {
     fn post_hook_timeout_warns() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        write_hooks_yaml(dir.path(), &format!(
-            "postSubmission:\n  - command: {}\n    args: [\"-c\", \"sleep 5\"]\n    timeout: 1\n", sh_cmd()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "postSubmission:\n  - command: {}\n    args: [\"-c\", \"sleep 5\"]\n    timeout: 1\n",
+                sh_cmd()
+            ),
+        );
         let mut mgr = HookManager::new(dir_str, Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let meta = make_metadata_for_dir(dir_str);
@@ -1171,9 +1403,13 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        write_hooks_yaml(dir.path(), &format!(
-            "postSubmission:\n  - command: {}\n", script.to_str().unwrap()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "postSubmission:\n  - command: {}\n",
+                script.to_str().unwrap()
+            ),
+        );
         let mut mgr = HookManager::new(dir.path().to_str().unwrap(), Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         // Simulate CreateJob failure: don't call execute_post_submission_hooks
@@ -1192,9 +1428,13 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        write_hooks_yaml(dir.path(), &format!(
-            "postSubmission:\n  - command: {}\n", script.to_str().unwrap()
-        ));
+        write_hooks_yaml(
+            dir.path(),
+            &format!(
+                "postSubmission:\n  - command: {}\n",
+                script.to_str().unwrap()
+            ),
+        );
         let mut mgr = HookManager::new(dir.path().to_str().unwrap(), Box::new(|_| {}));
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir.path().to_str().unwrap());

@@ -17,18 +17,27 @@ pub async fn get_queue_parameter_definitions(
 
     // List all queue environments
     let env_pages = crate::client::collect_paginated(
-        client.list_queue_environments().farm_id(farm_id).queue_id(queue_id)
-            .into_paginator().send()
-    ).await?;
+        client
+            .list_queue_environments()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .into_paginator()
+            .send(),
+    )
+    .await?;
 
     // Fetch full environment details and sort by priority
     let mut full_envs: Vec<(i32, String)> = Vec::new(); // (priority, template)
     for page in &env_pages {
         for env in page.environments() {
             let env_id = env.queue_environment_id();
-            let full = client.get_queue_environment()
-                .farm_id(farm_id).queue_id(queue_id).queue_environment_id(env_id)
-                .send().await
+            let full = client
+                .get_queue_environment()
+                .farm_id(farm_id)
+                .queue_id(queue_id)
+                .queue_environment_id(env_id)
+                .send()
+                .await
                 .map_err(crate::client::deadline_error)?;
             let priority = full.priority();
             let template = full.template().to_owned();
@@ -40,18 +49,22 @@ pub async fn get_queue_parameter_definitions(
     // Parse templates and collect parameters
     let mut params: indexmap::IndexMap<String, Value> = indexmap::IndexMap::new();
     for (_priority, template_str) in &full_envs {
-        let template: Value = serde_yaml::from_str(template_str)
-            .map_err(|e| DeadlineError::OperationError(format!("Failed to parse environment template: {e}")))?;
+        let template: Value = serde_yaml::from_str(template_str).map_err(|e| {
+            DeadlineError::OperationError(format!("Failed to parse environment template: {e}"))
+        })?;
 
-        let env_name = template.get("environment")
+        let env_name = template
+            .get("environment")
             .and_then(|e| e["name"].as_str())
             .unwrap_or("");
 
         let param_defs = match template.get("parameterDefinitions") {
             Some(Value::Array(arr)) => arr.clone(),
-            Some(_) => return Err(DeadlineError::OperationError(
-                "parameterDefinitions must be a list".into(),
-            )),
+            Some(_) => {
+                return Err(DeadlineError::OperationError(
+                    "parameterDefinitions must be a list".into(),
+                ));
+            }
             None => continue,
         };
 
@@ -59,19 +72,27 @@ pub async fn get_queue_parameter_definitions(
             validate_job_parameter(&param, true, true)?;
 
             // Auto-set userInterface.control and groupLabel
-            let needs_group_label = param.get("userInterface")
+            let needs_group_label = param
+                .get("userInterface")
                 .and_then(|ui| ui.get("groupLabel"))
                 .and_then(|g| g.as_str())
                 .is_none_or(str::is_empty);
 
             if needs_group_label {
-                let control = if param.get("userInterface").and_then(|ui| ui.get("control")).is_none() {
+                let control = if param
+                    .get("userInterface")
+                    .and_then(|ui| ui.get("control"))
+                    .is_none()
+                {
                     Some(get_ui_control(&param)?)
                 } else {
                     None
                 };
-                let ui = param.as_object_mut().expect("value is object")
-                    .entry("userInterface").or_insert_with(|| serde_json::json!({}));
+                let ui = param
+                    .as_object_mut()
+                    .expect("value is object")
+                    .entry("userInterface")
+                    .or_insert_with(|| serde_json::json!({}));
                 if let Some(ctrl) = control {
                     ui["control"] = Value::String(ctrl);
                 }
@@ -84,7 +105,8 @@ pub async fn get_queue_parameter_definitions(
                 if !diffs.is_empty() {
                     return Err(DeadlineError::OperationError(format!(
                         "Job template parameter {} is duplicated across queue environments with mismatched fields:\n{}",
-                        name, diffs.join(" ")
+                        name,
+                        diffs.join(" ")
                     )));
                 }
             } else {
@@ -96,41 +118,54 @@ pub async fn get_queue_parameter_definitions(
     Ok(params.into_values().collect())
 }
 
-fn validate_job_parameter(param: &Value, type_required: bool, default_required: bool) -> Result<(), DeadlineError> {
+fn validate_job_parameter(
+    param: &Value,
+    type_required: bool,
+    default_required: bool,
+) -> Result<(), DeadlineError> {
     let obj = param.as_object().ok_or_else(|| {
-        DeadlineError::OperationError(format!("Expected a dict for job parameter, but got {param}"))
+        DeadlineError::OperationError(format!(
+            "Expected a dict for job parameter, but got {param}"
+        ))
     })?;
 
     let name = obj.get("name").and_then(|n| n.as_str()).ok_or_else(|| {
         DeadlineError::OperationError(format!("No \"name\" field in job parameter. Got {param}"))
     })?;
     if name.is_empty() {
-        return Err(DeadlineError::OperationError("Job parameter has an empty name".into()));
+        return Err(DeadlineError::OperationError(
+            "Job parameter has an empty name".into(),
+        ));
     }
 
     if type_required && !obj.contains_key("type") {
-        return Err(DeadlineError::OperationError(
-            format!("Job parameter \"{name}\" is missing required key \"type\""),
-        ));
+        return Err(DeadlineError::OperationError(format!(
+            "Job parameter \"{name}\" is missing required key \"type\""
+        )));
     }
     if let Some(t) = obj.get("type").and_then(|t| t.as_str())
-        && !["INT", "FLOAT", "STRING", "PATH"].contains(&t) {
-            return Err(DeadlineError::OperationError(
-                format!("Job parameter \"{name}\" had \"type\" {t} but expected one of (\"INT\", \"FLOAT\", \"STRING\", \"PATH\")"),
-            ));
-        }
+        && !["INT", "FLOAT", "STRING", "PATH"].contains(&t)
+    {
+        return Err(DeadlineError::OperationError(format!(
+            "Job parameter \"{name}\" had \"type\" {t} but expected one of (\"INT\", \"FLOAT\", \"STRING\", \"PATH\")"
+        )));
+    }
 
     if default_required && !obj.contains_key("default") {
-        return Err(DeadlineError::OperationError(
-            format!("Job parameter \"{name}\" is missing required key \"default\""),
-        ));
+        return Err(DeadlineError::OperationError(format!(
+            "Job parameter \"{name}\" is missing required key \"default\""
+        )));
     }
 
     Ok(())
 }
 
 fn get_ui_control(param: &Value) -> Result<String, DeadlineError> {
-    if let Some(ctrl) = param.get("userInterface").and_then(|ui| ui.get("control")).and_then(|c| c.as_str()) {
+    if let Some(ctrl) = param
+        .get("userInterface")
+        .and_then(|ui| ui.get("control"))
+        .and_then(|c| c.as_str())
+    {
         return Ok(ctrl.to_owned());
     }
     let param_type = param["type"].as_str().unwrap_or("");
@@ -140,10 +175,20 @@ fn get_ui_control(param: &Value) -> Result<String, DeadlineError> {
     match param_type {
         "STRING" => Ok("LINE_EDIT".into()),
         "PATH" => {
-            let obj_type = param.get("objectType").and_then(|o| o.as_str()).unwrap_or("DIRECTORY");
+            let obj_type = param
+                .get("objectType")
+                .and_then(|o| o.as_str())
+                .unwrap_or("DIRECTORY");
             if obj_type == "FILE" {
-                let data_flow = param.get("dataFlow").and_then(|d| d.as_str()).unwrap_or("NONE");
-                if data_flow == "OUT" { Ok("CHOOSE_OUTPUT_FILE".into()) } else { Ok("CHOOSE_INPUT_FILE".into()) }
+                let data_flow = param
+                    .get("dataFlow")
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("NONE");
+                if data_flow == "OUT" {
+                    Ok("CHOOSE_OUTPUT_FILE".into())
+                } else {
+                    Ok("CHOOSE_INPUT_FILE".into())
+                }
             } else {
                 Ok("CHOOSE_DIRECTORY".into())
             }
@@ -151,13 +196,25 @@ fn get_ui_control(param: &Value) -> Result<String, DeadlineError> {
         "INT" | "FLOAT" => Ok("SPIN_BOX".into()),
         _ => Err(DeadlineError::OperationError(format!(
             "The job template parameter '{}' specifies an unsupported type '{param_type}'.",
-            param.get("name").and_then(|n| n.as_str()).unwrap_or("<unnamed>")
+            param
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("<unnamed>")
         ))),
     }
 }
 
 fn parameter_definition_difference(lhs: &Value, rhs: &Value) -> Vec<String> {
-    let fields = ["name", "type", "minValue", "maxValue", "minLength", "maxLength", "dataFlow", "objectType"];
+    let fields = [
+        "name",
+        "type",
+        "minValue",
+        "maxValue",
+        "minLength",
+        "maxLength",
+        "dataFlow",
+        "objectType",
+    ];
     let mut diffs = Vec::new();
     for field in &fields {
         if lhs.get(field) != rhs.get(field) {
@@ -165,7 +222,9 @@ fn parameter_definition_difference(lhs: &Value, rhs: &Value) -> Vec<String> {
         }
     }
     // allowedValues: compare as sets
-    if let (Some(Value::Array(a)), Some(Value::Array(b))) = (lhs.get("allowedValues"), rhs.get("allowedValues")) {
+    if let (Some(Value::Array(a)), Some(Value::Array(b))) =
+        (lhs.get("allowedValues"), rhs.get("allowedValues"))
+    {
         let set_a: std::collections::HashSet<&Value> = a.iter().collect();
         let set_b: std::collections::HashSet<&Value> = b.iter().collect();
         if set_a != set_b {

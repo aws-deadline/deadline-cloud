@@ -9,12 +9,15 @@ use super::helpers::suggest_resources_on_client_error;
 pub(crate) enum FarmAction {
     /// List available farms
     List {
-        #[arg(long)] profile: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
     },
     /// Get details of a specific farm
     Get {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
     },
 }
 
@@ -24,12 +27,22 @@ pub(crate) fn run(action: FarmAction) -> Result<(), CliError> {
         .block_on(run_async(action))
 }
 
-fn setup(profile: Option<String>, farm_id: Option<String>, required: &[&str]) -> Result<deadline_config::ini::IniConfig, CliError> {
-    let mut config = config_file::read_config()
-        .map_err(|e| CliError::Operation(e.to_string()))?;
+fn setup(
+    profile: Option<String>,
+    farm_id: Option<String>,
+    required: &[&str],
+) -> Result<deadline_config::ini::IniConfig, CliError> {
+    let mut config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
-        &crate::common::CliOptions { profile, farm_id, queue_id: None, job_id: None, yes: false, ..Default::default() },
+        &crate::common::CliOptions {
+            profile,
+            farm_id,
+            queue_id: None,
+            job_id: None,
+            yes: false,
+            ..Default::default()
+        },
         required,
     )?;
     Ok(config)
@@ -48,13 +61,22 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
                         .flat_map(aws_sdk_deadline::operation::list_farms::ListFarmsOutput::farms)
                         .map(|f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
                         .collect();
-                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+                    println!(
+                        "{}",
+                        crate::common::cli_object_repr(&serde_json::json!(structured))
+                    );
                     Ok(())
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "ListFarms", None, None, None, Some(&config),
-                    ).await;
+                        &e.to_string(),
+                        "ListFarms",
+                        None,
+                        None,
+                        None,
+                        Some(&config),
+                    )
+                    .await;
                     Err(CliError::Operation(format!(
                         "Failed to get Farms from Deadline:\n{e}{suggestion}"
                     )))
@@ -68,7 +90,8 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
             match dl.get_farm().farm_id(&farm).send().await {
                 Ok(output) => {
                     let resp = FarmResponse::from(output);
-                    let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
+                    let val = serde_json::to_value(&resp)
+                        .map_err(|e| CliError::Operation(e.to_string()))?;
                     println!("{}", crate::common::cli_object_repr(&val));
                     Ok(())
                 }

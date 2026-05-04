@@ -43,16 +43,16 @@
 //!    are required but auto-defaulted by `correct_errors()`. Union types
 //!    show up as enums with struct variants.
 
+pub mod bundle;
+pub mod cloudwatch;
+pub mod errors;
 pub mod farms;
-pub mod queues;
 pub mod fleets;
 pub mod jobs;
-pub mod workers;
-pub mod sessions;
 pub mod queue_resources;
-pub mod telemetry;
-pub mod errors;
-pub mod sts;
-pub mod cloudwatch;
-pub mod bundle;
+pub mod queues;
 pub mod s3;
+pub mod sessions;
+pub mod sts;
+pub mod telemetry;
+pub mod workers;

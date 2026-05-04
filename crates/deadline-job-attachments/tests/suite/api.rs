@@ -101,12 +101,19 @@ fn read_manifests_one_invalid_path_errors() {
         "valid.manifest",
         &[("f.txt", "aabbccdd11223344aabbccdd11223344", 10)],
     );
-    let bad = dir.path().join("nonexistent.manifest").to_string_lossy().into_owned();
+    let bad = dir
+        .path()
+        .join("nonexistent.manifest")
+        .to_string_lossy()
+        .into_owned();
 
     let err = read_manifests(&[p1, bad]).unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("not valid"), "expected 'not valid' in: {msg}");
-    assert!(msg.contains("nonexistent.manifest"), "expected bad path in: {msg}");
+    assert!(
+        msg.contains("nonexistent.manifest"),
+        "expected bad path in: {msg}"
+    );
 }
 
 // All paths invalid → error listing all
@@ -468,7 +475,10 @@ async fn attachment_download_duplicate_destination_errors() {
     .unwrap_err();
 
     let msg = err.to_string();
-    assert!(msg.contains("already in use"), "expected 'already in use' in: {msg}");
+    assert!(
+        msg.contains("already in use"),
+        "expected 'already in use' in: {msg}"
+    );
 }
 
 // Malformed S3 root URI → error
@@ -544,7 +554,8 @@ async fn attachment_upload_with_root_dirs() {
         root.path().to_string_lossy().as_bytes(),
         HashAlgorithm::Xxh128,
     );
-    let file_hash = deadline_job_attachments::asset_manifests::hash_data(b"hello", HashAlgorithm::Xxh128);
+    let file_hash =
+        deadline_job_attachments::asset_manifests::hash_data(b"hello", HashAlgorithm::Xxh128);
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{root_hash}_input"),
@@ -971,7 +982,8 @@ async fn attachment_upload_with_path_mapping_rules_file() {
         source.path().to_string_lossy().as_bytes(),
         HashAlgorithm::Xxh128,
     );
-    let file_hash = deadline_job_attachments::asset_manifests::hash_data(b"hello", HashAlgorithm::Xxh128);
+    let file_hash =
+        deadline_job_attachments::asset_manifests::hash_data(b"hello", HashAlgorithm::Xxh128);
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{source_hash}_input"),
@@ -1013,7 +1025,10 @@ async fn attachment_upload_with_path_mapping_rules_file() {
     .unwrap();
 
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0].source_path.as_deref(), Some(source.path().to_str().unwrap()));
+    assert_eq!(
+        result[0].source_path.as_deref(),
+        Some(source.path().to_str().unwrap())
+    );
 }
 
 // ASCII source path → asset-root metadata
@@ -1027,7 +1042,8 @@ async fn attachment_upload_ascii_path_sets_asset_root_metadata() {
         root.path().to_string_lossy().as_bytes(),
         HashAlgorithm::Xxh128,
     );
-    let file_hash = deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
+    let file_hash =
+        deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{root_hash}_input"),
@@ -1080,13 +1096,10 @@ async fn attachment_upload_with_manifest_path_uploads_manifest() {
         root.path().to_string_lossy().as_bytes(),
         HashAlgorithm::Xxh128,
     );
-    let file_hash = deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
+    let file_hash =
+        deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
     let manifest_name = format!("{root_hash}_input");
-    let p1 = write_manifest_file(
-        dir.path(),
-        &manifest_name,
-        &[("a.txt", &file_hash, 4)],
-    );
+    let p1 = write_manifest_file(dir.path(), &manifest_name, &[("a.txt", &file_hash, 4)]);
 
     let server = MockServer::start().await;
     Mock::given(method("HEAD"))
@@ -1133,13 +1146,10 @@ async fn attachment_upload_without_manifest_path_skips_manifest_upload() {
         root.path().to_string_lossy().as_bytes(),
         HashAlgorithm::Xxh128,
     );
-    let file_hash = deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
+    let file_hash =
+        deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
     let manifest_name = format!("{root_hash}_input");
-    let p1 = write_manifest_file(
-        dir.path(),
-        &manifest_name,
-        &[("a.txt", &file_hash, 4)],
-    );
+    let p1 = write_manifest_file(dir.path(), &manifest_name, &[("a.txt", &file_hash, 4)]);
 
     let server = MockServer::start().await;
     Mock::given(method("HEAD"))
@@ -1191,16 +1201,8 @@ async fn attachment_upload_multiple_manifests_preserves_order() {
     let fh1 = deadline_job_attachments::asset_manifests::hash_data(b"aaa", HashAlgorithm::Xxh128);
     let fh2 = deadline_job_attachments::asset_manifests::hash_data(b"bbb", HashAlgorithm::Xxh128);
 
-    let p1 = write_manifest_file(
-        dir.path(),
-        &format!("{hash1}_input"),
-        &[("a.txt", &fh1, 3)],
-    );
-    let p2 = write_manifest_file(
-        dir.path(),
-        &format!("{hash2}_input"),
-        &[("b.txt", &fh2, 3)],
-    );
+    let p1 = write_manifest_file(dir.path(), &format!("{hash1}_input"), &[("a.txt", &fh1, 3)]);
+    let p2 = write_manifest_file(dir.path(), &format!("{hash2}_input"), &[("b.txt", &fh2, 3)]);
 
     let server = MockServer::start().await;
     Mock::given(method("HEAD"))

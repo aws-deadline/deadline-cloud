@@ -1,5 +1,5 @@
 use serde_json::{Value, json};
-use wiremock::matchers::{method, header};
+use wiremock::matchers::{header, method};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Mount a `CloudWatch` `GetLogEvents` response.
@@ -26,11 +26,9 @@ pub async fn mock_get_log_events(
 pub async fn mock_get_log_events_not_found(server: &MockServer) {
     Mock::given(method("POST"))
         .and(header("x-amz-target", "Logs_20140328.GetLogEvents"))
-        .respond_with(
-            ResponseTemplate::new(400).set_body_json(json!({
-                "__type": "ResourceNotFoundException"
-            })),
-        )
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "__type": "ResourceNotFoundException"
+        })))
         .mount(server)
         .await;
 }
@@ -39,12 +37,10 @@ pub async fn mock_get_log_events_not_found(server: &MockServer) {
 pub async fn mock_get_log_events_access_denied(server: &MockServer) {
     Mock::given(method("POST"))
         .and(header("x-amz-target", "Logs_20140328.GetLogEvents"))
-        .respond_with(
-            ResponseTemplate::new(403).set_body_json(json!({
-                "__type": "AccessDeniedException",
-                "message": "User is not authorized to access this resource"
-            })),
-        )
+        .respond_with(ResponseTemplate::new(403).set_body_json(json!({
+            "__type": "AccessDeniedException",
+            "message": "User is not authorized to access this resource"
+        })))
         .expect(1..=3) // SDK may retry once or twice
         .mount(server)
         .await;

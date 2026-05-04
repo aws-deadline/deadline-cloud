@@ -70,26 +70,39 @@ async fn get_fleet_scoped_config(
     if user_id.is_some() && identity_store_id.is_some() {
         // DCM user — assume fleet role
         let dl = session::deadline_client(config).await;
-        let resp = dl.assume_fleet_role_for_read()
-            .farm_id(farm_id).fleet_id(fleet_id)
-            .send().await
-            .map_err(|e| DeadlineError::OperationError(
-                format!("Failed to get fleet credentials: {}", crate::client::format_sdk_error(&e))
-            ))?;
-        let creds = resp.credentials().ok_or_else(|| DeadlineError::OperationError(
-            "Failed to get fleet credentials: Empty credentials received.".into()
-        ))?;
+        let resp = dl
+            .assume_fleet_role_for_read()
+            .farm_id(farm_id)
+            .fleet_id(fleet_id)
+            .send()
+            .await
+            .map_err(|e| {
+                DeadlineError::OperationError(format!(
+                    "Failed to get fleet credentials: {}",
+                    crate::client::format_sdk_error(&e)
+                ))
+            })?;
+        let creds = resp.credentials().ok_or_else(|| {
+            DeadlineError::OperationError(
+                "Failed to get fleet credentials: Empty credentials received.".into(),
+            )
+        })?;
 
         let base_config = session::get_sdk_config(config).await;
         let region = base_config.region().cloned();
 
         let credentials = aws_credential_types::Credentials::new(
-            creds.access_key_id(), creds.secret_access_key(),
-            Some(creds.session_token().to_owned()), None, "fleet-role",
+            creds.access_key_id(),
+            creds.secret_access_key(),
+            Some(creds.session_token().to_owned()),
+            None,
+            "fleet-role",
         );
         let mut builder = aws_config::SdkConfig::builder()
             .behavior_version(aws_config::BehaviorVersion::latest())
-            .credentials_provider(aws_credential_types::provider::SharedCredentialsProvider::new(credentials));
+            .credentials_provider(
+                aws_credential_types::provider::SharedCredentialsProvider::new(credentials),
+            );
         if let Some(r) = region {
             builder = builder.region(r);
         }
@@ -103,7 +116,10 @@ async fn get_fleet_scoped_config(
 /// Format a `CloudWatch` SDK error using the common smithy trait.
 fn cw_sdk_err<E>(err: &aws_sdk_cloudwatchlogs::error::SdkError<E>) -> String
 where
-    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static,
+    E: std::fmt::Display
+        + aws_smithy_types::error::metadata::ProvideErrorMetadata
+        + std::error::Error
+        + 'static,
 {
     match err {
         aws_sdk_cloudwatchlogs::error::SdkError::ServiceError(e) => {
@@ -112,7 +128,10 @@ where
             let msg = inner.message().unwrap_or("No message");
             format!("{code}: {msg}")
         }
-        other => format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other)),
+        other => format!(
+            "{}",
+            aws_smithy_types::error::display::DisplayErrorContext(other)
+        ),
     }
 }
 
@@ -130,9 +149,12 @@ fn parse_events(raw_events: &[aws_sdk_cloudwatchlogs::types::OutputLogEvent]) ->
     raw_events
         .iter()
         .map(|e| {
-            let timestamp = e.timestamp.map_or_else(Utc::now, |ms| Utc.timestamp_millis_opt(ms).unwrap());
+            let timestamp = e
+                .timestamp
+                .map_or_else(Utc::now, |ms| Utc.timestamp_millis_opt(ms).unwrap());
             let message = e.message.as_deref().unwrap_or("").trim_end().to_owned();
-            let ingestion_time = e.ingestion_time
+            let ingestion_time = e
+                .ingestion_time
                 .map(|ms| Utc.timestamp_millis_opt(ms).unwrap());
             LogEvent {
                 timestamp,
@@ -156,11 +178,11 @@ pub async fn get_session_logs(
     config: Option<&IniConfig>,
 ) -> Result<(SessionLogResult, SessionAutoSelect), DeadlineError> {
     // Resolve session_id
-    let (resolved_session_id, auto_select) = if let Some(id) = session_id { (id.to_owned(), SessionAutoSelect::Provided) } else {
+    let (resolved_session_id, auto_select) = if let Some(id) = session_id {
+        (id.to_owned(), SessionAutoSelect::Provided)
+    } else {
         let jid = job_id.ok_or_else(|| {
-            DeadlineError::OperationError(
-                "Either session_id or job_id must be provided".into(),
-            )
+            DeadlineError::OperationError("Either session_id or job_id must be provided".into())
         })?;
         auto_select_session(farm_id, queue_id, jid, config).await?
     };
@@ -192,26 +214,33 @@ pub async fn get_session_logs(
             let raw_events = resp.events();
             let events = parse_events(raw_events);
             let count = events.len();
-            Ok((SessionLogResult {
-                events,
-                next_token: resp.next_forward_token().map(ToOwned::to_owned),
-                log_group,
-                log_stream: resolved_session_id,
-                count,
-            }, auto_select))
+            Ok((
+                SessionLogResult {
+                    events,
+                    next_token: resp.next_forward_token().map(ToOwned::to_owned),
+                    log_group,
+                    log_stream: resolved_session_id,
+                    count,
+                },
+                auto_select,
+            ))
         }
         Err(e) => {
             if is_resource_not_found(&e) {
-                Ok((SessionLogResult {
-                    events: vec![],
-                    next_token: None,
-                    log_group,
-                    log_stream: resolved_session_id,
-                    count: 0,
-                }, auto_select))
+                Ok((
+                    SessionLogResult {
+                        events: vec![],
+                        next_token: None,
+                        log_group,
+                        log_stream: resolved_session_id,
+                        count: 0,
+                    },
+                    auto_select,
+                ))
             } else {
                 Err(DeadlineError::OperationError(format!(
-                    "Failed to retrieve logs: {}", cw_sdk_err(&e)
+                    "Failed to retrieve logs: {}",
+                    cw_sdk_err(&e)
                 )))
             }
         }
@@ -278,7 +307,8 @@ pub async fn get_worker_logs(
                 })
             } else {
                 Err(DeadlineError::OperationError(format!(
-                    "Failed to retrieve worker logs: {}", cw_sdk_err(&e)
+                    "Failed to retrieve worker logs: {}",
+                    cw_sdk_err(&e)
                 )))
             }
         }
@@ -294,10 +324,17 @@ async fn auto_select_session(
 ) -> Result<(String, SessionAutoSelect), DeadlineError> {
     let client = session::deadline_client(config).await;
     let resp = crate::client::collect_paginated(
-        client.list_sessions().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .into_paginator().send()
-    ).await?;
-    let sessions: Vec<&aws_sdk_deadline::types::SessionSummary> = resp.iter()
+        client
+            .list_sessions()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .job_id(job_id)
+            .into_paginator()
+            .send(),
+    )
+    .await?;
+    let sessions: Vec<&aws_sdk_deadline::types::SessionSummary> = resp
+        .iter()
         .flat_map(aws_sdk_deadline::operation::list_sessions::ListSessionsOutput::sessions)
         .collect();
 
@@ -313,10 +350,8 @@ async fn auto_select_session(
     }
 
     // Prefer ongoing sessions (no endedAt), most recently started
-    let ongoing: Vec<&&aws_sdk_deadline::types::SessionSummary> = sessions
-        .iter()
-        .filter(|s| s.ended_at().is_none())
-        .collect();
+    let ongoing: Vec<&&aws_sdk_deadline::types::SessionSummary> =
+        sessions.iter().filter(|s| s.ended_at().is_none()).collect();
 
     let best = if ongoing.is_empty() {
         // Fall back to most recently ended
@@ -335,12 +370,11 @@ async fn auto_select_session(
     Ok((id.clone(), SessionAutoSelect::LatestSession(id)))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serial_test::serial;
-    use wiremock::matchers::{method, header};
+    use wiremock::matchers::{header, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn setup_env(server: &MockServer) {
@@ -349,7 +383,10 @@ mod tests {
             std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", &url);
             std::env::set_var("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &url);
             std::env::set_var("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
-            std::env::set_var("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+            std::env::set_var(
+                "AWS_SECRET_ACCESS_KEY",
+                "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            );
             std::env::set_var("AWS_DEFAULT_REGION", "us-west-2");
             // Prevent host ~/.aws/config from triggering DCM credential scoping
             std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
@@ -380,8 +417,17 @@ mod tests {
         ]).await;
 
         let result = get_worker_logs(
-            "farm-abc", "fleet-001", "worker-001", 100, None, None, None, None,
-        ).await.unwrap();
+            "farm-abc",
+            "fleet-001",
+            "worker-001",
+            100,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.count, 1);
         assert_eq!(result.log_group, "/aws/deadline/farm-abc/fleet-001");
@@ -408,8 +454,17 @@ mod tests {
             .await;
 
         let result = get_worker_logs(
-            "farm-abc", "fleet-001", "worker-001", 100, None, None, None, None,
-        ).await.unwrap();
+            "farm-abc",
+            "fleet-001",
+            "worker-001",
+            100,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.count, 0);
         assert!(result.events.is_empty());

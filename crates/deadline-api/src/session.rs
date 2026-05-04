@@ -1,6 +1,6 @@
 use aws_config::SdkConfig;
-use aws_credential_types::provider::{self, future, ProvideCredentials, SharedCredentialsProvider};
 use aws_credential_types::Credentials;
+use aws_credential_types::provider::{self, ProvideCredentials, SharedCredentialsProvider, future};
 use aws_sdk_deadline::Client as DeadlineClient;
 use aws_sdk_sts::Client as StsClient;
 use deadline_config::config_file;
@@ -62,7 +62,10 @@ pub struct SessionCache {
     cached_config: Option<SdkConfig>,
     /// Three states: `None` = not cached yet, `Some(None)` = cached with
     /// default profile, `Some(Some("name"))` = cached with named profile.
-    #[allow(clippy::option_option, reason = "intentional three-state cache: uncached / default profile / named profile")]
+    #[allow(
+        clippy::option_option,
+        reason = "intentional three-state cache: uncached / default profile / named profile"
+    )]
     cached_profile: Option<Option<String>>,
     /// Queue user configs cached by (`farm_id`, `queue_id`).
     /// Python equivalent: `@lru_cache` on `_get_queue_user_boto3_session`.
@@ -128,7 +131,10 @@ impl SessionCache {
         // Resolve account_id best-effort from STS
         let account_id = crate::telemetry::resolve_account_id(&sdk_config).await;
         let telemetry = crate::telemetry::create_telemetry_with_metadata(
-            config, None, None, account_id.as_deref(),
+            config,
+            None,
+            None,
+            account_id.as_deref(),
         );
         builder = builder.interceptor(TelemetryInterceptor::new(Some(telemetry)));
         DeadlineClient::from_conf(builder.build())
@@ -233,11 +239,17 @@ impl QueueUserCredentialProvider {
         queue_display_name: Option<String>,
     ) -> Self {
         let queue_display_name_or_id = queue_display_name.unwrap_or_else(|| queue_id.clone());
-        Self { client, farm_id, queue_id, queue_display_name_or_id }
+        Self {
+            client,
+            farm_id,
+            queue_id,
+            queue_display_name_or_id,
+        }
     }
 
     async fn load_credentials(&self) -> provider::Result {
-        let result = self.client
+        let result = self
+            .client
             .assume_queue_role_for_user()
             .farm_id(&self.farm_id)
             .queue_id(&self.queue_id)
@@ -250,11 +262,19 @@ impl QueueUserCredentialProvider {
                     use aws_sdk_deadline::error::ProvideErrorMetadata;
                     let inner = e.err();
                     (
-                        ProvideErrorMetadata::code(inner).unwrap_or("Unknown").to_owned(),
+                        ProvideErrorMetadata::code(inner)
+                            .unwrap_or("Unknown")
+                            .to_owned(),
                         format!("{inner}"),
                     )
                 }
-                other => ("Unknown".to_owned(), format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other))),
+                other => (
+                    "Unknown".to_owned(),
+                    format!(
+                        "{}",
+                        aws_smithy_types::error::display::DisplayErrorContext(other)
+                    ),
+                ),
             };
 
             let display = &self.queue_display_name_or_id;
@@ -280,9 +300,9 @@ impl QueueUserCredentialProvider {
             Some(c) if !c.access_key_id().is_empty() => c,
             _ => {
                 let display = &self.queue_display_name_or_id;
-                return Err(provider::error::CredentialsError::provider_error(
-                    format!("Failed to get credentials for '{display}': Empty credentials received.")
-                ));
+                return Err(provider::error::CredentialsError::provider_error(format!(
+                    "Failed to get credentials for '{display}': Empty credentials received."
+                )));
             }
         };
 
@@ -383,7 +403,11 @@ pub async fn get_queue_user_config(
     }
     let farm = farm_id.map_or_else(|| get_setting("defaults.farm_id", config), String::from);
     let queue = queue_id.map_or_else(|| get_setting("defaults.queue_id", config), String::from);
-    SESSION.lock().await.get_queue_user_config(&farm, &queue, queue_display_name, config).await
+    SESSION
+        .lock()
+        .await
+        .get_queue_user_config(&farm, &queue, queue_display_name, config)
+        .await
 }
 
 /// Get an `SdkConfig` appropriate for non-Deadline AWS services (`CloudWatch`, S3)
@@ -436,7 +460,11 @@ pub fn resolve_profile_name(config: Option<&IniConfig>) -> Option<String> {
 
 pub fn display_profile_name(config: Option<&IniConfig>) -> String {
     let name = get_setting("defaults.aws_profile_name", config);
-    if name.is_empty() { "(default)".to_owned() } else { name }
+    if name.is_empty() {
+        "(default)".to_owned()
+    } else {
+        name
+    }
 }
 
 #[cfg(test)]
@@ -461,7 +489,10 @@ mod tests {
         };
         let ua = ctx.build_user_agent();
         let version = env!("CARGO_PKG_VERSION");
-        assert_eq!(ua, format!("app/deadline-client#{version} submitter/Blender"));
+        assert_eq!(
+            ua,
+            format!("app/deadline-client#{version} submitter/Blender")
+        );
     }
 
     #[test]
@@ -473,7 +504,10 @@ mod tests {
         };
         let ua = ctx.build_user_agent();
         let version = env!("CARGO_PKG_VERSION");
-        assert_eq!(ua, format!("app/deadline-client#{version} submitter/Blender#4.0"));
+        assert_eq!(
+            ua,
+            format!("app/deadline-client#{version} submitter/Blender#4.0")
+        );
     }
 
     #[test]
@@ -484,7 +518,10 @@ mod tests {
         };
         let ua = ctx.build_user_agent();
         let version = env!("CARGO_PKG_VERSION");
-        assert_eq!(ua, format!("app/deadline-client#{version} cli-command/deadline.bundle.submit"));
+        assert_eq!(
+            ua,
+            format!("app/deadline-client#{version} cli-command/deadline.bundle.submit")
+        );
     }
 
     #[test]
@@ -498,7 +535,9 @@ mod tests {
         let version = env!("CARGO_PKG_VERSION");
         assert_eq!(
             ua,
-            format!("app/deadline-client#{version} submitter/Blender#4.0 cli-command/deadline.bundle.submit")
+            format!(
+                "app/deadline-client#{version} submitter/Blender#4.0 cli-command/deadline.bundle.submit"
+            )
         );
     }
 
@@ -594,7 +633,11 @@ mod tests {
         let config = aws_sdk_deadline::Config::builder()
             .endpoint_url(format!("http://localhost:{port}"))
             .credentials_provider(Credentials::new(
-                "AKID", "SECRET", Some("TOKEN".into()), None, "test",
+                "AKID",
+                "SECRET",
+                Some("TOKEN".into()),
+                None,
+                "test",
             ))
             .region(aws_sdk_deadline::config::Region::new("us-west-2"))
             .behavior_version_latest()
@@ -607,7 +650,9 @@ mod tests {
     async fn queue_credential_provider_success_returns_credentials() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .and(path(
+                "/2023-10-12/farms/farm-abc/queues/queue-123/user-roles",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "credentials": {
                     "accessKeyId": "ASIAQUEUEUSER",
@@ -620,9 +665,8 @@ mod tests {
             .await;
 
         let client = test_deadline_client(&server);
-        let provider = QueueUserCredentialProvider::new(
-            client, "farm-abc".into(), "queue-123".into(), None,
-        );
+        let provider =
+            QueueUserCredentialProvider::new(client, "farm-abc".into(), "queue-123".into(), None);
         let creds = provider.load_credentials().await.expect("should succeed");
         assert_eq!(creds.access_key_id(), "ASIAQUEUEUSER");
         assert_eq!(creds.secret_access_key(), "secretqueue");
@@ -648,7 +692,9 @@ mod tests {
     async fn queue_credential_provider_error_uses_display_name() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .and(path(
+                "/2023-10-12/farms/farm-abc/queues/queue-123/user-roles",
+            ))
             .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
                 "__type": "AccessDeniedException",
                 "message": "Not authorized"
@@ -658,11 +704,17 @@ mod tests {
 
         let client = test_deadline_client(&server);
         let provider = QueueUserCredentialProvider::new(
-            client, "farm-abc".into(), "queue-123".into(), Some("My Queue".into()),
+            client,
+            "farm-abc".into(),
+            "queue-123".into(),
+            Some("My Queue".into()),
         );
         let err = provider.load_credentials().await.unwrap_err();
         let msg = credential_error_message(&err);
-        assert!(msg.contains("My Queue"), "error should use display name, got: {msg}");
+        assert!(
+            msg.contains("My Queue"),
+            "error should use display name, got: {msg}"
+        );
     }
 
     // queue_display_name is not provided — error messages use queue_id
@@ -670,7 +722,9 @@ mod tests {
     async fn queue_credential_provider_error_falls_back_to_queue_id() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .and(path(
+                "/2023-10-12/farms/farm-abc/queues/queue-123/user-roles",
+            ))
             .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
                 "__type": "AccessDeniedException",
                 "message": "Not authorized"
@@ -679,12 +733,14 @@ mod tests {
             .await;
 
         let client = test_deadline_client(&server);
-        let provider = QueueUserCredentialProvider::new(
-            client, "farm-abc".into(), "queue-123".into(), None,
-        );
+        let provider =
+            QueueUserCredentialProvider::new(client, "farm-abc".into(), "queue-123".into(), None);
         let err = provider.load_credentials().await.unwrap_err();
         let msg = credential_error_message(&err);
-        assert!(msg.contains("queue-123"), "error should use queue_id, got: {msg}");
+        assert!(
+            msg.contains("queue-123"),
+            "error should use queue_id, got: {msg}"
+        );
     }
 
     // ThrottlingException — returns error with retry guidance
@@ -692,7 +748,9 @@ mod tests {
     async fn queue_credential_provider_throttling_returns_retry_message() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .and(path(
+                "/2023-10-12/farms/farm-abc/queues/queue-123/user-roles",
+            ))
             .respond_with(ResponseTemplate::new(429).set_body_json(serde_json::json!({
                 "__type": "ThrottlingException",
                 "message": "Rate exceeded"
@@ -701,12 +759,14 @@ mod tests {
             .await;
 
         let client = test_deadline_client(&server);
-        let provider = QueueUserCredentialProvider::new(
-            client, "farm-abc".into(), "queue-123".into(), None,
-        );
+        let provider =
+            QueueUserCredentialProvider::new(client, "farm-abc".into(), "queue-123".into(), None);
         let err = provider.load_credentials().await.unwrap_err();
         let msg = credential_error_message(&err);
-        assert!(msg.contains("Throttled"), "should mention throttling, got: {msg}");
+        assert!(
+            msg.contains("Throttled"),
+            "should mention throttling, got: {msg}"
+        );
         assert!(msg.contains("retry"), "should mention retry, got: {msg}");
     }
 
@@ -715,7 +775,9 @@ mod tests {
     async fn queue_credential_provider_internal_error_returns_message() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .and(path(
+                "/2023-10-12/farms/farm-abc/queues/queue-123/user-roles",
+            ))
             .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
                 "__type": "InternalServerException",
                 "message": "Something broke"
@@ -724,12 +786,14 @@ mod tests {
             .await;
 
         let client = test_deadline_client(&server);
-        let provider = QueueUserCredentialProvider::new(
-            client, "farm-abc".into(), "queue-123".into(), None,
-        );
+        let provider =
+            QueueUserCredentialProvider::new(client, "farm-abc".into(), "queue-123".into(), None);
         let err = provider.load_credentials().await.unwrap_err();
         let msg = credential_error_message(&err);
-        assert!(msg.contains("internal server error"), "should mention internal error, got: {msg}");
+        assert!(
+            msg.contains("internal server error"),
+            "should mention internal error, got: {msg}"
+        );
     }
 
     // other AWS error (AccessDeniedException) — returns admin contact guidance
@@ -737,7 +801,9 @@ mod tests {
     async fn queue_credential_provider_access_denied_returns_admin_guidance() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .and(path(
+                "/2023-10-12/farms/farm-abc/queues/queue-123/user-roles",
+            ))
             .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
                 "__type": "AccessDeniedException",
                 "message": "User is not authorized"
@@ -746,13 +812,15 @@ mod tests {
             .await;
 
         let client = test_deadline_client(&server);
-        let provider = QueueUserCredentialProvider::new(
-            client, "farm-abc".into(), "queue-123".into(), None,
-        );
+        let provider =
+            QueueUserCredentialProvider::new(client, "farm-abc".into(), "queue-123".into(), None);
         let err = provider.load_credentials().await.unwrap_err();
         let msg = credential_error_message(&err);
         assert!(msg.contains("Failed to assume Queue role"), "got: {msg}");
-        assert!(msg.contains("administrator"), "should mention admin, got: {msg}");
+        assert!(
+            msg.contains("administrator"),
+            "should mention admin, got: {msg}"
+        );
     }
 
     // empty credentials (None) — returns empty credentials error
@@ -760,7 +828,9 @@ mod tests {
     async fn queue_credential_provider_empty_credentials_returns_error() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .and(path(
+                "/2023-10-12/farms/farm-abc/queues/queue-123/user-roles",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "credentials": null
             })))
@@ -768,9 +838,8 @@ mod tests {
             .await;
 
         let client = test_deadline_client(&server);
-        let provider = QueueUserCredentialProvider::new(
-            client, "farm-abc".into(), "queue-123".into(), None,
-        );
+        let provider =
+            QueueUserCredentialProvider::new(client, "farm-abc".into(), "queue-123".into(), None);
         let err = provider.load_credentials().await.unwrap_err();
         let msg = credential_error_message(&err);
         assert!(msg.contains("Empty credentials received"), "got: {msg}");
@@ -781,15 +850,16 @@ mod tests {
     async fn queue_credential_provider_missing_credentials_key_returns_error() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/2023-10-12/farms/farm-abc/queues/queue-123/user-roles"))
+            .and(path(
+                "/2023-10-12/farms/farm-abc/queues/queue-123/user-roles",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
             .mount(&server)
             .await;
 
         let client = test_deadline_client(&server);
-        let provider = QueueUserCredentialProvider::new(
-            client, "farm-abc".into(), "queue-123".into(), None,
-        );
+        let provider =
+            QueueUserCredentialProvider::new(client, "farm-abc".into(), "queue-123".into(), None);
         let err = provider.load_credentials().await.unwrap_err();
         let msg = credential_error_message(&err);
         assert!(msg.contains("Empty credentials received"), "got: {msg}");
@@ -800,21 +870,25 @@ mod tests {
     async fn get_queue_user_config_caches_by_farm_and_queue() {
         let mut cache = SessionCache::new();
         // First call creates a config
-        let cfg1 = cache.get_queue_user_config(
-            "farm-abc", "queue-123", None, None,
-        ).await;
+        let cfg1 = cache
+            .get_queue_user_config("farm-abc", "queue-123", None, None)
+            .await;
         assert!(cfg1.is_ok());
         // Second call should return cached (same key)
-        assert!(cache.cached_queue_configs.contains_key(&("farm-abc".to_owned(), "queue-123".to_owned())));
+        assert!(
+            cache
+                .cached_queue_configs
+                .contains_key(&("farm-abc".to_owned(), "queue-123".to_owned()))
+        );
     }
 
     // force_refresh clears base session and queue configs
     #[tokio::test]
     async fn invalidate_clears_queue_config_cache() {
         let mut cache = SessionCache::new();
-        let _ = cache.get_queue_user_config(
-            "farm-abc", "queue-123", None, None,
-        ).await;
+        let _ = cache
+            .get_queue_user_config("farm-abc", "queue-123", None, None)
+            .await;
         assert!(!cache.cached_queue_configs.is_empty());
         cache.invalidate();
         assert!(cache.cached_queue_configs.is_empty());

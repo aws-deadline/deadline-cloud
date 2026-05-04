@@ -8,12 +8,14 @@ use crate::errors::JobAttachmentsError;
 use serde::Serialize;
 
 use crate::api::read_manifests;
-use crate::asset_manifests::{decode_manifest, hash_data, AssetManifest, HashAlgorithm};
-use crate::diff::{fast_diff, hash_diff, FileStatus};
-use crate::download::{download_manifest_from_s3, get_output_manifests_by_asset_root, merge_asset_manifests};
+use crate::asset_manifests::{AssetManifest, HashAlgorithm, decode_manifest, hash_data};
+use crate::diff::{FileStatus, fast_diff, hash_diff};
+use crate::download::{
+    download_manifest_from_s3, get_output_manifests_by_asset_root, merge_asset_manifests,
+};
 use crate::models::{AssetRootGroup, JobAttachmentS3Settings};
 use crate::progress_tracker::ProgressReportMetadata;
-use crate::upload::{hash_assets_and_create_manifest, S3UploadContext};
+use crate::upload::{S3UploadContext, hash_assets_and_create_manifest};
 
 // --- Types ---
 
@@ -113,11 +115,15 @@ pub fn resolve_glob_config(
 
         let include = parsed
             .get("include")
-            .and_then(|v| v.as_array()).map_or_else(|| vec!["**/*".into()], |arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            });
+            .and_then(|v| v.as_array())
+            .map_or_else(
+                || vec!["**/*".into()],
+                |arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                },
+            );
 
         let exclude = parsed
             .get("exclude")
@@ -144,18 +150,19 @@ pub fn glob_files(root: &str, config: &GlobConfig) -> Result<Vec<String>, JobAtt
 
     for pattern in &config.include {
         let full_pattern = base.join(pattern).to_string_lossy().into_owned();
-        for entry in glob::glob(&full_pattern).map_err(|e| {
-            JobAttachmentsError::AssetSync(format!("Invalid glob pattern: {e}"))
-        })? {
+        for entry in glob::glob(&full_pattern)
+            .map_err(|e| JobAttachmentsError::AssetSync(format!("Invalid glob pattern: {e}")))?
+        {
             if let Ok(path) = entry
-                && path.is_file() {
-                    // Use absolute instead of canonicalize to avoid /private symlink resolution on macOS
-                    let normalized = std::path::absolute(&path)
-                        .unwrap_or(path)
-                        .to_string_lossy()
-                        .into_owned();
-                    matched.insert(normalized);
-                }
+                && path.is_file()
+            {
+                // Use absolute instead of canonicalize to avoid /private symlink resolution on macOS
+                let normalized = std::path::absolute(&path)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
+                matched.insert(normalized);
+            }
         }
     }
 
@@ -185,7 +192,9 @@ pub fn write_manifest(
     let root_hash = hash_data(root.as_bytes(), HashAlgorithm::Xxh128);
     let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
 
-    let manifest_name = if let Some(n) = name { n.to_owned() } else {
+    let manifest_name = if let Some(n) = name {
+        n.to_owned()
+    } else {
         let derived = root.replace(['/', '\\', ':'], "_");
         derived.strip_prefix('_').unwrap_or(&derived).to_owned()
     };
@@ -199,9 +208,8 @@ pub fn write_manifest(
         })?;
     }
 
-    std::fs::write(&dest_path, manifest.encode()).map_err(|e| {
-        JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}"))
-    })?;
+    std::fs::write(&dest_path, manifest.encode())
+        .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}")))?;
 
     Ok(dest_path.to_string_lossy().into_owned())
 }
@@ -237,9 +245,7 @@ pub fn manifest_snapshot(
                 None,
                 callback,
             )?;
-            let current_manifest = manifests
-                .first()
-                .and_then(|m| m.asset_manifest.as_ref());
+            let current_manifest = manifests.first().and_then(|m| m.asset_manifest.as_ref());
             match current_manifest {
                 None => return Ok(None),
                 Some(cm) => {
@@ -247,12 +253,7 @@ pub fn manifest_snapshot(
                     diffs
                         .into_iter()
                         .filter(|(s, _)| *s == FileStatus::New || *s == FileStatus::Modified)
-                        .map(|(_, p)| {
-                            Path::new(root)
-                                .join(&p.path)
-                                .to_string_lossy()
-                                .into_owned()
-                        })
+                        .map(|(_, p)| Path::new(root).join(&p.path).to_string_lossy().into_owned())
                         .collect()
                 }
             }
@@ -261,9 +262,7 @@ pub fn manifest_snapshot(
             diffs
                 .into_iter()
                 .filter(|(_, s)| *s != FileStatus::Deleted)
-                .map(|(p, _)| {
-                    Path::new(root).join(&p).to_string_lossy().into_owned()
-                })
+                .map(|(p, _)| Path::new(root).join(&p).to_string_lossy().into_owned())
                 .collect()
         };
 
@@ -280,10 +279,7 @@ pub fn manifest_snapshot(
             None,
             None,
         )?;
-        manifests
-            .into_iter()
-            .next()
-            .and_then(|m| m.asset_manifest)
+        manifests.into_iter().next().and_then(|m| m.asset_manifest)
     } else {
         // Full snapshot
         let group = build_single_group(root, &current_files);
@@ -294,10 +290,7 @@ pub fn manifest_snapshot(
             None,
             callback,
         )?;
-        manifests
-            .into_iter()
-            .next()
-            .and_then(|m| m.asset_manifest)
+        manifests.into_iter().next().and_then(|m| m.asset_manifest)
     };
 
     match output_manifest {
@@ -320,9 +313,8 @@ pub fn manifest_diff(
     force_rehash: bool,
     callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<ManifestDiffResult, JobAttachmentsError> {
-    let contents = std::fs::read_to_string(manifest_path).map_err(|e| {
-        JobAttachmentsError::AssetSync(format!("Failed to read manifest: {e}"))
-    })?;
+    let contents = std::fs::read_to_string(manifest_path)
+        .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to read manifest: {e}")))?;
     let reference = decode_manifest(&contents)?;
     let current_files = glob_files(root, config)?;
 
@@ -425,10 +417,7 @@ pub async fn manifest_upload(
     _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<(), JobAttachmentsError> {
     let file_path = Path::new(manifest_file);
-    let filename = file_path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy();
+    let filename = file_path.file_name().unwrap_or_default().to_string_lossy();
 
     let manifest_s3_key = match s3_key_prefix {
         Some(prefix) => format!("{s3_cas_prefix}/Manifests/{prefix}/{filename}"),
@@ -456,7 +445,10 @@ pub async fn manifest_upload(
 /// response (or empty map if the job has no attachments). The CLI layer
 /// is responsible for calling `GetJob` and passing this in.
 #[allow(clippy::implicit_hasher, reason = "only used with default HashMap")]
-#[allow(clippy::too_many_arguments, reason = "S3 + Deadline context params needed for manifest resolution")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "S3 + Deadline context params needed for manifest resolution"
+)]
 pub async fn manifest_download(
     download_dir: &str,
     farm_id: &str,
@@ -479,44 +471,39 @@ pub async fn manifest_download(
 
     // Download input manifests
     if download_input
-        && let Some(manifest_list) = job_attachments
-            .get("manifests")
-            .and_then(|v| v.as_array())
-        {
-            for entry in manifest_list {
-                let input_path = entry
-                    .get("inputManifestPath")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let root_path = entry
-                    .get("rootPath")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+        && let Some(manifest_list) = job_attachments.get("manifests").and_then(|v| v.as_array())
+    {
+        for entry in manifest_list {
+            let input_path = entry
+                .get("inputManifestPath")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let root_path = entry.get("rootPath").and_then(|v| v.as_str()).unwrap_or("");
 
-                if input_path.is_empty() {
-                    continue;
-                }
-
-                let manifest_key = format!("{s3_prefix}/{input_path}");
-                let (_, _last_modified, manifest) = download_manifest_from_s3(
-                    s3_client,
-                    &s3_settings.s3_bucket_name,
-                    &manifest_key,
-                    account_id,
-                )
-                .await?;
-
-                manifests_by_root
-                    .entry(root_path.to_owned())
-                    .or_default()
-                    .push(manifest);
+            if input_path.is_empty() {
+                continue;
             }
-        }
 
-        // Step-step dependencies (if step_id provided)
-        // Deferred: requires Deadline API client for ListStepDependencies.
-        // Will be wired in batch 9e-3 when the CLI has access to the
-        // Deadline client.
+            let manifest_key = format!("{s3_prefix}/{input_path}");
+            let (_, _last_modified, manifest) = download_manifest_from_s3(
+                s3_client,
+                &s3_settings.s3_bucket_name,
+                &manifest_key,
+                account_id,
+            )
+            .await?;
+
+            manifests_by_root
+                .entry(root_path.to_owned())
+                .or_default()
+                .push(manifest);
+        }
+    }
+
+    // Step-step dependencies (if step_id provided)
+    // Deferred: requires Deadline API client for ListStepDependencies.
+    // Will be wired in batch 9e-3 when the CLI has access to the
+    // Deadline client.
 
     // Download output manifests
     if download_output {
@@ -535,10 +522,7 @@ pub async fn manifest_download(
         .unwrap_or_default();
 
         for (root, manifests) in output_by_root {
-            manifests_by_root
-                .entry(root)
-                .or_default()
-                .extend(manifests);
+            manifests_by_root.entry(root).or_default().extend(manifests);
         }
     }
 

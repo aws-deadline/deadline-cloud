@@ -13,7 +13,9 @@ pub async fn mock_list_fleets(server: &MockServer, farm_id: &str, fleets: &[Valu
 pub async fn mock_get_fleet(server: &MockServer, farm_id: &str, fleet: Value) {
     let fleet_id = fleet["fleetId"].as_str().unwrap_or("fleet-mock");
     Mock::given(method("GET"))
-        .and(path(format!("/2023-10-12/farms/{farm_id}/fleets/{fleet_id}")))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/fleets/{fleet_id}"
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(fleet))
         .mount(server)
         .await;
@@ -28,7 +30,9 @@ pub async fn mock_list_queue_fleet_associations(
     associations: &[Value],
 ) {
     Mock::given(method("GET"))
-        .and(path(format!("/2023-10-12/farms/{farm_id}/queue-fleet-associations")))
+        .and(path(format!(
+            "/2023-10-12/farms/{farm_id}/queue-fleet-associations"
+        )))
         .and(query_param("queueId", queue_id))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "queueFleetAssociations": associations,
@@ -67,11 +71,9 @@ pub async fn mock_assume_fleet_role_for_read_error(
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/fleets/{fleet_id}/read-roles"
         )))
-        .respond_with(
-            ResponseTemplate::new(status).set_body_json(json!({
-                "__type": error_type
-            })),
-        )
+        .respond_with(ResponseTemplate::new(status).set_body_json(json!({
+            "__type": error_type
+        })))
         .mount(server)
         .await;
 }
@@ -86,9 +88,7 @@ pub async fn mock_list_fleets_with_principal_id(
     Mock::given(method("GET"))
         .and(path(format!("/2023-10-12/farms/{farm_id}/fleets")))
         .and(query_param("principalId", principal_id))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "fleets": fleets })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "fleets": fleets })))
         .mount(server)
         .await;
 }

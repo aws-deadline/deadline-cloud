@@ -1,8 +1,8 @@
 //! Level 2 tests for DCM credential detection and principalId injection
 //! (auth status, list farms with/without DCM, auth CLI commands).
 
-use deadline_test_server::deadline_api::{farms, fleets, queues};
 use deadline_test_server::TestHarness;
+use deadline_test_server::deadline_api::{farms, fleets, queues};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
@@ -29,7 +29,10 @@ fn write_dcm_aws_config(harness: &TestHarness, profile_name: &str) {
 async fn auth_status_dcm_profile_shows_monitor_login_source() {
     let harness = TestHarness::new().await;
     write_dcm_aws_config(&harness, "dcm-profile");
-    harness.cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"])
+        .assert()
+        .success();
 
     assert_cmd_snapshot!(harness.cmd(&["auth", "status", "--output", "json"]));
 }
@@ -46,12 +49,17 @@ async fn auth_status_non_dcm_profile_shows_host_provided_source() {
 async fn farm_list_dcm_user_injects_principal_id() {
     let harness = TestHarness::new().await;
     write_dcm_aws_config(&harness, "dcm-profile");
-    harness.cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"])
+        .assert()
+        .success();
 
     farms::mock_list_farms_with_principal_id(
-        &harness.server, "user-dcm-test-id",
+        &harness.server,
+        "user-dcm-test-id",
         &[json!({"farmId": "farm-dcm", "displayName": "DCM Farm"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["farm", "list"]));
 }
@@ -63,7 +71,8 @@ async fn farm_list_non_dcm_does_not_inject_principal_id() {
     farms::mock_list_farms(
         &harness.server,
         &[json!({"farmId": "farm-all", "displayName": "All Farm"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["farm", "list"]));
 }
@@ -82,11 +91,16 @@ async fn auth_status_default_profile_dcm_shows_monitor_login_source() {
          monitor_id=monitor-default123\n\
          user_id=user-default-dcm\n\
          identity_store_id=d-defaultstore\n",
-    ).unwrap();
+    )
+    .unwrap();
     // Use (default) profile — no explicit profile name set
-    harness.cli(&["config", "set", "defaults.aws_profile_name", "(default)"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.aws_profile_name", "(default)"])
+        .assert()
+        .success();
 
-    let output = harness.cli(&["auth", "status", "--output", "json"])
+    let output = harness
+        .cli(&["auth", "status", "--output", "json"])
         .output()
         .expect("failed to run");
 
@@ -105,13 +119,22 @@ async fn auth_status_default_profile_dcm_shows_monitor_login_source() {
 async fn queue_list_dcm_user_injects_principal_id() {
     let harness = TestHarness::new().await;
     write_dcm_aws_config(&harness, "dcm-profile");
-    harness.cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"]).assert().success();
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
 
     queues::mock_list_queues_with_principal_id(
-        &harness.server, "farm-abc", "user-dcm-test-id",
+        &harness.server,
+        "farm-abc",
+        "user-dcm-test-id",
         &[json!({"queueId": "queue-dcm", "displayName": "DCM Queue"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "list"]));
 }
@@ -121,13 +144,22 @@ async fn queue_list_dcm_user_injects_principal_id() {
 async fn fleet_list_dcm_user_injects_principal_id() {
     let harness = TestHarness::new().await;
     write_dcm_aws_config(&harness, "dcm-profile");
-    harness.cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"]).assert().success();
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
 
     fleets::mock_list_fleets_with_principal_id(
-        &harness.server, "farm-abc", "user-dcm-test-id",
+        &harness.server,
+        "farm-abc",
+        "user-dcm-test-id",
         &[json!({"fleetId": "fleet-dcm", "displayName": "DCM Fleet"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["fleet", "list"]));
 }

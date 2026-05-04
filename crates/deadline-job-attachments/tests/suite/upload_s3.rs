@@ -9,17 +9,13 @@ use deadline_job_attachments::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
 };
 use deadline_job_attachments::caches::S3CheckCache;
-use deadline_job_attachments::models::{
-    AssetRootManifest, JobAttachmentS3Settings,
-};
+use deadline_job_attachments::models::{AssetRootManifest, JobAttachmentS3Settings};
 use deadline_job_attachments::progress_tracker::{
     ProgressReportMetadata, ProgressStatus, ProgressTracker,
 };
-use deadline_job_attachments::upload::{
-    upload_assets, snapshot_assets, S3UploadContext,
-};
+use deadline_job_attachments::upload::{S3UploadContext, snapshot_assets, upload_assets};
 use tempfile::TempDir;
-use wiremock::matchers::{method, path_regex, header_exists};
+use wiremock::matchers::{header_exists, method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // --- Multipart POST responder ---
@@ -61,11 +57,9 @@ fn test_manifest(dir: &Path, files: &[(&str, &[u8])]) -> AssetManifest {
             std::fs::create_dir_all(parent).unwrap();
         }
         std::fs::write(&file_path, content).unwrap();
-        let hash = deadline_job_attachments::asset_manifests::hash_file(
-            &file_path,
-            HashAlgorithm::Xxh128,
-        )
-        .unwrap();
+        let hash =
+            deadline_job_attachments::asset_manifests::hash_file(&file_path, HashAlgorithm::Xxh128)
+                .unwrap();
         let meta = std::fs::metadata(&file_path).unwrap();
         paths.push(ManifestPath {
             path: name.to_string(),
@@ -104,11 +98,17 @@ async fn build_uploader(server: &MockServer) -> S3UploadContext {
 async fn build_uploader_low_threshold(server: &MockServer) -> S3UploadContext {
     let mut config = deadline_config::ini::IniConfig::new();
     deadline_config::config_file::set_setting(
-        "settings.small_file_threshold_multiplier", "1", &mut config,
-    ).unwrap();
+        "settings.small_file_threshold_multiplier",
+        "1",
+        &mut config,
+    )
+    .unwrap();
     deadline_config::config_file::set_setting(
-        "settings.s3_max_pool_connections", "10", &mut config,
-    ).unwrap();
+        "settings.s3_max_pool_connections",
+        "10",
+        &mut config,
+    )
+    .unwrap();
     let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(aws_config::Region::new("us-west-2"))
         .endpoint_url(server.uri())
@@ -159,7 +159,9 @@ async fn upload_assets_returns_stats_and_attachments_with_manifest_paths() {
         .await;
     // PUT for file data — verify CAS key format
     Mock::given(method("PUT"))
-        .and(path_regex(r"/test-bucket/root-prefix/Data/[a-f0-9]{32}\.xxh128"))
+        .and(path_regex(
+            r"/test-bucket/root-prefix/Data/[a-f0-9]{32}\.xxh128",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
@@ -488,14 +490,7 @@ async fn snapshot_assets_missing_farm_id_errors() {
     let snapshot_dir = TempDir::new().unwrap();
     let s3_settings = test_s3_settings();
 
-    let result = snapshot_assets(
-        "",
-        "queue-1",
-        &s3_settings,
-        snapshot_dir.path(),
-        &[],
-        None,
-    );
+    let result = snapshot_assets("", "queue-1", &s3_settings, snapshot_dir.path(), &[], None);
 
     assert!(result.is_err());
 }
@@ -543,7 +538,9 @@ async fn upload_input_files_small_files_uploaded() {
         .mount(&server)
         .await;
     Mock::given(method("PUT"))
-        .and(path_regex(r"/test-bucket/root-prefix/Data/[a-f0-9]{32}\.xxh128"))
+        .and(path_regex(
+            r"/test-bucket/root-prefix/Data/[a-f0-9]{32}\.xxh128",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
@@ -577,7 +574,9 @@ async fn upload_input_files_existing_file_skipped() {
     let server = MockServer::start().await;
     // HEAD returns 200 — file exists in S3, should be skipped
     Mock::given(method("HEAD"))
-        .and(path_regex(r"/test-bucket/root-prefix/Data/[a-f0-9]{32}\.xxh128"))
+        .and(path_regex(
+            r"/test-bucket/root-prefix/Data/[a-f0-9]{32}\.xxh128",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
@@ -767,12 +766,10 @@ async fn upload_file_to_s3_nonexistent_silently_skipped() {
 async fn upload_file_to_s3_403_non_kms_returns_s3_client_error() {
     let server = MockServer::start().await;
     Mock::given(method("PUT"))
-        .respond_with(
-            ResponseTemplate::new(403).set_body_string(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+        .respond_with(ResponseTemplate::new(403).set_body_string(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"#,
-            ),
-        )
+        ))
         .mount(&server)
         .await;
 
@@ -802,12 +799,10 @@ async fn upload_file_to_s3_403_non_kms_returns_s3_client_error() {
 async fn upload_file_to_s3_403_kms_returns_kms_guidance() {
     let server = MockServer::start().await;
     Mock::given(method("PUT"))
-        .respond_with(
-            ResponseTemplate::new(403).set_body_string(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+        .respond_with(ResponseTemplate::new(403).set_body_string(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>AccessDenied</Code><Message>kms:GenerateDataKey denied</Message></Error>"#,
-            ),
-        )
+        ))
         .mount(&server)
         .await;
 
@@ -837,12 +832,10 @@ async fn upload_file_to_s3_403_kms_returns_kms_guidance() {
 async fn upload_file_to_s3_404_returns_bucket_guidance() {
     let server = MockServer::start().await;
     Mock::given(method("PUT"))
-        .respond_with(
-            ResponseTemplate::new(404).set_body_string(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+        .respond_with(ResponseTemplate::new(404).set_body_string(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message></Error>"#,
-            ),
-        )
+        ))
         .mount(&server)
         .await;
 
@@ -949,12 +942,10 @@ async fn file_already_uploaded_transport_error() {
 async fn upload_bytes_to_s3_403_non_kms_returns_put_object_guidance() {
     let server = MockServer::start().await;
     Mock::given(method("PUT"))
-        .respond_with(
-            ResponseTemplate::new(403).set_body_string(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+        .respond_with(ResponseTemplate::new(403).set_body_string(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"#,
-            ),
-        )
+        ))
         .mount(&server)
         .await;
 
@@ -981,12 +972,10 @@ async fn upload_bytes_to_s3_403_non_kms_returns_put_object_guidance() {
 async fn upload_bytes_to_s3_403_kms_returns_kms_guidance() {
     let server = MockServer::start().await;
     Mock::given(method("PUT"))
-        .respond_with(
-            ResponseTemplate::new(403).set_body_string(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+        .respond_with(ResponseTemplate::new(403).set_body_string(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>AccessDenied</Code><Message>kms:GenerateDataKey denied</Message></Error>"#,
-            ),
-        )
+        ))
         .mount(&server)
         .await;
 
@@ -1013,12 +1002,10 @@ async fn upload_bytes_to_s3_403_kms_returns_kms_guidance() {
 async fn upload_bytes_to_s3_404_returns_bucket_guidance() {
     let server = MockServer::start().await;
     Mock::given(method("PUT"))
-        .respond_with(
-            ResponseTemplate::new(404).set_body_string(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+        .respond_with(ResponseTemplate::new(404).set_body_string(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message></Error>"#,
-            ),
-        )
+        ))
         .mount(&server)
         .await;
 
@@ -1065,10 +1052,7 @@ async fn upload_input_files_large_file_multipart() {
         .await;
 
     Mock::given(method("PUT"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("ETag", "\"abc123\""),
-        )
+        .respond_with(ResponseTemplate::new(200).insert_header("ETag", "\"abc123\""))
         .mount(&server)
         .await;
 
@@ -1076,9 +1060,9 @@ async fn upload_input_files_large_file_multipart() {
     let large_content = vec![0x42u8; LARGE_FILE_SIZE];
     let file_path = dir.path().join("large.bin");
     std::fs::write(&file_path, &large_content).unwrap();
-    let hash = deadline_job_attachments::asset_manifests::hash_file(
-        &file_path, HashAlgorithm::Xxh128,
-    ).unwrap();
+    let hash =
+        deadline_job_attachments::asset_manifests::hash_file(&file_path, HashAlgorithm::Xxh128)
+            .unwrap();
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
@@ -1089,7 +1073,8 @@ async fn upload_input_files_large_file_multipart() {
             size: large_content.len() as u64,
             mtime: 1_000_000,
         }],
-    ).unwrap();
+    )
+    .unwrap();
 
     let uploader = build_uploader_low_threshold(&server).await;
     let tracker = ProgressTracker::new(
@@ -1164,9 +1149,9 @@ async fn upload_file_to_s3_multipart_part_failure_aborts() {
     let large_content = vec![0x42u8; LARGE_FILE_SIZE];
     let file_path = dir.path().join("large.bin");
     std::fs::write(&file_path, &large_content).unwrap();
-    let hash = deadline_job_attachments::asset_manifests::hash_file(
-        &file_path, HashAlgorithm::Xxh128,
-    ).unwrap();
+    let hash =
+        deadline_job_attachments::asset_manifests::hash_file(&file_path, HashAlgorithm::Xxh128)
+            .unwrap();
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
@@ -1177,23 +1162,29 @@ async fn upload_file_to_s3_multipart_part_failure_aborts() {
             size: large_content.len() as u64,
             mtime: 1_000_000,
         }],
-    ).unwrap();
+    )
+    .unwrap();
 
     let uploader = build_uploader_low_threshold(&server).await;
     let cache_dir = TempDir::new().unwrap();
     let result = uploader
         .upload_input_files(
-            &manifest, "test-bucket", dir.path(), "root-prefix/Data",
+            &manifest,
+            "test-bucket",
+            dir.path(),
+            "root-prefix/Data",
             None,
             Some(cache_dir.path().to_str().unwrap()),
             None,
         )
         .await;
 
-    assert!(result.is_err(), "Upload should fail when UploadPart returns 500");
+    assert!(
+        result.is_err(),
+        "Upload should fail when UploadPart returns 500"
+    );
     // wiremock expect(1..) on "abort-multipart" verifies AbortMultipartUpload was called
 }
-
 
 // Small file below threshold still uses PutObject (not multipart).
 // Verifies the dispatch logic doesn't accidentally route small files
@@ -1228,21 +1219,34 @@ async fn upload_input_files_small_file_uses_put_object_not_multipart() {
     // 100 bytes — well below 8MB threshold
     std::fs::write(dir.path().join("small.txt"), [0x41u8; 100]).unwrap();
     let hash = deadline_job_attachments::asset_manifests::hash_file(
-        &dir.path().join("small.txt"), HashAlgorithm::Xxh128,
-    ).unwrap();
+        &dir.path().join("small.txt"),
+        HashAlgorithm::Xxh128,
+    )
+    .unwrap();
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
         100,
-        vec![ManifestPath { path: "small.txt".into(), hash, size: 100, mtime: 1_000_000 }],
-    ).unwrap();
+        vec![ManifestPath {
+            path: "small.txt".into(),
+            hash,
+            size: 100,
+            mtime: 1_000_000,
+        }],
+    )
+    .unwrap();
 
     let uploader = build_uploader_low_threshold(&server).await;
     let cache_dir = TempDir::new().unwrap();
     uploader
         .upload_input_files(
-            &manifest, "test-bucket", dir.path(), "root-prefix/Data",
-            None, Some(cache_dir.path().to_str().unwrap()), None,
+            &manifest,
+            "test-bucket",
+            dir.path(),
+            "root-prefix/Data",
+            None,
+            Some(cache_dir.path().to_str().unwrap()),
+            None,
         )
         .await
         .unwrap();
@@ -1282,29 +1286,40 @@ async fn upload_input_files_multipart_create_fails_propagates_error() {
     let large_content = vec![0x42u8; LARGE_FILE_SIZE];
     let file_path = dir.path().join("large.bin");
     std::fs::write(&file_path, &large_content).unwrap();
-    let hash = deadline_job_attachments::asset_manifests::hash_file(
-        &file_path, HashAlgorithm::Xxh128,
-    ).unwrap();
+    let hash =
+        deadline_job_attachments::asset_manifests::hash_file(&file_path, HashAlgorithm::Xxh128)
+            .unwrap();
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
         ManifestVersion::V2023_03_03,
         large_content.len() as u64,
         vec![ManifestPath {
-            path: "large.bin".into(), hash,
-            size: large_content.len() as u64, mtime: 1_000_000,
+            path: "large.bin".into(),
+            hash,
+            size: large_content.len() as u64,
+            mtime: 1_000_000,
         }],
-    ).unwrap();
+    )
+    .unwrap();
 
     let uploader = build_uploader_low_threshold(&server).await;
     let cache_dir = TempDir::new().unwrap();
     let result = uploader
         .upload_input_files(
-            &manifest, "test-bucket", dir.path(), "root-prefix/Data",
-            None, Some(cache_dir.path().to_str().unwrap()), None,
+            &manifest,
+            "test-bucket",
+            dir.path(),
+            "root-prefix/Data",
+            None,
+            Some(cache_dir.path().to_str().unwrap()),
+            None,
         )
         .await;
 
-    assert!(result.is_err(), "Should fail when CreateMultipartUpload returns 403");
+    assert!(
+        result.is_err(),
+        "Should fail when CreateMultipartUpload returns 403"
+    );
 }
 
 // Note: Mid-part cancellation during multipart upload is not tested because

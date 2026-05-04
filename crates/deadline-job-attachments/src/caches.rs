@@ -26,7 +26,11 @@ const RETRY_ATTEMPTS: usize = 3;
 
 /// Opens a `SQLite` database, sets WAL journal mode, and creates the table if missing.
 /// Retries up to `RETRY_ATTEMPTS` times with jittered delay on lock contention.
-fn open_db(db_path: &str, table_name: &str, create_query: &str) -> Result<Connection, JobAttachmentsError> {
+fn open_db(
+    db_path: &str,
+    table_name: &str,
+    create_query: &str,
+) -> Result<Connection, JobAttachmentsError> {
     let mut last_err = None;
     for attempt in 0..RETRY_ATTEMPTS {
         match Connection::open(db_path) {
@@ -37,8 +41,9 @@ fn open_db(db_path: &str, table_name: &str, create_query: &str) -> Result<Connec
                     .execute(&format!("SELECT * FROM {table_name} LIMIT 0"), [])
                     .is_err()
                 {
-                    conn.execute_batch(create_query)
-                        .map_err(|e| JobAttachmentsError::AssetSync(format!("Create table failed: {e}")))?;
+                    conn.execute_batch(create_query).map_err(|e| {
+                        JobAttachmentsError::AssetSync(format!("Create table failed: {e}"))
+                    })?;
                 }
                 return Ok(conn);
             }
@@ -191,7 +196,8 @@ impl HashCache {
                 let path_bytes: Vec<u8> = row.get(0)?;
                 let file_path = String::from_utf8_lossy(&path_bytes).into_owned();
                 let alg_str: String = row.get(1)?;
-                let hash_algorithm: HashAlgorithm = alg_str.parse().unwrap_or(HashAlgorithm::Xxh128);
+                let hash_algorithm: HashAlgorithm =
+                    alg_str.parse().unwrap_or(HashAlgorithm::Xxh128);
                 Ok(HashCacheEntry {
                     file_path,
                     hash_algorithm,
@@ -257,9 +263,8 @@ impl S3CheckCache {
             .join("s3_check_cache.db")
             .to_string_lossy()
             .into_owned();
-        let create_query = format!(
-            "CREATE TABLE {S3_CHECK_TABLE}(s3_key TEXT PRIMARY KEY, last_seen_time TEXT)"
-        );
+        let create_query =
+            format!("CREATE TABLE {S3_CHECK_TABLE}(s3_key TEXT PRIMARY KEY, last_seen_time TEXT)");
         let conn = open_db(&db_path, S3_CHECK_TABLE, &create_query)?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -283,7 +288,9 @@ impl S3CheckCache {
             .ok()?;
 
         // Check expiry
-        let last_seen: f64 = if let Ok(v) = entry.last_seen_time.parse() { v } else {
+        let last_seen: f64 = if let Ok(v) = entry.last_seen_time.parse() {
+            v
+        } else {
             log::warn!(
                 "Timestamp for S3 key {} is not valid. Ignoring.",
                 entry.s3_key
@@ -492,7 +499,14 @@ mod tests {
             let path_bytes = "/tmp/python_file.txt".as_bytes();
             conn.execute(
                 "INSERT INTO hashesV4 VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![path_bytes, "xxh128", 0, -1, "deadbeef", "2025-04-21 12:08:54.123456"],
+                rusqlite::params![
+                    path_bytes,
+                    "xxh128",
+                    0,
+                    -1,
+                    "deadbeef",
+                    "2025-04-21 12:08:54.123456"
+                ],
             )
             .unwrap();
         }
@@ -515,13 +529,27 @@ mod tests {
     fn format_mtime_for_cache_format_matches_python() {
         // Whole seconds: no fractional part
         let whole = format_mtime_for_cache(1_745_262_534, 0);
-        assert!(!whole.contains('.'), "whole-second mtime should have no fractional part, got: {whole}");
-        assert_eq!(whole.len(), 19, "expected YYYY-MM-DD HH:MM:SS (19 chars), got: {whole}");
+        assert!(
+            !whole.contains('.'),
+            "whole-second mtime should have no fractional part, got: {whole}"
+        );
+        assert_eq!(
+            whole.len(),
+            19,
+            "expected YYYY-MM-DD HH:MM:SS (19 chars), got: {whole}"
+        );
 
         // With microseconds: 6-digit fractional part
         let frac = format_mtime_for_cache(1_745_262_534, 500_000_000);
-        assert!(frac.ends_with(".500000"), "expected .500000 suffix, got: {frac}");
-        assert_eq!(frac.len(), 26, "expected 26-char datetime with microseconds, got: {frac}");
+        assert!(
+            frac.ends_with(".500000"),
+            "expected .500000 suffix, got: {frac}"
+        );
+        assert_eq!(
+            frac.len(),
+            26,
+            "expected 26-char datetime with microseconds, got: {frac}"
+        );
     }
 
     /// Python uses `os.stat().st_mtime` (a C double) which loses nanosecond
@@ -577,9 +605,7 @@ mod tests {
         };
         cache.put_entry(&entry);
 
-        let result = cache
-            .get_entry("prefix/Data/abcdef.xxh128")
-            .unwrap();
+        let result = cache.get_entry("prefix/Data/abcdef.xxh128").unwrap();
         assert_eq!(result.s3_key, "prefix/Data/abcdef.xxh128");
     }
 

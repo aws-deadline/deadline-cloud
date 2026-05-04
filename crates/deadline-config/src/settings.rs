@@ -228,5 +228,8 @@ pub static SETTINGS: &[(&str, SettingDef)] = &[
 
 /// Look up a setting definition by name. Returns `None` if unknown.
 pub fn find_setting(name: &str) -> Option<&'static SettingDef> {
-    SETTINGS.iter().find(|(n, _)| *n == name).map(|(_, def)| def)
+    SETTINGS
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, def)| def)
 }

@@ -57,7 +57,7 @@ async fn run_async(args: &HandleWebUrlArgs) -> Result<(), CliError> {
         handle_url(url).await
     } else if args.install && args.uninstall {
         Err(CliError::Operation(
-            "Only one of the --install and --uninstall options may be provided.".into()
+            "Only one of the --install and --uninstall options may be provided.".into(),
         ))
     } else if args.install {
         install_handler(args.all_users)?;
@@ -69,17 +69,18 @@ async fn run_async(args: &HandleWebUrlArgs) -> Result<(), CliError> {
         Ok(())
     } else {
         Err(CliError::Operation(
-            "At least one of a URL, --install, or --uninstall must be provided.".into()
+            "At least one of a URL, --install, or --uninstall must be provided.".into(),
         ))
     }
 }
 
 async fn handle_url(url: &str) -> Result<(), CliError> {
     // Split URL: scheme://netloc?query
-    let (scheme, rest) = url.split_once("://")
-        .ok_or_else(|| CliError::Operation(format!(
+    let (scheme, rest) = url.split_once("://").ok_or_else(|| {
+        CliError::Operation(format!(
             "URL scheme is not supported. Only {DEADLINE_URL_SCHEME} is supported."
-        )))?;
+        ))
+    })?;
 
     if scheme != DEADLINE_URL_SCHEME {
         return Err(CliError::Operation(format!(
@@ -100,12 +101,16 @@ async fn handle_url(url: &str) -> Result<(), CliError> {
 async fn handle_download_output(query: &str) -> Result<(), CliError> {
     let params = parse_query_string(
         query,
-        &["farm-id", "queue-id", "job-id", "step-id", "task-id", "profile"],
+        &[
+            "farm-id", "queue-id", "job-id", "step-id", "task-id", "profile",
+        ],
         &["farm-id", "queue-id", "job-id"],
-    ).map_err(CliError::Operation)?;
+    )
+    .map_err(CliError::Operation)?;
 
     // Validate resource IDs (exclude profile)
-    let id_params: HashMap<String, String> = params.iter()
+    let id_params: HashMap<String, String> = params
+        .iter()
         .filter(|(k, _)| *k != "profile")
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
@@ -118,21 +123,24 @@ async fn handle_download_output(query: &str) -> Result<(), CliError> {
     let task_id = params.get("task_id").map(String::as_str);
 
     // Resolve AWS profile: use URL-provided profile, or find best match
-    let profile = if let Some(p) = params.get("profile") { p.clone() } else {
-        let config = config_file::read_config()
-            .map_err(|e| CliError::Operation(e.to_string()))?;
+    let profile = if let Some(p) = params.get("profile") {
+        p.clone()
+    } else {
+        let config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
         let aws_profiles = read_aws_profile_names();
         let profile_refs: Vec<&str> = aws_profiles.iter().map(String::as_str).collect();
         config_file::get_best_profile_for_farm(&config, &profile_refs, farm_id, Some(queue_id))
     };
 
     // Build config with the resolved profile
-    let mut config = config_file::read_config()
-        .map_err(|e| CliError::Operation(e.to_string()))?;
+    let mut config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
     config_file::set_setting("defaults.aws_profile_name", &profile, &mut config)
         .map_err(|e| CliError::Operation(e.to_string()))?;
 
-    download_output_impl(&config, farm_id, queue_id, job_id, step_id, task_id, None, false, false).await
+    download_output_impl(
+        &config, farm_id, queue_id, job_id, step_id, task_id, None, false, false,
+    )
+    .await
 }
 
 // -----------------------------------------------------------------------
@@ -156,15 +164,18 @@ fn install_handler(all_users: bool) -> Result<(), CliError> {
     let command_value = format!("\"{exe_str}\" handle-web-url \"%1\" --prompt-when-complete");
 
     // Use winreg crate for Windows registry operations
-    use winreg::enums::*;
     use winreg::RegKey;
+    use winreg::enums::*;
 
     let result = (|| -> std::io::Result<()> {
         let hkey = if all_users {
-            RegKey::predef(HKEY_CLASSES_ROOT).create_subkey(DEADLINE_URL_SCHEME)?.0
+            RegKey::predef(HKEY_CLASSES_ROOT)
+                .create_subkey(DEADLINE_URL_SCHEME)?
+                .0
         } else {
             RegKey::predef(HKEY_CURRENT_USER)
-                .create_subkey(format!("Software\\Classes\\{DEADLINE_URL_SCHEME}"))?.0
+                .create_subkey(format!("Software\\Classes\\{DEADLINE_URL_SCHEME}"))?
+                .0
         };
         hkey.set_value("", &"URL:AWS Deadline Cloud Protocol")?;
         hkey.set_value("URL Protocol", &"")?;
@@ -202,7 +213,10 @@ fn install_handler(all_users: bool) -> Result<(), CliError> {
     let exe_str = exe.display().to_string();
 
     let (entry_dir, mimeapps_path) = if all_users {
-        ("/usr/share/applications".into(), "/usr/share/applications/mimeapps.list".into())
+        (
+            "/usr/share/applications".into(),
+            "/usr/share/applications/mimeapps.list".into(),
+        )
     } else {
         let home = std::env::var("HOME").unwrap_or_default();
         (
@@ -221,15 +235,22 @@ fn install_handler(all_users: bool) -> Result<(), CliError> {
         "[Default Applications]\nx-scheme-handler/{DEADLINE_URL_SCHEME}={DEADLINE_URL_SCHEME}.desktop;\n"
     );
 
-    std::fs::write(format!("{entry_dir}/{DEADLINE_URL_SCHEME}.desktop"), desktop_content)
-        .map_err(|e| CliError::Operation(format!("Failed to write desktop file: {e}")))?;
+    std::fs::write(
+        format!("{entry_dir}/{DEADLINE_URL_SCHEME}.desktop"),
+        desktop_content,
+    )
+    .map_err(|e| CliError::Operation(format!("Failed to write desktop file: {e}")))?;
     std::fs::write(&mimeapps_path, mimeapps_content)
         .map_err(|e| CliError::Operation(format!("Failed to write mimeapps.list: {e}")))?;
 
-    Command::new("update-desktop-database").arg(&entry_dir).status()
-        .map_err(|e| CliError::Operation(format!(
-            "Failed to install the handler for {DEADLINE_URL_SCHEME} URLs:\n{e}"
-        )))?;
+    Command::new("update-desktop-database")
+        .arg(&entry_dir)
+        .status()
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to install the handler for {DEADLINE_URL_SCHEME} URLs:\n{e}"
+            ))
+        })?;
 
     Ok(())
 }
@@ -237,22 +258,21 @@ fn install_handler(all_users: bool) -> Result<(), CliError> {
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 fn install_handler(_all_users: bool) -> Result<(), CliError> {
     Err(CliError::Operation(
-        "Installing the web URL handler is only supported on Windows and Linux".into()
+        "Installing the web URL handler is only supported on Windows and Linux".into(),
     ))
 }
 
 #[cfg(target_os = "windows")]
 fn uninstall_handler(all_users: bool) -> Result<(), CliError> {
-    use winreg::enums::*;
     use winreg::RegKey;
+    use winreg::enums::*;
 
     let result = (|| -> std::io::Result<()> {
         if all_users {
             let hkey = RegKey::predef(HKEY_CLASSES_ROOT);
             hkey.delete_subkey_all(DEADLINE_URL_SCHEME)?;
         } else {
-            let hkey = RegKey::predef(HKEY_CURRENT_USER)
-                .open_subkey("Software\\Classes")?;
+            let hkey = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
             hkey.delete_subkey_all(DEADLINE_URL_SCHEME)?;
         }
         Ok(())
@@ -261,7 +281,9 @@ fn uninstall_handler(all_users: bool) -> Result<(), CliError> {
     match result {
         Ok(()) => Ok(()),
         Err(e) if e.raw_os_error() == Some(2) => {
-            println!("Nothing to uninstall, no handler for {DEADLINE_URL_SCHEME} URLs was installed");
+            println!(
+                "Nothing to uninstall, no handler for {DEADLINE_URL_SCHEME} URLs was installed"
+            );
             Ok(())
         }
         Err(e) => Err(CliError::Operation(format!(
@@ -293,13 +315,21 @@ fn uninstall_handler(all_users: bool) -> Result<(), CliError> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             println!("{desktop_file} not found, nothing to remove");
         }
-        Err(e) => return Err(CliError::Operation(format!("Failed to remove {desktop_file}: {e}"))),
+        Err(e) => {
+            return Err(CliError::Operation(format!(
+                "Failed to remove {desktop_file}: {e}"
+            )));
+        }
     }
 
-    Command::new("update-desktop-database").arg(&entry_dir).status()
-        .map_err(|e| CliError::Operation(format!(
-            "Failed to uninstall the handler for {DEADLINE_URL_SCHEME} URLs:\n{e}"
-        )))?;
+    Command::new("update-desktop-database")
+        .arg(&entry_dir)
+        .status()
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to uninstall the handler for {DEADLINE_URL_SCHEME} URLs:\n{e}"
+            ))
+        })?;
 
     Ok(())
 }
@@ -307,7 +337,7 @@ fn uninstall_handler(all_users: bool) -> Result<(), CliError> {
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 fn uninstall_handler(_all_users: bool) -> Result<(), CliError> {
     Err(CliError::Operation(
-        "Uninstalling the web URL handler is only supported on Windows and Linux".into()
+        "Uninstalling the web URL handler is only supported on Windows and Linux".into(),
     ))
 }
 
@@ -320,7 +350,8 @@ fn read_aws_profile_names() -> Vec<String> {
     let home = std::env::var("HOME").unwrap_or_default();
     let path = std::path::PathBuf::from(home).join(".aws").join("config");
     let content = std::fs::read_to_string(&path).unwrap_or_default();
-    content.lines()
+    content
+        .lines()
         .filter_map(|line| {
             let line = line.trim();
             if let Some(rest) = line.strip_prefix("[profile ") {
@@ -345,14 +376,19 @@ pub(crate) fn parse_query_string(
 
     if !query.is_empty() {
         for pair in query.split('&') {
-            let (key, value) = pair.split_once('=')
+            let (key, value) = pair
+                .split_once('=')
                 .ok_or_else(|| format!("Malformed query parameter: {pair}"))?;
-            parsed.entry(key.to_owned()).or_default().push(value.to_owned());
+            parsed
+                .entry(key.to_owned())
+                .or_default()
+                .push(value.to_owned());
         }
     }
 
     // Check required
-    let missing: Vec<&str> = required_names.iter()
+    let missing: Vec<&str> = required_names
+        .iter()
         .filter(|name| !parsed.contains_key(**name))
         .copied()
         .collect();
@@ -370,7 +406,10 @@ pub(crate) fn parse_query_string(
                     "The URL query parameter {name} was provided multiple times, it may only be provided once."
                 ));
             }
-            result.insert(name.replace('-', "_"), values.into_iter().next().expect("values is non-empty"));
+            result.insert(
+                name.replace('-', "_"),
+                values.into_iter().next().expect("values is non-empty"),
+            );
         }
     }
 
@@ -439,7 +478,8 @@ mod tests {
             "ab-c=def&x=73&xyz=testing-value",
             &["ab-c", "x", "xyz"],
             &[],
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(result["ab_c"], "def");
         assert_eq!(result["x"], "73");
         assert_eq!(result["xyz"], "testing-value");
@@ -471,7 +511,8 @@ mod tests {
             "a-1=b&c=d",
             &["a-1", "c", "missing-required", "g"],
             &["a-1", "c", "missing-required"],
-        ).unwrap_err();
+        )
+        .unwrap_err();
         assert!(err.contains("did not contain the required parameter"));
         assert!(err.contains("missing-required"));
     }
@@ -480,9 +521,16 @@ mod tests {
     fn parse_query_string_multiple_missing_required_errors() {
         let err = parse_query_string(
             "a=b&c=d",
-            &["a", "c", "missing-required", "also-not-here", "not-required"],
+            &[
+                "a",
+                "c",
+                "missing-required",
+                "also-not-here",
+                "not-required",
+            ],
             &["a", "c", "missing-required", "also-not-here"],
-        ).unwrap_err();
+        )
+        .unwrap_err();
         assert!(err.contains("did not contain the required parameter"));
         assert!(err.contains("missing-required"));
         assert!(err.contains("also-not-here"));
@@ -491,11 +539,7 @@ mod tests {
 
     #[test]
     fn parse_query_string_extra_params_errors() {
-        let err = parse_query_string(
-            "a=b&c=d&extra-parameter=3",
-            &["a", "c"],
-            &["a"],
-        ).unwrap_err();
+        let err = parse_query_string("a=b&c=d&extra-parameter=3", &["a", "c"], &["a"]).unwrap_err();
         assert!(err.contains("contained unsupported parameter"));
         assert!(err.contains("extra-parameter"));
     }
@@ -506,7 +550,8 @@ mod tests {
             "duplicated-param=b&c=d&duplicated-param=e",
             &["duplicated-param", "c"],
             &["c"],
-        ).unwrap_err();
+        )
+        .unwrap_err();
         assert!(err.contains("provided multiple times"));
         assert!(err.contains("duplicated-param"));
     }
@@ -522,28 +567,76 @@ mod tests {
 
     #[test]
     fn validate_id_format_valid_resources() {
-        assert!(validate_id_format("farm", "farm-0123456789abcdef0123456789abcdef"));
-        assert!(validate_id_format("queue", "queue-0123456789abcdef0123456789abcdef"));
-        assert!(validate_id_format("job", "job-0123456789abcdef0123456789abcdef"));
-        assert!(validate_id_format("step", "step-0123456789abcdef0123456789abcdef"));
-        assert!(validate_id_format("task", "task-0123456789abcdef0123456789abcdef-99"));
-        assert!(validate_id_format("task", "task-0123456789abcdef0123456789abcdef-0"));
+        assert!(validate_id_format(
+            "farm",
+            "farm-0123456789abcdef0123456789abcdef"
+        ));
+        assert!(validate_id_format(
+            "queue",
+            "queue-0123456789abcdef0123456789abcdef"
+        ));
+        assert!(validate_id_format(
+            "job",
+            "job-0123456789abcdef0123456789abcdef"
+        ));
+        assert!(validate_id_format(
+            "step",
+            "step-0123456789abcdef0123456789abcdef"
+        ));
+        assert!(validate_id_format(
+            "task",
+            "task-0123456789abcdef0123456789abcdef-99"
+        ));
+        assert!(validate_id_format(
+            "task",
+            "task-0123456789abcdef0123456789abcdef-0"
+        ));
     }
 
     #[test]
     fn validate_id_format_invalid_cases() {
         assert!(!validate_id_format("farm", ""));
         assert!(!validate_id_format("farm", "farm-123"));
-        assert!(!validate_id_format("farm", "farm0123456789abcdefabcdefabcdefabcd"));
-        assert!(!validate_id_format("farm", "farm--0123456789abcdefabcdefabcdefabcd"));
-        assert!(!validate_id_format("farm", "farm-0123456789abcdefabcdefabcdefabcd00000"));
-        assert!(!validate_id_format("farm", "queue-0123456789abcdefabcdefabcdefabcd"));
-        assert!(!validate_id_format("farm", "farm-0123456789abcdefabcdefabcdezxvzx"));
-        assert!(!validate_id_format("farmfarm", "farmfarm-0123456789abcdefabcdefabcdefabcd"));
-        assert!(!validate_id_format("mission", "mission-0123456789abcdefabcdefabcdefabcd"));
-        assert!(!validate_id_format("task", "task-0123456789abcdefabcdefabcdefabcd"));
-        assert!(!validate_id_format("task", "task-0123456789abcdefabcdefabcdefabcd-00"));
-        assert!(!validate_id_format("task", "task-0123456789abcdefabcdefabcdefabcd-12345678912345"));
+        assert!(!validate_id_format(
+            "farm",
+            "farm0123456789abcdefabcdefabcdefabcd"
+        ));
+        assert!(!validate_id_format(
+            "farm",
+            "farm--0123456789abcdefabcdefabcdefabcd"
+        ));
+        assert!(!validate_id_format(
+            "farm",
+            "farm-0123456789abcdefabcdefabcdefabcd00000"
+        ));
+        assert!(!validate_id_format(
+            "farm",
+            "queue-0123456789abcdefabcdefabcdefabcd"
+        ));
+        assert!(!validate_id_format(
+            "farm",
+            "farm-0123456789abcdefabcdefabcdezxvzx"
+        ));
+        assert!(!validate_id_format(
+            "farmfarm",
+            "farmfarm-0123456789abcdefabcdefabcdefabcd"
+        ));
+        assert!(!validate_id_format(
+            "mission",
+            "mission-0123456789abcdefabcdefabcdefabcd"
+        ));
+        assert!(!validate_id_format(
+            "task",
+            "task-0123456789abcdefabcdefabcdefabcd"
+        ));
+        assert!(!validate_id_format(
+            "task",
+            "task-0123456789abcdefabcdefabcdefabcd-00"
+        ));
+        assert!(!validate_id_format(
+            "task",
+            "task-0123456789abcdefabcdefabcdefabcd-12345678912345"
+        ));
     }
 
     // -- validate_resource_ids --
@@ -551,9 +644,18 @@ mod tests {
     #[test]
     fn validate_resource_ids_valid() {
         let ids = HashMap::from([
-            ("farm_id".into(), "farm-0123456789abcdef0123456789abcdef".into()),
-            ("queue_id".into(), "queue-0123456789abcdef0123456789abcdef".into()),
-            ("job_id".into(), "job-0123456789abcdef0123456789abcdef".into()),
+            (
+                "farm_id".into(),
+                "farm-0123456789abcdef0123456789abcdef".into(),
+            ),
+            (
+                "queue_id".into(),
+                "queue-0123456789abcdef0123456789abcdef".into(),
+            ),
+            (
+                "job_id".into(),
+                "job-0123456789abcdef0123456789abcdef".into(),
+            ),
         ]);
         assert!(validate_resource_ids(&ids).is_ok());
     }
@@ -561,17 +663,21 @@ mod tests {
     #[test]
     fn validate_resource_ids_with_task() {
         let ids = HashMap::from([
-            ("farm_id".into(), "farm-0123456789abcdef0123456789abcdef".into()),
-            ("task_id".into(), "task-0123456789abcdef0123456789abcdef-99".into()),
+            (
+                "farm_id".into(),
+                "farm-0123456789abcdef0123456789abcdef".into(),
+            ),
+            (
+                "task_id".into(),
+                "task-0123456789abcdef0123456789abcdef-99".into(),
+            ),
         ]);
         assert!(validate_resource_ids(&ids).is_ok());
     }
 
     #[test]
     fn validate_resource_ids_invalid_format() {
-        let ids = HashMap::from([
-            ("farm_id".into(), "farm-123".into()),
-        ]);
+        let ids = HashMap::from([("farm_id".into(), "farm-123".into())]);
         let err = validate_resource_ids(&ids).unwrap_err();
         assert!(err.contains("invalid format"));
         assert!(err.contains("farm-123"));
@@ -579,9 +685,10 @@ mod tests {
 
     #[test]
     fn validate_resource_ids_mismatched_prefix() {
-        let ids = HashMap::from([
-            ("farm_id".into(), "queue-0123456789abcdef0123456789abcdef".into()),
-        ]);
+        let ids = HashMap::from([(
+            "farm_id".into(),
+            "queue-0123456789abcdef0123456789abcdef".into(),
+        )]);
         let err = validate_resource_ids(&ids).unwrap_err();
         assert!(err.contains("invalid format"));
     }
@@ -591,13 +698,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let aws_dir = dir.path().join(".aws");
         std::fs::create_dir_all(&aws_dir).unwrap();
-        std::fs::write(aws_dir.join("config"), "[default]\nregion=us-west-2\n\n[profile my-profile]\nregion=us-east-1\n").unwrap();
+        std::fs::write(
+            aws_dir.join("config"),
+            "[default]\nregion=us-west-2\n\n[profile my-profile]\nregion=us-east-1\n",
+        )
+        .unwrap();
         let old_home = std::env::var("HOME").ok();
-        unsafe { std::env::set_var("HOME", dir.path()); }
+        unsafe {
+            std::env::set_var("HOME", dir.path());
+        }
         let profiles = read_aws_profile_names();
         match old_home {
-            Some(h) => unsafe { std::env::set_var("HOME", h); },
-            None => unsafe { std::env::remove_var("HOME"); },
+            Some(h) => unsafe {
+                std::env::set_var("HOME", h);
+            },
+            None => unsafe {
+                std::env::remove_var("HOME");
+            },
         }
         assert!(profiles.contains(&"default".to_owned()));
         assert!(profiles.contains(&"my-profile".to_owned()));

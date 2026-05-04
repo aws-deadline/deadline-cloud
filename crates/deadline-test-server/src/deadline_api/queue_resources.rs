@@ -28,11 +28,9 @@ pub async fn mock_assume_queue_role_for_user_error(
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/user-roles"
         )))
-        .respond_with(
-            ResponseTemplate::new(status).set_body_json(json!({
-                "__type": error_type
-            })),
-        )
+        .respond_with(ResponseTemplate::new(status).set_body_json(json!({
+            "__type": error_type
+        })))
         .mount(server)
         .await;
 }
@@ -79,8 +77,7 @@ pub async fn mock_list_storage_profiles_for_queue(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/storage-profiles"
         )))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(json!({ "storageProfiles": profiles })),
+            ResponseTemplate::new(200).set_body_json(json!({ "storageProfiles": profiles })),
         )
         .mount(server)
         .await;

@@ -6,8 +6,10 @@ client software: CLI, GUI FFI layer, and shared library crates.
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (stable, edition 2024)
-- `cargo-insta` for snapshot test review: `cargo install cargo-insta`
 - Python 3.9+ (for GUI commands and Python bindings development)
+- Dev tools: `make setup-tools` (installs cargo-insta, cargo-deny, etc.)
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the full setup guide.
 
 ## Build
 

@@ -77,9 +77,10 @@ fn read_aws_config_section(content: &str, section_header: &str, key: &str) -> Op
             break;
         }
         if let Some((k, v)) = trimmed.split_once('=')
-            && k.trim() == key {
-                return Some(v.trim().to_owned());
-            }
+            && k.trim() == key
+        {
+            return Some(v.trim().to_owned());
+        }
     }
     None
 }
@@ -146,9 +147,7 @@ pub fn get_user_and_identity_store_id(
 }
 
 /// Returns the `monitor_id` from the AWS profile if it's a DCM profile.
-pub fn get_monitor_id(
-    config: Option<&deadline_config::ini::IniConfig>,
-) -> Option<String> {
+pub fn get_monitor_id(config: Option<&deadline_config::ini::IniConfig>) -> Option<String> {
     match session::resolve_profile_name(config) {
         Some(name) => read_aws_profile_key(&name, "monitor_id"),
         None => read_aws_default_profile_key("monitor_id"),
@@ -167,12 +166,12 @@ pub async fn check_authentication_status(
     if let Some(uid) = user_id {
         req = req.principal_id(uid);
     }
-    if req.send().await.is_ok() { AwsAuthenticationStatus::Authenticated } else {
+    if req.send().await.is_ok() {
+        AwsAuthenticationStatus::Authenticated
+    } else {
         let source = get_credentials_source(config);
         match source {
-            AwsCredentialsSource::DeadlineCloudMonitorLogin => {
-                AwsAuthenticationStatus::NeedsLogin
-            }
+            AwsCredentialsSource::DeadlineCloudMonitorLogin => AwsAuthenticationStatus::NeedsLogin,
             _ => AwsAuthenticationStatus::ConfigurationError,
         }
     }
@@ -187,7 +186,12 @@ pub async fn login(
     telemetry: Option<&TelemetryClient>,
 ) -> Result<String, String> {
     let ephemeral;
-    let tc = if let Some(t) = telemetry { t } else { ephemeral = crate::telemetry::create_telemetry(config); &ephemeral };
+    let tc = if let Some(t) = telemetry {
+        t
+    } else {
+        ephemeral = crate::telemetry::create_telemetry(config);
+        &ephemeral
+    };
     let start = std::time::Instant::now();
     let result = login_inner(on_pending_authorization, on_cancellation_check, config).await;
     crate::telemetry::record_latency(tc, "login", start);
@@ -202,7 +206,8 @@ async fn login_inner(
     let source = get_credentials_source(config);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
         return Err(
-            "Logging in is only supported for AWS Profiles created by Deadline Cloud monitor.".to_owned(),
+            "Logging in is only supported for AWS Profiles created by Deadline Cloud monitor."
+                .to_owned(),
         );
     }
 
@@ -240,10 +245,11 @@ async fn login_inner(
             return Ok(format!("Deadline Cloud monitor profile: {profile_name}"));
         }
         if let Some(cb) = on_cancellation_check
-            && cb() {
-                let _ = child.kill();
-                return Err("Login canceled".to_owned());
-            }
+            && cb()
+        {
+            let _ = child.kill();
+            return Err("Login canceled".to_owned());
+        }
         if let Some(_exit) = child.try_wait().ok().flatten() {
             let out = child
                 .stdout
@@ -271,13 +277,12 @@ pub fn logout(
     with_telemetry_latency("logout", config, telemetry, || logout_inner(config))
 }
 
-fn logout_inner(
-    config: Option<&deadline_config::ini::IniConfig>,
-) -> Result<String, String> {
+fn logout_inner(config: Option<&deadline_config::ini::IniConfig>) -> Result<String, String> {
     let source = get_credentials_source(config);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
         return Err(
-            "Logging out is only supported for AWS Profiles created by Deadline Cloud monitor.".to_owned(),
+            "Logging out is only supported for AWS Profiles created by Deadline Cloud monitor."
+                .to_owned(),
         );
     }
 
@@ -310,8 +315,10 @@ fn logout_inner(
 
 fn get_monitor_path(config: Option<&deadline_config::ini::IniConfig>) -> String {
     match config {
-        Some(c) => deadline_config::config_file::get_setting("deadline-cloud-monitor.path", c).unwrap_or_default(),
-        None => deadline_config::config_file::get_setting_from_disk("deadline-cloud-monitor.path").unwrap_or_default(),
+        Some(c) => deadline_config::config_file::get_setting("deadline-cloud-monitor.path", c)
+            .unwrap_or_default(),
+        None => deadline_config::config_file::get_setting_from_disk("deadline-cloud-monitor.path")
+            .unwrap_or_default(),
     }
 }
 
@@ -344,26 +351,36 @@ mod tests {
 
     // ── read_aws_profile_key ──────────────────────────────────
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn read_profile_key_happy_path() {
         let _f = with_aws_config("[profile myprof]\nmonitor_id = mon-123\nregion = us-west-2\n");
-        assert_eq!(read_aws_profile_key("myprof", "monitor_id"), Some("mon-123".into()));
-        assert_eq!(read_aws_profile_key("myprof", "region"), Some("us-west-2".into()));
+        assert_eq!(
+            read_aws_profile_key("myprof", "monitor_id"),
+            Some("mon-123".into())
+        );
+        assert_eq!(
+            read_aws_profile_key("myprof", "region"),
+            Some("us-west-2".into())
+        );
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn read_profile_key_missing_key() {
         let _f = with_aws_config("[profile myprof]\nregion = us-west-2\n");
         assert_eq!(read_aws_profile_key("myprof", "monitor_id"), None);
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn read_profile_key_missing_profile() {
         let _f = with_aws_config("[profile other]\nmonitor_id = mon-123\n");
         assert_eq!(read_aws_profile_key("myprof", "monitor_id"), None);
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn read_profile_key_stops_at_next_section() {
         let _f = with_aws_config("[profile first]\nkey1 = val1\n[profile second]\nkey2 = val2\n");
         assert_eq!(read_aws_profile_key("first", "key1"), Some("val1".into()));
@@ -371,45 +388,58 @@ mod tests {
         assert_eq!(read_aws_profile_key("second", "key2"), Some("val2".into()));
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn read_profile_key_trims_whitespace() {
         let _f = with_aws_config("[profile myprof]\n  monitor_id  =  mon-456  \n");
-        assert_eq!(read_aws_profile_key("myprof", "monitor_id"), Some("mon-456".into()));
+        assert_eq!(
+            read_aws_profile_key("myprof", "monitor_id"),
+            Some("mon-456".into())
+        );
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn read_profile_key_empty_file() {
         let _f = with_aws_config("");
         assert_eq!(read_aws_profile_key("myprof", "monitor_id"), None);
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn read_profile_key_no_file() {
         set_nonexistent_config();
         assert_eq!(read_aws_profile_key("myprof", "monitor_id"), None);
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn read_profile_key_value_with_equals_sign() {
         let _f = with_aws_config("[profile myprof]\ncredential_process = echo a=b\n");
-        assert_eq!(read_aws_profile_key("myprof", "credential_process"), Some("echo a=b".into()));
+        assert_eq!(
+            read_aws_profile_key("myprof", "credential_process"),
+            Some("echo a=b".into())
+        );
     }
 
     // ── aws_profile_exists ────────────────────────────────────
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn profile_exists_true() {
         let _f = with_aws_config("[profile myprof]\nregion = us-west-2\n");
         assert!(aws_profile_exists("myprof"));
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn profile_exists_false() {
         let _f = with_aws_config("[profile other]\nregion = us-west-2\n");
         assert!(!aws_profile_exists("myprof"));
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn profile_exists_no_file() {
         set_nonexistent_config();
         assert!(!aws_profile_exists("myprof"));
@@ -417,41 +447,58 @@ mod tests {
 
     // ── get_credentials_source ────────────────────────────────
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn credentials_source_dcm_profile() {
         let _f = with_aws_config("[profile dcm]\nmonitor_id = mon-abc\n");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "dcm");
-        assert_eq!(get_credentials_source(Some(&ini)), AwsCredentialsSource::DeadlineCloudMonitorLogin);
+        assert_eq!(
+            get_credentials_source(Some(&ini)),
+            AwsCredentialsSource::DeadlineCloudMonitorLogin
+        );
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn credentials_source_host_provided() {
         let _f = with_aws_config("[profile regular]\nregion = us-west-2\n");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "regular");
-        assert_eq!(get_credentials_source(Some(&ini)), AwsCredentialsSource::HostProvided);
+        assert_eq!(
+            get_credentials_source(Some(&ini)),
+            AwsCredentialsSource::HostProvided
+        );
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn credentials_source_not_valid() {
         let _f = with_aws_config("[profile other]\nregion = us-west-2\n");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "nonexistent");
-        assert_eq!(get_credentials_source(Some(&ini)), AwsCredentialsSource::NotValid);
+        assert_eq!(
+            get_credentials_source(Some(&ini)),
+            AwsCredentialsSource::NotValid
+        );
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn credentials_source_default_profile() {
         let _f = with_aws_config("");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "(default)");
-        assert_eq!(get_credentials_source(Some(&ini)), AwsCredentialsSource::HostProvided);
+        assert_eq!(
+            get_credentials_source(Some(&ini)),
+            AwsCredentialsSource::HostProvided
+        );
     }
 
     // ── get_user_and_identity_store_id ────────────────────────
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn user_and_identity_dcm_profile_returns_both() {
         let _f = with_aws_config(
             "[profile dcm]\nmonitor_id = mon-abc\nuser_id = user-123\nidentity_store_id = d-456\n",
@@ -463,7 +510,8 @@ mod tests {
         assert_eq!(isid.as_deref(), Some("d-456"));
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn user_and_identity_non_dcm_returns_none() {
         let _f = with_aws_config("[profile regular]\nregion = us-west-2\n");
         let mut ini = deadline_config::ini::IniConfig::new();
@@ -473,9 +521,11 @@ mod tests {
         assert!(isid.is_none());
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn user_and_identity_dcm_missing_user_id() {
-        let _f = with_aws_config("[profile dcm]\nmonitor_id = mon-abc\nidentity_store_id = d-456\n");
+        let _f =
+            with_aws_config("[profile dcm]\nmonitor_id = mon-abc\nidentity_store_id = d-456\n");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "dcm");
         let (uid, isid) = get_user_and_identity_store_id(Some(&ini));
@@ -483,7 +533,8 @@ mod tests {
         assert_eq!(isid.as_deref(), Some("d-456"));
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn user_and_identity_default_profile_returns_none() {
         let _f = with_aws_config("");
         let mut ini = deadline_config::ini::IniConfig::new();
@@ -493,7 +544,8 @@ mod tests {
 
     // ── get_monitor_id ────────────────────────────────────────
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn monitor_id_dcm_profile() {
         let _f = with_aws_config("[profile dcm]\nmonitor_id = mon-xyz\n");
         let mut ini = deadline_config::ini::IniConfig::new();
@@ -501,7 +553,8 @@ mod tests {
         assert_eq!(get_monitor_id(Some(&ini)), Some("mon-xyz".into()));
     }
 
-    #[test] #[serial]
+    #[test]
+    #[serial]
     fn monitor_id_non_dcm_profile() {
         let _f = with_aws_config("[profile regular]\nregion = us-west-2\n");
         let mut ini = deadline_config::ini::IniConfig::new();

@@ -30,9 +30,7 @@ pub async fn mock_list_sessions(
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/sessions"
         )))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "sessions": sessions })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "sessions": sessions })))
         .mount(server)
         .await;
 }
@@ -51,12 +49,10 @@ pub async fn mock_list_sessions_paginated(
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/sessions"
         )))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
-                "sessions": page1,
-                "nextToken": "sessions-page2"
-            })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "sessions": page1,
+            "nextToken": "sessions-page2"
+        })))
         .up_to_n_times(1)
         .mount(server)
         .await;
@@ -66,9 +62,7 @@ pub async fn mock_list_sessions_paginated(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/sessions"
         )))
         .and(query_param("nextToken", "sessions-page2"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "sessions": page2 })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "sessions": page2 })))
         .mount(server)
         .await;
 }
@@ -84,9 +78,7 @@ pub async fn mock_list_steps(
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps"
         )))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "steps": steps })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "steps": steps })))
         .mount(server)
         .await;
 }
@@ -105,12 +97,10 @@ pub async fn mock_list_steps_paginated(
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps"
         )))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
-                "steps": page1,
-                "nextToken": "steps-page2"
-            })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "steps": page1,
+            "nextToken": "steps-page2"
+        })))
         .up_to_n_times(1)
         .mount(server)
         .await;
@@ -120,9 +110,7 @@ pub async fn mock_list_steps_paginated(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps"
         )))
         .and(query_param("nextToken", "steps-page2"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "steps": page2 })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "steps": page2 })))
         .mount(server)
         .await;
 }
@@ -139,9 +127,7 @@ pub async fn mock_list_tasks(
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps/{step_id}/tasks"
         )))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "tasks": tasks })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "tasks": tasks })))
         .mount(server)
         .await;
 }
@@ -161,12 +147,10 @@ pub async fn mock_list_tasks_paginated(
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps/{step_id}/tasks"
         )))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
-                "tasks": page1,
-                "nextToken": "tasks-page2"
-            })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tasks": page1,
+            "nextToken": "tasks-page2"
+        })))
         .up_to_n_times(1)
         .mount(server)
         .await;
@@ -176,9 +160,7 @@ pub async fn mock_list_tasks_paginated(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/steps/{step_id}/tasks"
         )))
         .and(query_param("nextToken", "tasks-page2"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "tasks": page2 })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "tasks": page2 })))
         .mount(server)
         .await;
 }
@@ -208,7 +190,9 @@ pub async fn mock_get_session_action(
     job_id: &str,
     session_action: Value,
 ) {
-    let session_action_id = session_action["sessionActionId"].as_str().unwrap_or("sessionaction-mock-0");
+    let session_action_id = session_action["sessionActionId"]
+        .as_str()
+        .unwrap_or("sessionaction-mock-0");
     Mock::given(method("GET"))
         .and(path(format!(
             "/2023-10-12/farms/{farm_id}/queues/{queue_id}/jobs/{job_id}/session-actions/{session_action_id}"
@@ -262,37 +246,25 @@ pub async fn mock_list_session_actions(
 }
 
 /// Mount a `BatchGetStep` response (POST). Returns steps and errors arrays.
-pub async fn mock_batch_get_steps(
-    server: &MockServer,
-    steps: &[Value],
-    errors: &[Value],
-) {
+pub async fn mock_batch_get_steps(server: &MockServer, steps: &[Value], errors: &[Value]) {
     Mock::given(method("POST"))
         .and(path("/2023-10-12/batch-get-step"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
-                "steps": steps,
-                "errors": errors,
-            })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "steps": steps,
+            "errors": errors,
+        })))
         .mount(server)
         .await;
 }
 
 /// Mount a `BatchGetTask` response (POST). Returns tasks and errors arrays.
-pub async fn mock_batch_get_tasks(
-    server: &MockServer,
-    tasks: &[Value],
-    errors: &[Value],
-) {
+pub async fn mock_batch_get_tasks(server: &MockServer, tasks: &[Value], errors: &[Value]) {
     Mock::given(method("POST"))
         .and(path("/2023-10-12/batch-get-task"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
-                "tasks": tasks,
-                "errors": errors,
-            })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tasks": tasks,
+            "errors": errors,
+        })))
         .mount(server)
         .await;
 }

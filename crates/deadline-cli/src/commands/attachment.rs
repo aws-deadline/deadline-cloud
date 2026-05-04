@@ -67,7 +67,10 @@ struct S3Context {
 /// When --profile is absent: call `get_queue()` to derive S3 URI from queue settings,
 /// then call `get_queue_user_config()` to get queue-scoped credentials (unconditional,
 /// matching Python's `get_queue_user_boto3_session` pattern).
-#[allow(clippy::ref_option, reason = "callers pass &Option from local bindings")]
+#[allow(
+    clippy::ref_option,
+    reason = "callers pass &Option from local bindings"
+)]
 async fn resolve_s3_context(
     profile: &Option<String>,
     s3_root_uri: Option<String>,
@@ -79,7 +82,10 @@ async fn resolve_s3_context(
             .filter(|u| !u.is_empty())
             .ok_or_else(|| CliError::Operation("No valid s3 root path available".into()))?;
         let sdk_config = deadline_api::session::get_sdk_config(Some(config)).await;
-        Ok(S3Context { sdk_config, s3_root_uri: uri })
+        Ok(S3Context {
+            sdk_config,
+            s3_root_uri: uri,
+        })
     } else {
         // No --profile: derive S3 URI from queue settings, use queue-scoped credentials
         let farm_id = config_file::get_setting("defaults.farm_id", config)
@@ -88,10 +94,16 @@ async fn resolve_s3_context(
             .map_err(|e| CliError::Operation(e.to_string()))?;
 
         // Derive S3 root URI from queue's jobAttachmentSettings (unless explicitly provided)
-        let uri = if let Some(u) = s3_root_uri.filter(|u| !u.is_empty()) { u } else {
-            let queue = deadline_api::session::deadline_client(Some(config)).await
-                .get_queue().farm_id(&farm_id).queue_id(&queue_id)
-                .send().await
+        let uri = if let Some(u) = s3_root_uri.filter(|u| !u.is_empty()) {
+            u
+        } else {
+            let queue = deadline_api::session::deadline_client(Some(config))
+                .await
+                .get_queue()
+                .farm_id(&farm_id)
+                .queue_id(&queue_id)
+                .send()
+                .await
                 .map_err(|e| CliError::Operation(deadline_api::client::format_sdk_error(&e)))?;
             match queue.job_attachment_settings() {
                 Some(s) if !s.s3_bucket_name().is_empty() => {
@@ -108,12 +120,20 @@ async fn resolve_s3_context(
         };
 
         // Get queue-scoped credentials (unconditional — matches Python)
-        let sdk_config =
-            deadline_api::session::get_queue_user_config(Some(&farm_id), Some(&queue_id), None, false, Some(config))
-                .await
-                .map_err(|e| CliError::Operation(e.to_string()))?;
+        let sdk_config = deadline_api::session::get_queue_user_config(
+            Some(&farm_id),
+            Some(&queue_id),
+            None,
+            false,
+            Some(config),
+        )
+        .await
+        .map_err(|e| CliError::Operation(e.to_string()))?;
 
-        Ok(S3Context { sdk_config, s3_root_uri: uri })
+        Ok(S3Context {
+            sdk_config,
+            s3_root_uri: uri,
+        })
     }
 }
 
@@ -126,15 +146,26 @@ pub(crate) fn run(action: AttachmentAction) -> Result<(), CliError> {
 async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
     match action {
         AttachmentAction::Download {
-            manifests, s3_root_uri, path_mapping_rules,
-            farm_id, queue_id, profile, conflict_resolution, json,
+            manifests,
+            s3_root_uri,
+            path_mapping_rules,
+            farm_id,
+            queue_id,
+            profile,
+            conflict_resolution,
+            json,
         } => {
-            let mut config = config_file::read_config()
-                .map_err(|e| CliError::Operation(e.to_string()))?;
+            let mut config =
+                config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
             crate::common::apply_cli_options_to_config(
                 &mut config,
                 &crate::common::CliOptions {
-                    profile: profile.clone(), farm_id, queue_id, job_id: None, yes: false, ..Default::default()
+                    profile: profile.clone(),
+                    farm_id,
+                    queue_id,
+                    job_id: None,
+                    yes: false,
+                    ..Default::default()
                 },
                 &[],
             )?;
@@ -143,11 +174,8 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
 
             // Resolve conflict resolution
             let resolution = conflict_resolution.unwrap_or_else(|| {
-                let setting = config_file::get_setting(
-                    "settings.conflict_resolution",
-                    &config,
-                )
-                .unwrap_or_default();
+                let setting = config_file::get_setting("settings.conflict_resolution", &config)
+                    .unwrap_or_default();
                 match setting.to_uppercase().as_str() {
                     "SKIP" => FileConflictResolution::Skip,
                     "OVERWRITE" => FileConflictResolution::Overwrite,
@@ -173,22 +201,37 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
             .map_err(|e| CliError::Operation(e.to_string()))?;
 
             if json {
-                println!("{}", serde_json::to_string(&stats.stats).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string(&stats.stats).unwrap_or_default()
+                );
             } else {
                 println!("{}", stats.stats);
             }
             Ok(())
         }
         AttachmentAction::Upload {
-            manifests, root_dirs, path_mapping_rules, s3_root_uri,
-            upload_manifest_path, farm_id, queue_id, profile, json: _,
+            manifests,
+            root_dirs,
+            path_mapping_rules,
+            s3_root_uri,
+            upload_manifest_path,
+            farm_id,
+            queue_id,
+            profile,
+            json: _,
         } => {
-            let mut config = config_file::read_config()
-                .map_err(|e| CliError::Operation(e.to_string()))?;
+            let mut config =
+                config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
             crate::common::apply_cli_options_to_config(
                 &mut config,
                 &crate::common::CliOptions {
-                    profile: profile.clone(), farm_id, queue_id, job_id: None, yes: false, ..Default::default()
+                    profile: profile.clone(),
+                    farm_id,
+                    queue_id,
+                    job_id: None,
+                    yes: false,
+                    ..Default::default()
                 },
                 &[],
             )?;

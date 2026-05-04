@@ -46,10 +46,7 @@ pub fn hash_data(data: &[u8], _alg: HashAlgorithm) -> String {
 }
 
 /// Hashes a file by reading it in chunks. Returns a 32-char lowercase hex string.
-pub fn hash_file(
-    path: &Path,
-    _alg: HashAlgorithm,
-) -> Result<String, JobAttachmentsError> {
+pub fn hash_file(path: &Path, _alg: HashAlgorithm) -> Result<String, JobAttachmentsError> {
     let file = std::fs::File::open(path).map_err(|e| {
         JobAttachmentsError::AssetSync(format!("Failed to open file {}: {e}", path.display()))
     })?;
@@ -58,10 +55,7 @@ pub fn hash_file(
     let mut buf = [0u8; 8192];
     loop {
         let n = reader.read(&mut buf).map_err(|e| {
-            JobAttachmentsError::AssetSync(format!(
-                "Failed to read file {}: {e}",
-                path.display()
-            ))
+            JobAttachmentsError::AssetSync(format!("Failed to read file {}: {e}", path.display()))
         })?;
         if n == 0 {
             break;
@@ -121,9 +115,7 @@ pub struct AssetManifest {
 
 /// Sort key for canonical path ordering per RFC 8785: UTF-16 BE bytes.
 fn utf16_be_sort_key(s: &str) -> Vec<u8> {
-    s.encode_utf16()
-        .flat_map(u16::to_be_bytes)
-        .collect()
+    s.encode_utf16().flat_map(u16::to_be_bytes).collect()
 }
 
 /// Escape non-ASCII characters to `\uXXXX` sequences (equivalent to Python's
@@ -212,9 +204,9 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
     let doc: serde_json::Value = serde_json::from_str(json_str)
         .map_err(|e| JobAttachmentsError::ManifestDecode(format!("Invalid JSON: {e}")))?;
 
-    let obj = doc
-        .as_object()
-        .ok_or_else(|| JobAttachmentsError::ManifestDecode("Manifest must be a JSON object".into()))?;
+    let obj = doc.as_object().ok_or_else(|| {
+        JobAttachmentsError::ManifestDecode("Manifest must be a JSON object".into())
+    })?;
 
     // Check manifestVersion
     let version_val = obj.get("manifestVersion").ok_or_else(|| {
@@ -249,14 +241,16 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
         .as_str()
         .ok_or_else(|| JobAttachmentsError::ManifestDecode("hashAlg must be a string".into()))?;
     if hash_alg_str != "xxh128" {
-        return Err(JobAttachmentsError::ManifestDecode("hashAlg must be one of {\"xxh128\"}".to_owned()));
+        return Err(JobAttachmentsError::ManifestDecode(
+            "hashAlg must be one of {\"xxh128\"}".to_owned(),
+        ));
     }
     let hash_alg: HashAlgorithm = hash_alg_str.parse()?;
 
     // Validate totalSize
-    let total_size = obj["totalSize"]
-        .as_u64()
-        .ok_or_else(|| JobAttachmentsError::ManifestDecode("totalSize must be a non-negative integer".into()))?;
+    let total_size = obj["totalSize"].as_u64().ok_or_else(|| {
+        JobAttachmentsError::ManifestDecode("totalSize must be a non-negative integer".into())
+    })?;
 
     // Validate paths
     let paths_val = &obj["paths"];
@@ -294,12 +288,12 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
         let hash = entry_obj["hash"]
             .as_str()
             .ok_or_else(|| JobAttachmentsError::ManifestDecode("hash must be a string".into()))?;
-        let size = entry_obj["size"]
-            .as_u64()
-            .ok_or_else(|| JobAttachmentsError::ManifestDecode("size must be a non-negative integer".into()))?;
-        let mtime = entry_obj["mtime"]
-            .as_i64()
-            .ok_or_else(|| JobAttachmentsError::ManifestDecode("mtime must be an integer".into()))?;
+        let size = entry_obj["size"].as_u64().ok_or_else(|| {
+            JobAttachmentsError::ManifestDecode("size must be a non-negative integer".into())
+        })?;
+        let mtime = entry_obj["mtime"].as_i64().ok_or_else(|| {
+            JobAttachmentsError::ManifestDecode("mtime must be an integer".into())
+        })?;
 
         paths.push(ManifestPath {
             path: path.to_owned(),
@@ -469,7 +463,10 @@ mod tests {
         let err = decode_manifest(&json).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("Unknown manifest version"), "got: {msg}");
-        assert!(msg.contains("2023-03-03"), "should list supported versions, got: {msg}");
+        assert!(
+            msg.contains("2023-03-03"),
+            "should list supported versions, got: {msg}"
+        );
     }
 
     #[test]
@@ -557,7 +554,10 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("size must be a non-negative integer"));
+        assert!(
+            err.to_string()
+                .contains("size must be a non-negative integer")
+        );
     }
 
     #[test]
@@ -596,7 +596,10 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("totalSize must be a non-negative integer"));
+        assert!(
+            err.to_string()
+                .contains("totalSize must be a non-negative integer")
+        );
     }
 
     // === : AssetManifest::encode ===
@@ -705,7 +708,9 @@ mod tests {
 
         let encoded = manifest.encode();
         let a_pos = encoded.find("a.txt").unwrap();
-        let e_pos = encoded.find("\\u00e9").unwrap_or_else(|| encoded.find("\\u00E9").unwrap());
+        let e_pos = encoded
+            .find("\\u00e9")
+            .unwrap_or_else(|| encoded.find("\\u00E9").unwrap());
         assert!(a_pos < e_pos, "a.txt should sort before é.txt in UTF-16 BE");
     }
 

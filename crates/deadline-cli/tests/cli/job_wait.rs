@@ -14,7 +14,7 @@ fn insta_settings() -> insta::Settings {
     settings.add_filter(r"Elapsed time: .* seconds", "Elapsed time: [TIME] seconds");
     settings.add_filter(r"\[[\d.]+s elapsed.*\]", "[ELAPSED]");
     settings.add_filter(r"after [\d.]+ seconds", "after [TIME] seconds");
-    settings.add_filter(r"\r.*\n", "");  // strip \r status line overwrites
+    settings.add_filter(r"\r.*\n", ""); // strip \r status line overwrites
     settings
 }
 
@@ -25,16 +25,31 @@ fn insta_settings() -> insta::Settings {
 #[tokio::test]
 async fn job_wait_succeeded_exits_0() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "SUCCEEDED",
-        "taskRunStatusCounts": { "SUCCEEDED": 10 },
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "SUCCEEDED",
+            "taskRunStatusCounts": { "SUCCEEDED": 10 },
+        }),
+    )
+    .await;
 
     let _guard = insta_settings().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&["job", "wait"]));
@@ -47,38 +62,66 @@ async fn job_wait_succeeded_exits_0() {
 #[tokio::test]
 async fn job_wait_failed_exits_2_with_failed_tasks() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "FAILED",
-        "taskRunStatusCounts": { "FAILED": 1, "SUCCEEDED": 5 },
-    })).await;
-
-    sessions::mock_list_steps(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "FAILED",
+            "taskRunStatusCounts": { "FAILED": 1, "SUCCEEDED": 5 },
+        }),
+    )
+    .await;
+
+    sessions::mock_list_steps(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "job-aaa",
+        &[json!({
             "stepId": "step-001",
             "name": "Render Step",
             "taskRunStatusCounts": { "FAILED": 1, "SUCCEEDED": 5 },
-        }),
-    ]).await;
+        })],
+    )
+    .await;
 
-    sessions::mock_list_tasks(&harness.server, "farm-abc", "queue-abc", "job-aaa", "step-001", &[
-        json!({
-            "taskId": "task-001",
-            "runStatus": "FAILED",
-            "parameters": { "Frame": { "int": "1" } },
-            "latestSessionActionId": "sessionaction-abc123def45678901234567890abcdef-3",
-        }),
-        json!({
-            "taskId": "task-002",
-            "runStatus": "SUCCEEDED",
-            "parameters": { "Frame": { "int": "2" } },
-        }),
-    ]).await;
+    sessions::mock_list_tasks(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "job-aaa",
+        "step-001",
+        &[
+            json!({
+                "taskId": "task-001",
+                "runStatus": "FAILED",
+                "parameters": { "Frame": { "int": "1" } },
+                "latestSessionActionId": "sessionaction-abc123def45678901234567890abcdef-3",
+            }),
+            json!({
+                "taskId": "task-002",
+                "runStatus": "SUCCEEDED",
+                "parameters": { "Frame": { "int": "2" } },
+            }),
+        ],
+    )
+    .await;
 
     let _guard = insta_settings().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&["job", "wait"]));
@@ -91,24 +134,44 @@ async fn job_wait_failed_exits_2_with_failed_tasks() {
 #[tokio::test]
 async fn job_wait_canceled_exits_3() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "CANCELED",
-        "taskRunStatusCounts": { "CANCELED": 10 },
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "CANCELED",
+            "taskRunStatusCounts": { "CANCELED": 10 },
+        }),
+    )
+    .await;
 
     sessions::mock_list_steps(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[]).await;
 
-    let output = harness.cli(&["job", "wait"])
+    let output = harness
+        .cli(&["job", "wait"])
         .output()
         .expect("failed to run");
 
-    assert_eq!(output.status.code(), Some(3), "expected exit code 3 for CANCELED");
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "expected exit code 3 for CANCELED"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -118,24 +181,44 @@ async fn job_wait_canceled_exits_3() {
 #[tokio::test]
 async fn job_wait_suspended_exits_4() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "SUSPENDED",
-        "taskRunStatusCounts": { "SUSPENDED": 10 },
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "SUSPENDED",
+            "taskRunStatusCounts": { "SUSPENDED": 10 },
+        }),
+    )
+    .await;
 
     sessions::mock_list_steps(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[]).await;
 
-    let output = harness.cli(&["job", "wait"])
+    let output = harness
+        .cli(&["job", "wait"])
         .output()
         .expect("failed to run");
 
-    assert_eq!(output.status.code(), Some(4), "expected exit code 4 for SUSPENDED");
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "expected exit code 4 for SUSPENDED"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -145,24 +228,44 @@ async fn job_wait_suspended_exits_4() {
 #[tokio::test]
 async fn job_wait_not_compatible_exits_5() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "NOT_COMPATIBLE",
-        "taskRunStatusCounts": {},
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "NOT_COMPATIBLE",
+            "taskRunStatusCounts": {},
+        }),
+    )
+    .await;
 
     sessions::mock_list_steps(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[]).await;
 
-    let output = harness.cli(&["job", "wait"])
+    let output = harness
+        .cli(&["job", "wait"])
         .output()
         .expect("failed to run");
 
-    assert_eq!(output.status.code(), Some(5), "expected exit code 5 for NOT_COMPATIBLE");
+    assert_eq!(
+        output.status.code(),
+        Some(5),
+        "expected exit code 5 for NOT_COMPATIBLE"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,16 +275,31 @@ async fn job_wait_not_compatible_exits_5() {
 #[tokio::test]
 async fn job_wait_timeout_exits_1() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "RUNNING",
-        "taskRunStatusCounts": { "RUNNING": 5 },
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "RUNNING",
+            "taskRunStatusCounts": { "RUNNING": 5 },
+        }),
+    )
+    .await;
 
     let _guard = insta_settings().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&["job", "wait", "--timeout", "1"]));
@@ -194,16 +312,31 @@ async fn job_wait_timeout_exits_1() {
 #[tokio::test]
 async fn job_wait_verbose_shows_status_line() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "SUCCEEDED",
-        "taskRunStatusCounts": { "SUCCEEDED": 10, "RUNNING": 0 },
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "SUCCEEDED",
+            "taskRunStatusCounts": { "SUCCEEDED": 10, "RUNNING": 0 },
+        }),
+    )
+    .await;
 
     let _guard = insta_settings().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&["job", "wait"]));
@@ -216,9 +349,18 @@ async fn job_wait_verbose_shows_status_line() {
 #[tokio::test]
 async fn job_wait_api_error_exits_1() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
     // No mock — initial get_job for name fails via CliError (exit 1)
     let _guard = insta_settings().bind_to_scope();
@@ -232,37 +374,64 @@ async fn job_wait_api_error_exits_1() {
 #[tokio::test]
 async fn job_wait_json_failed_tasks_have_full_details() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "FAILED",
-        "taskRunStatusCounts": { "FAILED": 1 },
-    })).await;
-
-    sessions::mock_list_steps(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "FAILED",
+            "taskRunStatusCounts": { "FAILED": 1 },
+        }),
+    )
+    .await;
+
+    sessions::mock_list_steps(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "job-aaa",
+        &[json!({
             "stepId": "step-001",
             "name": "Render Step",
             "taskRunStatusCounts": { "FAILED": 1 },
-        }),
-    ]).await;
+        })],
+    )
+    .await;
 
-    sessions::mock_list_tasks(&harness.server, "farm-abc", "queue-abc", "job-aaa", "step-001", &[
-        json!({
+    sessions::mock_list_tasks(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "job-aaa",
+        "step-001",
+        &[json!({
             "taskId": "task-001",
             "createdAt": "2024-01-01T00:00:00Z",
             "createdBy": "user:test",
             "runStatus": "FAILED",
             "parameters": { "Frame": { "int": "1" } },
             "latestSessionActionId": "sessionaction-abc123def45678901234567890abcdef-3",
-        }),
-    ]).await;
+        })],
+    )
+    .await;
 
-    let output = harness.cli(&["job", "wait", "--output", "json"])
+    let output = harness
+        .cli(&["job", "wait", "--output", "json"])
         .output()
         .expect("failed to run");
 
@@ -273,7 +442,10 @@ async fn job_wait_json_failed_tasks_have_full_details() {
     assert_eq!(task["stepId"], "step-001");
     assert_eq!(task["taskId"], "task-001");
     assert_eq!(task["stepName"], "Render Step");
-    assert_eq!(task["sessionId"], "session-abc123def45678901234567890abcdef");
+    assert_eq!(
+        task["sessionId"],
+        "session-abc123def45678901234567890abcdef"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -283,36 +455,63 @@ async fn job_wait_json_failed_tasks_have_full_details() {
 #[tokio::test]
 async fn job_wait_json_failed_task_no_session_action_id() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "FAILED",
-        "taskRunStatusCounts": { "FAILED": 1 },
-    })).await;
-
-    sessions::mock_list_steps(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "FAILED",
+            "taskRunStatusCounts": { "FAILED": 1 },
+        }),
+    )
+    .await;
+
+    sessions::mock_list_steps(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "job-aaa",
+        &[json!({
             "stepId": "step-001",
             "name": "Render Step",
             "taskRunStatusCounts": { "FAILED": 1 },
-        }),
-    ]).await;
+        })],
+    )
+    .await;
 
-    sessions::mock_list_tasks(&harness.server, "farm-abc", "queue-abc", "job-aaa", "step-001", &[
-        json!({
+    sessions::mock_list_tasks(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "job-aaa",
+        "step-001",
+        &[json!({
             "taskId": "task-001",
             "createdAt": "2024-01-01T00:00:00Z",
             "createdBy": "user:test",
             "runStatus": "FAILED",
             "parameters": {},
-        }),
-    ]).await;
+        })],
+    )
+    .await;
 
-    let output = harness.cli(&["job", "wait", "--output", "json"])
+    let output = harness
+        .cli(&["job", "wait", "--output", "json"])
         .output()
         .expect("failed to run");
 
@@ -320,7 +519,10 @@ async fn job_wait_json_failed_task_no_session_action_id() {
     let parsed: serde_json::Value = serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("expected valid JSON, got error {e}: {stdout}"));
     let task = &parsed["failedTasks"][0];
-    assert!(task["sessionId"].is_null(), "expected null sessionId when latestSessionActionId absent");
+    assert!(
+        task["sessionId"].is_null(),
+        "expected null sessionId when latestSessionActionId absent"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -330,41 +532,70 @@ async fn job_wait_json_failed_task_no_session_action_id() {
 #[tokio::test]
 async fn job_wait_skips_steps_with_no_failed_tasks() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "FAILED",
-        "taskRunStatusCounts": { "FAILED": 1, "SUCCEEDED": 9 },
-    })).await;
-
-    sessions::mock_list_steps(&harness.server, "farm-abc", "queue-abc", "job-aaa", &[
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         json!({
-            "stepId": "step-001",
-            "name": "Setup Step",
-            "taskRunStatusCounts": { "SUCCEEDED": 5, "FAILED": 0 },
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "FAILED",
+            "taskRunStatusCounts": { "FAILED": 1, "SUCCEEDED": 9 },
         }),
-        json!({
-            "stepId": "step-002",
-            "name": "Render Step",
-            "taskRunStatusCounts": { "FAILED": 1, "SUCCEEDED": 4 },
-        }),
-    ]).await;
+    )
+    .await;
 
-    sessions::mock_list_tasks(&harness.server, "farm-abc", "queue-abc", "job-aaa", "step-002", &[
-        json!({
+    sessions::mock_list_steps(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "job-aaa",
+        &[
+            json!({
+                "stepId": "step-001",
+                "name": "Setup Step",
+                "taskRunStatusCounts": { "SUCCEEDED": 5, "FAILED": 0 },
+            }),
+            json!({
+                "stepId": "step-002",
+                "name": "Render Step",
+                "taskRunStatusCounts": { "FAILED": 1, "SUCCEEDED": 4 },
+            }),
+        ],
+    )
+    .await;
+
+    sessions::mock_list_tasks(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        "job-aaa",
+        "step-002",
+        &[json!({
             "taskId": "task-010",
             "createdAt": "2024-01-01T00:00:00Z",
             "createdBy": "user:test",
             "runStatus": "FAILED",
             "parameters": {},
-        }),
-    ]).await;
+        })],
+    )
+    .await;
 
-    let output = harness.cli(&["job", "wait", "--output", "json"])
+    let output = harness
+        .cli(&["job", "wait", "--output", "json"])
         .output()
         .expect("failed to run");
 
@@ -381,18 +612,34 @@ async fn job_wait_skips_steps_with_no_failed_tasks() {
 #[tokio::test]
 async fn job_wait_json_output_succeeded() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "SUCCEEDED",
-        "taskRunStatusCounts": { "SUCCEEDED": 10 },
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "SUCCEEDED",
+            "taskRunStatusCounts": { "SUCCEEDED": 10 },
+        }),
+    )
+    .await;
 
-    let output = harness.cli(&["job", "wait", "--output", "json"])
+    let output = harness
+        .cli(&["job", "wait", "--output", "json"])
         .output()
         .expect("failed to run");
 
@@ -413,8 +660,14 @@ async fn job_wait_json_output_succeeded() {
 #[tokio::test]
 async fn job_wait_no_job_id_exits_with_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
     assert_cmd_snapshot!(harness.cmd(&["job", "wait"]));
 }
@@ -426,18 +679,34 @@ async fn job_wait_no_job_id_exits_with_error() {
 #[tokio::test]
 async fn job_wait_timeout_json_output() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
 
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa",
-        "name": "Render Job",
-        "taskRunStatus": "RUNNING",
-        "taskRunStatusCounts": { "RUNNING": 5 },
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa",
+            "name": "Render Job",
+            "taskRunStatus": "RUNNING",
+            "taskRunStatusCounts": { "RUNNING": 5 },
+        }),
+    )
+    .await;
 
-    let output = harness.cli(&["job", "wait", "--timeout", "1", "--output", "json"])
+    let output = harness
+        .cli(&["job", "wait", "--timeout", "1", "--output", "json"])
         .output()
         .expect("failed to run");
 

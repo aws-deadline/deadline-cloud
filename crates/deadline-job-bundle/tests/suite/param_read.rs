@@ -5,10 +5,7 @@ use std::fs;
 use tempfile::TempDir;
 
 /// Helper: create a bundle dir with a template and optional `parameter_values`.
-fn make_bundle(
-    template: &serde_json::Value,
-    param_values: Option<&serde_json::Value>,
-) -> TempDir {
+fn make_bundle(template: &serde_json::Value, param_values: Option<&serde_json::Value>) -> TempDir {
     let dir = TempDir::new().unwrap();
     fs::write(
         dir.path().join("template.yaml"),
@@ -251,8 +248,14 @@ fn read_params_multiple_hidden_missing_lists_all() {
     let dir = make_bundle(&template, None);
     let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("Secret1"), "Expected 'Secret1' in error, got: {msg}");
-    assert!(msg.contains("Secret2"), "Expected 'Secret2' in error, got: {msg}");
+    assert!(
+        msg.contains("Secret1"),
+        "Expected 'Secret1' in error, got: {msg}"
+    );
+    assert!(
+        msg.contains("Secret2"),
+        "Expected 'Secret2' in error, got: {msg}"
+    );
 }
 
 // .79: HIDDEN parameter with a default value → no error

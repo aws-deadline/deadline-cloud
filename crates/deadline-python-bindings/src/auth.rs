@@ -6,7 +6,10 @@ use crate::DeadlineOperationError;
 #[pyo3(signature = (config_path=None))]
 // PyO3 requires PyResult return type for #[pyfunction] even when the
 // function is infallible — Python always expects an exception-capable call.
-#[allow(clippy::unnecessary_wraps, reason = "PyO3 requires PyResult return type")]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "PyO3 requires PyResult return type"
+)]
 pub fn get_credentials_source(config_path: Option<&str>) -> PyResult<String> {
     let config = crate::load_config(config_path).ok();
     let source = deadline_api::auth::get_credentials_source(config.as_ref());
@@ -41,7 +44,9 @@ pub fn check_auth_status_with_progress(
     let config = crate::load_config(config_path).ok();
     let notify = |msg: &str| {
         if let Some(ref cb) = on_progress {
-            Python::with_gil(|py| { let _ = cb.call1(py, (msg,)); });
+            Python::with_gil(|py| {
+                let _ = cb.call1(py, (msg,));
+            });
         }
     };
     let rt = crate::make_runtime()?;
@@ -66,7 +71,9 @@ pub fn check_auth_status_with_progress(
 pub fn check_api_available(config_path: Option<&str>) -> PyResult<bool> {
     let config = crate::load_config(config_path).ok();
     let rt = crate::make_runtime()?;
-    let status = rt.block_on(deadline_api::auth::check_authentication_status(config.as_ref()));
+    let status = rt.block_on(deadline_api::auth::check_authentication_status(
+        config.as_ref(),
+    ));
     Ok(status == deadline_api::auth::AwsAuthenticationStatus::Authenticated)
 }
 
@@ -83,6 +90,5 @@ pub fn login(config_path: Option<&str>) -> PyResult<String> {
 #[pyo3(signature = (config_path=None))]
 pub fn logout(config_path: Option<&str>) -> PyResult<String> {
     let config = crate::load_config(config_path).ok();
-    deadline_api::auth::logout(config.as_ref(), None)
-        .map_err(DeadlineOperationError::new_err)
+    deadline_api::auth::logout(config.as_ref(), None).map_err(DeadlineOperationError::new_err)
 }

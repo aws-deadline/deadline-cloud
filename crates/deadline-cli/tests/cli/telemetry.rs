@@ -7,36 +7,65 @@ use serde_json::json;
 #[tokio::test]
 async fn export_credentials_success_sends_telemetry() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user(
         &harness.server, "farm-abc", "queue-aaa",
         json!({"credentials": {"accessKeyId": "AK", "secretAccessKey": "SK", "sessionToken": "ST", "expiration": "2024-12-18T01:00:00Z"}}),
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
-    harness.cli(&["queue", "export-credentials"]).assert().success();
+    harness
+        .cli(&["queue", "export-credentials"])
+        .assert()
+        .success();
     // wiremock verifies expect(1..) on drop
 }
 
 #[tokio::test]
 async fn export_credentials_failure_sends_telemetry() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user_error(
-        &harness.server, "farm-abc", "queue-aaa", 403, "AccessDeniedException",
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        403,
+        "AccessDeniedException",
+    )
+    .await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
-    harness.cli(&["queue", "export-credentials"]).assert().failure();
+    harness
+        .cli(&["queue", "export-credentials"])
+        .assert()
+        .failure();
 }
 
 #[tokio::test]
 async fn export_credentials_telemetry_opted_out_no_post() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user(
         &harness.server, "farm-abc", "queue-aaa",
         json!({"credentials": {"accessKeyId": "AK", "secretAccessKey": "SK", "sessionToken": "ST", "expiration": "2024-12-18T01:00:00Z"}}),

@@ -3,8 +3,8 @@
 //! Test spec reference: `specs/test_specs/cli.md`, Section 48, cases 1-14.
 //! Python test reference: `test/unit/deadline_client/cli/test_cli_handle_web_url.py`
 
-use deadline_test_server::deadline_api::{jobs, queues, s3, sts};
 use deadline_test_server::TestHarness;
+use deadline_test_server::deadline_api::{jobs, queues, s3, sts};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
@@ -52,9 +52,7 @@ fn queue_response() -> serde_json::Value {
 #[tokio::test]
 async fn handle_web_url_wrong_scheme_errors() {
     let harness = TestHarness::new().await;
-    assert_cmd_snapshot!(harness.cmd(&[
-        "handle-web-url", "https://sketchy-website.com"
-    ]));
+    assert_cmd_snapshot!(harness.cmd(&["handle-web-url", "https://sketchy-website.com"]));
 }
 
 // =====================================================================
@@ -64,9 +62,7 @@ async fn handle_web_url_wrong_scheme_errors() {
 #[tokio::test]
 async fn handle_web_url_unsupported_command_errors() {
     let harness = TestHarness::new().await;
-    assert_cmd_snapshot!(harness.cmd(&[
-        "handle-web-url", "deadline://config"
-    ]));
+    assert_cmd_snapshot!(harness.cmd(&["handle-web-url", "deadline://config"]));
 }
 
 // =====================================================================
@@ -103,9 +99,7 @@ async fn handle_web_url_missing_job_id_errors() {
 #[tokio::test]
 async fn handle_web_url_missing_all_params_errors() {
     let harness = TestHarness::new().await;
-    assert_cmd_snapshot!(harness.cmd(&[
-        "handle-web-url", "deadline://download-output"
-    ]));
+    assert_cmd_snapshot!(harness.cmd(&["handle-web-url", "deadline://download-output"]));
 }
 
 // =====================================================================
@@ -115,25 +109,19 @@ async fn handle_web_url_missing_all_params_errors() {
 #[tokio::test]
 async fn handle_web_url_url_with_install_flag_errors() {
     let harness = TestHarness::new().await;
-    assert_cmd_snapshot!(harness.cmd(&[
-        "handle-web-url", "deadline://config", "--install"
-    ]));
+    assert_cmd_snapshot!(harness.cmd(&["handle-web-url", "deadline://config", "--install"]));
 }
 
 #[tokio::test]
 async fn handle_web_url_url_with_uninstall_flag_errors() {
     let harness = TestHarness::new().await;
-    assert_cmd_snapshot!(harness.cmd(&[
-        "handle-web-url", "deadline://config", "--uninstall"
-    ]));
+    assert_cmd_snapshot!(harness.cmd(&["handle-web-url", "deadline://config", "--uninstall"]));
 }
 
 #[tokio::test]
 async fn handle_web_url_url_with_all_users_flag_errors() {
     let harness = TestHarness::new().await;
-    assert_cmd_snapshot!(harness.cmd(&[
-        "handle-web-url", "deadline://config", "--all-users"
-    ]));
+    assert_cmd_snapshot!(harness.cmd(&["handle-web-url", "deadline://config", "--all-users"]));
 }
 
 // =====================================================================
@@ -143,9 +131,7 @@ async fn handle_web_url_url_with_all_users_flag_errors() {
 #[tokio::test]
 async fn handle_web_url_both_install_uninstall_errors() {
     let harness = TestHarness::new().await;
-    assert_cmd_snapshot!(harness.cmd(&[
-        "handle-web-url", "--install", "--uninstall"
-    ]));
+    assert_cmd_snapshot!(harness.cmd(&["handle-web-url", "--install", "--uninstall"]));
 }
 
 // =====================================================================
@@ -171,9 +157,7 @@ async fn handle_web_url_download_output_required_params_succeeds() {
     sts::mock_get_caller_identity(&harness.server).await;
     s3::mock_s3_list_empty(&harness.server).await;
 
-    let url = format!(
-        "deadline://download-output?farm-id={FARM}&queue-id={QUEUE}&job-id={JOB}"
-    );
+    let url = format!("deadline://download-output?farm-id={FARM}&queue-id={QUEUE}&job-id={JOB}");
     assert_cmd_snapshot!(harness.cmd(&["handle-web-url", &url]));
 }
 
@@ -192,13 +176,22 @@ async fn handle_web_url_download_output_with_step_and_task_succeeds() {
 
     // Mock step and task
     jobs::mock_get_step(
-        &harness.server, FARM, QUEUE, JOB,
+        &harness.server,
+        FARM,
+        QUEUE,
+        JOB,
         json!({"stepId": STEP, "name": "Render Step"}),
-    ).await;
+    )
+    .await;
     jobs::mock_get_task(
-        &harness.server, FARM, QUEUE, JOB, STEP,
+        &harness.server,
+        FARM,
+        QUEUE,
+        JOB,
+        STEP,
         json!({"taskId": TASK, "parameters": {"Frame": {"int": "1"}}}),
-    ).await;
+    )
+    .await;
 
     let url = format!(
         "deadline://download-output?farm-id={FARM}&queue-id={QUEUE}&job-id={JOB}&step-id={STEP}&task-id={TASK}"

@@ -3,7 +3,7 @@
 use deadline_job_attachments::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
 };
-use deadline_job_attachments::diff::{fast_diff, hash_diff, FileStatus};
+use deadline_job_attachments::diff::{FileStatus, fast_diff, hash_diff};
 use std::fs;
 use tempfile::TempDir;
 
@@ -18,8 +18,13 @@ fn make_manifest(entries: &[(&str, &str, u64, i64)]) -> AssetManifest {
         })
         .collect();
     let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    AssetManifest::new(HashAlgorithm::Xxh128, ManifestVersion::V2023_03_03, total_size, paths)
-        .unwrap()
+    AssetManifest::new(
+        HashAlgorithm::Xxh128,
+        ManifestVersion::V2023_03_03,
+        total_size,
+        paths,
+    )
+    .unwrap()
 }
 
 fn create_file(dir: &TempDir, name: &str, content: &[u8]) -> String {
@@ -53,7 +58,11 @@ fn fast_diff_deleted_file_detected() {
     // Manifest has a file, disk doesn't
     let manifest = make_manifest(&[("gone.txt", "aa".repeat(16).as_str(), 10, 1_000_000)]);
     let result = fast_diff(dir.path().to_str().unwrap(), &[], &manifest);
-    assert!(result.iter().any(|(p, s)| p == "gone.txt" && *s == FileStatus::Deleted));
+    assert!(
+        result
+            .iter()
+            .any(|(p, s)| p == "gone.txt" && *s == FileStatus::Deleted)
+    );
 }
 
 #[test]
@@ -116,7 +125,11 @@ fn hash_diff_new_file_detected() {
         ("b.txt", "bb".repeat(16).as_str(), 20, 2000),
     ]);
     let result = hash_diff(&reference, &compare);
-    assert!(result.iter().any(|(s, p)| *s == FileStatus::New && p.path == "b.txt"));
+    assert!(
+        result
+            .iter()
+            .any(|(s, p)| *s == FileStatus::New && p.path == "b.txt")
+    );
 }
 
 #[test]
@@ -127,7 +140,11 @@ fn hash_diff_deleted_file_detected() {
     ]);
     let compare = make_manifest(&[("a.txt", "aa".repeat(16).as_str(), 10, 1000)]);
     let result = hash_diff(&reference, &compare);
-    assert!(result.iter().any(|(s, p)| *s == FileStatus::Deleted && p.path == "b.txt"));
+    assert!(
+        result
+            .iter()
+            .any(|(s, p)| *s == FileStatus::Deleted && p.path == "b.txt")
+    );
 }
 
 #[test]
@@ -135,7 +152,11 @@ fn hash_diff_modified_file_detected() {
     let reference = make_manifest(&[("a.txt", "aa".repeat(16).as_str(), 10, 1000)]);
     let compare = make_manifest(&[("a.txt", "cc".repeat(16).as_str(), 10, 1000)]);
     let result = hash_diff(&reference, &compare);
-    assert!(result.iter().any(|(s, p)| *s == FileStatus::Modified && p.path == "a.txt"));
+    assert!(
+        result
+            .iter()
+            .any(|(s, p)| *s == FileStatus::Modified && p.path == "a.txt")
+    );
 }
 
 #[test]

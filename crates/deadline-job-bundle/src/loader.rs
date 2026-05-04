@@ -21,27 +21,27 @@ pub fn validate_directory_symlink_containment(job_bundle_dir: &str) -> Result<()
 }
 
 fn walk_and_check(resolved_root: &Path, dir: &Path) -> Result<(), DeadlineError> {
-    let entries = fs::read_dir(dir).map_err(|e| {
-        op_err(format!("Failed to read directory {}: {e}", dir.display()))
-    })?;
+    let entries = fs::read_dir(dir)
+        .map_err(|e| op_err(format!("Failed to read directory {}: {e}", dir.display())))?;
     for entry in entries {
-        let entry = entry.map_err(|e| {
-            op_err(format!("Failed to read directory entry: {e}"))
-        })?;
+        let entry = entry.map_err(|e| op_err(format!("Failed to read directory entry: {e}")))?;
         let path = entry.path();
-        let resolved = fs::canonicalize(&path).map_err(|e| {
-            op_err(format!(
-                "Failed to resolve path {}: {e}",
-                path.display()
-            ))
-        })?;
+        let resolved = fs::canonicalize(&path)
+            .map_err(|e| op_err(format!("Failed to resolve path {}: {e}", path.display())))?;
         if !resolved.starts_with(resolved_root) {
             return Err(op_err(format!(
                 "Job bundle cannot contain a path that resolves outside of the resolved bundle directory:\n{}\n\nPath in bundle:\n{}\nResolves to:\n{}",
-                resolved_root.display(), path.display(), resolved.display()
+                resolved_root.display(),
+                path.display(),
+                resolved.display()
             )));
         }
-        if path.is_dir() && !path.symlink_metadata().map(|m| m.is_symlink()).unwrap_or(false) {
+        if path.is_dir()
+            && !path
+                .symlink_metadata()
+                .map(|m| m.is_symlink())
+                .unwrap_or(false)
+        {
             walk_and_check(resolved_root, &path)?;
         }
     }
@@ -63,8 +63,16 @@ pub fn read_yaml_or_json(
         (true, true) => Err(op_err(format!(
             "Job bundle directory has both {filename}.json and {filename}.yaml, only one is permitted:\n{job_bundle_dir}"
         ))),
-        (true, false) => Ok((fs::read_to_string(&json_path).map_err(|e| op_err(format!("Failed to read {json_path}: {e}")))?, "JSON".into())),
-        (false, true) => Ok((fs::read_to_string(&yaml_path).map_err(|e| op_err(format!("Failed to read {yaml_path}: {e}")))?, "YAML".into())),
+        (true, false) => Ok((
+            fs::read_to_string(&json_path)
+                .map_err(|e| op_err(format!("Failed to read {json_path}: {e}")))?,
+            "JSON".into(),
+        )),
+        (false, true) => Ok((
+            fs::read_to_string(&yaml_path)
+                .map_err(|e| op_err(format!("Failed to read {yaml_path}: {e}")))?,
+            "YAML".into(),
+        )),
         (false, false) if required => Err(op_err(format!(
             "Job bundle directory lacks a {filename}.json or {filename}.yaml:\n{job_bundle_dir}"
         ))),
@@ -110,11 +118,16 @@ pub fn save_yaml_or_json_to_file(
 ) -> Result<(), DeadlineError> {
     let (ext, contents) = match file_type {
         "YAML" => ("yaml", deadline_yaml_dump(data)),
-        "JSON" => ("json", serde_json::to_string_pretty(data)
-            .map_err(|e| op_err(format!("Failed to serialize JSON: {e}")))?),
-        _ => return Err(op_err(format!(
-            "Unexpected file type '{file_type}' in job bundle:\n{bundle_dir}"
-        ))),
+        "JSON" => (
+            "json",
+            serde_json::to_string_pretty(data)
+                .map_err(|e| op_err(format!("Failed to serialize JSON: {e}")))?,
+        ),
+        _ => {
+            return Err(op_err(format!(
+                "Unexpected file type '{file_type}' in job bundle:\n{bundle_dir}"
+            )));
+        }
     };
     let path = Path::new(bundle_dir).join(format!("{filename}.{ext}"));
     fs::write(&path, &contents)
@@ -124,4 +137,3 @@ pub fn save_yaml_or_json_to_file(
 pub fn deadline_yaml_dump(data: &serde_json::Value) -> String {
     serde_yaml::to_string(data).unwrap_or_default()
 }
-

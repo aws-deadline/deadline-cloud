@@ -10,8 +10,14 @@ use serde_json::json;
 #[tokio::test]
 async fn queue_export_credentials_user_mode_prints_credentials_json() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     // Use fractional seconds to verify RFC 3339 T separator is preserved
     queue_resources::mock_assume_queue_role_for_user(
         &harness.server,
@@ -34,8 +40,14 @@ async fn queue_export_credentials_user_mode_prints_credentials_json() {
 #[tokio::test]
 async fn queue_export_credentials_read_mode_prints_credentials_json() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_read(
         &harness.server,
         "farm-abc",
@@ -57,8 +69,14 @@ async fn queue_export_credentials_read_mode_prints_credentials_json() {
 #[tokio::test]
 async fn queue_export_credentials_access_denied_prints_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user_error(
         &harness.server,
         "farm-abc",
@@ -78,8 +96,14 @@ async fn queue_export_credentials_access_denied_prints_error() {
 #[tokio::test]
 async fn queue_export_credentials_auth_error_prints_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user_error(
         &harness.server,
         "farm-abc",
@@ -95,8 +119,14 @@ async fn queue_export_credentials_auth_error_prints_error() {
 #[tokio::test]
 async fn queue_export_credentials_throttling_prints_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user_error(
         &harness.server,
         "farm-abc",
@@ -112,8 +142,14 @@ async fn queue_export_credentials_throttling_prints_error() {
 #[tokio::test]
 async fn queue_export_credentials_internal_error_prints_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user_error(
         &harness.server,
         "farm-abc",
@@ -132,8 +168,14 @@ async fn queue_export_credentials_internal_error_prints_error() {
 #[tokio::test]
 async fn queue_export_credentials_empty_credentials_exits_with_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user(
         &harness.server,
         "farm-abc",
@@ -150,8 +192,14 @@ async fn queue_export_credentials_empty_credentials_exits_with_error() {
 #[tokio::test]
 async fn queue_export_credentials_missing_credentials_key_exits_with_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user(
         &harness.server,
         "farm-abc",
@@ -171,8 +219,14 @@ async fn queue_export_credentials_missing_credentials_key_exits_with_error() {
 #[tokio::test]
 async fn export_credentials_output_format_flag() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
     queue_resources::mock_assume_queue_role_for_user(
         &harness.server,
         "farm-abc",
@@ -185,10 +239,17 @@ async fn export_credentials_output_format_flag() {
                 "expiration": "2024-12-18T01:30:45Z"
             }
         }),
-    ).await;
+    )
+    .await;
 
     // The --output-format flag should be accepted without error
-    harness.cli(&["queue", "export-credentials", "--output-format", "credentials_process"])
+    harness
+        .cli(&[
+            "queue",
+            "export-credentials",
+            "--output-format",
+            "credentials_process",
+        ])
         .assert()
         .success();
 }

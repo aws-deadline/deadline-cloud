@@ -20,8 +20,7 @@ async fn log_level_debug_flag_enables_debug_output() {
 // No --log-level flag; config has settings.log_level=WARNING → defaults from config
 #[tokio::test]
 async fn log_level_defaults_to_config_value() {
-    let harness =
-        TestHarness::with_config("[defaults]\n\n[settings]\nlog_level = WARNING\n").await;
+    let harness = TestHarness::with_config("[defaults]\n\n[settings]\nlog_level = WARNING\n").await;
     let _guard = config_show_settings().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&["config", "show"]));
 }
@@ -29,8 +28,7 @@ async fn log_level_defaults_to_config_value() {
 // Config has invalid log level → falls back to WARNING with a warning message
 #[tokio::test]
 async fn log_level_invalid_config_value_falls_back_to_warning() {
-    let harness =
-        TestHarness::with_config("[defaults]\n\n[settings]\nlog_level = TRACE\n").await;
+    let harness = TestHarness::with_config("[defaults]\n\n[settings]\nlog_level = TRACE\n").await;
     let _guard = config_show_settings().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&["config", "show"]));
 }

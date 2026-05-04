@@ -1,6 +1,6 @@
 use clap::Subcommand;
 use deadline_config::config_file;
-use deadline_job_bundle::{create_job_from_job_bundle, SubmitJobParams};
+use deadline_job_bundle::{SubmitJobParams, create_job_from_job_bundle};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -152,6 +152,7 @@ pub(crate) fn run(action: BundleAction) -> Result<(), CliError> {
         .block_on(run_async(action))
 }
 
+#[allow(clippy::too_many_lines, reason = "bundle submit orchestrates validation, attachment upload, and job creation")]
 async fn run_async(action: BundleAction) -> Result<(), CliError> {
     match action {
         BundleAction::Submit {
@@ -179,8 +180,8 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             let job_parameters = parse_parameters(&parameter)?;
 
             // Apply CLI options to config
-            let mut config = config_file::read_config()
-                .map_err(|e| CliError::Operation(e.to_string()))?;
+            let mut config =
+                config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
             crate::common::apply_cli_options_to_config(
                 &mut config,
                 &crate::common::CliOptions {
@@ -209,21 +210,29 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 None
             };
 
-            let hash_progress = std::sync::Mutex::new(
-                crate::common::ProgressBarManager::new(100, "Hashing Attachments"),
-            );
-            let upload_progress = std::sync::Mutex::new(
-                crate::common::ProgressBarManager::new(100, "Uploading Attachments"),
-            );
+            let hash_progress = std::sync::Mutex::new(crate::common::ProgressBarManager::new(
+                100,
+                "Hashing Attachments",
+            ));
+            let upload_progress = std::sync::Mutex::new(crate::common::ProgressBarManager::new(
+                100,
+                "Uploading Attachments",
+            ));
 
             let telemetry = deadline_api::telemetry::create_telemetry(Some(&config));
 
             // F8: If snapshot path ends in .zip, use a temp dir then zip after
-            let snapshot_tmpdir: Option<std::path::PathBuf> = if save_debug_snapshot.as_ref().is_some_and(|p| {
-                std::path::Path::new(p.as_str()).extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
-            }) {
-                let tmp = std::env::temp_dir().join(format!("deadline-snapshot-{}", std::process::id()));
-                std::fs::create_dir_all(&tmp).map_err(|e| CliError::Operation(format!("Failed to create temp dir: {e}")))?;
+            let snapshot_tmpdir: Option<std::path::PathBuf> = if save_debug_snapshot
+                .as_ref()
+                .is_some_and(|p| {
+                    std::path::Path::new(p.as_str())
+                        .extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+                }) {
+                let tmp =
+                    std::env::temp_dir().join(format!("deadline-snapshot-{}", std::process::id()));
+                std::fs::create_dir_all(&tmp)
+                    .map_err(|e| CliError::Operation(format!("Failed to create temp dir: {e}")))?;
                 Some(tmp)
             } else {
                 None
@@ -257,19 +266,27 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 require_paths_exist,
                 submitter_name: Some(submitter_name.unwrap_or_else(|| "CLI".into())),
                 known_asset_paths: known_asset_path,
-                auto_accept: yes || config_file::str2bool(
-                    &config_file::get_setting("settings.auto_accept", &config)
-                        .unwrap_or_default(),
-                ).unwrap_or(false),
+                auto_accept: yes
+                    || config_file::str2bool(
+                        &config_file::get_setting("settings.auto_accept", &config)
+                            .unwrap_or_default(),
+                    )
+                    .unwrap_or(false),
                 force_s3_check: resolved_force_s3_check,
                 debug_snapshot_dir: effective_snapshot_dir,
                 config: Some(&config),
                 print_callback: Box::new(|msg| println!("{msg}")),
                 hashing_progress_callback: Some(Box::new(move |meta| {
-                    hash_progress.lock().expect("lock poisoned").callback(meta.progress as u64)
+                    hash_progress
+                        .lock()
+                        .expect("lock poisoned")
+                        .callback(meta.progress as u64)
                 })),
                 upload_progress_callback: Some(Box::new(move |meta| {
-                    upload_progress.lock().expect("lock poisoned").callback(meta.progress as u64)
+                    upload_progress
+                        .lock()
+                        .expect("lock poisoned")
+                        .callback(meta.progress as u64)
                 })),
                 continue_callback: Some(Box::new(crate::common::should_continue)),
                 interactive_confirmation_callback: Some(Box::new(|msg, _default| {
@@ -285,12 +302,25 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     // F6: Emit error telemetry before flushing
                     let mut details = std::collections::HashMap::new();
                     details.insert("exception_scope".into(), serde_json::json!("on_submit"));
-                    details.insert("exception_type".into(), serde_json::json!("DeadlineOperationError"));
+                    details.insert(
+                        "exception_type".into(),
+                        serde_json::json!("DeadlineOperationError"),
+                    );
                     telemetry.record_event("com.amazon.rum.deadline.error", details, false);
                     drop(telemetry); // Flush telemetry before exit
-                    let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-                    let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
-                    let suggestion = suggest_resources_on_client_error(&e.to_string(), "CreateJob", Some(&farm), Some(&queue), None, Some(&config)).await;
+                    let farm =
+                        config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+                    let queue =
+                        config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
+                    let suggestion = suggest_resources_on_client_error(
+                        &e.to_string(),
+                        "CreateJob",
+                        Some(&farm),
+                        Some(&queue),
+                        None,
+                        Some(&config),
+                    )
+                    .await;
                     return Err(CliError::Operation(format!("{e}{suggestion}")));
                 }
             };
@@ -317,9 +347,10 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 && farm_id.is_none()
                 && queue_id.is_none()
                 && storage_profile_id.is_none()
-                && let Some(ref id) = job_id {
-                    let _ = config_file::set_setting_to_disk("defaults.job_id", id);
-                }
+                && let Some(ref id) = job_id
+            {
+                let _ = config_file::set_setting_to_disk("defaults.job_id", id);
+            }
 
             Ok(())
         }
@@ -336,9 +367,14 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
         } => {
             // Validate --submitter-info
             let submitter_info_json = if !submitter_info.is_empty() {
-                Some(validate_submitter_info(&submitter_info, submitter_name.as_deref())?)
+                Some(validate_submitter_info(
+                    &submitter_info,
+                    submitter_name.as_deref(),
+                )?)
             } else if let Some(ref name) = submitter_name {
-                eprintln!("DeprecationWarning: The option --submitter-name is deprecated. Use --submitter-info instead.");
+                eprintln!(
+                    "DeprecationWarning: The option --submitter-name is deprecated. Use --submitter-info instead."
+                );
                 Some(serde_json::json!({"submitter_name": name}))
             } else {
                 None
@@ -359,12 +395,8 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             });
 
             let python = super::gui::find_python()?;
-            let stdout = super::gui::launch_gui(
-                &python,
-                "gui-submit",
-                &params.to_string(),
-                install_gui,
-            )?;
+            let stdout =
+                super::gui::launch_gui(&python, "gui-submit", &params.to_string(), install_gui)?;
 
             if !stdout.trim().is_empty() {
                 print!("{stdout}");
@@ -397,7 +429,9 @@ fn validate_submitter_info(
                 CliError::Operation(format!("Invalid JSON in --submitter-info '{val}': {e}"))
             })?;
             let map = obj.as_object().ok_or_else(|| {
-                CliError::Operation(format!("--submitter-info JSON must be an object, got: {val}"))
+                CliError::Operation(format!(
+                    "--submitter-info JSON must be an object, got: {val}"
+                ))
             })?;
             for (k, v) in map {
                 merged.insert(k.clone(), v.clone());
@@ -406,15 +440,17 @@ fn validate_submitter_info(
             let content = std::fs::read_to_string(path).map_err(|e| {
                 CliError::Operation(format!("Cannot read --submitter-info file '{path}': {e}"))
             })?;
-            let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str());
-            let obj: serde_json::Value = if ext.is_some_and(|e| e.eq_ignore_ascii_case("yaml") || e.eq_ignore_ascii_case("yml")) {
-                serde_yaml::from_str(&content).map_err(|e| {
-                    CliError::Operation(format!("Invalid YAML in '{path}': {e}"))
-                })?
+            let ext = std::path::Path::new(path)
+                .extension()
+                .and_then(|e| e.to_str());
+            let obj: serde_json::Value = if ext
+                .is_some_and(|e| e.eq_ignore_ascii_case("yaml") || e.eq_ignore_ascii_case("yml"))
+            {
+                serde_yaml::from_str(&content)
+                    .map_err(|e| CliError::Operation(format!("Invalid YAML in '{path}': {e}")))?
             } else {
-                serde_json::from_str(&content).map_err(|e| {
-                    CliError::Operation(format!("Invalid JSON in '{path}': {e}"))
-                })?
+                serde_json::from_str(&content)
+                    .map_err(|e| CliError::Operation(format!("Invalid JSON in '{path}': {e}")))?
             };
             let map = obj.as_object().ok_or_else(|| {
                 CliError::Operation(format!("File '{path}' must contain a JSON object"))
@@ -434,8 +470,13 @@ fn validate_submitter_info(
 
     // Apply deprecated --submitter-name (takes precedence)
     if let Some(name) = deprecated_name {
-        eprintln!("DeprecationWarning: The option --submitter-name is deprecated. Use --submitter-info instead.");
-        merged.insert("submitter_name".to_owned(), serde_json::Value::String(name.to_owned()));
+        eprintln!(
+            "DeprecationWarning: The option --submitter-name is deprecated. Use --submitter-info instead."
+        );
+        merged.insert(
+            "submitter_name".to_owned(),
+            serde_json::Value::String(name.to_owned()),
+        );
     }
 
     // Validate field names

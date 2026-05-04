@@ -9,11 +9,13 @@ use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::errors::JobAttachmentsError;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
-use crate::errors::JobAttachmentsError;
 
-use crate::asset_manifests::{decode_manifest, AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion};
+use crate::asset_manifests::{
+    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, decode_manifest,
+};
 use crate::models::{FileConflictResolution, JobAttachmentS3Settings};
 use crate::progress_tracker::{
     DownloadSummaryStatistics, ProgressReportMetadata, ProgressStatus, ProgressTracker,
@@ -35,9 +37,9 @@ fn ensure_paths_within_directory(
 ) -> Result<(), JobAttachmentsError> {
     let root = Path::new(root_path);
     if !root.is_absolute() {
-        return Err(JobAttachmentsError::PathOutsideDirectory(
-            format!("The provided root path is not an absolute path: {root_path}"),
-        ));
+        return Err(JobAttachmentsError::PathOutsideDirectory(format!(
+            "The provided root path is not an absolute path: {root_path}"
+        )));
     }
     let normalized_root = normalize_path(root);
 
@@ -45,9 +47,10 @@ fn ensure_paths_within_directory(
         let joined = root.join(&p.path);
         let normalized = normalize_path(&joined);
         if !normalized.starts_with(&normalized_root) {
-            return Err(JobAttachmentsError::PathOutsideDirectory(
-                format!("The provided path is not under the root directory: {}", p.path),
-            ));
+            return Err(JobAttachmentsError::PathOutsideDirectory(format!(
+                "The provided path is not under the root directory: {}",
+                p.path
+            )));
         }
     }
     Ok(())
@@ -58,7 +61,9 @@ fn normalize_path(path: &Path) -> PathBuf {
     let mut components = Vec::new();
     for component in path.components() {
         match component {
-            std::path::Component::ParentDir => { components.pop(); }
+            std::path::Component::ParentDir => {
+                components.pop();
+            }
             std::path::Component::CurDir => {}
             other => components.push(other),
         }
@@ -172,27 +177,29 @@ async fn s3_stream_to_file(
         Ok(output) => {
             let mut file = tokio::fs::File::create(local_path).await.map_err(|e| {
                 JobAttachmentsError::AssetSync(format!(
-                    "Failed to create {}: {e}", local_path.display()
+                    "Failed to create {}: {e}",
+                    local_path.display()
                 ))
             })?;
             let mut body = output.body.into_async_read();
             tokio::io::copy(&mut body, &mut file).await.map_err(|e| {
                 JobAttachmentsError::AssetSync(format!(
-                    "Failed to write {}: {e}", local_path.display()
+                    "Failed to write {}: {e}",
+                    local_path.display()
                 ))
             })?;
             Ok(())
         }
         Err(sdk_err) => {
             use aws_sdk_s3::error::ProvideErrorMetadata;
-            let status = sdk_err
-                .raw_response()
-                .map_or(0, |r| r.status().as_u16());
+            let status = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
             let msg = service_err.message().unwrap_or_default();
             let full_text = format!("{raw} {msg}");
-            Err(s3_download_error(status, &full_text, s3_bucket, s3_key, local_path))
+            Err(s3_download_error(
+                status, &full_text, s3_bucket, s3_key, local_path,
+            ))
         }
     }
 }
@@ -203,10 +210,7 @@ async fn s3_stream_to_file(
 
 /// Generate a unique file path by appending " (N)" before the extension.
 /// Uses atomic file creation to handle concurrent downloads.
-fn get_new_copy_file_path(
-    local_file_path: &Path,
-    collision_state: &CollisionState,
-) -> PathBuf {
+fn get_new_copy_file_path(local_file_path: &Path, collision_state: &CollisionState) -> PathBuf {
     let mut state = collision_state.lock().expect("collision mutex poisoned");
     let key = local_file_path.to_string_lossy().to_string();
     let num = state.entry(key).or_insert(0);
@@ -225,7 +229,11 @@ fn get_new_copy_file_path(
         *num += 1;
         let candidate = parent.join(format!("{stem} ({num}){ext}"));
         // Atomic check: try to exclusively create the file
-        match OpenOptions::new().write(true).create_new(true).open(&candidate) {
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
             Ok(_) | Err(_) => return candidate, // best effort on other errors
         }
@@ -377,21 +385,25 @@ pub async fn download_file(
     }
 
     // Download from S3 — stream directly to file, retry on 404 without suffix
-    let stream_result = s3_stream_to_file(
-        s3_client, s3_bucket, &s3_key, account_id, &local_file_path,
-    )
-    .await;
+    let stream_result =
+        s3_stream_to_file(s3_client, s3_bucket, &s3_key, account_id, &local_file_path).await;
 
     match stream_result {
         Ok(()) => {}
-        Err(JobAttachmentsError::S3Client { status_code: 404, .. }) => {
+        Err(JobAttachmentsError::S3Client {
+            status_code: 404, ..
+        }) => {
             // Retry without algorithm suffix (backward compatibility)
             let fallback_key = match cas_prefix {
                 Some(prefix) => format!("{}/{}", prefix, file.hash),
                 None => file.hash.clone(),
             };
             s3_stream_to_file(
-                s3_client, s3_bucket, &fallback_key, account_id, &local_file_path,
+                s3_client,
+                s3_bucket,
+                &fallback_key,
+                account_id,
+                &local_file_path,
             )
             .await?;
         }
@@ -463,8 +475,8 @@ pub async fn download_files_from_manifests(
     );
 
     for (local_root, manifest) in manifests_by_root {
-        let results: Vec<(u64, Option<PathBuf>)> = stream::iter(
-            manifest.paths.iter().map(|file| {
+        let results: Vec<(u64, Option<PathBuf>)> =
+            stream::iter(manifest.paths.iter().map(|file| {
                 let collision = &collision_state;
                 let tracker = &progress_tracker;
                 async move {
@@ -496,11 +508,10 @@ pub async fn download_files_from_manifests(
 
                     Ok(result)
                 }
-            })
-        )
-        .buffer_unordered(num_workers)
-        .try_collect()
-        .await?;
+            }))
+            .buffer_unordered(num_workers)
+            .try_collect()
+            .await?;
 
         let mut downloaded = Vec::new();
         for (_file_bytes, local_path) in results {
@@ -569,20 +580,28 @@ pub async fn get_output_manifests_by_asset_root(
             ));
         }
         return get_manifests_by_session_action_id(
-            s3_settings, farm_id, queue_id, job_id,
-            step_id.expect("checked above"), task_id.expect("checked above"), sa_id,
-            s3_client, account_id,
+            s3_settings,
+            farm_id,
+            queue_id,
+            job_id,
+            step_id.expect("checked above"),
+            task_id.expect("checked above"),
+            sa_id,
+            s3_client,
+            account_id,
         )
         .await;
     }
 
-    let manifest_prefix = get_output_manifest_prefix(
-        s3_settings, farm_id, queue_id, job_id, step_id, task_id,
-    )?;
+    let manifest_prefix =
+        get_output_manifest_prefix(s3_settings, farm_id, queue_id, job_id, step_id, task_id)?;
 
     // List S3 objects under the prefix
     let Ok(manifest_keys) = list_manifest_keys_from_s3(
-        s3_client, &s3_settings.s3_bucket_name, &manifest_prefix, account_id,
+        s3_client,
+        &s3_settings.s3_bucket_name,
+        &manifest_prefix,
+        account_id,
     )
     .await
     else {
@@ -600,13 +619,9 @@ pub async fn get_output_manifests_by_asset_root(
     let mut by_root: HashMap<String, Vec<(DateTime<Utc>, AssetManifest)>> = HashMap::new();
 
     for key in &selected_keys {
-        let (asset_root, last_modified, manifest) = download_manifest_from_s3(
-            s3_client,
-            &s3_settings.s3_bucket_name,
-            key,
-            account_id,
-        )
-        .await?;
+        let (asset_root, last_modified, manifest) =
+            download_manifest_from_s3(s3_client, &s3_settings.s3_bucket_name, key, account_id)
+                .await?;
 
         let root = asset_root.ok_or_else(|| {
             JobAttachmentsError::MissingAssetRoot(format!(
@@ -614,7 +629,10 @@ pub async fn get_output_manifests_by_asset_root(
             ))
         })?;
 
-        by_root.entry(root).or_default().push((last_modified, manifest));
+        by_root
+            .entry(root)
+            .or_default()
+            .push((last_modified, manifest));
     }
 
     // Sort each asset root's manifests by LastModified (oldest first, newer wins)
@@ -667,9 +685,7 @@ async fn list_manifest_keys_from_s3(
         }
 
         let resp = req.send().await.map_err(|sdk_err| {
-            let status = sdk_err
-                .raw_response()
-                .map_or(0, |r| r.status().as_u16());
+            let status = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
             match status {
@@ -789,9 +805,7 @@ pub async fn download_manifest_from_s3(
         .send()
         .await
         .map_err(|sdk_err| {
-            let status = sdk_err
-                .raw_response()
-                .map_or(0, |r| r.status().as_u16());
+            let status = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
             JobAttachmentsError::S3Client {
@@ -827,9 +841,8 @@ pub async fn download_manifest_from_s3(
         .await
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to read manifest body: {e}")))?
         .into_bytes();
-    let contents = String::from_utf8(body_bytes.to_vec()).map_err(|e| {
-        JobAttachmentsError::AssetSync(format!("Manifest is not valid UTF-8: {e}"))
-    })?;
+    let contents = String::from_utf8(body_bytes.to_vec())
+        .map_err(|e| JobAttachmentsError::AssetSync(format!("Manifest is not valid UTF-8: {e}")))?;
     let manifest = decode_manifest(&contents)?;
 
     Ok((asset_root, last_modified, manifest))
@@ -851,16 +864,27 @@ async fn get_manifests_by_session_action_id(
 
     // Try task-specific prefix first
     let task_prefix = get_output_manifest_prefix(
-        s3_settings, farm_id, queue_id, job_id, Some(step_id), Some(task_id),
+        s3_settings,
+        farm_id,
+        queue_id,
+        job_id,
+        Some(step_id),
+        Some(task_id),
     )?;
 
-    let sa_pattern = regex::Regex::new(&format!(r".*{}.*output.*", regex::escape(session_action_id)))
-        .unwrap_or_else(|_| regex::Regex::new(r"$^").expect("valid regex"));
+    let sa_pattern = regex::Regex::new(&format!(
+        r".*{}.*output.*",
+        regex::escape(session_action_id)
+    ))
+    .unwrap_or_else(|_| regex::Regex::new(r"$^").expect("valid regex"));
 
     let mut manifest_keys: Vec<String> = Vec::new();
 
     if let Ok(all_keys) = list_manifest_keys_from_s3(
-        s3_client, &s3_settings.s3_bucket_name, &task_prefix, account_id,
+        s3_client,
+        &s3_settings.s3_bucket_name,
+        &task_prefix,
+        account_id,
     )
     .await
     {
@@ -873,10 +897,18 @@ async fn get_manifests_by_session_action_id(
     // Fall back to step level if no task-level manifests found
     if manifest_keys.is_empty() {
         let step_prefix = get_output_manifest_prefix(
-            s3_settings, farm_id, queue_id, job_id, Some(step_id), None,
+            s3_settings,
+            farm_id,
+            queue_id,
+            job_id,
+            Some(step_id),
+            None,
         )?;
         if let Ok(all_keys) = list_manifest_keys_from_s3(
-            s3_client, &s3_settings.s3_bucket_name, &step_prefix, account_id,
+            s3_client,
+            &s3_settings.s3_bucket_name,
+            &step_prefix,
+            account_id,
         )
         .await
         {
@@ -889,13 +921,9 @@ async fn get_manifests_by_session_action_id(
 
     // Download all found manifests
     for key in &manifest_keys {
-        let (asset_root, _last_modified, manifest) = download_manifest_from_s3(
-            s3_client,
-            &s3_settings.s3_bucket_name,
-            key,
-            account_id,
-        )
-        .await?;
+        let (asset_root, _last_modified, manifest) =
+            download_manifest_from_s3(s3_client, &s3_settings.s3_bucket_name, key, account_id)
+                .await?;
 
         let root = asset_root.ok_or_else(|| {
             JobAttachmentsError::MissingAssetRoot(format!(
@@ -937,11 +965,23 @@ impl OutputDownloader {
         account_id: String,
     ) -> Result<Self, JobAttachmentsError> {
         let outputs_by_root = get_output_manifests_by_asset_root(
-            &s3_settings, farm_id, queue_id, job_id,
-            step_id, task_id, session_action_id,
-            &s3_client, &account_id,
-        ).await?;
-        Ok(Self { s3_settings, outputs_by_root, s3_client, account_id })
+            &s3_settings,
+            farm_id,
+            queue_id,
+            job_id,
+            step_id,
+            task_id,
+            session_action_id,
+            &s3_client,
+            &account_id,
+        )
+        .await?;
+        Ok(Self {
+            s3_settings,
+            outputs_by_root,
+            s3_client,
+            account_id,
+        })
     }
 
     /// Get output file paths grouped by asset root.
@@ -995,7 +1035,8 @@ impl OutputDownloader {
             &self.account_id,
             on_downloading_files,
             file_conflict_resolution,
-        ).await
+        )
+        .await
     }
 }
 

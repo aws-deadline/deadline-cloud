@@ -32,7 +32,8 @@ fn validate_param_not_a_dict_returns_error() {
 
 #[test]
 fn validate_param_missing_name_returns_error() {
-    let err = validate_job_parameter(&serde_json::json!({"type": "STRING"}), false, false).unwrap_err();
+    let err =
+        validate_job_parameter(&serde_json::json!({"type": "STRING"}), false, false).unwrap_err();
     assert!(err.to_string().contains("name"), "got: {err}");
 }
 
@@ -52,7 +53,12 @@ fn validate_param_empty_name_returns_error() {
 
 #[test]
 fn validate_param_unknown_type_returns_error() {
-    let err = validate_job_parameter(&serde_json::json!({"name": "P", "type": "UNKNOWN"}), false, false).unwrap_err();
+    let err = validate_job_parameter(
+        &serde_json::json!({"name": "P", "type": "UNKNOWN"}),
+        false,
+        false,
+    )
+    .unwrap_err();
     assert!(
         err.to_string().contains("STRING") || err.to_string().contains("expected one of"),
         "got: {err}"
@@ -277,39 +283,29 @@ fn validate_ui_spec_decimals_not_int_returns_error() {
 
 #[test]
 fn validate_ui_spec_decimals_negative_returns_error() {
-    let err =
-        validate_user_interface_spec(&serde_json::json!({"decimals": -1}), "P").unwrap_err();
+    let err = validate_user_interface_spec(&serde_json::json!({"decimals": -1}), "P").unwrap_err();
     assert!(err.to_string().contains("non-negative"), "got: {err}");
 }
 
 #[test]
 fn validate_ui_spec_single_step_delta_string_returns_error() {
-    let err = validate_user_interface_spec(
-        &serde_json::json!({"singleStepDelta": "fast"}),
-        "P",
-    )
-    .unwrap_err();
+    let err = validate_user_interface_spec(&serde_json::json!({"singleStepDelta": "fast"}), "P")
+        .unwrap_err();
     assert!(err.to_string().contains("singleStepDelta"), "got: {err}");
 }
 
 #[test_case(0   ; "zero")]
 #[test_case(-1  ; "negative")]
 fn validate_ui_spec_single_step_delta_non_positive_returns_error(val: i64) {
-    let err = validate_user_interface_spec(
-        &serde_json::json!({"singleStepDelta": val}),
-        "P",
-    )
-    .unwrap_err();
+    let err = validate_user_interface_spec(&serde_json::json!({"singleStepDelta": val}), "P")
+        .unwrap_err();
     assert!(err.to_string().contains("positive"), "got: {err}");
 }
 
 #[test]
 fn validate_ui_spec_file_filters_not_list_returns_error() {
-    let err = validate_user_interface_spec(
-        &serde_json::json!({"fileFilters": "not a list"}),
-        "P",
-    )
-    .unwrap_err();
+    let err = validate_user_interface_spec(&serde_json::json!({"fileFilters": "not a list"}), "P")
+        .unwrap_err();
     assert!(err.to_string().contains("fileFilters"), "got: {err}");
 }
 
@@ -336,8 +332,8 @@ fn validate_file_filter_valid() {
 
 #[test]
 fn validate_file_filter_not_dict_returns_error() {
-    let err =
-        validate_user_interface_file_filter(&serde_json::json!("string"), "P", "ff[0]").unwrap_err();
+    let err = validate_user_interface_file_filter(&serde_json::json!("string"), "P", "ff[0]")
+        .unwrap_err();
     assert!(
         err.to_string().contains("dict") || err.to_string().contains("object"),
         "got: {err}"

@@ -23,7 +23,11 @@ pub struct JobCompletionResult {
 }
 
 const TERMINAL_STATES: &[&str] = &[
-    "SUCCEEDED", "FAILED", "CANCELED", "SUSPENDED", "NOT_COMPATIBLE",
+    "SUCCEEDED",
+    "FAILED",
+    "CANCELED",
+    "SUSPENDED",
+    "NOT_COMPATIBLE",
 ];
 
 fn extract_session_id(session_action_id: &str) -> Option<String> {
@@ -45,15 +49,22 @@ async fn collect_failed_tasks(
     let client = crate::session::deadline_client(config).await;
 
     let steps_pages = crate::client::collect_paginated(
-        client.list_steps().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .into_paginator().send()
-    ).await?;
+        client
+            .list_steps()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .job_id(job_id)
+            .into_paginator()
+            .send(),
+    )
+    .await?;
 
     for page in &steps_pages {
         for step in page.steps() {
             let step_id = step.step_id();
             let step_name = step.name();
-            let failed_count = step.task_run_status_counts()
+            let failed_count = step
+                .task_run_status_counts()
                 .get(&aws_sdk_deadline::types::TaskRunStatus::Failed)
                 .copied()
                 .unwrap_or(0);
@@ -63,28 +74,43 @@ async fn collect_failed_tasks(
             }
 
             let tasks_pages = crate::client::collect_paginated(
-                client.list_tasks().farm_id(farm_id).queue_id(queue_id).job_id(job_id).step_id(step_id)
-                    .into_paginator().send()
-            ).await?;
+                client
+                    .list_tasks()
+                    .farm_id(farm_id)
+                    .queue_id(queue_id)
+                    .job_id(job_id)
+                    .step_id(step_id)
+                    .into_paginator()
+                    .send(),
+            )
+            .await?;
 
             for tpage in &tasks_pages {
                 for task in tpage.tasks() {
                     if task.run_status() != &aws_sdk_deadline::types::TaskRunStatus::Failed {
                         continue;
                     }
-                    let session_id = task.latest_session_action_id()
-                        .and_then(extract_session_id);
+                    let session_id = task.latest_session_action_id().and_then(extract_session_id);
 
                     // Convert parameters to Value for FailedTask
                     let parameters = match task.parameters() {
                         Some(params) => {
-                            let map: serde_json::Map<String, Value> = params.iter()
+                            let map: serde_json::Map<String, Value> = params
+                                .iter()
                                 .map(|(k, v)| {
                                     let inner = match v {
-                                        aws_sdk_deadline::types::TaskParameterValue::Int(i) => serde_json::json!({"int": i}),
-                                        aws_sdk_deadline::types::TaskParameterValue::Float(f) => serde_json::json!({"float": f}),
-                                        aws_sdk_deadline::types::TaskParameterValue::String(s) => serde_json::json!({"string": s}),
-                                        aws_sdk_deadline::types::TaskParameterValue::Path(p) => serde_json::json!({"path": p}),
+                                        aws_sdk_deadline::types::TaskParameterValue::Int(i) => {
+                                            serde_json::json!({"int": i})
+                                        }
+                                        aws_sdk_deadline::types::TaskParameterValue::Float(f) => {
+                                            serde_json::json!({"float": f})
+                                        }
+                                        aws_sdk_deadline::types::TaskParameterValue::String(s) => {
+                                            serde_json::json!({"string": s})
+                                        }
+                                        aws_sdk_deadline::types::TaskParameterValue::Path(p) => {
+                                            serde_json::json!({"path": p})
+                                        }
                                         _ => serde_json::json!(null),
                                     };
                                     (k.clone(), inner)
@@ -138,9 +164,18 @@ pub async fn wait_for_job_completion(
             )));
         }
 
-        let job = client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .send().await.map_err(crate::client::deadline_error)?;
-        let status = job.task_run_status.as_ref().map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
+        let job = client
+            .get_job()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .job_id(job_id)
+            .send()
+            .await
+            .map_err(crate::client::deadline_error)?;
+        let status = job
+            .task_run_status
+            .as_ref()
+            .map_or("", aws_sdk_deadline::types::TaskRunStatus::as_str);
 
         if let Some(cb) = status_callback {
             cb(status, elapsed, timeout);

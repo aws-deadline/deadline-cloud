@@ -5,9 +5,9 @@
 //! retrieval. The caller provides an `SdkConfig` with credentials; this module
 //! builds a properly-configured S3 client on top of it.
 
+use crate::errors::JobAttachmentsError;
 use deadline_config::config_file::{get_setting, get_setting_from_disk};
 use deadline_config::ini::IniConfig;
-use crate::errors::JobAttachmentsError;
 
 // --- Constants ---
 
@@ -38,9 +38,10 @@ pub fn build_s3_client(
     // construction time, not mid-transfer. The value itself is used by
     // upload/download callers, not by the HTTP client.
     if let Some(c) = config
-        && let Err(e) = get_s3_max_pool_connections(Some(c)) {
-            log::warn!("S3 pool connections config issue: {e}");
-        }
+        && let Err(e) = get_s3_max_pool_connections(Some(c))
+    {
+        log::warn!("S3 pool connections config issue: {e}");
+    }
 
     let timeout_config = aws_config::timeout::TimeoutConfig::builder()
         .connect_timeout(std::time::Duration::from_secs(S3_CONNECT_TIMEOUT_SECS))
@@ -159,7 +160,10 @@ pub fn compute_download_workers(s3_max_pool_connections: usize) -> usize {
 /// Format an STS SDK error using the common smithy trait.
 fn format_sts_sdk_err<E>(err: &aws_sdk_sts::error::SdkError<E>) -> String
 where
-    E: std::fmt::Display + aws_smithy_types::error::metadata::ProvideErrorMetadata + std::error::Error + 'static,
+    E: std::fmt::Display
+        + aws_smithy_types::error::metadata::ProvideErrorMetadata
+        + std::error::Error
+        + 'static,
 {
     match err {
         aws_sdk_sts::error::SdkError::ServiceError(e) => {
@@ -168,7 +172,10 @@ where
             let msg = inner.message().unwrap_or("No message");
             format!("{code}: {msg}")
         }
-        other => format!("{}", aws_smithy_types::error::display::DisplayErrorContext(other)),
+        other => format!(
+            "{}",
+            aws_smithy_types::error::display::DisplayErrorContext(other)
+        ),
     }
 }
 
@@ -181,21 +188,15 @@ pub async fn get_account_id(
     sdk_config: &aws_config::SdkConfig,
 ) -> Result<String, JobAttachmentsError> {
     let sts = aws_sdk_sts::Client::new(sdk_config);
-    let identity = sts
-        .get_caller_identity()
-        .send()
-        .await
-        .map_err(|e| {
-            JobAttachmentsError::AssetSync(format!(
-                "Failed to get caller identity: {}", format_sts_sdk_err(&e)
-            ))
-        })?;
-    identity
-        .account()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| {
-            JobAttachmentsError::AssetSync("GetCallerIdentity returned no account ID".into())
-        })
+    let identity = sts.get_caller_identity().send().await.map_err(|e| {
+        JobAttachmentsError::AssetSync(format!(
+            "Failed to get caller identity: {}",
+            format_sts_sdk_err(&e)
+        ))
+    })?;
+    identity.account().map(ToOwned::to_owned).ok_or_else(|| {
+        JobAttachmentsError::AssetSync("GetCallerIdentity returned no account ID".into())
+    })
 }
 
 #[cfg(test)]
@@ -307,24 +308,34 @@ mod tests {
     #[test]
     fn get_small_file_threshold_multiplier_valid() {
         let mut config = IniConfig::new();
-        set_setting("settings.small_file_threshold_multiplier", "20", &mut config)
-            .unwrap();
-        assert_eq!(get_small_file_threshold_multiplier(Some(&config)).unwrap(), 20);
+        set_setting(
+            "settings.small_file_threshold_multiplier",
+            "20",
+            &mut config,
+        )
+        .unwrap();
+        assert_eq!(
+            get_small_file_threshold_multiplier(Some(&config)).unwrap(),
+            20
+        );
     }
 
     #[test]
     fn get_small_file_threshold_multiplier_not_integer_errors() {
         let mut config = IniConfig::new();
-        set_setting("settings.small_file_threshold_multiplier", "abc", &mut config)
-            .unwrap();
+        set_setting(
+            "settings.small_file_threshold_multiplier",
+            "abc",
+            &mut config,
+        )
+        .unwrap();
         assert!(get_small_file_threshold_multiplier(Some(&config)).is_err());
     }
 
     #[test]
     fn get_small_file_threshold_multiplier_zero_errors() {
         let mut config = IniConfig::new();
-        set_setting("settings.small_file_threshold_multiplier", "0", &mut config)
-            .unwrap();
+        set_setting("settings.small_file_threshold_multiplier", "0", &mut config).unwrap();
         assert!(get_small_file_threshold_multiplier(Some(&config)).is_err());
     }
 
@@ -334,8 +345,12 @@ mod tests {
     fn compute_upload_config_defaults() {
         let mut config = IniConfig::new();
         set_setting("settings.s3_max_pool_connections", "50", &mut config).unwrap();
-        set_setting("settings.small_file_threshold_multiplier", "20", &mut config)
-            .unwrap();
+        set_setting(
+            "settings.small_file_threshold_multiplier",
+            "20",
+            &mut config,
+        )
+        .unwrap();
         let (threshold, workers) = compute_upload_config(Some(&config)).unwrap();
         // 8MB * 20 = 160MB
         assert_eq!(threshold, 8 * 1024 * 1024 * 20);
@@ -347,8 +362,7 @@ mod tests {
     fn compute_upload_config_small_multiplier() {
         let mut config = IniConfig::new();
         set_setting("settings.s3_max_pool_connections", "10", &mut config).unwrap();
-        set_setting("settings.small_file_threshold_multiplier", "2", &mut config)
-            .unwrap();
+        set_setting("settings.small_file_threshold_multiplier", "2", &mut config).unwrap();
         let (threshold, workers) = compute_upload_config(Some(&config)).unwrap();
         // 8MB * 2 = 16MB
         assert_eq!(threshold, 8 * 1024 * 1024 * 2);

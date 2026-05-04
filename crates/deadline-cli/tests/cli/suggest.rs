@@ -3,8 +3,8 @@
 //! These test that CLI commands include resource suggestions in error output
 //! when API calls fail with `AccessDenied` or `ResourceNotFound`.
 
-use deadline_test_server::deadline_api::{errors, farms, fleets, jobs, queues, workers};
 use deadline_test_server::TestHarness;
+use deadline_test_server::deadline_api::{errors, farms, fleets, jobs, queues, workers};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
@@ -12,13 +12,18 @@ use serde_json::json;
 #[tokio::test]
 async fn queue_get_access_denied_suggests_available_queues() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
 
     errors::mock_get_queue_access_denied(&harness.server, "farm-abc", "queue-bad").await;
     queues::mock_list_queues(
-        &harness.server, "farm-abc",
+        &harness.server,
+        "farm-abc",
         &[json!({"queueId": "queue-111", "displayName": "Good Queue"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "get", "--queue-id", "queue-bad"]));
 }
@@ -32,7 +37,8 @@ async fn farm_get_not_found_suggests_available_farms() {
     farms::mock_list_farms(
         &harness.server,
         &[json!({"farmId": "farm-real", "displayName": "Real Farm"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-bad"]));
 }
@@ -41,14 +47,23 @@ async fn farm_get_not_found_suggests_available_farms() {
 #[tokio::test]
 async fn job_get_access_denied_suggests_jobs() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
     errors::mock_get_job_not_found(&harness.server, "farm-abc", "queue-abc", "job-bad").await;
     jobs::mock_list_jobs(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[json!({"jobId": "job-real", "name": "Real Job"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "--job-id", "job-bad"]));
 }
@@ -88,18 +103,26 @@ async fn farm_get_not_found_more_than_10_farms_shows_and_more() {
 #[tokio::test]
 async fn queue_get_error_suggests_queues_not_jobs() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
 
     errors::mock_get_queue_access_denied(&harness.server, "farm-abc", "queue-bad").await;
     // Mount BOTH jobs and queues — greedy dispatch would pick jobs (wrong)
     jobs::mock_list_jobs(
-        &harness.server, "farm-abc", "queue-bad",
+        &harness.server,
+        "farm-abc",
+        "queue-bad",
         &[json!({"jobId": "job-111", "name": "Some Job"})],
-    ).await;
+    )
+    .await;
     queues::mock_list_queues(
-        &harness.server, "farm-abc",
+        &harness.server,
+        "farm-abc",
         &[json!({"queueId": "queue-good", "displayName": "Good Queue"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["queue", "get", "--queue-id", "queue-bad"]));
 }
@@ -108,18 +131,26 @@ async fn queue_get_error_suggests_queues_not_jobs() {
 #[tokio::test]
 async fn fleet_get_error_suggests_fleets_not_workers() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
 
     errors::mock_get_fleet_not_found(&harness.server, "farm-abc", "fleet-bad").await;
     // Mount BOTH workers and fleets — greedy dispatch would pick workers (wrong)
     workers::mock_search_workers(
-        &harness.server, "farm-abc",
-        &[json!({"workerId": "worker-111", "status": "RUNNING"})], 1,
-    ).await;
+        &harness.server,
+        "farm-abc",
+        &[json!({"workerId": "worker-111", "status": "RUNNING"})],
+        1,
+    )
+    .await;
     fleets::mock_list_fleets(
-        &harness.server, "farm-abc",
+        &harness.server,
+        "farm-abc",
         &[json!({"fleetId": "fleet-good", "displayName": "Good Fleet"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["fleet", "get", "--fleet-id", "fleet-bad"]));
 }
@@ -128,18 +159,29 @@ async fn fleet_get_error_suggests_fleets_not_workers() {
 #[tokio::test]
 async fn job_get_error_suggests_jobs_first() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
     errors::mock_get_job_not_found(&harness.server, "farm-abc", "queue-abc", "job-bad").await;
     jobs::mock_list_jobs(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[json!({"jobId": "job-real", "name": "Real Job"})],
-    ).await;
+    )
+    .await;
     queues::mock_list_queues(
-        &harness.server, "farm-abc",
+        &harness.server,
+        "farm-abc",
         &[json!({"queueId": "queue-abc", "displayName": "My Queue"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "--job-id", "job-bad"]));
 }
@@ -148,15 +190,24 @@ async fn job_get_error_suggests_jobs_first() {
 #[tokio::test]
 async fn job_get_error_paginated_list_jobs_shows_all_suggestions() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
     errors::mock_get_job_not_found(&harness.server, "farm-abc", "queue-abc", "job-bad").await;
     jobs::mock_list_jobs_paginated(
-        &harness.server, "farm-abc", "queue-abc",
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
         &[json!({"jobId": "job-page1", "name": "First Page Job"})],
         &[json!({"jobId": "job-page2", "name": "Second Page Job"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "--job-id", "job-bad"]));
 }

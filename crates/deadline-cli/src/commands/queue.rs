@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Local, Utc};
 use clap::Subcommand;
+use deadline_api::telemetry::create_telemetry;
 use deadline_api::{api, client, session};
 use deadline_config::config_file;
-use deadline_api::telemetry::create_telemetry;
-use deadline_job_attachments::incremental_download::IncrementalDownloadState;
 use deadline_job_attachments::incremental_download::IncrementalDownloadJob;
+use deadline_job_attachments::incremental_download::IncrementalDownloadState;
 use deadline_job_attachments::models::FileConflictResolution;
 
 use super::config::CliError;
@@ -20,20 +20,28 @@ const DEFAULT_CHECKPOINT_DIR: &str = "~/.deadline/incremental_download";
 pub(crate) enum QueueAction {
     /// List available queues
     List {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
     },
     /// Get details of a specific queue
     Get {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
     },
     /// Export queue credentials for use with AWS CLI
     ExportCredentials {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
         /// USER (default) or READ
         #[arg(long, default_value = "USER")]
         mode: String,
@@ -43,17 +51,24 @@ pub(crate) enum QueueAction {
     },
     /// List queue parameter definitions from queue environments
     Paramdefs {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
     },
     /// Download new job attachment output for all jobs in a queue
     #[command(name = "sync-output")]
     SyncOutput {
-        #[arg(long)] profile: Option<String>,
-        #[arg(long)] farm_id: Option<String>,
-        #[arg(long)] queue_id: Option<String>,
-        #[arg(long)] storage_profile_id: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        storage_profile_id: Option<String>,
         /// Output as JSON
         #[arg(long)]
         json: bool,
@@ -84,12 +99,23 @@ pub(crate) fn run(action: QueueAction) -> Result<(), CliError> {
         .block_on(run_async(action))
 }
 
-fn setup(profile: Option<String>, farm_id: Option<String>, queue_id: Option<String>, required: &[&str]) -> Result<deadline_config::ini::IniConfig, CliError> {
-    let mut config = config_file::read_config()
-        .map_err(|e| CliError::Operation(e.to_string()))?;
+fn setup(
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    required: &[&str],
+) -> Result<deadline_config::ini::IniConfig, CliError> {
+    let mut config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
-        &crate::common::CliOptions { profile, farm_id, queue_id, job_id: None, yes: false, ..Default::default() },
+        &crate::common::CliOptions {
+            profile,
+            farm_id,
+            queue_id,
+            job_id: None,
+            yes: false,
+            ..Default::default()
+        },
         required,
     )?;
     Ok(config)
@@ -117,7 +143,9 @@ impl PidFileLock {
 
         // Try atomic rename/link
         if Self::try_claim(&tmp_path, path) {
-            return Ok(Self { path: path.to_path_buf() });
+            return Ok(Self {
+                path: path.to_path_buf(),
+            });
         }
 
         // Lock exists — check if holder is alive
@@ -140,7 +168,9 @@ impl PidFileLock {
 
         // Retry after cleanup
         if Self::try_claim(&tmp_path, path) {
-            return Ok(Self { path: path.to_path_buf() });
+            return Ok(Self {
+                path: path.to_path_buf(),
+            });
         }
 
         let _ = fs::remove_file(&tmp_path);
@@ -176,7 +206,9 @@ impl PidFileLock {
             // from our own checkpoint file (a u32 cast to i32, which is safe
             // for valid PIDs on all supported platforms).
             #[allow(unsafe_code, reason = "POSIX process-existence check via kill(pid, 0)")]
-            unsafe { libc::kill(pid as i32, 0) == 0 }
+            unsafe {
+                libc::kill(pid as i32, 0) == 0
+            }
         }
         #[cfg(not(unix))]
         {
@@ -190,9 +222,10 @@ impl Drop for PidFileLock {
     fn drop(&mut self) {
         // Only remove if we still own it (our PID matches)
         if let Ok(contents) = fs::read_to_string(&self.path)
-            && contents.trim() == std::process::id().to_string() {
-                let _ = fs::remove_file(&self.path);
-            }
+            && contents.trim() == std::process::id().to_string()
+        {
+            let _ = fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -200,13 +233,15 @@ impl Drop for PidFileLock {
 // Subcommand dispatch
 // =========================================================================
 
+#[allow(clippy::too_many_lines, reason = "queue subcommands are sequential pipelines")]
 async fn run_async(action: QueueAction) -> Result<(), CliError> {
     match action {
         QueueAction::List { profile, farm_id } => {
             let config = setup(profile, farm_id, None, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let dl = session::deadline_client(Some(&config)).await;
-            let builder = client::apply_dcm_principal(dl.list_queues().farm_id(&farm), Some(&config));
+            let builder =
+                client::apply_dcm_principal(dl.list_queues().farm_id(&farm), Some(&config));
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
@@ -214,45 +249,69 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                         .flat_map(aws_sdk_deadline::operation::list_queues::ListQueuesOutput::queues)
                         .map(|q| serde_json::json!({"queueId": q.queue_id(), "displayName": q.display_name()}))
                         .collect();
-                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(structured)));
+                    println!(
+                        "{}",
+                        crate::common::cli_object_repr(&serde_json::json!(structured))
+                    );
                     Ok(())
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "ListQueues", Some(&farm), None, None, Some(&config),
-                    ).await;
+                        &e.to_string(),
+                        "ListQueues",
+                        Some(&farm),
+                        None,
+                        None,
+                        Some(&config),
+                    )
+                    .await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queues from Deadline:\n{e}{suggestion}"
                     )))
                 }
             }
         }
-        QueueAction::Get { profile, farm_id, queue_id } => {
+        QueueAction::Get {
+            profile,
+            farm_id,
+            queue_id,
+        } => {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
             let dl = session::deadline_client(Some(&config)).await;
-            match dl.get_queue().farm_id(&farm).queue_id(&queue)
-                .send().await
-            {
+            match dl.get_queue().farm_id(&farm).queue_id(&queue).send().await {
                 Ok(output) => {
                     let resp = deadline_api::responses::QueueResponse::from(output);
-                    let val = serde_json::to_value(&resp).map_err(|e| CliError::Operation(e.to_string()))?;
+                    let val = serde_json::to_value(&resp)
+                        .map_err(|e| CliError::Operation(e.to_string()))?;
                     println!("{}", crate::common::cli_object_repr(&val));
                     Ok(())
                 }
                 Err(e) => {
                     let err = client::format_sdk_error(&e);
                     let suggestion = suggest_resources_on_client_error(
-                        &err, "GetQueue", Some(&farm), Some(&queue), None, Some(&config),
-                    ).await;
+                        &err,
+                        "GetQueue",
+                        Some(&farm),
+                        Some(&queue),
+                        None,
+                        Some(&config),
+                    )
+                    .await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queue from Deadline:\n{err}{suggestion}"
                     )))
                 }
             }
         }
-        QueueAction::ExportCredentials { profile, farm_id, queue_id, mode, output_format: _ } => {
+        QueueAction::ExportCredentials {
+            profile,
+            farm_id,
+            queue_id,
+            mode,
+            output_format: _,
+        } => {
             let start = std::time::Instant::now();
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
@@ -263,12 +322,20 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             // Both typed outputs have identical .credentials() shape
             let dl = session::deadline_client(Some(&config)).await;
             let creds_result = match mode.to_uppercase().as_str() {
-                "READ" => dl.assume_queue_role_for_read()
-                    .farm_id(&farm).queue_id(&queue).send().await
+                "READ" => dl
+                    .assume_queue_role_for_read()
+                    .farm_id(&farm)
+                    .queue_id(&queue)
+                    .send()
+                    .await
                     .map(|o| o.credentials)
                     .map_err(|e| client::format_sdk_error(&e)),
-                _ => dl.assume_queue_role_for_user()
-                    .farm_id(&farm).queue_id(&queue).send().await
+                _ => dl
+                    .assume_queue_role_for_user()
+                    .farm_id(&farm)
+                    .queue_id(&queue)
+                    .send()
+                    .await
                     .map(|o| o.credentials)
                     .map_err(|e| client::format_sdk_error(&e)),
             };
@@ -281,13 +348,18 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
 
             match creds_result {
                 Ok(Some(creds)) if !creds.access_key_id().is_empty() => {
-                    let expiration = creds.expiration()
+                    let expiration = creds
+                        .expiration()
                         .fmt(aws_sdk_deadline::primitives::DateTimeFormat::DateTime)
                         .unwrap_or_default()
                         .replace('Z', "+00:00");
 
                     details.insert("is_success".into(), serde_json::json!(true));
-                    telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
+                    telemetry.record_event(
+                        "com.amazon.rum.deadline.queue_export_credentials",
+                        details,
+                        false,
+                    );
 
                     let output = serde_json::json!({
                         "Version": 1,
@@ -296,13 +368,20 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                         "SessionToken": creds.session_token(),
                         "Expiration": expiration,
                     });
-                    println!("{}", serde_json::to_string_pretty(&output).expect("JSON serialization"));
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&output).expect("JSON serialization")
+                    );
                     Ok(())
                 }
                 Ok(None | Some(_)) => {
                     details.insert("is_success".into(), serde_json::json!(false));
                     details.insert("error_type".into(), serde_json::json!("MissingCredentials"));
-                    telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
+                    telemetry.record_event(
+                        "com.amazon.rum.deadline.queue_export_credentials",
+                        details,
+                        false,
+                    );
                     Err(CliError::Operation(
                         "Failed to export credentials:\nResponse missing required credential fields".into()
                     ))
@@ -310,26 +389,49 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 Err(e) => {
                     details.insert("is_success".into(), serde_json::json!(false));
                     details.insert("error_type".into(), serde_json::json!(e));
-                    telemetry.record_event("com.amazon.rum.deadline.queue_export_credentials", details, false);
-                    Err(CliError::Operation(format!("Failed to export credentials:\n{e}")))
+                    telemetry.record_event(
+                        "com.amazon.rum.deadline.queue_export_credentials",
+                        details,
+                        false,
+                    );
+                    Err(CliError::Operation(format!(
+                        "Failed to export credentials:\n{e}"
+                    )))
                 }
             }
         }
-        QueueAction::Paramdefs { profile, farm_id, queue_id } => {
+        QueueAction::Paramdefs {
+            profile,
+            farm_id,
+            queue_id,
+        } => {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
             match deadline_api::queue_parameters::get_queue_parameter_definitions(
-                &farm, &queue, Some(&config),
-            ).await {
+                &farm,
+                &queue,
+                Some(&config),
+            )
+            .await
+            {
                 Ok(params) => {
-                    println!("{}", crate::common::cli_object_repr(&serde_json::json!(params)));
+                    println!(
+                        "{}",
+                        crate::common::cli_object_repr(&serde_json::json!(params))
+                    );
                     Ok(())
                 }
                 Err(e) => {
                     let suggestion = suggest_resources_on_client_error(
-                        &e.to_string(), "ListQueueEnvironments", Some(&farm), Some(&queue), None, Some(&config),
-                    ).await;
+                        &e.to_string(),
+                        "ListQueueEnvironments",
+                        Some(&farm),
+                        Some(&queue),
+                        None,
+                        Some(&config),
+                    )
+                    .await;
                     Err(CliError::Operation(format!(
                         "Failed to get Queue Parameter Definitions from Deadline:\n{e}{suggestion}"
                     )))
@@ -337,17 +439,32 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             }
         }
         QueueAction::SyncOutput {
-            profile, farm_id, queue_id, storage_profile_id,
-            json, bootstrap_lookback_minutes, checkpoint_dir,
-            force_bootstrap, ignore_storage_profiles,
-            conflict_resolution, dry_run,
+            profile,
+            farm_id,
+            queue_id,
+            storage_profile_id,
+            json,
+            bootstrap_lookback_minutes,
+            checkpoint_dir,
+            force_bootstrap,
+            ignore_storage_profiles,
+            conflict_resolution,
+            dry_run,
         } => {
             run_sync_output(
-                profile, farm_id, queue_id, storage_profile_id,
-                json, bootstrap_lookback_minutes, checkpoint_dir,
-                force_bootstrap, ignore_storage_profiles,
-                conflict_resolution, dry_run,
-            ).await
+                profile,
+                farm_id,
+                queue_id,
+                storage_profile_id,
+                json,
+                bootstrap_lookback_minutes,
+                checkpoint_dir,
+                force_bootstrap,
+                ignore_storage_profiles,
+                conflict_resolution,
+                dry_run,
+            )
+            .await
         }
     }
 }
@@ -356,8 +473,14 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
 // sync-output implementation
 // =========================================================================
 
-#[allow(clippy::too_many_arguments, reason = "CLI handler passes through all user-provided options")]
-#[allow(clippy::fn_params_excessive_bools, reason = "bool params map 1:1 to CLI flags")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "CLI handler passes through all user-provided options"
+)]
+#[allow(
+    clippy::fn_params_excessive_bools,
+    reason = "bool params map 1:1 to CLI flags"
+)]
 async fn run_sync_output(
     profile: Option<String>,
     farm_id: Option<String>,
@@ -383,7 +506,8 @@ async fn run_sync_output(
     let checkpoint_dir = crate::common::expand_tilde(&checkpoint_dir);
     fs::create_dir_all(&checkpoint_dir).map_err(|e| {
         CliError::Operation(format!(
-            "Failed to create checkpoint directory {}: {e}", checkpoint_dir.display()
+            "Failed to create checkpoint directory {}: {e}",
+            checkpoint_dir.display()
         ))
     })?;
 
@@ -396,10 +520,14 @@ async fn run_sync_output(
     }
 
     // Apply CLI options including --storage-profile-id override
-    let mut config = config_file::read_config()
-        .map_err(|e| CliError::Operation(e.to_string()))?;
+    let mut config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
     let opts = crate::common::CliOptions {
-        profile, farm_id, queue_id, job_id: None, yes: false, ..Default::default()
+        profile,
+        farm_id,
+        queue_id,
+        job_id: None,
+        yes: false,
+        ..Default::default()
     };
     crate::common::apply_cli_options_to_config(&mut config, &opts, &["farm_id", "queue_id"])?;
 
@@ -416,8 +544,8 @@ async fn run_sync_output(
         eprintln!("Ignoring all storage profiles.");
         None
     } else {
-        let sp_id = config_file::get_setting("settings.storage_profile_id", &config)
-            .unwrap_or_default();
+        let sp_id =
+            config_file::get_setting("settings.storage_profile_id", &config).unwrap_or_default();
         if sp_id.is_empty() {
             return Err(CliError::Operation(
                 "The sync-output operation requires a storage profile defined in the deadline client configuration or \
@@ -431,26 +559,44 @@ async fn run_sync_output(
             ));
         }
         // Validate the storage profile exists
-        session::deadline_client(Some(&config)).await
+        session::deadline_client(Some(&config))
+            .await
             .get_storage_profile_for_queue()
-            .farm_id(&farm).queue_id(&queue_id_str).storage_profile_id(&sp_id)
-            .send().await
-            .map_err(|e| CliError::Operation(format!(
-                "Could not retrieve the storage profile {sp_id:?} from Deadline Cloud:\n{}", client::format_sdk_error(&e)
-            )))?;
+            .farm_id(&farm)
+            .queue_id(&queue_id_str)
+            .storage_profile_id(&sp_id)
+            .send()
+            .await
+            .map_err(|e| {
+                CliError::Operation(format!(
+                    "Could not retrieve the storage profile {sp_id:?} from Deadline Cloud:\n{}",
+                    client::format_sdk_error(&e)
+                ))
+            })?;
         Some(sp_id)
     };
 
     // Build checkpoint file path
-    let sp_label = local_storage_profile_id.as_deref().unwrap_or("ignore-storage-profiles");
+    let sp_label = local_storage_profile_id
+        .as_deref()
+        .unwrap_or("ignore-storage-profiles");
     let checkpoint_file_name = format!("{queue_id_str}_{sp_label}_{DOWNLOAD_CHECKPOINT_FILE_NAME}");
     let checkpoint_file_path = checkpoint_dir.join(&checkpoint_file_name);
 
     // Get queue and validate job attachment settings
-    let queue = session::deadline_client(Some(&config)).await
-        .get_queue().farm_id(&farm).queue_id(&queue_id_str)
-        .send().await
-        .map_err(|e| CliError::Operation(format!("Failed to get queue:\n{}", client::format_sdk_error(&e))))?;
+    let queue = session::deadline_client(Some(&config))
+        .await
+        .get_queue()
+        .farm_id(&farm)
+        .queue_id(&queue_id_str)
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to get queue:\n{}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
 
     if queue.job_attachment_settings().is_none() {
         return Err(CliError::Operation(format!(
@@ -469,7 +615,8 @@ async fn run_sync_output(
     let _lock = PidFileLock::acquire(&pid_lock_path, "incremental output download")?;
 
     // Load or bootstrap checkpoint
-    let checkpoint: IncrementalDownloadState = if force_bootstrap || !checkpoint_file_path.exists() {
+    let checkpoint: IncrementalDownloadState = if force_bootstrap || !checkpoint_file_path.exists()
+    {
         let lookback = Duration::milliseconds((bootstrap_lookback_minutes * 60_000.0) as i64);
         let bootstrap_timestamp = Utc::now() - lookback;
 
@@ -478,12 +625,17 @@ async fn run_sync_output(
         } else {
             eprintln!("Checkpoint not found, lookback is {bootstrap_lookback_minutes} minutes");
         }
-        eprintln!("Initializing from: {}", bootstrap_timestamp.with_timezone(&Local).to_rfc3339());
+        eprintln!(
+            "Initializing from: {}",
+            bootstrap_timestamp.with_timezone(&Local).to_rfc3339()
+        );
 
         IncrementalDownloadState::new(
             local_storage_profile_id.clone(),
             bootstrap_timestamp,
-            None, None, None,
+            None,
+            None,
+            None,
         )
     } else {
         let loaded = IncrementalDownloadState::from_file(&checkpoint_file_path)
@@ -510,26 +662,41 @@ async fn run_sync_output(
             )));
         }
 
-        eprintln!("Continuing from: {}", loaded.downloads_completed_timestamp.with_timezone(&Local).to_rfc3339());
+        eprintln!(
+            "Continuing from: {}",
+            loaded
+                .downloads_completed_timestamp
+                .with_timezone(&Local)
+                .to_rfc3339()
+        );
         loaded
     };
 
     eprintln!();
 
     // Parse conflict resolution
-    let conflict: FileConflictResolution = conflict_resolution.parse()
+    let conflict: FileConflictResolution = conflict_resolution
+        .parse()
         .map_err(|e: String| CliError::Operation(e))?;
 
     // Run the incremental output download orchestration
     let updated_checkpoint = incremental_output_download(
-        &farm, &queue_id_str, &queue, &config,
-        checkpoint, &local_storage_profile_id, conflict, dry_run,
-    ).await?;
+        &farm,
+        &queue_id_str,
+        &queue,
+        &config,
+        checkpoint,
+        &local_storage_profile_id,
+        conflict,
+        dry_run,
+    )
+    .await?;
 
     if dry_run {
         eprintln!("This is a DRY RUN so the checkpoint was not saved");
     } else {
-        updated_checkpoint.save_file(&checkpoint_file_path)
+        updated_checkpoint
+            .save_file(&checkpoint_file_path)
             .map_err(|e| CliError::Operation(format!("Failed to save checkpoint: {e}")))?;
         eprintln!("Checkpoint saved");
     }
@@ -538,8 +705,14 @@ async fn run_sync_output(
 }
 
 /// Core orchestration: find jobs with new output, download manifests and files.
-#[allow(clippy::ref_option, reason = "callers pass &Option from local bindings")]
-#[allow(clippy::too_many_lines, reason = "incremental sync pipeline with 4 major steps")]
+#[allow(
+    clippy::ref_option,
+    reason = "callers pass &Option from local bindings"
+)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "incremental sync pipeline with 4 major steps"
+)]
 async fn incremental_output_download(
     farm_id: &str,
     queue_id: &str,
@@ -557,13 +730,22 @@ async fn incremental_output_download(
     );
 
     eprintln!("Updating download state across time interval:");
-    eprintln!("    From: {}", checkpoint.downloads_completed_timestamp.with_timezone(&Local).to_rfc3339());
+    eprintln!(
+        "    From: {}",
+        checkpoint
+            .downloads_completed_timestamp
+            .with_timezone(&Local)
+            .to_rfc3339()
+    );
     eprintln!("      To: {}", now.with_timezone(&Local).to_rfc3339());
     let update_length = now - checkpoint.downloads_completed_timestamp;
     let ec_delta = Duration::seconds(checkpoint.eventual_consistency_max_seconds);
     if update_length > ec_delta {
-        eprintln!("  Length: {} + {} (eventual consistency allowance)",
-            format_duration(update_length - ec_delta), format_duration(ec_delta));
+        eprintln!(
+            "  Length: {} + {} (eventual consistency allowance)",
+            format_duration(update_length - ec_delta),
+            format_duration(ec_delta)
+        );
     } else {
         eprintln!("  Length: {}", format_duration(update_length));
     }
@@ -584,18 +766,24 @@ async fn incremental_output_download(
         }],
         "operator": "OR"
     });
-    let active_jobs = api::list_jobs_by_filter_expression(
-        farm_id, queue_id, &active_filter, Some(config),
-    ).await.map_err(|e| CliError::Operation(format!("Failed to search active jobs: {e}")))?;
+    let active_jobs =
+        api::list_jobs_by_filter_expression(farm_id, queue_id, &active_filter, Some(config))
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to search active jobs: {e}")))?;
 
     let mut download_candidates: std::collections::HashMap<String, serde_json::Value> =
         std::collections::HashMap::new();
     for job in &active_jobs {
         if let Some(counts) = job.get("taskRunStatusCounts")
-            && counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0) > 0
-                && let Some(id) = job["jobId"].as_str() {
-                    download_candidates.insert(id.to_owned(), job.clone());
-                }
+            && counts
+                .get("SUCCEEDED")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0)
+                > 0
+            && let Some(id) = job["jobId"].as_str()
+        {
+            download_candidates.insert(id.to_owned(), job.clone());
+        }
     }
 
     // Recently ended jobs — paginate through all
@@ -609,16 +797,22 @@ async fn incremental_output_download(
         }],
         "operator": "AND"
     });
-    let ended_jobs = api::list_jobs_by_filter_expression(
-        farm_id, queue_id, &ended_filter, Some(config),
-    ).await.map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
+    let ended_jobs =
+        api::list_jobs_by_filter_expression(farm_id, queue_id, &ended_filter, Some(config))
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
 
     for job in &ended_jobs {
         if let Some(counts) = job.get("taskRunStatusCounts")
-            && counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0) > 0
-                && let Some(id) = job["jobId"].as_str() {
-                    download_candidates.insert(id.to_owned(), job.clone());
-                }
+            && counts
+                .get("SUCCEEDED")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0)
+                > 0
+            && let Some(id) = job["jobId"].as_str()
+        {
+            download_candidates.insert(id.to_owned(), job.clone());
+        }
     }
 
     eprintln!("...retrieval completed");
@@ -626,30 +820,49 @@ async fn incremental_output_download(
 
     // Step 2: Categorize jobs
     let checkpoint_jobs_map: std::collections::HashMap<String, &IncrementalDownloadJob> =
-        checkpoint.jobs.iter().map(|j| (j.job_id().to_owned(), j)).collect();
+        checkpoint
+            .jobs
+            .iter()
+            .map(|j| (j.job_id().to_owned(), j))
+            .collect();
     let checkpoint_job_ids: std::collections::HashSet<String> =
         checkpoint_jobs_map.keys().cloned().collect();
     let candidate_ids: std::collections::HashSet<String> =
         download_candidates.keys().cloned().collect();
 
-    let mut new_job_ids: std::collections::HashSet<String> =
-        candidate_ids.difference(&checkpoint_job_ids).cloned().collect();
-    let mut updated_job_ids: std::collections::HashSet<String> =
-        candidate_ids.intersection(&checkpoint_job_ids).cloned().collect();
-    let finished_tracking_ids: std::collections::HashSet<String> =
-        checkpoint_job_ids.difference(&candidate_ids).cloned().collect();
+    let mut new_job_ids: std::collections::HashSet<String> = candidate_ids
+        .difference(&checkpoint_job_ids)
+        .cloned()
+        .collect();
+    let mut updated_job_ids: std::collections::HashSet<String> = candidate_ids
+        .intersection(&checkpoint_job_ids)
+        .cloned()
+        .collect();
+    let finished_tracking_ids: std::collections::HashSet<String> = checkpoint_job_ids
+        .difference(&candidate_ids)
+        .cloned()
+        .collect();
     let mut unchanged_job_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut completed_job_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut attachments_free_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut missing_storage_profile_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut attachments_free_ids: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    let mut missing_storage_profile_ids: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
 
-    eprintln!("Categorizing {} checkpoint jobs against {} download candidate jobs...",
-        checkpoint.jobs.len(), download_candidates.len());
+    eprintln!(
+        "Categorizing {} checkpoint jobs against {} download candidate jobs...",
+        checkpoint.jobs.len(),
+        download_candidates.len()
+    );
 
     // Copy attachments from checkpoint for updated jobs
     for job_id in updated_job_ids.clone() {
         if let Some(cp_job) = checkpoint_jobs_map.get(&job_id) {
-            if cp_job.job.get("attachments").is_some_and(serde_json::Value::is_null) {
+            if cp_job
+                .job
+                .get("attachments")
+                .is_some_and(serde_json::Value::is_null)
+            {
                 attachments_free_ids.insert(job_id.clone());
                 continue;
             }
@@ -663,15 +876,28 @@ async fn incremental_output_download(
             }
         }
     }
-    updated_job_ids = updated_job_ids.difference(&attachments_free_ids).cloned().collect();
+    updated_job_ids = updated_job_ids
+        .difference(&attachments_free_ids)
+        .cloned()
+        .collect();
 
     // Detect unchanged jobs (same SUCCEEDED count and endedAt)
     for job_id in updated_job_ids.clone() {
-        if let (Some(cp_job), Some(dc_job)) = (checkpoint_jobs_map.get(&job_id), download_candidates.get(&job_id)) {
-            let cp_succeeded = cp_job.job.get("taskRunStatusCounts")
-                .and_then(|c| c.get("SUCCEEDED")).and_then(serde_json::Value::as_i64).unwrap_or(0);
-            let dc_succeeded = dc_job.get("taskRunStatusCounts")
-                .and_then(|c| c.get("SUCCEEDED")).and_then(serde_json::Value::as_i64).unwrap_or(0);
+        if let (Some(cp_job), Some(dc_job)) = (
+            checkpoint_jobs_map.get(&job_id),
+            download_candidates.get(&job_id),
+        ) {
+            let cp_succeeded = cp_job
+                .job
+                .get("taskRunStatusCounts")
+                .and_then(|c| c.get("SUCCEEDED"))
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0);
+            let dc_succeeded = dc_job
+                .get("taskRunStatusCounts")
+                .and_then(|c| c.get("SUCCEEDED"))
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0);
             let cp_ended = cp_job.job.get("endedAt").and_then(|v| v.as_str());
             let dc_ended = dc_job.get("endedAt").and_then(|v| v.as_str());
             if cp_succeeded == dc_succeeded && cp_ended == dc_ended {
@@ -681,19 +907,35 @@ async fn incremental_output_download(
             }
         }
     }
-    updated_job_ids = updated_job_ids.difference(&unchanged_job_ids).cloned().collect();
+    updated_job_ids = updated_job_ids
+        .difference(&unchanged_job_ids)
+        .cloned()
+        .collect();
 
     // Print updated jobs
     for job_id in &updated_job_ids {
-        if let (Some(cp_job), Some(dc_job)) = (checkpoint_jobs_map.get(job_id), download_candidates.get(job_id)) {
+        if let (Some(cp_job), Some(dc_job)) = (
+            checkpoint_jobs_map.get(job_id),
+            download_candidates.get(job_id),
+        ) {
             let name = cp_job.job["name"].as_str().unwrap_or("unknown");
             eprintln!("EXISTING Job: {name} ({job_id})");
             let cp_counts = &cp_job.job["taskRunStatusCounts"];
             let dc_counts = &dc_job["taskRunStatusCounts"];
-            let cp_succeeded = cp_counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0);
-            let cp_total: i64 = cp_counts.as_object().map_or(0, |m| m.values().filter_map(serde_json::Value::as_i64).sum());
-            let dc_succeeded = dc_counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0);
-            let dc_total: i64 = dc_counts.as_object().map_or(0, |m| m.values().filter_map(serde_json::Value::as_i64).sum());
+            let cp_succeeded = cp_counts
+                .get("SUCCEEDED")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0);
+            let cp_total: i64 = cp_counts.as_object().map_or(0, |m| {
+                m.values().filter_map(serde_json::Value::as_i64).sum()
+            });
+            let dc_succeeded = dc_counts
+                .get("SUCCEEDED")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0);
+            let dc_total: i64 = dc_counts.as_object().map_or(0, |m| {
+                m.values().filter_map(serde_json::Value::as_i64).sum()
+            });
             eprintln!("  Succeeded tasks (before): {cp_succeeded} / {cp_total}");
             eprintln!("  Succeeded tasks (now)   : {dc_succeeded} / {dc_total}");
 
@@ -703,26 +945,44 @@ async fn incremental_output_download(
             }
         }
     }
-    updated_job_ids = updated_job_ids.difference(&completed_job_ids).cloned().collect();
+    updated_job_ids = updated_job_ids
+        .difference(&completed_job_ids)
+        .cloned()
+        .collect();
 
     // Print finished tracking jobs
     for job_id in &finished_tracking_ids {
         if let Some(cp_job) = checkpoint_jobs_map.get(job_id) {
-            let name = cp_job.job.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let name = cp_job
+                .job
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
             if cp_job.job.as_object().is_none_or(|m| m.len() <= 1) {
                 continue; // minimal placeholder, skip
             }
             eprintln!("FINISHED TRACKING Job: {name} ({job_id})");
-            if cp_job.job.get("attachments").is_some_and(serde_json::Value::is_null) {
+            if cp_job
+                .job
+                .get("attachments")
+                .is_some_and(serde_json::Value::is_null)
+            {
                 eprintln!("  Job without job attachments is no longer active");
             } else {
                 let counts = &cp_job.job["taskRunStatusCounts"];
-                let succeeded = counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                let total: i64 = counts.as_object().map_or(0, |m| m.values().filter_map(serde_json::Value::as_i64).sum());
+                let succeeded = counts
+                    .get("SUCCEEDED")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0);
+                let total: i64 = counts.as_object().map_or(0, |m| {
+                    m.values().filter_map(serde_json::Value::as_i64).sum()
+                });
                 if succeeded == total {
                     eprintln!("   Job succeeded");
                 } else {
-                    eprintln!("   Job is not a download candidate anymore (likely suspended, canceled or failed)");
+                    eprintln!(
+                        "   Job is not a download candidate anymore (likely suspended, canceled or failed)"
+                    );
                 }
             }
         }
@@ -731,38 +991,64 @@ async fn incremental_output_download(
     // For new jobs, call GetJob to get attachments
     let dl = session::deadline_client(Some(config)).await;
     for job_id in new_job_ids.clone() {
-        let job_detail = dl.get_job().farm_id(farm_id).queue_id(queue_id).job_id(&job_id)
-            .send().await
-            .map_err(|e| CliError::Operation(format!("Failed to get job {job_id}: {}", client::format_sdk_error(&e))))?;
+        let job_detail = dl
+            .get_job()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .job_id(&job_id)
+            .send()
+            .await
+            .map_err(|e| {
+                CliError::Operation(format!(
+                    "Failed to get job {job_id}: {}",
+                    client::format_sdk_error(&e)
+                ))
+            })?;
         if let Some(dc_job) = download_candidates.get_mut(&job_id) {
-            dc_job["attachments"] = job_detail.attachments.as_ref()
-                .map_or(serde_json::Value::Null, deadline_api::type_conversions::attachments_to_value);
-            dc_job["storageProfileId"] = serde_json::json!(job_detail.storage_profile_id.as_deref());
+            dc_job["attachments"] = job_detail.attachments.as_ref().map_or(
+                serde_json::Value::Null,
+                deadline_api::type_conversions::attachments_to_value,
+            );
+            dc_job["storageProfileId"] =
+                serde_json::json!(job_detail.storage_profile_id.as_deref());
         }
 
         let dc_job = &download_candidates[&job_id];
         let name = dc_job["name"].as_str().unwrap_or("unknown");
         let counts = &dc_job["taskRunStatusCounts"];
-        let succeeded = counts.get("SUCCEEDED").and_then(serde_json::Value::as_i64).unwrap_or(0);
-        let total: i64 = counts.as_object().map_or(0, |m| m.values().filter_map(serde_json::Value::as_i64).sum());
+        let succeeded = counts
+            .get("SUCCEEDED")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+        let total: i64 = counts.as_object().map_or(0, |m| {
+            m.values().filter_map(serde_json::Value::as_i64).sum()
+        });
 
-        if dc_job.get("attachments").is_none_or(serde_json::Value::is_null) {
+        if dc_job
+            .get("attachments")
+            .is_none_or(serde_json::Value::is_null)
+        {
             eprintln!("NEW Job: {name} ({job_id})");
             eprintln!("  Succeeded tasks: {succeeded} / {total}");
             eprintln!("  Job does not use job attachments.");
             attachments_free_ids.insert(job_id.clone());
-        } else if dc_job.get("storageProfileId").is_some_and(serde_json::Value::is_null)
+        } else if dc_job
+            .get("storageProfileId")
+            .is_some_and(serde_json::Value::is_null)
             && local_storage_profile_id.is_some()
         {
             eprintln!("NEW Job: {name} ({job_id})");
-            eprintln!("  WARNING: THE JOB OUTPUT WILL NOT BE DOWNLOADED, IT HAS NO STORAGE PROFILE.");
+            eprintln!(
+                "  WARNING: THE JOB OUTPUT WILL NOT BE DOWNLOADED, IT HAS NO STORAGE PROFILE."
+            );
             missing_storage_profile_ids.insert(job_id.clone());
         } else {
             eprintln!("NEW Job: {name} ({job_id})");
             eprintln!("  Succeeded tasks: {succeeded} / {total}");
 
             // SYNC-002: Print manifest file system paths for new jobs with attachments
-            if let Some(manifests) = dc_job.get("attachments")
+            if let Some(manifests) = dc_job
+                .get("attachments")
                 .and_then(|a| a["manifests"].as_array())
             {
                 eprintln!("  Manifest file system paths:");
@@ -779,9 +1065,18 @@ async fn incremental_output_download(
             }
         }
     }
-    new_job_ids = new_job_ids.difference(&attachments_free_ids).cloned().collect();
-    new_job_ids = new_job_ids.difference(&completed_job_ids).cloned().collect();
-    new_job_ids = new_job_ids.difference(&missing_storage_profile_ids).cloned().collect();
+    new_job_ids = new_job_ids
+        .difference(&attachments_free_ids)
+        .cloned()
+        .collect();
+    new_job_ids = new_job_ids
+        .difference(&completed_job_ids)
+        .cloned()
+        .collect();
+    new_job_ids = new_job_ids
+        .difference(&missing_storage_profile_ids)
+        .cloned()
+        .collect();
 
     eprintln!("...categorization completed");
     eprintln!();
@@ -791,8 +1086,13 @@ async fn incremental_output_download(
         // Collect unique storage profile IDs from jobs to process
         let mut sp_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
         sp_ids.insert(local_sp_id.clone());
-        for job_id in new_job_ids.iter().chain(updated_job_ids.iter()).chain(completed_job_ids.iter()) {
-            if let Some(sp) = download_candidates.get(job_id)
+        for job_id in new_job_ids
+            .iter()
+            .chain(updated_job_ids.iter())
+            .chain(completed_job_ids.iter())
+        {
+            if let Some(sp) = download_candidates
+                .get(job_id)
                 .and_then(|j| j.get("storageProfileId"))
                 .and_then(|v| v.as_str())
             {
@@ -804,10 +1104,19 @@ async fn incremental_output_download(
         let mut storage_profiles: std::collections::HashMap<String, serde_json::Value> =
             std::collections::HashMap::new();
         for sp_id in &sp_ids {
-            let sp_output = dl.get_storage_profile_for_queue()
-                .farm_id(farm_id).queue_id(queue_id).storage_profile_id(sp_id)
-                .send().await
-                .map_err(|e| CliError::Operation(format!("Failed to get storage profile {sp_id}: {}", client::format_sdk_error(&e))))?;
+            let sp_output = dl
+                .get_storage_profile_for_queue()
+                .farm_id(farm_id)
+                .queue_id(queue_id)
+                .storage_profile_id(sp_id)
+                .send()
+                .await
+                .map_err(|e| {
+                    CliError::Operation(format!(
+                        "Failed to get storage profile {sp_id}: {}",
+                        client::format_sdk_error(&e)
+                    ))
+                })?;
             storage_profiles.insert(sp_id.clone(), storage_profile_output_to_value(&sp_output));
         }
 
@@ -815,10 +1124,13 @@ async fn incremental_output_download(
         let local_sp = &storage_profiles[local_sp_id];
         let local_name = local_sp["displayName"].as_str().unwrap_or("unknown");
         eprintln!("Local storage profile is {local_name} ({local_sp_id})");
-        let same_sp_count = download_candidates.values()
+        let same_sp_count = download_candidates
+            .values()
             .filter(|j| j.get("storageProfileId").and_then(|v| v.as_str()) == Some(local_sp_id))
             .count();
-        eprintln!("  {same_sp_count} download candidate jobs have the same storage profile and will be downloaded to their original specified paths");
+        eprintln!(
+            "  {same_sp_count} download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
+        );
 
         // Print path mapping rules for each non-local storage profile
         for (sp_id, sp) in &storage_profiles {
@@ -829,21 +1141,29 @@ async fn incremental_output_download(
             let sp_name = sp["displayName"].as_str().unwrap_or("unknown");
             let sp_os = sp["osFamily"].as_str().unwrap_or("unknown");
             let local_os = local_sp["osFamily"].as_str().unwrap_or("unknown");
-            let job_count = download_candidates.values()
-                .filter(|j| j.get("storageProfileId").and_then(|v| v.as_str()) == Some(sp_id.as_str()))
+            let job_count = download_candidates
+                .values()
+                .filter(|j| {
+                    j.get("storageProfileId").and_then(|v| v.as_str()) == Some(sp_id.as_str())
+                })
                 .count();
 
             eprintln!();
-            eprintln!("Path mapping rules for {job_count} download candidate jobs with storage profile {sp_name} ({sp_id})");
+            eprintln!(
+                "Path mapping rules for {job_count} download candidate jobs with storage profile {sp_name} ({sp_id})"
+            );
             eprintln!("  job storage profile: {sp_name} ({sp_os})");
             eprintln!("  local storage profile: {local_name} ({local_os})");
 
             let source_sp = StorageProfile::from_json(sp);
             let dest_sp = StorageProfile::from_json(local_sp);
             if let (Some(src), Some(dst)) = (source_sp, dest_sp) {
-                let rules = deadline_job_attachments::path_mapping::generate_path_mapping_rules(&src, &dst);
+                let rules =
+                    deadline_job_attachments::path_mapping::generate_path_mapping_rules(&src, &dst);
                 if rules.is_empty() {
-                    eprintln!("   No rules generated. Storage profiles {local_name} and {sp_name} share no file system location names.");
+                    eprintln!(
+                        "   No rules generated. Storage profiles {local_name} and {sp_name} share no file system location names."
+                    );
                 } else {
                     for rule in &rules {
                         eprintln!("  - from: {}", rule.source_path);
@@ -856,11 +1176,13 @@ async fn incremental_output_download(
     }
 
     // Step 3: Get sessions and session actions for jobs with downloads
-    let jobs_to_process: std::collections::HashSet<String> = new_job_ids.iter()
+    let jobs_to_process: std::collections::HashSet<String> = new_job_ids
+        .iter()
         .chain(updated_job_ids.iter())
         .chain(completed_job_ids.iter())
         .filter(|id| {
-            download_candidates.get(*id)
+            download_candidates
+                .get(*id)
                 .and_then(|j| j.get("attachments"))
                 .is_some_and(|a| !a.is_null())
         })
@@ -870,23 +1192,34 @@ async fn incremental_output_download(
     eprintln!("Retrieving sessions for {} jobs...", jobs_to_process.len());
 
     // Collect session completed indexes from checkpoint
-    let checkpoint_session_indexes: std::collections::HashMap<String, std::collections::HashMap<String, i64>> =
-        checkpoint.jobs.iter()
-            .map(|j| (j.job_id().to_owned(), j.session_completed_indexes.clone()))
-            .collect();
+    let checkpoint_session_indexes: std::collections::HashMap<
+        String,
+        std::collections::HashMap<String, i64>,
+    > = checkpoint
+        .jobs
+        .iter()
+        .map(|j| (j.job_id().to_owned(), j.session_completed_indexes.clone()))
+        .collect();
 
     let mut all_session_actions: Vec<serde_json::Value> = Vec::new();
 
     // Track session actions per job for SYNC-001/SYNC-003 filtering
-    let mut job_session_action_counts: std::collections::HashMap<String, (usize, usize)> = std::collections::HashMap::new(); // (total, with_output)
-    let mut job_session_action_ids: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut job_session_action_counts: std::collections::HashMap<String, (usize, usize)> =
+        std::collections::HashMap::new(); // (total, with_output)
+    let mut job_session_action_ids: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
 
     for job_id in &jobs_to_process {
         let sessions_pages = client::collect_paginated(
-            dl.list_sessions().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-                .into_paginator().send()
-        ).await
-            .map_err(|e| CliError::Operation(format!("Failed to list sessions for {job_id}: {e}")))?;
+            dl.list_sessions()
+                .farm_id(farm_id)
+                .queue_id(queue_id)
+                .job_id(job_id)
+                .into_paginator()
+                .send(),
+        )
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to list sessions for {job_id}: {e}")))?;
 
         let mut job_actions: Vec<serde_json::Value> = Vec::new();
 
@@ -895,11 +1228,19 @@ async fn incremental_output_download(
                 let session_id = session.session_id();
                 let action_pages = client::collect_paginated(
                     dl.list_session_actions()
-                        .farm_id(farm_id).queue_id(queue_id).job_id(job_id).session_id(session_id)
-                        .into_paginator().send()
-                ).await.map_err(|e| CliError::Operation(
-                    format!("Failed to list session actions for {session_id}: {e}")
-                ))?;
+                        .farm_id(farm_id)
+                        .queue_id(queue_id)
+                        .job_id(job_id)
+                        .session_id(session_id)
+                        .into_paginator()
+                        .send(),
+                )
+                .await
+                .map_err(|e| {
+                    CliError::Operation(format!(
+                        "Failed to list session actions for {session_id}: {e}"
+                    ))
+                })?;
 
                 for apage in &action_pages {
                     for action in apage.session_actions() {
@@ -907,26 +1248,41 @@ async fn incremental_output_download(
                         let succeeded = action.status().as_str() == "SUCCEEDED";
                         let is_task_run = matches!(
                             action.definition(),
-                            Some(aws_sdk_deadline::types::SessionActionDefinitionSummary::TaskRun(_))
+                            Some(
+                                aws_sdk_deadline::types::SessionActionDefinitionSummary::TaskRun(_)
+                            )
                         );
                         if succeeded && is_task_run {
                             // Check if already downloaded (by session action index)
                             let sa_id = action.session_action_id();
-                            let sa_index: i64 = sa_id.rsplit('-').next()
-                                .and_then(|s| s.parse().ok()).unwrap_or(0);
+                            let sa_index: i64 = sa_id
+                                .rsplit('-')
+                                .next()
+                                .and_then(|s| s.parse().ok())
+                                .unwrap_or(0);
                             let completed_index = checkpoint_session_indexes
                                 .get(job_id)
                                 .and_then(|m| m.get(session_id))
                                 .copied();
                             if completed_index.is_none_or(|ci| sa_index > ci) {
                                 let mut action_val = serde_json::Map::new();
-                                action_val.insert("sessionActionId".into(), serde_json::json!(sa_id));
-                                action_val.insert("status".into(), serde_json::json!(action.status().as_str()));
+                                action_val
+                                    .insert("sessionActionId".into(), serde_json::json!(sa_id));
+                                action_val.insert(
+                                    "status".into(),
+                                    serde_json::json!(action.status().as_str()),
+                                );
                                 if let Some(dt) = action.started_at() {
-                                    action_val.insert("startedAt".into(), serde_json::json!(dt.to_string()));
+                                    action_val.insert(
+                                        "startedAt".into(),
+                                        serde_json::json!(dt.to_string()),
+                                    );
                                 }
                                 if let Some(dt) = action.ended_at() {
-                                    action_val.insert("endedAt".into(), serde_json::json!(dt.to_string()));
+                                    action_val.insert(
+                                        "endedAt".into(),
+                                        serde_json::json!(dt.to_string()),
+                                    );
                                 }
                                 if let Some(aws_sdk_deadline::types::SessionActionDefinitionSummary::TaskRun(tr)) = action.definition() {
                                     action_val.insert("definition".into(), serde_json::json!({
@@ -941,7 +1297,8 @@ async fn incremental_output_download(
             }
         }
 
-        let action_ids: Vec<String> = job_actions.iter()
+        let action_ids: Vec<String> = job_actions
+            .iter()
             .filter_map(|a| a["sessionActionId"].as_str().map(ToOwned::to_owned))
             .collect();
         job_session_action_counts.insert(job_id.clone(), (job_actions.len(), 0));
@@ -949,16 +1306,27 @@ async fn incremental_output_download(
         all_session_actions.extend(job_actions);
     }
 
-    eprintln!("Found {} new session action(s) across {} job(s)",
-        all_session_actions.len(), jobs_to_process.len());
+    eprintln!(
+        "Found {} new session action(s) across {} job(s)",
+        all_session_actions.len(),
+        jobs_to_process.len()
+    );
 
     // Step 4: Download output manifests and files
-    eprintln!("Populating manifest S3 keys for {} jobs...", jobs_to_process.len());
-    let attachment_settings = queue.job_attachment_settings().expect("checked is_none above");
+    eprintln!(
+        "Populating manifest S3 keys for {} jobs...",
+        jobs_to_process.len()
+    );
+    let attachment_settings = queue
+        .job_attachment_settings()
+        .expect("checked is_none above");
     let bucket = attachment_settings.s3_bucket_name();
     let prefix = attachment_settings.root_prefix();
 
-    let mut downloaded_manifests: Vec<(chrono::DateTime<Utc>, deadline_job_attachments::asset_manifests::AssetManifest)> = Vec::new();
+    let mut downloaded_manifests: Vec<(
+        chrono::DateTime<Utc>,
+        deadline_job_attachments::asset_manifests::AssetManifest,
+    )> = Vec::new();
     let mut downloaded_files_count: usize = 0;
     let mut downloaded_bytes: u64 = 0;
 
@@ -966,9 +1334,9 @@ async fn incremental_output_download(
         eprintln!("Summary of paths to download:");
         eprintln!("  (no files to download)");
     } else {
-        let sdk_config = session::get_queue_scoped_config(
-            farm_id, queue_id, Some(config),
-        ).await.map_err(|e| CliError::Operation(format!("Failed to get S3 credentials:\n{e}")))?;
+        let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, Some(config))
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to get S3 credentials:\n{e}")))?;
 
         let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, Some(config));
         let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config)
@@ -983,43 +1351,59 @@ async fn incremental_output_download(
 
             let manifest_prefix = format!("{prefix}/Manifests/{farm_id}/{queue_id}/{job_id}/");
             let manifest_keys = deadline_job_attachments::download::list_output_manifest_keys(
-                &s3_client, bucket, &manifest_prefix, &account_id,
-            ).await.unwrap_or_default();
+                &s3_client,
+                bucket,
+                &manifest_prefix,
+                &account_id,
+            )
+            .await
+            .unwrap_or_default();
 
             // SYNC-001/003: Count session actions with output manifests for this job
-            let mut session_action_ids_with_manifests: std::collections::HashSet<String> = std::collections::HashSet::new();
+            let mut session_action_ids_with_manifests: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
             for key in &manifest_keys {
                 // Extract session action ID from manifest key path
                 // Format: .../step-X/task-Y/timestamp_sessionaction-ID/file.manifest
                 if let Some(sa_part) = key.rsplit('/').nth(1)
-                    && let Some(sa_id) = sa_part.split('_').find(|p| p.starts_with("sessionaction-")) {
-                        session_action_ids_with_manifests.insert(sa_id.to_owned());
-                    }
+                    && let Some(sa_id) =
+                        sa_part.split('_').find(|p| p.starts_with("sessionaction-"))
+                {
+                    session_action_ids_with_manifests.insert(sa_id.to_owned());
+                }
             }
 
             // Update the with-output count for this job
             if let Some(counts) = job_session_action_counts.get_mut(job_id) {
                 let job_sa_ids = job_session_action_ids.get(job_id);
                 counts.1 = job_sa_ids.map_or(0, |ids| {
-                    ids.iter().filter(|id| session_action_ids_with_manifests.contains(id.as_str())).count()
+                    ids.iter()
+                        .filter(|id| session_action_ids_with_manifests.contains(id.as_str()))
+                        .count()
                 });
             }
 
             for key in &manifest_keys {
                 match deadline_job_attachments::download::download_manifest_from_s3(
-                    &s3_client, bucket, key, &account_id,
-                ).await {
+                    &s3_client,
+                    bucket,
+                    key,
+                    &account_id,
+                )
+                .await
+                {
                     Ok((Some(asset_root), last_modified, mut manifest)) => {
-                    let root_path_format = dc_job.get("attachments")
-                        .and_then(|a| a["manifests"].as_array())
-                        .and_then(|m| m.first())
-                        .and_then(|m| m["rootPathFormat"].as_str());
+                        let root_path_format = dc_job
+                            .get("attachments")
+                            .and_then(|a| a["manifests"].as_array())
+                            .and_then(|m| m.first())
+                            .and_then(|m| m["rootPathFormat"].as_str());
 
-                    let mut unmapped = Vec::new();
-                    let _ = deadline_job_attachments::incremental_download::make_manifest_paths_absolute(
+                        let mut unmapped = Vec::new();
+                        let _ = deadline_job_attachments::incremental_download::make_manifest_paths_absolute(
                         &asset_root, &mut manifest, None, root_path_format, &mut unmapped,
                     );
-                    downloaded_manifests.push((last_modified, manifest));
+                        downloaded_manifests.push((last_modified, manifest));
                     }
                     Ok((None, _, _)) => {
                         log::warn!("Manifest {key} has no asset root metadata, skipping");
@@ -1036,19 +1420,25 @@ async fn incremental_output_download(
             if let Some(&(total, with_output)) = job_session_action_counts.get(job_id) {
                 let without_output = total - with_output;
                 if without_output > 0 {
-                    let name = download_candidates.get(job_id)
+                    let name = download_candidates
+                        .get(job_id)
                         .and_then(|j| j["name"].as_str())
                         .unwrap_or("unknown");
-                    eprintln!("WARNING: Job {name} ({job_id}) ran {without_output} / {total} session actions with no output.");
-                    eprintln!("         This may indicate steps in the job that strictly perform validation or save results elsewhere like a shared file system or S3.");
+                    eprintln!(
+                        "WARNING: Job {name} ({job_id}) ran {without_output} / {total} session actions with no output."
+                    );
+                    eprintln!(
+                        "         This may indicate steps in the job that strictly perform validation or save results elsewhere like a shared file system or S3."
+                    );
                 }
             }
         }
 
         // Merge and download
-        let manifest_paths = deadline_job_attachments::incremental_download::merge_absolute_path_manifest_list(
-            &mut downloaded_manifests,
-        );
+        let manifest_paths =
+            deadline_job_attachments::incremental_download::merge_absolute_path_manifest_list(
+                &mut downloaded_manifests,
+            );
 
         let total_bytes: u64 = manifest_paths.iter().map(|p| p.size).sum();
         let total_files = manifest_paths.len();
@@ -1064,10 +1454,12 @@ async fn incremental_output_download(
             // SYNC-004: Use summarize_path_list with sizes instead of aggregate count
             let local_paths: Vec<String> = manifest_paths.iter().map(|p| p.path.clone()).collect();
             let path_refs: Vec<&str> = local_paths.iter().map(String::as_str).collect();
-            let size_by_path: std::collections::HashMap<String, u64> = manifest_paths.iter()
+            let size_by_path: std::collections::HashMap<String, u64> = manifest_paths
+                .iter()
                 .map(|p| (p.path.clone(), p.size))
                 .collect();
-            let summary = deadline_api::path_utils::summarize_path_list(&path_refs, 30, Some(&size_by_path));
+            let summary =
+                deadline_api::path_utils::summarize_path_list(&path_refs, 30, Some(&size_by_path));
             eprint!("{summary}");
         }
         eprintln!();
@@ -1079,35 +1471,54 @@ async fn incremental_output_download(
                 s3_bucket_name: bucket.to_owned(),
                 root_prefix: prefix.to_owned(),
             };
-            let cas_prefix = s3_settings.full_cas_prefix()
+            let cas_prefix = s3_settings
+                .full_cas_prefix()
                 .map_err(|e| CliError::Operation(format!("Failed to compute CAS prefix: {e}")))?;
 
             // Group manifest paths by parent directory for download
-            let mut manifests_by_root: std::collections::HashMap<String, deadline_job_attachments::asset_manifests::AssetManifest> =
-                std::collections::HashMap::new();
+            let mut manifests_by_root: std::collections::HashMap<
+                String,
+                deadline_job_attachments::asset_manifests::AssetManifest,
+            > = std::collections::HashMap::new();
             for mp in &manifest_paths {
                 let dir = Path::new(&mp.path)
-                    .parent().map_or_else(|| "/".to_owned(), |p| p.to_string_lossy().to_string());
+                    .parent()
+                    .map_or_else(|| "/".to_owned(), |p| p.to_string_lossy().to_string());
                 let root = if dir.is_empty() { "/".to_owned() } else { dir };
                 let entry = manifests_by_root.entry(root).or_insert_with(|| {
                     deadline_job_attachments::asset_manifests::AssetManifest::new(
                         deadline_job_attachments::asset_manifests::HashAlgorithm::Xxh128,
                         deadline_job_attachments::asset_manifests::ManifestVersion::V2023_03_03,
-                        0, vec![],
-                    ).expect("valid manifest params")
+                        0,
+                        vec![],
+                    )
+                    .expect("valid manifest params")
                 });
                 let filename = Path::new(&mp.path)
-                    .file_name().map_or_else(|| mp.path.clone(), |f| f.to_string_lossy().to_string());
-                entry.paths.push(deadline_job_attachments::asset_manifests::ManifestPath {
-                    path: filename, hash: mp.hash.clone(), size: mp.size, mtime: mp.mtime,
-                });
+                    .file_name()
+                    .map_or_else(|| mp.path.clone(), |f| f.to_string_lossy().to_string());
+                entry
+                    .paths
+                    .push(deadline_job_attachments::asset_manifests::ManifestPath {
+                        path: filename,
+                        hash: mp.hash.clone(),
+                        size: mp.size,
+                        mtime: mp.mtime,
+                    });
                 entry.total_size += mp.size;
             }
 
             match deadline_job_attachments::download::download_files_from_manifests(
-                bucket, &manifests_by_root, Some(&cas_prefix),
-                &s3_client, &account_id, None, conflict,
-            ).await {
+                bucket,
+                &manifests_by_root,
+                Some(&cas_prefix),
+                &s3_client,
+                &account_id,
+                None,
+                conflict,
+            )
+            .await
+            {
                 Ok(stats) => {
                     downloaded_files_count = stats.downloaded_files.len();
                     downloaded_bytes = stats.stats.total_bytes;
@@ -1121,32 +1532,44 @@ async fn incremental_output_download(
     eprintln!();
 
     if dry_run {
-        eprintln!("Summary of DRY RUN for incremental output download (no files were downloaded to the file system):");
+        eprintln!(
+            "Summary of DRY RUN for incremental output download (no files were downloaded to the file system):"
+        );
     } else {
         eprintln!("Summary of incremental output download:");
     }
-    eprintln!("  Downloaded session actions: {}", job_session_action_counts.values().map(|&(_, with_output)| with_output).sum::<usize>());
+    eprintln!(
+        "  Downloaded session actions: {}",
+        job_session_action_counts
+            .values()
+            .map(|&(_, with_output)| with_output)
+            .sum::<usize>()
+    );
     eprintln!("  Downloaded files: {downloaded_files_count}");
-    eprintln!("  Downloaded bytes: {}",
-        deadline_job_attachments::progress_tracker::human_readable_file_size(downloaded_bytes));
+    eprintln!(
+        "  Downloaded bytes: {}",
+        deadline_job_attachments::progress_tracker::human_readable_file_size(downloaded_bytes)
+    );
     eprintln!("  Jobs with downloads:");
     eprintln!("    completed: {}", completed_job_ids.len());
     eprintln!("    added: {}", new_job_ids.len());
     eprintln!("    updated: {}", updated_job_ids.len());
     eprintln!("  Jobs without downloads:");
-    eprintln!("    not using job attachments: {}", attachments_free_ids.len());
-    eprintln!("    missing storage profile: {}", missing_storage_profile_ids.len());
+    eprintln!(
+        "    not using job attachments: {}",
+        attachments_free_ids.len()
+    );
+    eprintln!(
+        "    missing storage profile: {}",
+        missing_storage_profile_ids.len()
+    );
     eprintln!("    unchanged: {}", unchanged_job_ids.len());
     eprintln!("    inactive: {}", finished_tracking_ids.len());
 
     // Update checkpoint
     let mut updated_jobs: Vec<IncrementalDownloadJob> = Vec::new();
     for job in download_candidates.values() {
-        updated_jobs.push(
-            IncrementalDownloadJob::new(
-                job.clone(), None, None,
-            )
-        );
+        updated_jobs.push(IncrementalDownloadJob::new(job.clone(), None, None));
     }
 
     checkpoint.downloads_completed_timestamp = new_completed;
@@ -1188,7 +1611,9 @@ fn is_writable(path: &Path) -> bool {
 }
 
 /// Convert `GetStorageProfileForQueueOutput` to a `serde_json::Value` matching the API JSON shape.
-fn storage_profile_output_to_value(output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput) -> serde_json::Value {
+fn storage_profile_output_to_value(
+    output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput,
+) -> serde_json::Value {
     deadline_api::type_conversions::storage_profile_output_to_value(output)
 }
 

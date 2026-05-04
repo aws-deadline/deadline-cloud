@@ -57,11 +57,16 @@ impl TestHarness {
         cmd.env("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &ep);
         cmd.env("AWS_ENDPOINT_URL_S3", &ep);
         cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
-        cmd.env("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        cmd.env(
+            "AWS_SECRET_ACCESS_KEY",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        );
         cmd.env("AWS_DEFAULT_REGION", "us-west-2");
         cmd.env("DEADLINE_CONFIG_FILE_PATH", &self.config_path);
         cmd.env("HOME", self.config_dir.path());
-        for var in CLEAN_VARS { cmd.env_remove(var); }
+        for var in CLEAN_VARS {
+            cmd.env_remove(var);
+        }
         cmd.args(args);
         cmd
     }
@@ -76,11 +81,16 @@ impl TestHarness {
         cmd.env("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &ep);
         cmd.env("AWS_ENDPOINT_URL_S3", &ep);
         cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
-        cmd.env("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        cmd.env(
+            "AWS_SECRET_ACCESS_KEY",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        );
         cmd.env("AWS_DEFAULT_REGION", "us-west-2");
         cmd.env("DEADLINE_CONFIG_FILE_PATH", &self.config_path);
         cmd.env("HOME", self.config_dir.path());
-        for var in CLEAN_VARS { cmd.env_remove(var); }
+        for var in CLEAN_VARS {
+            cmd.env_remove(var);
+        }
         cmd.args(args);
         cmd
     }

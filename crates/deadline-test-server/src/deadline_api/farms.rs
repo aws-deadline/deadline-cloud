@@ -6,27 +6,19 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 pub async fn mock_list_farms(server: &MockServer, farms: &[Value]) {
     Mock::given(method("GET"))
         .and(path("/2023-10-12/farms"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "farms": farms })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "farms": farms })))
         .mount(server)
         .await;
 }
 
 /// Mount a paginated `ListFarms` response.
-pub async fn mock_list_farms_paginated(
-    server: &MockServer,
-    page1: &[Value],
-    page2: &[Value],
-) {
+pub async fn mock_list_farms_paginated(server: &MockServer, page1: &[Value], page2: &[Value]) {
     Mock::given(method("GET"))
         .and(path("/2023-10-12/farms"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
-                "farms": page1,
-                "nextToken": "page2-token"
-            })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "farms": page1,
+            "nextToken": "page2-token"
+        })))
         .up_to_n_times(1)
         .mount(server)
         .await;
@@ -34,9 +26,7 @@ pub async fn mock_list_farms_paginated(
     Mock::given(method("GET"))
         .and(path("/2023-10-12/farms"))
         .and(query_param("nextToken", "page2-token"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "farms": page2 })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "farms": page2 })))
         .mount(server)
         .await;
 }
@@ -60,9 +50,7 @@ pub async fn mock_list_farms_with_principal_id(
     Mock::given(method("GET"))
         .and(path("/2023-10-12/farms"))
         .and(query_param("principalId", principal_id))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "farms": farms })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "farms": farms })))
         .mount(server)
         .await;
 }

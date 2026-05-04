@@ -3,13 +3,13 @@
 //! Each function walks the typed SDK accessors and builds a JSON value
 //! manually. This avoids needing raw HTTP body interception.
 
+use aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput;
 use aws_sdk_deadline::types::{
     Attachments, DependencyCounts, FleetConfiguration, HostPropertiesResponse,
     JobAttachmentSettings, JobParameter, JobRunAsUser, LogConfiguration, ManifestProperties,
     ParameterSpace, SchedulingConfiguration, StepRequiredCapabilities, TaskParameterValue,
 };
-use aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 pub fn job_parameter_to_value(p: &JobParameter) -> Value {
     match p {
@@ -117,7 +117,10 @@ pub fn manifest_properties_to_value(m: &ManifestProperties) -> Value {
         obj.insert("fileSystemLocationName".into(), json!(name));
     }
     obj.insert("rootPath".into(), json!(m.root_path()));
-    obj.insert("rootPathFormat".into(), json!(m.root_path_format().as_str()));
+    obj.insert(
+        "rootPathFormat".into(),
+        json!(m.root_path_format().as_str()),
+    );
     if m.output_relative_directories.is_some() {
         obj.insert(
             "outputRelativeDirectories".into(),
@@ -134,7 +137,11 @@ pub fn manifest_properties_to_value(m: &ManifestProperties) -> Value {
 }
 
 pub fn attachments_to_value(a: &Attachments) -> Value {
-    let manifests: Vec<Value> = a.manifests().iter().map(manifest_properties_to_value).collect();
+    let manifests: Vec<Value> = a
+        .manifests()
+        .iter()
+        .map(manifest_properties_to_value)
+        .collect();
     json!({
         "manifests": manifests,
         "fileSystem": a.file_system().as_str(),
@@ -142,21 +149,31 @@ pub fn attachments_to_value(a: &Attachments) -> Value {
 }
 
 pub fn parameter_space_to_value(p: &ParameterSpace) -> Value {
-    let params: Vec<Value> = p.parameters().iter().map(|sp| {
-        let mut obj = Map::new();
-        obj.insert("name".into(), json!(sp.name()));
-        obj.insert("type".into(), json!(sp.r#type().as_str()));
-        if let Some(chunks) = sp.chunks() {
-            let mut c = Map::new();
-            c.insert("defaultTaskCount".into(), json!(chunks.default_task_count()));
-            if let Some(t) = chunks.target_runtime_seconds() {
-                c.insert("targetRuntimeSeconds".into(), json!(t));
+    let params: Vec<Value> = p
+        .parameters()
+        .iter()
+        .map(|sp| {
+            let mut obj = Map::new();
+            obj.insert("name".into(), json!(sp.name()));
+            obj.insert("type".into(), json!(sp.r#type().as_str()));
+            if let Some(chunks) = sp.chunks() {
+                let mut c = Map::new();
+                c.insert(
+                    "defaultTaskCount".into(),
+                    json!(chunks.default_task_count()),
+                );
+                if let Some(t) = chunks.target_runtime_seconds() {
+                    c.insert("targetRuntimeSeconds".into(), json!(t));
+                }
+                c.insert(
+                    "rangeConstraint".into(),
+                    json!(chunks.range_constraint().as_str()),
+                );
+                obj.insert("chunks".into(), Value::Object(c));
             }
-            c.insert("rangeConstraint".into(), json!(chunks.range_constraint().as_str()));
-            obj.insert("chunks".into(), Value::Object(c));
-        }
-        Value::Object(obj)
-    }).collect();
+            Value::Object(obj)
+        })
+        .collect();
     let mut obj = Map::new();
     obj.insert("parameters".into(), json!(params));
     if let Some(c) = p.combination() {
@@ -193,7 +210,9 @@ fn fleet_amount_capability_to_value(c: &aws_sdk_deadline::types::FleetAmountCapa
     Value::Object(obj)
 }
 
-fn fleet_attribute_capability_to_value(c: &aws_sdk_deadline::types::FleetAttributeCapability) -> Value {
+fn fleet_attribute_capability_to_value(
+    c: &aws_sdk_deadline::types::FleetAttributeCapability,
+) -> Value {
     json!({"name": c.name(), "values": c.values()})
 }
 
@@ -208,7 +227,11 @@ fn customer_managed_worker_capabilities_to_value(
         obj.insert("memoryMiB".into(), memory_mib_range_to_value(m));
     }
     if w.accelerator_types.is_some() {
-        let types: Vec<&str> = w.accelerator_types().iter().map(aws_sdk_deadline::types::AcceleratorType::as_str).collect();
+        let types: Vec<&str> = w
+            .accelerator_types()
+            .iter()
+            .map(aws_sdk_deadline::types::AcceleratorType::as_str)
+            .collect();
         obj.insert("acceleratorTypes".into(), json!(types));
     }
     if let Some(c) = w.accelerator_count() {
@@ -228,13 +251,24 @@ fn customer_managed_worker_capabilities_to_value(
         obj.insert("acceleratorTotalMemoryMiB".into(), Value::Object(am));
     }
     obj.insert("osFamily".into(), json!(w.os_family().as_str()));
-    obj.insert("cpuArchitectureType".into(), json!(w.cpu_architecture_type().as_str()));
+    obj.insert(
+        "cpuArchitectureType".into(),
+        json!(w.cpu_architecture_type().as_str()),
+    );
     if w.custom_amounts.is_some() {
-        let amounts: Vec<Value> = w.custom_amounts().iter().map(fleet_amount_capability_to_value).collect();
+        let amounts: Vec<Value> = w
+            .custom_amounts()
+            .iter()
+            .map(fleet_amount_capability_to_value)
+            .collect();
         obj.insert("customAmounts".into(), json!(amounts));
     }
     if w.custom_attributes.is_some() {
-        let attrs: Vec<Value> = w.custom_attributes().iter().map(fleet_attribute_capability_to_value).collect();
+        let attrs: Vec<Value> = w
+            .custom_attributes()
+            .iter()
+            .map(fleet_attribute_capability_to_value)
+            .collect();
         obj.insert("customAttributes".into(), json!(attrs));
     }
     Value::Object(obj)
@@ -251,48 +285,72 @@ fn service_managed_ec2_instance_capabilities_to_value(
         obj.insert("memoryMiB".into(), memory_mib_range_to_value(m));
     }
     obj.insert("osFamily".into(), json!(c.os_family().as_str()));
-    obj.insert("cpuArchitectureType".into(), json!(c.cpu_architecture_type().as_str()));
+    obj.insert(
+        "cpuArchitectureType".into(),
+        json!(c.cpu_architecture_type().as_str()),
+    );
     if let Some(vol) = c.root_ebs_volume() {
-        obj.insert("rootEbsVolume".into(), json!({
-            "sizeGiB": vol.size_gib(),
-            "iops": vol.iops(),
-            "throughputMiB": vol.throughput_mib(),
-        }));
+        obj.insert(
+            "rootEbsVolume".into(),
+            json!({
+                "sizeGiB": vol.size_gib(),
+                "iops": vol.iops(),
+                "throughputMiB": vol.throughput_mib(),
+            }),
+        );
     }
     if let Some(acc) = c.accelerator_capabilities() {
         let mut ac = Map::new();
-        let sels: Vec<Value> = acc.selections().iter().map(|s| {
-            let mut so = Map::new();
-            so.insert("name".into(), json!(s.name().as_str()));
-            let rt = s.runtime();
-            if !rt.is_empty() {
-                so.insert("runtime".into(), json!(rt));
-            }
-            Value::Object(so)
-        }).collect();
+        let sels: Vec<Value> = acc
+            .selections()
+            .iter()
+            .map(|s| {
+                let mut so = Map::new();
+                so.insert("name".into(), json!(s.name().as_str()));
+                let rt = s.runtime();
+                if !rt.is_empty() {
+                    so.insert("runtime".into(), json!(rt));
+                }
+                Value::Object(so)
+            })
+            .collect();
         ac.insert("selections".into(), json!(sels));
         if let Some(count) = acc.count() {
-                let mut co = Map::new();
-                co.insert("min".into(), json!(count.min()));
-                if let Some(max) = count.max() {
-                    co.insert("max".into(), json!(max));
-                }
-                ac.insert("count".into(), Value::Object(co));
+            let mut co = Map::new();
+            co.insert("min".into(), json!(count.min()));
+            if let Some(max) = count.max() {
+                co.insert("max".into(), json!(max));
             }
+            ac.insert("count".into(), Value::Object(co));
+        }
         obj.insert("acceleratorCapabilities".into(), Value::Object(ac));
     }
     if c.allowed_instance_types.is_some() {
-        obj.insert("allowedInstanceTypes".into(), json!(c.allowed_instance_types()));
+        obj.insert(
+            "allowedInstanceTypes".into(),
+            json!(c.allowed_instance_types()),
+        );
     }
     if c.excluded_instance_types.is_some() {
-        obj.insert("excludedInstanceTypes".into(), json!(c.excluded_instance_types()));
+        obj.insert(
+            "excludedInstanceTypes".into(),
+            json!(c.excluded_instance_types()),
+        );
     }
     if c.custom_amounts.is_some() {
-        let amounts: Vec<Value> = c.custom_amounts().iter().map(fleet_amount_capability_to_value).collect();
+        let amounts: Vec<Value> = c
+            .custom_amounts()
+            .iter()
+            .map(fleet_amount_capability_to_value)
+            .collect();
         obj.insert("customAmounts".into(), json!(amounts));
     }
     if c.custom_attributes.is_some() {
-        let attrs: Vec<Value> = c.custom_attributes().iter().map(fleet_attribute_capability_to_value).collect();
+        let attrs: Vec<Value> = c
+            .custom_attributes()
+            .iter()
+            .map(fleet_attribute_capability_to_value)
+            .collect();
         obj.insert("customAttributes".into(), json!(attrs));
     }
     Value::Object(obj)
@@ -308,14 +366,20 @@ pub fn fleet_configuration_to_value(c: &FleetConfiguration) -> Value {
                 if let Some(s) = asc.standby_worker_count() {
                     ac.insert("standbyWorkerCount".into(), json!(s));
                 }
-                ac.insert("workerIdleDurationSeconds".into(), json!(asc.worker_idle_duration_seconds()));
+                ac.insert(
+                    "workerIdleDurationSeconds".into(),
+                    json!(asc.worker_idle_duration_seconds()),
+                );
                 if let Some(s) = asc.scale_out_workers_per_minute() {
                     ac.insert("scaleOutWorkersPerMinute".into(), json!(s));
                 }
                 obj.insert("autoScalingConfiguration".into(), Value::Object(ac));
             }
             if let Some(wc) = cm.worker_capabilities() {
-                obj.insert("workerCapabilities".into(), customer_managed_worker_capabilities_to_value(wc));
+                obj.insert(
+                    "workerCapabilities".into(),
+                    customer_managed_worker_capabilities_to_value(wc),
+                );
             }
             if let Some(sp) = cm.storage_profile_id() {
                 obj.insert("storageProfileId".into(), json!(sp));
@@ -328,14 +392,23 @@ pub fn fleet_configuration_to_value(c: &FleetConfiguration) -> Value {
         FleetConfiguration::ServiceManagedEc2(sm) => {
             let mut obj = Map::new();
             if let Some(ic) = sm.instance_capabilities() {
-                obj.insert("instanceCapabilities".into(), service_managed_ec2_instance_capabilities_to_value(ic));
+                obj.insert(
+                    "instanceCapabilities".into(),
+                    service_managed_ec2_instance_capabilities_to_value(ic),
+                );
             }
             if let Some(imo) = sm.instance_market_options() {
-                obj.insert("instanceMarketOptions".into(), json!({"type": imo.r#type().as_str()}));
+                obj.insert(
+                    "instanceMarketOptions".into(),
+                    json!({"type": imo.r#type().as_str()}),
+                );
             }
             if let Some(vpc) = sm.vpc_configuration() {
                 if vpc.resource_configuration_arns.is_some() {
-                    obj.insert("vpcConfiguration".into(), json!({"resourceConfigurationArns": vpc.resource_configuration_arns()}));
+                    obj.insert(
+                        "vpcConfiguration".into(),
+                        json!({"resourceConfigurationArns": vpc.resource_configuration_arns()}),
+                    );
                 } else {
                     obj.insert("vpcConfiguration".into(), json!({}));
                 }
@@ -348,7 +421,10 @@ pub fn fleet_configuration_to_value(c: &FleetConfiguration) -> Value {
                 if let Some(s) = asc.standby_worker_count() {
                     ac.insert("standbyWorkerCount".into(), json!(s));
                 }
-                ac.insert("workerIdleDurationSeconds".into(), json!(asc.worker_idle_duration_seconds()));
+                ac.insert(
+                    "workerIdleDurationSeconds".into(),
+                    json!(asc.worker_idle_duration_seconds()),
+                );
                 if let Some(s) = asc.scale_out_workers_per_minute() {
                     ac.insert("scaleOutWorkersPerMinute".into(), json!(s));
                 }
@@ -370,9 +446,18 @@ pub fn scheduling_configuration_to_value(c: &SchedulingConfiguration) -> Value {
             let mut obj = Map::new();
             obj.insert("priorityWeight".into(), json!(wb.priority_weight()));
             obj.insert("errorWeight".into(), json!(wb.error_weight()));
-            obj.insert("submissionTimeWeight".into(), json!(wb.submission_time_weight()));
-            obj.insert("renderingTaskWeight".into(), json!(wb.rendering_task_weight()));
-            obj.insert("renderingTaskBuffer".into(), json!(wb.rendering_task_buffer()));
+            obj.insert(
+                "submissionTimeWeight".into(),
+                json!(wb.submission_time_weight()),
+            );
+            obj.insert(
+                "renderingTaskWeight".into(),
+                json!(wb.rendering_task_weight()),
+            );
+            obj.insert(
+                "renderingTaskBuffer".into(),
+                json!(wb.rendering_task_buffer()),
+            );
             if let Some(_mpo) = wb.max_priority_override() {
                 obj.insert("maxPriorityOverride".into(), json!("ALWAYS_SCHEDULE_FIRST"));
             }
@@ -383,47 +468,62 @@ pub fn scheduling_configuration_to_value(c: &SchedulingConfiguration) -> Value {
 }
 
 pub fn step_required_capabilities_to_value(c: &StepRequiredCapabilities) -> Value {
-    let attributes: Vec<Value> = c.attributes().iter().map(|a| {
-        let mut obj = Map::new();
-        obj.insert("name".into(), json!(a.name()));
-        if a.any_of.is_some() {
-            obj.insert("anyOf".into(), json!(a.any_of()));
-        }
-        if a.all_of.is_some() {
-            obj.insert("allOf".into(), json!(a.all_of()));
-        }
-        Value::Object(obj)
-    }).collect();
-    let amounts: Vec<Value> = c.amounts().iter().map(|a| {
-        let mut obj = Map::new();
-        obj.insert("name".into(), json!(a.name()));
-        if let Some(min) = a.min() {
-            obj.insert("min".into(), json!(min));
-        }
-        if let Some(max) = a.max() {
-            obj.insert("max".into(), json!(max));
-        }
-        if let Some(val) = a.value() {
-            obj.insert("value".into(), json!(val));
-        }
-        Value::Object(obj)
-    }).collect();
+    let attributes: Vec<Value> = c
+        .attributes()
+        .iter()
+        .map(|a| {
+            let mut obj = Map::new();
+            obj.insert("name".into(), json!(a.name()));
+            if a.any_of.is_some() {
+                obj.insert("anyOf".into(), json!(a.any_of()));
+            }
+            if a.all_of.is_some() {
+                obj.insert("allOf".into(), json!(a.all_of()));
+            }
+            Value::Object(obj)
+        })
+        .collect();
+    let amounts: Vec<Value> = c
+        .amounts()
+        .iter()
+        .map(|a| {
+            let mut obj = Map::new();
+            obj.insert("name".into(), json!(a.name()));
+            if let Some(min) = a.min() {
+                obj.insert("min".into(), json!(min));
+            }
+            if let Some(max) = a.max() {
+                obj.insert("max".into(), json!(max));
+            }
+            if let Some(val) = a.value() {
+                obj.insert("value".into(), json!(val));
+            }
+            Value::Object(obj)
+        })
+        .collect();
     json!({"attributes": attributes, "amounts": amounts})
 }
 
 /// Convert `GetStorageProfileForQueueOutput` to Value matching the API JSON shape.
 pub fn storage_profile_output_to_value(output: &GetStorageProfileForQueueOutput) -> Value {
     let mut m = Map::new();
-    m.insert("storageProfileId".into(), json!(output.storage_profile_id()));
+    m.insert(
+        "storageProfileId".into(),
+        json!(output.storage_profile_id()),
+    );
     m.insert("displayName".into(), json!(output.display_name()));
     m.insert("osFamily".into(), json!(output.os_family().as_str()));
-    let locations: Vec<Value> = output.file_system_locations().iter().map(|loc| {
-        json!({
-            "name": loc.name(),
-            "path": loc.path(),
-            "type": loc.r#type().as_str(),
+    let locations: Vec<Value> = output
+        .file_system_locations()
+        .iter()
+        .map(|loc| {
+            json!({
+                "name": loc.name(),
+                "path": loc.path(),
+                "type": loc.r#type().as_str(),
+            })
         })
-    }).collect();
+        .collect();
     m.insert("fileSystemLocations".into(), json!(locations));
     Value::Object(m)
 }
@@ -432,17 +532,16 @@ pub fn storage_profile_output_to_value(output: &GetStorageProfileForQueueOutput)
 mod tests {
     use super::*;
     use aws_sdk_deadline::types::{
-        Attachments, AutoScalingMode, CpuArchitectureType,
-        CustomerManagedFleetConfiguration, CustomerManagedFleetOperatingSystemFamily,
-        CustomerManagedWorkerCapabilities, DependencyCounts, FleetConfiguration,
-        HostPropertiesResponse, IpAddresses, JobAttachmentSettings, JobAttachmentsFileSystem,
-        JobParameter, JobRunAsUser, LogConfiguration, ManifestProperties, MemoryMiBRange,
-        ParameterSpace, PathFormat, PosixUser, PriorityBalancedSchedulingConfiguration,
-        PriorityFifoSchedulingConfiguration, RunAs, SchedulingConfiguration,
-        ServiceManagedEc2FleetConfiguration, ServiceManagedEc2InstanceCapabilities,
-        ServiceManagedFleetOperatingSystemFamily, StepAmountCapability,
-        StepAttributeCapability, StepParameter, StepParameterType, StepRequiredCapabilities,
-        TaskParameterValue, VCpuCountRange, WindowsUser,
+        Attachments, AutoScalingMode, CpuArchitectureType, CustomerManagedFleetConfiguration,
+        CustomerManagedFleetOperatingSystemFamily, CustomerManagedWorkerCapabilities,
+        DependencyCounts, FleetConfiguration, HostPropertiesResponse, IpAddresses,
+        JobAttachmentSettings, JobAttachmentsFileSystem, JobParameter, JobRunAsUser,
+        LogConfiguration, ManifestProperties, MemoryMiBRange, ParameterSpace, PathFormat,
+        PosixUser, PriorityBalancedSchedulingConfiguration, PriorityFifoSchedulingConfiguration,
+        RunAs, SchedulingConfiguration, ServiceManagedEc2FleetConfiguration,
+        ServiceManagedEc2InstanceCapabilities, ServiceManagedFleetOperatingSystemFamily,
+        StepAmountCapability, StepAttributeCapability, StepParameter, StepParameterType,
+        StepRequiredCapabilities, TaskParameterValue, VCpuCountRange, WindowsUser,
     };
 
     // -------------------------------------------------------------------
@@ -528,7 +627,10 @@ mod tests {
             .build()
             .unwrap();
         let v = job_attachment_settings_to_value(&s);
-        assert_eq!(v, json!({"s3BucketName": "my-bucket", "rootPrefix": "Data/"}));
+        assert_eq!(
+            v,
+            json!({"s3BucketName": "my-bucket", "rootPrefix": "Data/"})
+        );
     }
 
     // -------------------------------------------------------------------
@@ -593,9 +695,7 @@ mod tests {
     #[test]
     fn host_properties_full() {
         let h = HostPropertiesResponse::builder()
-            .ip_addresses(
-                IpAddresses::builder().ipv4_addresses("10.0.0.1").build(),
-            )
+            .ip_addresses(IpAddresses::builder().ipv4_addresses("10.0.0.1").build())
             .host_name("ip-10-0-0-1")
             .ec2_instance_arn("arn:aws:ec2:us-west-2:123:instance/i-abc")
             .ec2_instance_type("m5.large")
@@ -603,7 +703,10 @@ mod tests {
         let v = host_properties_to_value(&h);
         assert_eq!(v["hostName"], "ip-10-0-0-1");
         assert_eq!(v["ipAddresses"]["ipV4Addresses"], json!(["10.0.0.1"]));
-        assert_eq!(v["ec2InstanceArn"], "arn:aws:ec2:us-west-2:123:instance/i-abc");
+        assert_eq!(
+            v["ec2InstanceArn"],
+            "arn:aws:ec2:us-west-2:123:instance/i-abc"
+        );
         assert_eq!(v["ec2InstanceType"], "m5.large");
     }
 
@@ -622,7 +725,11 @@ mod tests {
 
     #[test]
     fn posix_user_converts() {
-        let u = PosixUser::builder().user("render").group("artists").build().unwrap();
+        let u = PosixUser::builder()
+            .user("render")
+            .group("artists")
+            .build()
+            .unwrap();
         let v = posix_user_to_value(&u);
         assert_eq!(v, json!({"user": "render", "group": "artists"}));
     }
@@ -636,13 +743,22 @@ mod tests {
             .unwrap();
         let v = windows_user_to_value(&u);
         assert_eq!(v["user"], "DOMAIN\\render");
-        assert_eq!(v["passwordArn"], "arn:aws:secretsmanager:us-west-2:123:secret:pw");
+        assert_eq!(
+            v["passwordArn"],
+            "arn:aws:secretsmanager:us-west-2:123:secret:pw"
+        );
     }
 
     #[test]
     fn job_run_as_user_posix_only() {
         let j = JobRunAsUser::builder()
-            .posix(PosixUser::builder().user("render").group("artists").build().unwrap())
+            .posix(
+                PosixUser::builder()
+                    .user("render")
+                    .group("artists")
+                    .build()
+                    .unwrap(),
+            )
             .run_as(RunAs::QueueConfiguredUser)
             .build()
             .unwrap();
@@ -784,7 +900,13 @@ mod tests {
                 .worker_capabilities(
                     CustomerManagedWorkerCapabilities::builder()
                         .v_cpu_count(VCpuCountRange::builder().min(4).max(8).build().unwrap())
-                        .memory_mib(MemoryMiBRange::builder().min(8192).max(16384).build().unwrap())
+                        .memory_mib(
+                            MemoryMiBRange::builder()
+                                .min(8192)
+                                .max(16384)
+                                .build()
+                                .unwrap(),
+                        )
                         .os_family(CustomerManagedFleetOperatingSystemFamily::Linux)
                         .cpu_architecture_type(CpuArchitectureType::X8664)
                         .build()
@@ -796,11 +918,26 @@ mod tests {
         );
         let v = fleet_configuration_to_value(&c);
         assert_eq!(v["customerManaged"]["mode"], "NO_SCALING");
-        assert_eq!(v["customerManaged"]["workerCapabilities"]["vCpuCount"]["min"], 4);
-        assert_eq!(v["customerManaged"]["workerCapabilities"]["vCpuCount"]["max"], 8);
-        assert_eq!(v["customerManaged"]["workerCapabilities"]["memoryMiB"]["min"], 8192);
-        assert_eq!(v["customerManaged"]["workerCapabilities"]["osFamily"], "LINUX");
-        assert_eq!(v["customerManaged"]["workerCapabilities"]["cpuArchitectureType"], "x86_64");
+        assert_eq!(
+            v["customerManaged"]["workerCapabilities"]["vCpuCount"]["min"],
+            4
+        );
+        assert_eq!(
+            v["customerManaged"]["workerCapabilities"]["vCpuCount"]["max"],
+            8
+        );
+        assert_eq!(
+            v["customerManaged"]["workerCapabilities"]["memoryMiB"]["min"],
+            8192
+        );
+        assert_eq!(
+            v["customerManaged"]["workerCapabilities"]["osFamily"],
+            "LINUX"
+        );
+        assert_eq!(
+            v["customerManaged"]["workerCapabilities"]["cpuArchitectureType"],
+            "x86_64"
+        );
         assert_eq!(v["customerManaged"]["storageProfileId"], "sp-abc");
     }
 
@@ -811,20 +948,35 @@ mod tests {
                 .instance_capabilities(
                     ServiceManagedEc2InstanceCapabilities::builder()
                         .v_cpu_count(VCpuCountRange::builder().min(2).max(16).build().unwrap())
-                        .memory_mib(MemoryMiBRange::builder().min(4096).max(32768).build().unwrap())
+                        .memory_mib(
+                            MemoryMiBRange::builder()
+                                .min(4096)
+                                .max(32768)
+                                .build()
+                                .unwrap(),
+                        )
                         .os_family(ServiceManagedFleetOperatingSystemFamily::Linux)
                         .cpu_architecture_type(CpuArchitectureType::X8664)
                         .allowed_instance_types("m5.large".to_owned())
                         .allowed_instance_types("m5.xlarge".to_owned())
                         .build()
-                        .unwrap()
+                        .unwrap(),
                 )
-                .build()
+                .build(),
         );
         let v = fleet_configuration_to_value(&c);
-        assert_eq!(v["serviceManagedEc2"]["instanceCapabilities"]["vCpuCount"]["min"], 2);
-        assert_eq!(v["serviceManagedEc2"]["instanceCapabilities"]["memoryMiB"]["min"], 4096);
-        assert_eq!(v["serviceManagedEc2"]["instanceCapabilities"]["osFamily"], "LINUX");
+        assert_eq!(
+            v["serviceManagedEc2"]["instanceCapabilities"]["vCpuCount"]["min"],
+            2
+        );
+        assert_eq!(
+            v["serviceManagedEc2"]["instanceCapabilities"]["memoryMiB"]["min"],
+            4096
+        );
+        assert_eq!(
+            v["serviceManagedEc2"]["instanceCapabilities"]["osFamily"],
+            "LINUX"
+        );
         assert_eq!(
             v["serviceManagedEc2"]["instanceCapabilities"]["allowedInstanceTypes"],
             json!(["m5.large", "m5.xlarge"])

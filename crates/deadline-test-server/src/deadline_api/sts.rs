@@ -1,4 +1,4 @@
-use wiremock::matchers::{method, body_string_contains};
+use wiremock::matchers::{body_string_contains, method};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Mount a successful STS `GetCallerIdentity` response.

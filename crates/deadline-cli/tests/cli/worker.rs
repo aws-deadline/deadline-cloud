@@ -1,14 +1,17 @@
 //! Level 2 tests for `deadline worker` subcommands.
 
-use deadline_test_server::deadline_api::{errors, telemetry, workers};
 use deadline_test_server::TestHarness;
+use deadline_test_server::deadline_api::{errors, telemetry, workers};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
 #[tokio::test]
 async fn worker_list_prints_workers_with_count() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
     workers::mock_search_workers(
         &harness.server, "farm-abc",
         &[
@@ -24,22 +27,37 @@ async fn worker_list_prints_workers_with_count() {
 #[tokio::test]
 async fn worker_list_with_page_size_and_offset() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
     workers::mock_search_workers(
-        &harness.server, "farm-abc",
+        &harness.server,
+        "farm-abc",
         &[json!({"workerId": "worker-ccc", "status": "IDLE", "createdAt": "2024-01-03T00:00:00Z"})],
         20,
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "worker", "list", "--fleet-id", "fleet-abc", "--page-size", "10", "--item-offset", "5",
+        "worker",
+        "list",
+        "--fleet-id",
+        "fleet-abc",
+        "--page-size",
+        "10",
+        "--item-offset",
+        "5",
     ]));
 }
 
 #[tokio::test]
 async fn worker_list_no_fleet_id_exits_with_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
 
     assert_cmd_snapshot!(harness.cmd(&["worker", "list"]));
 }
@@ -47,7 +65,10 @@ async fn worker_list_no_fleet_id_exits_with_error() {
 #[tokio::test]
 async fn worker_list_api_failure_prints_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
     errors::mock_search_workers_access_denied(&harness.server, "farm-abc").await;
 
     assert_cmd_snapshot!(harness.cmd(&["worker", "list", "--fleet-id", "fleet-abc"]));
@@ -56,21 +77,32 @@ async fn worker_list_api_failure_prints_error() {
 #[tokio::test]
 async fn worker_get_prints_details() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
     workers::mock_get_worker(
         &harness.server, "farm-abc", "fleet-abc",
         json!({"workerId": "worker-aaa", "fleetId": "fleet-abc", "farmId": "farm-abc", "status": "RUNNING", "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc"}),
     ).await;
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "worker", "get", "--fleet-id", "fleet-abc", "--worker-id", "worker-aaa",
+        "worker",
+        "get",
+        "--fleet-id",
+        "fleet-abc",
+        "--worker-id",
+        "worker-aaa",
     ]));
 }
 
 #[tokio::test]
 async fn worker_get_missing_fleet_id_exits_with_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
 
     assert_cmd_snapshot!(harness.cmd(&["worker", "get", "--worker-id", "worker-aaa"]));
 }
@@ -78,13 +110,19 @@ async fn worker_get_missing_fleet_id_exits_with_error() {
 #[tokio::test]
 async fn worker_get_api_failure_prints_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    errors::mock_get_worker_not_found(
-        &harness.server, "farm-abc", "fleet-abc", "worker-bad",
-    ).await;
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    errors::mock_get_worker_not_found(&harness.server, "farm-abc", "fleet-abc", "worker-bad").await;
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "worker", "get", "--fleet-id", "fleet-abc", "--worker-id", "worker-bad",
+        "worker",
+        "get",
+        "--fleet-id",
+        "fleet-abc",
+        "--worker-id",
+        "worker-bad",
     ]));
 }
 
@@ -92,13 +130,18 @@ async fn worker_get_api_failure_prints_error() {
 #[tokio::test]
 async fn worker_list_access_denied_suggests_available_fleets() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
     errors::mock_search_workers_access_denied(&harness.server, "farm-abc").await;
     // Mount fleet list for suggestion chain
     deadline_test_server::deadline_api::fleets::mock_list_fleets(
-        &harness.server, "farm-abc",
+        &harness.server,
+        "farm-abc",
         &[json!({"fleetId": "fleet-real", "displayName": "Real Fleet"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["worker", "list", "--fleet-id", "fleet-bad"]));
 }
@@ -107,10 +150,11 @@ async fn worker_list_access_denied_suggests_available_fleets() {
 #[tokio::test]
 async fn worker_get_not_found_suggests_available_workers() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    errors::mock_get_worker_not_found(
-        &harness.server, "farm-abc", "fleet-abc", "worker-bad",
-    ).await;
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    errors::mock_get_worker_not_found(&harness.server, "farm-abc", "fleet-abc", "worker-bad").await;
     // Mount worker search for suggestion chain
     workers::mock_search_workers(
         &harness.server, "farm-abc",
@@ -119,7 +163,12 @@ async fn worker_get_not_found_suggests_available_workers() {
     ).await;
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "worker", "get", "--fleet-id", "fleet-abc", "--worker-id", "worker-bad",
+        "worker",
+        "get",
+        "--fleet-id",
+        "fleet-abc",
+        "--worker-id",
+        "worker-bad",
     ]));
 }
 
@@ -132,7 +181,10 @@ async fn worker_get_not_found_suggests_available_workers() {
 #[tokio::test]
 async fn worker_list_sends_latency_telemetry() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
     workers::mock_search_workers(
         &harness.server, "farm-abc",
         &[json!({"workerId": "worker-aaa", "status": "RUNNING", "createdAt": "2024-01-01T00:00:00Z"})],
@@ -140,18 +192,34 @@ async fn worker_list_sends_latency_telemetry() {
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
-    harness.cli(&["worker", "list", "--fleet-id", "fleet-abc"]).assert().success();
+    harness
+        .cli(&["worker", "list", "--fleet-id", "fleet-abc"])
+        .assert()
+        .success();
 }
 
 #[tokio::test]
 async fn worker_get_sends_latency_telemetry() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
     workers::mock_get_worker(
         &harness.server, "farm-abc", "fleet-abc",
         json!({"workerId": "worker-aaa", "fleetId": "fleet-abc", "farmId": "farm-abc", "status": "RUNNING", "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc"}),
     ).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
-    harness.cli(&["worker", "get", "--fleet-id", "fleet-abc", "--worker-id", "worker-aaa"]).assert().success();
+    harness
+        .cli(&[
+            "worker",
+            "get",
+            "--fleet-id",
+            "fleet-abc",
+            "--worker-id",
+            "worker-aaa",
+        ])
+        .assert()
+        .success();
 }

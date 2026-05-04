@@ -4,7 +4,7 @@
 //! environment hooks, confirmation prompts, payload modification.
 
 use deadline_test_server::TestHarness;
-use deadline_test_server::deadline_api::{bundle, jobs, queues, queue_resources};
+use deadline_test_server::deadline_api::{bundle, jobs, queue_resources, queues};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 use std::fs;
@@ -22,15 +22,23 @@ fn bundle_hooks_settings() -> insta::Settings {
 }
 
 fn setup_config(harness: &TestHarness) {
-    harness.cli(&["config", "set", "defaults.farm_id", FARM]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", QUEUE]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", FARM])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", QUEUE])
+        .assert()
+        .success();
 }
 
 /// Minimal valid YAML template.
 fn create_bundle(harness: &TestHarness, name: &str) -> String {
     let dir = harness.config_dir.path().join(name);
     fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("template.yaml"), "\
+    fs::write(
+        dir.join("template.yaml"),
+        "\
 specificationVersion: jobtemplate-2023-09
 name: TestJob
 steps:
@@ -40,7 +48,9 @@ steps:
         onRun:
           command: echo
           args: ['hello']
-").unwrap();
+",
+    )
+    .unwrap();
     dir.to_str().unwrap().to_owned()
 }
 
@@ -50,7 +60,8 @@ fn create_bundle_with_hooks(harness: &TestHarness, name: &str) -> String {
     fs::write(
         std::path::Path::new(&dir).join("hooks.yaml"),
         "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 0\"]\n",
-    ).unwrap();
+    )
+    .unwrap();
     dir
 }
 
@@ -60,7 +71,8 @@ fn create_bundle_with_modifying_hook(harness: &TestHarness, name: &str) -> Strin
     fs::write(
         std::path::Path::new(&dir).join("hooks.yaml"),
         "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo '{\\\"priority\\\": 100}'\"]\n",
-    ).unwrap();
+    )
+    .unwrap();
     dir
 }
 
@@ -70,7 +82,8 @@ fn create_bundle_with_failing_hook(harness: &TestHarness, name: &str) -> String 
     fs::write(
         std::path::Path::new(&dir).join("hooks.yaml"),
         "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 1\"]\n",
-    ).unwrap();
+    )
+    .unwrap();
     dir
 }
 
@@ -81,7 +94,8 @@ fn create_env_hooks_dir(harness: &TestHarness, name: &str) -> String {
     fs::write(
         dir.join("hooks.yaml"),
         "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 0\"]\n",
-    ).unwrap();
+    )
+    .unwrap();
     dir.to_str().unwrap().to_owned()
 }
 
@@ -92,26 +106,38 @@ fn create_bundle_with_post_hook(harness: &TestHarness, name: &str) -> (String, S
     let marker_escaped = marker.to_str().unwrap().replace('\\', "\\\\");
     fs::write(
         std::path::Path::new(&dir).join("hooks.yaml"),
-        format!("postSubmission:\n  - command: sh\n    args: [\"-c\", \"touch '{marker_escaped}'\"]\n"),
-    ).unwrap();
+        format!(
+            "postSubmission:\n  - command: sh\n    args: [\"-c\", \"touch '{marker_escaped}'\"]\n"
+        ),
+    )
+    .unwrap();
     (dir, marker.to_str().unwrap().to_owned())
 }
 
 /// Mock the standard APIs for a no-attachment submission.
 async fn mock_submit_no_attachments(harness: &TestHarness) {
-    queues::mock_get_queue(&harness.server, FARM, json!({
-        "queueId": QUEUE,
-        "displayName": "Test Queue",
-    })).await;
-    queue_resources::mock_list_queue_environments(
-        &harness.server, FARM, QUEUE, &[],
-    ).await;
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+        }),
+    )
+    .await;
+    queue_resources::mock_list_queue_environments(&harness.server, FARM, QUEUE, &[]).await;
     bundle::mock_create_job(&harness.server, FARM, QUEUE, JOB).await;
-    jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
-        "jobId": JOB,
-        "lifecycleStatus": "CREATE_COMPLETE",
-        "lifecycleStatusMessage": "Job created successfully",
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({
+            "jobId": JOB,
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "Job created successfully",
+        }),
+    )
+    .await;
 }
 
 // =====================================================================
@@ -122,7 +148,10 @@ async fn mock_submit_no_attachments(harness: &TestHarness) {
 async fn bundle_submit_hooks_enabled() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
-    harness.cli(&["config", "set", "settings.allow_bundle_hooks", "true"]).assert().success();
+    harness
+        .cli(&["config", "set", "settings.allow_bundle_hooks", "true"])
+        .assert()
+        .success();
     mock_submit_no_attachments(&harness).await;
     let bundle_dir = create_bundle_with_hooks(&harness, "hooks_enabled");
     let _guard = bundle_hooks_settings().bind_to_scope();
@@ -152,13 +181,19 @@ async fn bundle_submit_hooks_disabled_note() {
 async fn bundle_submit_env_hooks_enabled() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
-    harness.cli(&["config", "set", "settings.allow_environment_hooks", "true"]).assert().success();
+    harness
+        .cli(&["config", "set", "settings.allow_environment_hooks", "true"])
+        .assert()
+        .success();
     mock_submit_no_attachments(&harness).await;
     let bundle_dir = create_bundle(&harness, "env_hooks_enabled");
     let env_hooks_dir = create_env_hooks_dir(&harness, "env_hooks");
     let _guard = bundle_hooks_settings().bind_to_scope();
-    assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"])
-        .env("DEADLINE_HOOKS_DIR", &env_hooks_dir));
+    assert_cmd_snapshot!(
+        harness
+            .cmd(&["bundle", "submit", &bundle_dir, "--yes"])
+            .env("DEADLINE_HOOKS_DIR", &env_hooks_dir)
+    );
 }
 
 // =====================================================================
@@ -174,8 +209,11 @@ async fn bundle_submit_env_hooks_disabled_warning() {
     let bundle_dir = create_bundle(&harness, "env_hooks_disabled");
     let env_hooks_dir = create_env_hooks_dir(&harness, "env_hooks_warn");
     let _guard = bundle_hooks_settings().bind_to_scope();
-    assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"])
-        .env("DEADLINE_HOOKS_DIR", &env_hooks_dir));
+    assert_cmd_snapshot!(
+        harness
+            .cmd(&["bundle", "submit", &bundle_dir, "--yes"])
+            .env("DEADLINE_HOOKS_DIR", &env_hooks_dir)
+    );
 }
 
 // =====================================================================
@@ -186,14 +224,23 @@ async fn bundle_submit_env_hooks_disabled_warning() {
 async fn bundle_submit_both_hook_sources() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
-    harness.cli(&["config", "set", "settings.allow_bundle_hooks", "true"]).assert().success();
-    harness.cli(&["config", "set", "settings.allow_environment_hooks", "true"]).assert().success();
+    harness
+        .cli(&["config", "set", "settings.allow_bundle_hooks", "true"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "settings.allow_environment_hooks", "true"])
+        .assert()
+        .success();
     mock_submit_no_attachments(&harness).await;
     let bundle_dir = create_bundle_with_hooks(&harness, "both_sources");
     let env_hooks_dir = create_env_hooks_dir(&harness, "env_hooks_both");
     let _guard = bundle_hooks_settings().bind_to_scope();
-    assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &bundle_dir, "--yes"])
-        .env("DEADLINE_HOOKS_DIR", &env_hooks_dir));
+    assert_cmd_snapshot!(
+        harness
+            .cmd(&["bundle", "submit", &bundle_dir, "--yes"])
+            .env("DEADLINE_HOOKS_DIR", &env_hooks_dir)
+    );
 }
 
 // =====================================================================
@@ -204,7 +251,10 @@ async fn bundle_submit_both_hook_sources() {
 async fn bundle_submit_pre_hook_modifies_payload() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
-    harness.cli(&["config", "set", "settings.allow_bundle_hooks", "true"]).assert().success();
+    harness
+        .cli(&["config", "set", "settings.allow_bundle_hooks", "true"])
+        .assert()
+        .success();
     mock_submit_no_attachments(&harness).await;
     let bundle_dir = create_bundle_with_modifying_hook(&harness, "hook_modifies");
     let _guard = bundle_hooks_settings().bind_to_scope();
@@ -219,7 +269,10 @@ async fn bundle_submit_pre_hook_modifies_payload() {
 async fn bundle_submit_pre_hook_failure_cancels() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
-    harness.cli(&["config", "set", "settings.allow_bundle_hooks", "true"]).assert().success();
+    harness
+        .cli(&["config", "set", "settings.allow_bundle_hooks", "true"])
+        .assert()
+        .success();
     mock_submit_no_attachments(&harness).await;
     let bundle_dir = create_bundle_with_failing_hook(&harness, "hook_fails");
     let _guard = bundle_hooks_settings().bind_to_scope();
@@ -234,10 +287,14 @@ async fn bundle_submit_pre_hook_failure_cancels() {
 async fn bundle_submit_post_hook_after_success() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
-    harness.cli(&["config", "set", "settings.allow_bundle_hooks", "true"]).assert().success();
+    harness
+        .cli(&["config", "set", "settings.allow_bundle_hooks", "true"])
+        .assert()
+        .success();
     mock_submit_no_attachments(&harness).await;
     let (bundle_dir, marker_path) = create_bundle_with_post_hook(&harness, "post_hook");
-    harness.cli(&["bundle", "submit", &bundle_dir, "--yes"])
+    harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes"])
         .assert()
         .success();
     assert!(
@@ -254,7 +311,10 @@ async fn bundle_submit_post_hook_after_success() {
 async fn bundle_submit_hooks_confirmation_prompt() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
-    harness.cli(&["config", "set", "settings.allow_bundle_hooks", "true"]).assert().success();
+    harness
+        .cli(&["config", "set", "settings.allow_bundle_hooks", "true"])
+        .assert()
+        .success();
     mock_submit_no_attachments(&harness).await;
     let bundle_dir = create_bundle_with_hooks(&harness, "hooks_prompt");
     let _guard = bundle_hooks_settings().bind_to_scope();

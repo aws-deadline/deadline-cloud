@@ -10,7 +10,11 @@
 
 use pyo3::prelude::*;
 
-pyo3::create_exception!(deadline._native, DeadlineOperationError, pyo3::exceptions::PyException);
+pyo3::create_exception!(
+    deadline._native,
+    DeadlineOperationError,
+    pyo3::exceptions::PyException
+);
 
 mod auth;
 mod config;
@@ -54,8 +58,14 @@ fn deadline_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(resources::get_farm, m)?)?;
     m.add_function(wrap_pyfunction!(resources::list_queues, m)?)?;
     m.add_function(wrap_pyfunction!(resources::get_queue, m)?)?;
-    m.add_function(wrap_pyfunction!(resources::list_storage_profiles_for_queue, m)?)?;
-    m.add_function(wrap_pyfunction!(resources::get_queue_parameter_definitions, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        resources::list_storage_profiles_for_queue,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        resources::get_queue_parameter_definitions,
+        m
+    )?)?;
 
     // Submission
     m.add_function(wrap_pyfunction!(submission::create_job_from_job_bundle, m)?)?;
@@ -64,7 +74,10 @@ fn deadline_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<telemetry::TelemetryClient>()?;
 
     // Exception type
-    m.add("DeadlineOperationError", m.py().get_type::<DeadlineOperationError>())?;
+    m.add(
+        "DeadlineOperationError",
+        m.py().get_type::<DeadlineOperationError>(),
+    )?;
 
     Ok(())
 }

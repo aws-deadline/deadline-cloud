@@ -22,7 +22,10 @@ pub async fn list_jobs_by_filter_expression(
     filter_expression: &Value,
     config: Option<&IniConfig>,
 ) -> Result<Vec<Value>, DeadlineError> {
-    use aws_sdk_deadline::types::{SearchSortExpression, FieldSortExpression, SortOrder, SearchFilterExpression, SearchGroupedFilterExpressions, LogicalOperator, DateTimeFilterExpression, ComparisonOperator};
+    use aws_sdk_deadline::types::{
+        ComparisonOperator, DateTimeFilterExpression, FieldSortExpression, LogicalOperator,
+        SearchFilterExpression, SearchGroupedFilterExpressions, SearchSortExpression, SortOrder,
+    };
 
     let client = session::deadline_client(config).await;
 
@@ -36,7 +39,8 @@ pub async fn list_jobs_by_filter_expression(
             .map_err(|e| DeadlineError::OperationError(format!("Invalid sort: {e}")))?,
     );
 
-    let mut result_jobs: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
+    let mut result_jobs: std::collections::HashMap<String, Value> =
+        std::collections::HashMap::new();
     let mut threshold_filter: Option<SearchFilterExpression> = None;
 
     loop {
@@ -71,19 +75,37 @@ pub async fn list_jobs_by_filter_expression(
                 // Convert to Value for callers that still need Value access
                 let mut map = serde_json::Map::new();
                 map.insert("jobId".into(), Value::String(id.to_owned()));
-                if let Some(name) = job.name() { map.insert("name".into(), Value::String(name.to_owned())); }
-                if let Some(status) = job.task_run_status() { map.insert("taskRunStatus".into(), Value::String(status.as_str().to_owned())); }
-                if let Some(created_at) = job.created_at() { map.insert("createdAt".into(), Value::String(created_at.to_string())); }
-                if let Some(started_at) = job.started_at() { map.insert("startedAt".into(), Value::String(started_at.to_string())); }
-                if let Some(ended_at) = job.ended_at() { map.insert("endedAt".into(), Value::String(ended_at.to_string())); }
+                if let Some(name) = job.name() {
+                    map.insert("name".into(), Value::String(name.to_owned()));
+                }
+                if let Some(status) = job.task_run_status() {
+                    map.insert(
+                        "taskRunStatus".into(),
+                        Value::String(status.as_str().to_owned()),
+                    );
+                }
+                if let Some(created_at) = job.created_at() {
+                    map.insert("createdAt".into(), Value::String(created_at.to_string()));
+                }
+                if let Some(started_at) = job.started_at() {
+                    map.insert("startedAt".into(), Value::String(started_at.to_string()));
+                }
+                if let Some(ended_at) = job.ended_at() {
+                    map.insert("endedAt".into(), Value::String(ended_at.to_string()));
+                }
                 if let Some(counts) = job.task_run_status_counts() {
-                    let counts_map: serde_json::Map<String, Value> = counts.iter()
+                    let counts_map: serde_json::Map<String, Value> = counts
+                        .iter()
                         .map(|(k, v)| (k.as_str().to_owned(), Value::Number((*v).into())))
                         .collect();
                     map.insert("taskRunStatusCounts".into(), Value::Object(counts_map));
                 }
-                if let Some(queue_id) = job.queue_id() { map.insert("queueId".into(), Value::String(queue_id.to_owned())); }
-                if let Some(created_by) = job.created_by() { map.insert("createdBy".into(), Value::String(created_by.to_owned())); }
+                if let Some(queue_id) = job.queue_id() {
+                    map.insert("queueId".into(), Value::String(queue_id.to_owned()));
+                }
+                if let Some(created_by) = job.created_by() {
+                    map.insert("createdBy".into(), Value::String(created_by.to_owned()));
+                }
                 result_jobs.insert(id.to_owned(), Value::Object(map));
             }
         }
@@ -98,7 +120,8 @@ pub async fn list_jobs_by_filter_expression(
         if first_ts == last_ts {
             return Err(DeadlineError::OperationError(
                 "Failure fetching jobs based on the createdAt field as more than 100 jobs \
-                 have the exact same timestamp value.".into()
+                 have the exact same timestamp value."
+                    .into(),
             ));
         }
 
@@ -118,24 +141,30 @@ pub async fn list_jobs_by_filter_expression(
 }
 
 /// Build SDK `SearchGroupedFilterExpressions` from JSON.
-pub fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types::SearchGroupedFilterExpressions, DeadlineError> {
-    use aws_sdk_deadline::types::{LogicalOperator, SearchTermMatchingType, SearchFilterExpression, SearchTermFilterExpression, ComparisonOperator, StringFilterExpression, StringListFilterExpression, DateTimeFilterExpression, SearchGroupedFilterExpressions};
+pub fn build_filter_expressions(
+    json: &Value,
+) -> Result<aws_sdk_deadline::types::SearchGroupedFilterExpressions, DeadlineError> {
+    use aws_sdk_deadline::types::{
+        ComparisonOperator, DateTimeFilterExpression, LogicalOperator, SearchFilterExpression,
+        SearchGroupedFilterExpressions, SearchTermFilterExpression, SearchTermMatchingType,
+        StringFilterExpression, StringListFilterExpression,
+    };
 
     let operator = match json["operator"].as_str().unwrap_or("AND") {
         "OR" => LogicalOperator::Or,
         _ => LogicalOperator::And,
     };
 
-    let filters = json["filters"].as_array()
-        .ok_or_else(|| DeadlineError::OperationError("filterExpressions.filters must be an array".into()))?;
+    let filters = json["filters"].as_array().ok_or_else(|| {
+        DeadlineError::OperationError("filterExpressions.filters must be an array".into())
+    })?;
 
     let mut sdk_filters = Vec::new();
     for f in filters {
         if let Some(stf) = f.get("searchTermFilter") {
             let term = stf["searchTerm"].as_str().unwrap_or("").to_owned();
-            let match_type = SearchTermMatchingType::from(
-                stf["matchType"].as_str().unwrap_or("CONTAINS")
-            );
+            let match_type =
+                SearchTermMatchingType::from(stf["matchType"].as_str().unwrap_or("CONTAINS"));
             sdk_filters.push(SearchFilterExpression::SearchTermFilter(
                 SearchTermFilterExpression::builder()
                     .search_term(term)
@@ -160,8 +189,13 @@ pub fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types:
             ));
         } else if let Some(slf) = f.get("stringListFilter") {
             let name = slf["name"].as_str().unwrap_or("").to_owned();
-            let values: Vec<String> = slf["values"].as_array()
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(ToOwned::to_owned)).collect())
+            let values: Vec<String> = slf["values"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(ToOwned::to_owned))
+                        .collect()
+                })
                 .unwrap_or_default();
             let op = match slf["operator"].as_str().unwrap_or("ANY_EQUALS") {
                 "ANY_NOT_EQUALS" => ComparisonOperator::NotEqual,
@@ -174,15 +208,18 @@ pub fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types:
                 builder = builder.values(v);
             }
             sdk_filters.push(SearchFilterExpression::StringListFilter(
-                builder.build()
+                builder
+                    .build()
                     .map_err(|e| DeadlineError::OperationError(format!("Invalid filter: {e}")))?,
             ));
         } else if let Some(dtf) = f.get("dateTimeFilter") {
             let name = dtf["name"].as_str().unwrap_or("").to_owned();
             let datetime_str = dtf["dateTime"].as_str().unwrap_or("");
             let datetime = ::aws_smithy_types::DateTime::from_str(
-                datetime_str, ::aws_smithy_types::date_time::Format::DateTimeWithOffset,
-            ).map_err(|e| DeadlineError::OperationError(format!("Invalid datetime: {e}")))?;
+                datetime_str,
+                ::aws_smithy_types::date_time::Format::DateTimeWithOffset,
+            )
+            .map_err(|e| DeadlineError::OperationError(format!("Invalid datetime: {e}")))?;
             let op = match dtf["operator"].as_str().unwrap_or("EQUAL") {
                 "GREATER_THAN_EQUAL_TO" => ComparisonOperator::GreaterThanEqualTo,
                 "LESS_THAN_EQUAL_TO" => ComparisonOperator::LessThanEqualTo,
@@ -214,10 +251,13 @@ pub fn build_filter_expressions(json: &Value) -> Result<aws_sdk_deadline::types:
 }
 
 /// Build SDK `SearchSortExpression` list from JSON.
-pub fn build_sort_expressions(json: &Value) -> Result<Vec<aws_sdk_deadline::types::SearchSortExpression>, DeadlineError> {
-    use aws_sdk_deadline::types::{SortOrder, SearchSortExpression, FieldSortExpression};
+pub fn build_sort_expressions(
+    json: &Value,
+) -> Result<Vec<aws_sdk_deadline::types::SearchSortExpression>, DeadlineError> {
+    use aws_sdk_deadline::types::{FieldSortExpression, SearchSortExpression, SortOrder};
 
-    let arr = json.as_array()
+    let arr = json
+        .as_array()
         .ok_or_else(|| DeadlineError::OperationError("sortExpressions must be an array".into()))?;
 
     let mut result = Vec::new();
@@ -262,41 +302,74 @@ pub async fn batch_get_steps_page(
             .map_err(|e| DeadlineError::OperationError(e.to_string()))?;
         ids.push(builder);
     }
-    let output = client.batch_get_step().set_identifiers(Some(ids))
-        .send().await.map_err(deadline_error)?;
+    let output = client
+        .batch_get_step()
+        .set_identifiers(Some(ids))
+        .send()
+        .await
+        .map_err(deadline_error)?;
     // Convert typed output to Value for the batch_get helper
-    let steps: Vec<Value> = output.steps().iter().map(|s| {
-        let mut m = serde_json::Map::new();
-        m.insert("farmId".into(), Value::String(s.farm_id().to_owned()));
-        m.insert("queueId".into(), Value::String(s.queue_id().to_owned()));
-        m.insert("jobId".into(), Value::String(s.job_id().to_owned()));
-        m.insert("stepId".into(), Value::String(s.step_id().to_owned()));
-        m.insert("name".into(), Value::String(s.name().to_owned()));
-        m.insert("lifecycleStatus".into(), Value::String(s.lifecycle_status().as_str().to_owned()));
-        if !s.task_run_status().as_str().contains("no value") {
-            m.insert("taskRunStatus".into(), Value::String(s.task_run_status().as_str().to_owned()));
-        }
-        m.insert("createdAt".into(), Value::String(crate::responses::format_datetime(s.created_at())));
-        if let Some(dt) = s.started_at() { m.insert("startedAt".into(), Value::String(crate::responses::format_datetime(dt))); }
-        if let Some(dt) = s.ended_at() { m.insert("endedAt".into(), Value::String(crate::responses::format_datetime(dt))); }
-        let counts_map: serde_json::Map<String, Value> = s.task_run_status_counts().iter()
-            .map(|(k, v)| (k.as_str().to_owned(), Value::Number((*v).into())))
-            .collect();
-        if !counts_map.is_empty() {
-            m.insert("taskRunStatusCounts".into(), Value::Object(counts_map));
-        }
-        Value::Object(m)
-    }).collect();
-    let errors: Vec<Value> = output.errors().iter().map(|e| {
-        let mut m = serde_json::Map::new();
-        m.insert("farmId".into(), Value::String(e.farm_id().to_owned()));
-        m.insert("queueId".into(), Value::String(e.queue_id().to_owned()));
-        m.insert("jobId".into(), Value::String(e.job_id().to_owned()));
-        m.insert("stepId".into(), Value::String(e.step_id().to_owned()));
-        m.insert("code".into(), Value::String(e.code().as_str().to_owned()));
-        m.insert("message".into(), Value::String(e.message().to_owned()));
-        Value::Object(m)
-    }).collect();
+    let steps: Vec<Value> = output
+        .steps()
+        .iter()
+        .map(|s| {
+            let mut m = serde_json::Map::new();
+            m.insert("farmId".into(), Value::String(s.farm_id().to_owned()));
+            m.insert("queueId".into(), Value::String(s.queue_id().to_owned()));
+            m.insert("jobId".into(), Value::String(s.job_id().to_owned()));
+            m.insert("stepId".into(), Value::String(s.step_id().to_owned()));
+            m.insert("name".into(), Value::String(s.name().to_owned()));
+            m.insert(
+                "lifecycleStatus".into(),
+                Value::String(s.lifecycle_status().as_str().to_owned()),
+            );
+            if !s.task_run_status().as_str().contains("no value") {
+                m.insert(
+                    "taskRunStatus".into(),
+                    Value::String(s.task_run_status().as_str().to_owned()),
+                );
+            }
+            m.insert(
+                "createdAt".into(),
+                Value::String(crate::responses::format_datetime(s.created_at())),
+            );
+            if let Some(dt) = s.started_at() {
+                m.insert(
+                    "startedAt".into(),
+                    Value::String(crate::responses::format_datetime(dt)),
+                );
+            }
+            if let Some(dt) = s.ended_at() {
+                m.insert(
+                    "endedAt".into(),
+                    Value::String(crate::responses::format_datetime(dt)),
+                );
+            }
+            let counts_map: serde_json::Map<String, Value> = s
+                .task_run_status_counts()
+                .iter()
+                .map(|(k, v)| (k.as_str().to_owned(), Value::Number((*v).into())))
+                .collect();
+            if !counts_map.is_empty() {
+                m.insert("taskRunStatusCounts".into(), Value::Object(counts_map));
+            }
+            Value::Object(m)
+        })
+        .collect();
+    let errors: Vec<Value> = output
+        .errors()
+        .iter()
+        .map(|e| {
+            let mut m = serde_json::Map::new();
+            m.insert("farmId".into(), Value::String(e.farm_id().to_owned()));
+            m.insert("queueId".into(), Value::String(e.queue_id().to_owned()));
+            m.insert("jobId".into(), Value::String(e.job_id().to_owned()));
+            m.insert("stepId".into(), Value::String(e.step_id().to_owned()));
+            m.insert("code".into(), Value::String(e.code().as_str().to_owned()));
+            m.insert("message".into(), Value::String(e.message().to_owned()));
+            Value::Object(m)
+        })
+        .collect();
     Ok(serde_json::json!({"steps": steps, "errors": errors}))
 }
 
@@ -319,49 +392,86 @@ pub async fn batch_get_tasks_page(
             .map_err(|e| DeadlineError::OperationError(e.to_string()))?;
         ids.push(builder);
     }
-    let output = client.batch_get_task().set_identifiers(Some(ids))
-        .send().await.map_err(deadline_error)?;
-    let tasks: Vec<Value> = output.tasks().iter().map(|t| {
-        let mut m = serde_json::Map::new();
-        m.insert("farmId".into(), Value::String(t.farm_id().to_owned()));
-        m.insert("queueId".into(), Value::String(t.queue_id().to_owned()));
-        m.insert("jobId".into(), Value::String(t.job_id().to_owned()));
-        m.insert("stepId".into(), Value::String(t.step_id().to_owned()));
-        m.insert("taskId".into(), Value::String(t.task_id().to_owned()));
-        if let Some(params) = t.parameters() {
-            let params_map: serde_json::Map<String, Value> = params.iter()
-                .map(|(k, v)| {
-                    let val = match v {
-                        aws_sdk_deadline::types::TaskParameterValue::Int(s) => serde_json::json!({"int": s}),
-                        aws_sdk_deadline::types::TaskParameterValue::Float(s) => serde_json::json!({"float": s}),
-                        aws_sdk_deadline::types::TaskParameterValue::String(s) => serde_json::json!({"string": s}),
-                        aws_sdk_deadline::types::TaskParameterValue::Path(s) => serde_json::json!({"path": s}),
-                        _ => Value::Null,
-                    };
-                    (k.clone(), val)
-                })
-                .collect::<std::collections::BTreeMap<_, _>>()
-                .into_iter()
-                .collect();
-            m.insert("parameters".into(), Value::Object(params_map));
-        }
-        m.insert("createdAt".into(), Value::String(crate::responses::format_datetime(t.created_at())));
-        m.insert("runStatus".into(), Value::String(t.run_status().as_str().to_owned()));
-        if let Some(dt) = t.started_at() { m.insert("startedAt".into(), Value::String(crate::responses::format_datetime(dt))); }
-        if let Some(dt) = t.ended_at() { m.insert("endedAt".into(), Value::String(crate::responses::format_datetime(dt))); }
-        Value::Object(m)
-    }).collect();
-    let errors: Vec<Value> = output.errors().iter().map(|e| {
-        let mut m = serde_json::Map::new();
-        m.insert("farmId".into(), Value::String(e.farm_id().to_owned()));
-        m.insert("queueId".into(), Value::String(e.queue_id().to_owned()));
-        m.insert("jobId".into(), Value::String(e.job_id().to_owned()));
-        m.insert("stepId".into(), Value::String(e.step_id().to_owned()));
-        m.insert("taskId".into(), Value::String(e.task_id().to_owned()));
-        m.insert("code".into(), Value::String(e.code().as_str().to_owned()));
-        m.insert("message".into(), Value::String(e.message().to_owned()));
-        Value::Object(m)
-    }).collect();
+    let output = client
+        .batch_get_task()
+        .set_identifiers(Some(ids))
+        .send()
+        .await
+        .map_err(deadline_error)?;
+    let tasks: Vec<Value> = output
+        .tasks()
+        .iter()
+        .map(|t| {
+            let mut m = serde_json::Map::new();
+            m.insert("farmId".into(), Value::String(t.farm_id().to_owned()));
+            m.insert("queueId".into(), Value::String(t.queue_id().to_owned()));
+            m.insert("jobId".into(), Value::String(t.job_id().to_owned()));
+            m.insert("stepId".into(), Value::String(t.step_id().to_owned()));
+            m.insert("taskId".into(), Value::String(t.task_id().to_owned()));
+            if let Some(params) = t.parameters() {
+                let params_map: serde_json::Map<String, Value> = params
+                    .iter()
+                    .map(|(k, v)| {
+                        let val = match v {
+                            aws_sdk_deadline::types::TaskParameterValue::Int(s) => {
+                                serde_json::json!({"int": s})
+                            }
+                            aws_sdk_deadline::types::TaskParameterValue::Float(s) => {
+                                serde_json::json!({"float": s})
+                            }
+                            aws_sdk_deadline::types::TaskParameterValue::String(s) => {
+                                serde_json::json!({"string": s})
+                            }
+                            aws_sdk_deadline::types::TaskParameterValue::Path(s) => {
+                                serde_json::json!({"path": s})
+                            }
+                            _ => Value::Null,
+                        };
+                        (k.clone(), val)
+                    })
+                    .collect::<std::collections::BTreeMap<_, _>>()
+                    .into_iter()
+                    .collect();
+                m.insert("parameters".into(), Value::Object(params_map));
+            }
+            m.insert(
+                "createdAt".into(),
+                Value::String(crate::responses::format_datetime(t.created_at())),
+            );
+            m.insert(
+                "runStatus".into(),
+                Value::String(t.run_status().as_str().to_owned()),
+            );
+            if let Some(dt) = t.started_at() {
+                m.insert(
+                    "startedAt".into(),
+                    Value::String(crate::responses::format_datetime(dt)),
+                );
+            }
+            if let Some(dt) = t.ended_at() {
+                m.insert(
+                    "endedAt".into(),
+                    Value::String(crate::responses::format_datetime(dt)),
+                );
+            }
+            Value::Object(m)
+        })
+        .collect();
+    let errors: Vec<Value> = output
+        .errors()
+        .iter()
+        .map(|e| {
+            let mut m = serde_json::Map::new();
+            m.insert("farmId".into(), Value::String(e.farm_id().to_owned()));
+            m.insert("queueId".into(), Value::String(e.queue_id().to_owned()));
+            m.insert("jobId".into(), Value::String(e.job_id().to_owned()));
+            m.insert("stepId".into(), Value::String(e.step_id().to_owned()));
+            m.insert("taskId".into(), Value::String(e.task_id().to_owned()));
+            m.insert("code".into(), Value::String(e.code().as_str().to_owned()));
+            m.insert("message".into(), Value::String(e.message().to_owned()));
+            Value::Object(m)
+        })
+        .collect();
     Ok(serde_json::json!({"tasks": tasks, "errors": errors}))
 }
 
@@ -370,8 +480,13 @@ pub async fn batch_get_tasks_page(
 // ---------------------------------------------------------------------------
 
 /// Convert our JSON attachments into the SDK's typed Attachments struct.
-fn build_sdk_attachments(att: &Value) -> Result<aws_sdk_deadline::types::Attachments, DeadlineError> {
-    let fs_str = att.get("fileSystem").and_then(|v| v.as_str()).unwrap_or("COPIED");
+fn build_sdk_attachments(
+    att: &Value,
+) -> Result<aws_sdk_deadline::types::Attachments, DeadlineError> {
+    let fs_str = att
+        .get("fileSystem")
+        .and_then(|v| v.as_str())
+        .unwrap_or("COPIED");
     let file_system: aws_sdk_deadline::types::JobAttachmentsFileSystem = fs_str.into();
 
     let mut builder = aws_sdk_deadline::types::Attachments::builder().file_system(file_system);
@@ -395,7 +510,10 @@ fn build_sdk_attachments(att: &Value) -> Result<aws_sdk_deadline::types::Attachm
             if let Some(v) = m.get("fileSystemLocationName").and_then(|v| v.as_str()) {
                 mb = mb.file_system_location_name(v);
             }
-            if let Some(dirs) = m.get("outputRelativeDirectories").and_then(|v| v.as_array()) {
+            if let Some(dirs) = m
+                .get("outputRelativeDirectories")
+                .and_then(|v| v.as_array())
+            {
                 for d in dirs {
                     if let Some(s) = d.as_str() {
                         mb = mb.output_relative_directories(s);
@@ -408,9 +526,9 @@ fn build_sdk_attachments(att: &Value) -> Result<aws_sdk_deadline::types::Attachm
         }
     }
 
-    builder.build().map_err(|e| {
-        DeadlineError::OperationError(format!("Failed to build attachments: {e}"))
-    })
+    builder
+        .build()
+        .map_err(|e| DeadlineError::OperationError(format!("Failed to build attachments: {e}")))
 }
 
 /// Call `CreateJob` API. The `args` map should contain farmId, queueId,
@@ -514,8 +632,14 @@ pub async fn wait_for_create_job_to_complete(
             ));
         }
 
-        let job = client.get_job().farm_id(farm_id).queue_id(queue_id).job_id(job_id)
-            .send().await.map_err(deadline_error)?;
+        let job = client
+            .get_job()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .job_id(job_id)
+            .send()
+            .await
+            .map_err(deadline_error)?;
 
         let status = job.lifecycle_status.as_str();
         let message = job.lifecycle_status_message.clone();
@@ -543,7 +667,10 @@ mod tests {
         unsafe {
             std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", &url);
             std::env::set_var("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
-            std::env::set_var("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+            std::env::set_var(
+                "AWS_SECRET_ACCESS_KEY",
+                "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            );
             std::env::set_var("AWS_DEFAULT_REGION", "us-west-2");
             std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
         }
@@ -567,9 +694,9 @@ mod tests {
             .await;
 
         // Pass a callback that always returns false (simulates SIGINT)
-        let result = wait_for_create_job_to_complete(
-            "farm-abc", "queue-abc", "job-abc", None, || false,
-        ).await;
+        let result =
+            wait_for_create_job_to_complete("farm-abc", "queue-abc", "job-abc", None, || false)
+                .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();

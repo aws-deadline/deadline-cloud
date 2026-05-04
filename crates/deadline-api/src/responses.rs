@@ -24,7 +24,7 @@ use aws_sdk_deadline::operation::get_step::GetStepOutput;
 use aws_sdk_deadline::operation::get_task::GetTaskOutput;
 use aws_sdk_deadline::operation::get_worker::GetWorkerOutput;
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// Format an AWS SDK `DateTime` to match Python's display format.
 /// Input: ISO 8601 (e.g. "2024-12-18T00:37:38Z" or "2024-12-18T00:37:38.624Z")
@@ -116,7 +116,9 @@ pub struct QueueResponse {
 
 impl From<GetQueueOutput> for QueueResponse {
     fn from(o: GetQueueOutput) -> Self {
-        let fslns = o.required_file_system_location_names.filter(|v| !v.is_empty());
+        let fslns = o
+            .required_file_system_location_names
+            .filter(|v| !v.is_empty());
         let aspids = o.allowed_storage_profile_ids.filter(|v| !v.is_empty());
         Self {
             farm_id: o.farm_id,
@@ -130,12 +132,18 @@ impl From<GetQueueOutput> for QueueResponse {
             updated_at: o.updated_at.as_ref().map(format_datetime),
             updated_by: o.updated_by,
             description: o.description,
-            job_attachment_settings: o.job_attachment_settings.as_ref().map(job_attachment_settings_to_value),
+            job_attachment_settings: o
+                .job_attachment_settings
+                .as_ref()
+                .map(job_attachment_settings_to_value),
             role_arn: o.role_arn,
             required_file_system_location_names: fslns,
             allowed_storage_profile_ids: aspids,
             job_run_as_user: o.job_run_as_user.as_ref().map(job_run_as_user_to_value),
-            scheduling_configuration: o.scheduling_configuration.as_ref().map(scheduling_configuration_to_value),
+            scheduling_configuration: o
+                .scheduling_configuration
+                .as_ref()
+                .map(scheduling_configuration_to_value),
         }
     }
 }
@@ -284,7 +292,8 @@ pub struct JobResponse {
 impl From<GetJobOutput> for JobResponse {
     fn from(o: GetJobOutput) -> Self {
         let task_run_status_counts = o.task_run_status_counts.as_ref().map(|m| {
-            let mut pairs: Vec<_> = m.iter()
+            let mut pairs: Vec<_> = m
+                .iter()
                 .map(|(k, v)| (k.as_str().to_owned(), json!(v)))
                 .collect();
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
@@ -292,7 +301,8 @@ impl From<GetJobOutput> for JobResponse {
             Value::Object(obj)
         });
         let parameters = o.parameters.as_ref().map(|m| {
-            let mut pairs: Vec<_> = m.iter()
+            let mut pairs: Vec<_> = m
+                .iter()
                 .map(|(k, v)| (k.clone(), job_parameter_to_value(v)))
                 .collect();
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
@@ -371,7 +381,9 @@ pub struct StepResponse {
 impl From<GetStepOutput> for StepResponse {
     fn from(o: GetStepOutput) -> Self {
         let task_run_status_counts = {
-            let mut pairs: Vec<_> = o.task_run_status_counts.iter()
+            let mut pairs: Vec<_> = o
+                .task_run_status_counts
+                .iter()
                 .map(|(k, v)| (k.as_str().to_owned(), json!(v)))
                 .collect();
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
@@ -394,7 +406,10 @@ impl From<GetStepOutput> for StepResponse {
             started_at: o.started_at.as_ref().map(format_datetime),
             ended_at: o.ended_at.as_ref().map(format_datetime),
             dependency_counts: o.dependency_counts.as_ref().map(dependency_counts_to_value),
-            required_capabilities: o.required_capabilities.as_ref().map(step_required_capabilities_to_value),
+            required_capabilities: o
+                .required_capabilities
+                .as_ref()
+                .map(step_required_capabilities_to_value),
             parameter_space: o.parameter_space.as_ref().map(parameter_space_to_value),
             description: o.description,
         }
@@ -435,7 +450,8 @@ pub struct TaskResponse {
 impl From<GetTaskOutput> for TaskResponse {
     fn from(o: GetTaskOutput) -> Self {
         let parameters = o.parameters.as_ref().map(|m| {
-            let obj: Map<String, Value> = m.iter()
+            let obj: Map<String, Value> = m
+                .iter()
                 .map(|(k, v)| (k.clone(), task_parameter_value_to_value(v)))
                 .collect();
             Value::Object(obj)
@@ -500,11 +516,19 @@ impl From<GetSessionOutput> for SessionResponse {
             updated_at: o.updated_at.as_ref().map(format_datetime),
             updated_by: o.updated_by,
             log: o.log.as_ref().and_then(|l| {
-                if l.log_driver().is_empty() { None } else { Some(log_configuration_to_value(l)) }
+                if l.log_driver().is_empty() {
+                    None
+                } else {
+                    Some(log_configuration_to_value(l))
+                }
             }),
             host_properties: o.host_properties.as_ref().map(host_properties_to_value),
             worker_log: o.worker_log.as_ref().and_then(|l| {
-                if l.log_driver().is_empty() { None } else { Some(log_configuration_to_value(l)) }
+                if l.log_driver().is_empty() {
+                    None
+                } else {
+                    Some(log_configuration_to_value(l))
+                }
             }),
         }
     }
@@ -548,7 +572,11 @@ impl From<GetWorkerOutput> for WorkerResponse {
             updated_by: o.updated_by,
             host_properties: o.host_properties.as_ref().map(host_properties_to_value),
             log: o.log.as_ref().and_then(|l| {
-                if l.log_driver().is_empty() { None } else { Some(log_configuration_to_value(l)) }
+                if l.log_driver().is_empty() {
+                    None
+                } else {
+                    Some(log_configuration_to_value(l))
+                }
             }),
         }
     }

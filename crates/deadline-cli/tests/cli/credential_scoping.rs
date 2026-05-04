@@ -13,8 +13,10 @@
 //! Worker log credential scoping is tested at Level 1
 //! in `deadline-api` since `get_worker_logs` is not exposed via CLI.
 
-use deadline_test_server::deadline_api::{cloudwatch, jobs, queue_resources, queues, sessions, sts};
 use deadline_test_server::TestHarness;
+use deadline_test_server::deadline_api::{
+    cloudwatch, jobs, queue_resources, queues, sessions, sts,
+};
 use serde_json::json;
 
 /// Write a fake ~/.aws/config with a DCM profile into the harness temp dir.
@@ -38,12 +40,7 @@ fn write_dcm_aws_config(harness: &TestHarness, profile_name: &str) {
 fn setup_dcm_config(harness: &TestHarness) {
     // Set profile FIRST, then set farm/queue/job under that profile
     harness
-        .cli(&[
-            "config",
-            "set",
-            "defaults.aws_profile_name",
-            "dcm-profile",
-        ])
+        .cli(&["config", "set", "defaults.aws_profile_name", "dcm-profile"])
         .assert()
         .success();
     harness
@@ -598,7 +595,9 @@ async fn job_logs_dcm_user_queue_role_failure_propagates_error() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let all_output = format!("{stdout}{stderr}");
     assert!(
-        all_output.contains("AccessDeniedException") || all_output.contains("queue credentials") || all_output.contains("Failed"),
+        all_output.contains("AccessDeniedException")
+            || all_output.contains("queue credentials")
+            || all_output.contains("Failed"),
         "Expected error about queue credentials or access denied, got:\nstdout: {stdout}\nstderr: {stderr}"
     );
 }

@@ -15,19 +15,26 @@ impl TelemetryClient {
     #[new]
     #[pyo3(signature = (config_path=None))]
     // PyO3 #[new] requires PyResult even when construction is infallible.
-    #[allow(clippy::unnecessary_wraps, reason = "PyO3 requires PyResult for __new__")]
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "PyO3 requires PyResult for __new__"
+    )]
     fn new(config_path: Option<&str>) -> PyResult<Self> {
         let config = match config_path {
             Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p)).ok(),
             None => deadline_config::config_file::read_config().ok(),
         };
         let client = deadline_api::telemetry::create_telemetry(config.as_ref());
-        Ok(Self { inner: Some(client) })
+        Ok(Self {
+            inner: Some(client),
+        })
     }
 
     /// Record a telemetry event.
     fn record_event(&self, event_type: &str, details: &Bound<'_, PyDict>) -> PyResult<()> {
-        let client = self.inner.as_ref()
+        let client = self
+            .inner
+            .as_ref()
             .ok_or_else(|| DeadlineOperationError::new_err("telemetry client is closed"))?;
         let mut map = HashMap::new();
         for (key, value) in details.iter() {

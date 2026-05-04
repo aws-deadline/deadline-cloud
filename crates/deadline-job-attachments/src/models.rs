@@ -1,6 +1,6 @@
 use crate::errors::JobAttachmentsError;
 
-use crate::asset_manifests::{hash_data, HashAlgorithm};
+use crate::asset_manifests::{HashAlgorithm, hash_data};
 
 // --- PathFormat ---
 
@@ -42,8 +42,7 @@ pub fn generate_random_guid() -> String {
 pub fn float_to_iso_datetime_string(time: f64) -> String {
     let seconds = time as i64;
     let microseconds = ((time - seconds as f64) * 1_000_000.0) as u32;
-    let dt = chrono::DateTime::from_timestamp(seconds, microseconds * 1000)
-        .unwrap_or_default();
+    let dt = chrono::DateTime::from_timestamp(seconds, microseconds * 1000).unwrap_or_default();
     dt.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()
 }
 
@@ -404,10 +403,7 @@ impl ManifestProperties {
                 "asset-root-json".into(),
                 serde_json::Value::String(ascii_json.clone()),
             );
-            metadata.insert(
-                "asset-root".into(),
-                serde_json::Value::String(ascii_json),
-            );
+            metadata.insert("asset-root".into(), serde_json::Value::String(ascii_json));
         }
 
         if let Some(ref name) = self.file_system_location_name {
@@ -418,10 +414,7 @@ impl ManifestProperties {
         }
 
         let mut outer = serde_json::Map::new();
-        outer.insert(
-            "Metadata".into(),
-            serde_json::Value::Object(metadata),
-        );
+        outer.insert("Metadata".into(), serde_json::Value::Object(metadata));
         serde_json::Value::Object(outer)
     }
 }
@@ -713,8 +706,7 @@ mod tests {
             root_prefix: "rp".into(),
         };
         assert_eq!(
-            s.full_output_prefix("f", "q", "j", "s", "t", "sa")
-                .unwrap(),
+            s.full_output_prefix("f", "q", "j", "s", "t", "sa").unwrap(),
             "rp/Manifests/f/q/j/s/t/sa"
         );
     }
@@ -839,7 +831,10 @@ mod tests {
     #[test_case("WINDOWS", StorageProfileOperatingSystemFamily::Windows ; "uppercase windows")]
     #[test_case("linux", StorageProfileOperatingSystemFamily::Linux ; "lowercase linux")]
     #[test_case("macos", StorageProfileOperatingSystemFamily::Macos ; "lowercase macos")]
-    fn storage_profile_os_family_case_insensitive(input: &str, expected: StorageProfileOperatingSystemFamily) {
+    fn storage_profile_os_family_case_insensitive(
+        input: &str,
+        expected: StorageProfileOperatingSystemFamily,
+    ) {
         let parsed: StorageProfileOperatingSystemFamily = input.parse().unwrap();
         assert_eq!(parsed, expected);
     }
@@ -993,7 +988,10 @@ mod tests {
         };
         assert_eq!(profile.storage_profile_id, "sp-abc123");
         assert_eq!(profile.display_name, "My Profile");
-        assert_eq!(profile.os_family, StorageProfileOperatingSystemFamily::Linux);
+        assert_eq!(
+            profile.os_family,
+            StorageProfileOperatingSystemFamily::Linux
+        );
     }
 
     // === StorageProfile::from_json ===
@@ -1012,10 +1010,19 @@ mod tests {
         let profile = StorageProfile::from_json(&json).unwrap();
         assert_eq!(profile.storage_profile_id, "sp-abc123");
         assert_eq!(profile.display_name, "My Profile");
-        assert_eq!(profile.os_family, StorageProfileOperatingSystemFamily::Linux);
+        assert_eq!(
+            profile.os_family,
+            StorageProfileOperatingSystemFamily::Linux
+        );
         assert_eq!(profile.file_system_locations.len(), 2);
-        assert_eq!(profile.file_system_locations[0].location_type, FileSystemLocationType::Local);
-        assert_eq!(profile.file_system_locations[1].location_type, FileSystemLocationType::Shared);
+        assert_eq!(
+            profile.file_system_locations[0].location_type,
+            FileSystemLocationType::Local
+        );
+        assert_eq!(
+            profile.file_system_locations[1].location_type,
+            FileSystemLocationType::Shared
+        );
     }
 
     #[test]
@@ -1027,7 +1034,10 @@ mod tests {
         });
         let profile = StorageProfile::from_json(&json).unwrap();
         assert!(profile.file_system_locations.is_empty());
-        assert_eq!(profile.os_family, StorageProfileOperatingSystemFamily::Windows);
+        assert_eq!(
+            profile.os_family,
+            StorageProfileOperatingSystemFamily::Windows
+        );
     }
 
     #[test]

@@ -3,7 +3,11 @@ CARGO_FLAGS := $(if $(filter release,$(PROFILE)),--release,)
 TARGET_DIR := target/$(PROFILE)
 BIN_NAME := deadline
 
-.PHONY: all build develop wheel test test-rust test-python lint fmt check clean
+.PHONY: all build develop wheel test test-rust test-python lint fmt check clean setup-tools
+
+# Install required and recommended Cargo tools
+setup-tools:
+	cargo install cargo-insta cargo-deny cargo-nextest cargo-outdated cargo-bloat
 
 # Default: build everything and install into .venv
 all: develop

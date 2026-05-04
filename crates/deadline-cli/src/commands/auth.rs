@@ -35,14 +35,14 @@ async fn run_async(action: AuthAction) -> Result<(), CliError> {
             let on_pending = |_source: auth::AwsCredentialsSource| {
                 println!("Opening Deadline Cloud monitor. Please log in and then return here.");
             };
-            let message = auth::login(Some(&on_pending), None, None, None).await
+            let message = auth::login(Some(&on_pending), None, None, None)
+                .await
                 .map_err(CliError::Operation)?;
             println!("\nSuccessfully logged in: {message}\n");
             Ok(())
         }
         AuthAction::Logout => {
-            auth::logout(None, None)
-                .map_err(CliError::Operation)?;
+            auth::logout(None, None).map_err(CliError::Operation)?;
             println!("Successfully logged out of all Deadline Cloud monitor AWS profiles");
             Ok(())
         }
@@ -52,8 +52,7 @@ async fn run_async(action: AuthAction) -> Result<(), CliError> {
 
 async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
     let config = if let Some(p) = profile {
-        let mut c = config_file::read_config()
-            .map_err(|e| CliError::Operation(e.to_string()))?;
+        let mut c = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
         config_file::set_setting("defaults.aws_profile_name", &p, &mut c)
             .map_err(|e| CliError::Operation(e.to_string()))?;
         Some(c)
@@ -81,7 +80,11 @@ async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
         println!("{:>w$} {profile_name}", "Profile Name:");
         println!("{:>w$} {creds_source}", "Source:");
         println!("{:>w$} {auth_status}", "Status:");
-        println!("{:>w$} {}", "API Availability:", if api_available { "True" } else { "False" });
+        println!(
+            "{:>w$} {}",
+            "API Availability:",
+            if api_available { "True" } else { "False" }
+        );
     }
     Ok(())
 }

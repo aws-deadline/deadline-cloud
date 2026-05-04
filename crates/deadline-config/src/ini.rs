@@ -33,18 +33,19 @@ impl IniConfig {
             // Check for continuation line (leading whitespace) before trimming
             if let Some((ref sec, ref key)) = last_key
                 && !raw_line.is_empty()
-                    && (raw_line.starts_with(' ') || raw_line.starts_with('\t'))
-                {
-                    let continuation = raw_line.trim();
-                    if !continuation.is_empty() {
-                        if let Some(section_map) = sections.get_mut(sec)
-                            && let Some(val) = section_map.get_mut(key) {
-                                val.push('\n');
-                                val.push_str(continuation);
-                            }
-                        continue;
+                && (raw_line.starts_with(' ') || raw_line.starts_with('\t'))
+            {
+                let continuation = raw_line.trim();
+                if !continuation.is_empty() {
+                    if let Some(section_map) = sections.get_mut(sec)
+                        && let Some(val) = section_map.get_mut(key)
+                    {
+                        val.push('\n');
+                        val.push_str(continuation);
                     }
+                    continue;
                 }
+            }
 
             let line = raw_line.trim();
 
@@ -77,7 +78,10 @@ impl IniConfig {
 
                 match &current_section {
                     Some(section) => {
-                        sections.get_mut(section).expect("key exists").insert(key.clone(), value);
+                        sections
+                            .get_mut(section)
+                            .expect("key exists")
+                            .insert(key.clone(), value);
                         last_key = Some((section.clone(), key));
                     }
                     None => {
@@ -200,7 +204,10 @@ mod tests {
         ini.set("settings", "log_level", "WARNING");
         let text = ini.to_string();
         let parsed = IniConfig::parse(&text).unwrap();
-        assert_eq!(parsed.get("defaults", "aws_profile_name"), Some("(default)"));
+        assert_eq!(
+            parsed.get("defaults", "aws_profile_name"),
+            Some("(default)")
+        );
         assert_eq!(parsed.get("settings", "log_level"), Some("WARNING"));
     }
 
@@ -265,8 +272,14 @@ mod tests {
             .iter()
             .map(|s| output.find(s).unwrap_or_else(|| panic!("{s} not found")))
             .collect();
-        assert!(section_positions[0] < section_positions[1], "zebra should come before alpha");
-        assert!(section_positions[1] < section_positions[2], "alpha should come before middle");
+        assert!(
+            section_positions[0] < section_positions[1],
+            "zebra should come before alpha"
+        );
+        assert!(
+            section_positions[1] < section_positions[2],
+            "alpha should come before middle"
+        );
     }
 
     #[test]
@@ -278,8 +291,14 @@ mod tests {
             .iter()
             .map(|s| output.find(s).unwrap_or_else(|| panic!("{s} not found")))
             .collect();
-        assert!(key_positions[0] < key_positions[1], "zebra should come before alpha");
-        assert!(key_positions[1] < key_positions[2], "alpha should come before middle");
+        assert!(
+            key_positions[0] < key_positions[1],
+            "zebra should come before alpha"
+        );
+        assert!(
+            key_positions[1] < key_positions[2],
+            "alpha should come before middle"
+        );
     }
 
     #[test]
@@ -303,7 +322,10 @@ mod tests {
         let output = ini.to_string();
         let zebra_pos = output.find("zebra = 1").unwrap();
         let alpha_pos = output.find("alpha = 2").unwrap();
-        assert!(zebra_pos < alpha_pos, "new key should append after existing");
+        assert!(
+            zebra_pos < alpha_pos,
+            "new key should append after existing"
+        );
     }
 
     // ── INI multiline value support ──────────────────────

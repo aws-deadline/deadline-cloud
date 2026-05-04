@@ -11,12 +11,13 @@ Active work item: #30 — Rust tooling and optimization setup.
 
 ### Quick wins (do first)
 
-1. **`rustfmt.toml` + `cargo fmt`** — Add formatting config, one-time
-   reformat, enforce in CI. No config exists today.
-2. **`[profile.release]` with LTO + strip** — Release binary is 36MB.
-   `lto = "thin"` + `strip = true` should bring it to ~12MB.
-3. **`cargo-deny`** — Audit 407 dependencies for license violations,
-   duplicate crate versions, and vulnerabilities. Create `deny.toml`.
+1. ✅ **`rustfmt.toml` + `cargo fmt`** — Done. 114 files reformatted.
+   `edition = "2024"`, enforced with `cargo fmt --check`.
+2. ✅ **`[profile.release]` with LTO + strip** — Done. 36MB → 29MB
+   (19% reduction). `lto = "thin"` + `strip = true`.
+3. ✅ **`cargo-deny`** — Done. All checks pass. 22 duplicate crates
+   (all transitive AWS SDK deps). 4 rustls-webpki advisories
+   acknowledged (pinned by hyper-rustls 0.24, awaiting upstream fix).
 
 ### Install for ongoing use
 

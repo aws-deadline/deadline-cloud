@@ -27,7 +27,8 @@ pub fn create_job_from_job_bundle(
     let max_retries_per_task: Option<i32> = extract_opt(params, "max_retries_per_task")?;
     let max_worker_count: Option<i32> = extract_opt(params, "max_worker_count")?;
     let target_task_run_status: Option<String> = extract_opt(params, "target_task_run_status")?;
-    let job_attachments_file_system: Option<String> = extract_opt(params, "job_attachments_file_system")?;
+    let job_attachments_file_system: Option<String> =
+        extract_opt(params, "job_attachments_file_system")?;
     let require_paths_exist: bool = extract_opt(params, "require_paths_exist")?.unwrap_or(false);
     let submitter_name: Option<String> = extract_opt(params, "submitter_name")?;
     let auto_accept: bool = extract_opt(params, "auto_accept")?.unwrap_or(false);
@@ -42,8 +43,9 @@ pub fn create_job_from_job_bundle(
                 .import("json")?
                 .call_method1("dumps", (item,))?
                 .extract()?;
-            serde_json::from_str(&json_str)
-                .map_err(|e| DeadlineOperationError::new_err(format!("Invalid job_parameters: {e}")))?
+            serde_json::from_str(&json_str).map_err(|e| {
+                DeadlineOperationError::new_err(format!("Invalid job_parameters: {e}"))
+            })?
         }
         None => Vec::new(),
     };
@@ -62,41 +64,59 @@ pub fn create_job_from_job_bundle(
     // Build callbacks
     let print_cb: Box<dyn Fn(&str) + Send> = match on_print {
         Some(cb) => Box::new(move |msg: &str| {
-            Python::with_gil(|py| { let _ = cb.call1(py, (msg,)); });
+            Python::with_gil(|py| {
+                let _ = cb.call1(py, (msg,));
+            });
         }),
         None => Box::new(|_| {}),
     };
 
-    let hashing_cb = on_hashing_progress.map(|cb| -> Box<dyn Fn(deadline_job_attachments::progress_tracker::ProgressReportMetadata) -> bool + Send> {
-        Box::new(move |meta| {
-            Python::with_gil(|py| {
-                let dict = PyDict::new(py);
-                let _ = dict.set_item("progress", meta.progress);
-                let _ = dict.set_item("transfer_rate", meta.transfer_rate);
-                let _ = dict.set_item("progress_message", &meta.progress_message);
-                let _ = dict.set_item("processed_files", meta.processed_files);
-                cb.call1(py, (dict,)).map(|r| r.is_truthy(py).unwrap_or(true)).unwrap_or(true)
+    let hashing_cb = on_hashing_progress.map(
+        |cb| -> Box<
+            dyn Fn(deadline_job_attachments::progress_tracker::ProgressReportMetadata) -> bool
+                + Send,
+        > {
+            Box::new(move |meta| {
+                Python::with_gil(|py| {
+                    let dict = PyDict::new(py);
+                    let _ = dict.set_item("progress", meta.progress);
+                    let _ = dict.set_item("transfer_rate", meta.transfer_rate);
+                    let _ = dict.set_item("progress_message", &meta.progress_message);
+                    let _ = dict.set_item("processed_files", meta.processed_files);
+                    cb.call1(py, (dict,))
+                        .map(|r| r.is_truthy(py).unwrap_or(true))
+                        .unwrap_or(true)
+                })
             })
-        })
-    });
+        },
+    );
 
-    let upload_cb = on_upload_progress.map(|cb| -> Box<dyn Fn(deadline_job_attachments::progress_tracker::ProgressReportMetadata) -> bool + Send> {
-        Box::new(move |meta| {
-            Python::with_gil(|py| {
-                let dict = PyDict::new(py);
-                let _ = dict.set_item("progress", meta.progress);
-                let _ = dict.set_item("transfer_rate", meta.transfer_rate);
-                let _ = dict.set_item("progress_message", &meta.progress_message);
-                let _ = dict.set_item("processed_files", meta.processed_files);
-                cb.call1(py, (dict,)).map(|r| r.is_truthy(py).unwrap_or(true)).unwrap_or(true)
+    let upload_cb = on_upload_progress.map(
+        |cb| -> Box<
+            dyn Fn(deadline_job_attachments::progress_tracker::ProgressReportMetadata) -> bool
+                + Send,
+        > {
+            Box::new(move |meta| {
+                Python::with_gil(|py| {
+                    let dict = PyDict::new(py);
+                    let _ = dict.set_item("progress", meta.progress);
+                    let _ = dict.set_item("transfer_rate", meta.transfer_rate);
+                    let _ = dict.set_item("progress_message", &meta.progress_message);
+                    let _ = dict.set_item("processed_files", meta.processed_files);
+                    cb.call1(py, (dict,))
+                        .map(|r| r.is_truthy(py).unwrap_or(true))
+                        .unwrap_or(true)
+                })
             })
-        })
-    });
+        },
+    );
 
     let confirm_cb = on_confirm.map(|cb| -> deadline_job_bundle::submission::ConfirmFn {
         Box::new(move |msg: &str, default: bool| {
             Python::with_gil(|py| {
-                cb.call1(py, (msg, default)).map(|r| r.is_truthy(py).unwrap_or(default)).unwrap_or(default)
+                cb.call1(py, (msg, default))
+                    .map(|r| r.is_truthy(py).unwrap_or(default))
+                    .unwrap_or(default)
             })
         })
     });
@@ -104,7 +124,9 @@ pub fn create_job_from_job_bundle(
     let continue_cb = on_continue.map(|cb| -> Box<dyn Fn() -> bool + Send> {
         Box::new(move || {
             Python::with_gil(|py| {
-                cb.call0(py).map(|r| r.is_truthy(py).unwrap_or(true)).unwrap_or(true)
+                cb.call0(py)
+                    .map(|r| r.is_truthy(py).unwrap_or(true))
+                    .unwrap_or(true)
             })
         })
     });
@@ -136,7 +158,9 @@ pub fn create_job_from_job_bundle(
 
     let rt = crate::make_runtime()?;
     let job_id = rt
-        .block_on(deadline_job_bundle::create_job_from_job_bundle(submit_params))
+        .block_on(deadline_job_bundle::create_job_from_job_bundle(
+            submit_params,
+        ))
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
 
     let dict = PyDict::new(py);

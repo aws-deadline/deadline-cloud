@@ -22,16 +22,24 @@ mod dcm;
 mod farm;
 #[path = "cli/fleet.rs"]
 mod fleet;
+#[path = "cli/gui.rs"]
+mod gui;
+#[path = "cli/handle_web_url.rs"]
+mod handle_web_url;
 #[path = "cli/job.rs"]
 mod job;
 #[path = "cli/job_actions.rs"]
 mod job_actions;
+#[path = "cli/job_download.rs"]
+mod job_download;
 #[path = "cli/job_logs.rs"]
 mod job_logs;
 #[path = "cli/job_wait.rs"]
 mod job_wait;
 #[path = "cli/manifest.rs"]
 mod manifest;
+#[path = "cli/mcp.rs"]
+mod mcp;
 #[path = "cli/queue.rs"]
 mod queue;
 #[path = "cli/queue_paramdefs.rs"]
@@ -42,21 +50,13 @@ mod queue_resources;
 mod queue_sync_output;
 #[path = "cli/root.rs"]
 mod root;
+#[path = "cli/smoke.rs"]
+mod smoke;
 #[path = "cli/suggest.rs"]
 mod suggest;
 #[path = "cli/telemetry.rs"]
 mod telemetry;
-#[path = "cli/worker.rs"]
-mod worker;
-#[path = "cli/smoke.rs"]
-mod smoke;
-#[path = "cli/job_download.rs"]
-mod job_download;
-#[path = "cli/handle_web_url.rs"]
-mod handle_web_url;
-#[path = "cli/mcp.rs"]
-mod mcp;
 #[path = "cli/trace_schedule.rs"]
 mod trace_schedule;
-#[path = "cli/gui.rs"]
-mod gui;
+#[path = "cli/worker.rs"]
+mod worker;

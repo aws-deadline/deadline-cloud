@@ -15,12 +15,16 @@ fn setup_dcm_env(harness: &TestHarness, monitor_script: &str) {
 
     // Fake AWS config with DCM profile
     let aws_config_path = dir.join("aws_config");
-    std::fs::write(&aws_config_path, "\
+    std::fs::write(
+        &aws_config_path,
+        "\
 [profile test-dcm]
 monitor_id = mon-fake123
 user_id = user-fake456
 identity_store_id = d-fake789
-").unwrap();
+",
+    )
+    .unwrap();
 
     // Fake monitor binary
     let monitor_path = dir.join("fake-monitor");
@@ -28,13 +32,20 @@ identity_store_id = d-fake789
     std::fs::set_permissions(&monitor_path, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     // Deadline config pointing to DCM profile and fake monitor
-    std::fs::write(&harness.config_path, format!("\
+    std::fs::write(
+        &harness.config_path,
+        format!(
+            "\
 [defaults]
 aws_profile_name = test-dcm
 
 [deadline-cloud-monitor]
 path = {}
-", monitor_path.display())).unwrap();
+",
+            monitor_path.display()
+        ),
+    )
+    .unwrap();
 }
 
 /// Build a command with the fake AWS config file set.
@@ -55,7 +66,11 @@ fn dcm_cmd(harness: &TestHarness, args: &[&str]) -> std::process::Command {
 async fn auth_status_authenticated() {
     let harness = TestHarness::new().await;
     // No STS mock — auth check uses ListFarms only
-    farms::mock_list_farms(&harness.server, &[json!({"farmId": "farm-abc", "displayName": "F"})]).await;
+    farms::mock_list_farms(
+        &harness.server,
+        &[json!({"farmId": "farm-abc", "displayName": "F"})],
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["auth", "status"]));
 }
@@ -141,7 +156,10 @@ async fn auth_login_dcm_monitor_exits_with_error() {
     // No ListFarms mock → auth check fails → login fails
 
     // Fake monitor that prints an error and exits non-zero
-    setup_dcm_env(&harness, "#!/bin/bash\necho 'Monitor login failed'\nexit 1\n");
+    setup_dcm_env(
+        &harness,
+        "#!/bin/bash\necho 'Monitor login failed'\nexit 1\n",
+    );
 
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "login"]));
 }
@@ -154,17 +172,25 @@ async fn auth_login_dcm_monitor_not_found() {
     // Set up DCM env but with a nonexistent monitor path
     let dir = harness.config_dir.path();
     let aws_config_path = dir.join("aws_config");
-    std::fs::write(&aws_config_path, "\
+    std::fs::write(
+        &aws_config_path,
+        "\
 [profile test-dcm]
 monitor_id = mon-fake123
-").unwrap();
-    std::fs::write(&harness.config_path, "\
+",
+    )
+    .unwrap();
+    std::fs::write(
+        &harness.config_path,
+        "\
 [defaults]
 aws_profile_name = test-dcm
 
 [deadline-cloud-monitor]
 path = /nonexistent/path/to/monitor
-").unwrap();
+",
+    )
+    .unwrap();
 
     let mut cmd = harness.cmd(&["auth", "login"]);
     cmd.env("AWS_CONFIG_FILE", aws_config_path);
@@ -200,14 +226,16 @@ async fn auth_status_output_json_uppercase_produces_json() {
     let harness = TestHarness::new().await;
     farms::mock_list_farms(&harness.server, &[]).await;
 
-    let output = harness.cli(&["auth", "status", "--output", "JSON"])
+    let output = harness
+        .cli(&["auth", "status", "--output", "JSON"])
         .output()
         .expect("failed to run");
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let parsed: serde_json::Value = serde_json::from_str(&stdout)
-        .unwrap_or_else(|e| panic!("Expected JSON output for --output JSON (uppercase), got: {stdout}\nError: {e}"));
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
+        panic!("Expected JSON output for --output JSON (uppercase), got: {stdout}\nError: {e}")
+    });
     assert_eq!(parsed["status"], "AUTHENTICATED");
 }
 
@@ -218,10 +246,14 @@ async fn auth_status_nonexistent_profile_shows_not_valid() {
 
     // Write an AWS config with only one profile — "existing-profile"
     let aws_config_path = harness.config_dir.path().join("aws_config");
-    std::fs::write(&aws_config_path, "\
+    std::fs::write(
+        &aws_config_path,
+        "\
 [profile existing-profile]
 region = us-west-2
-").unwrap();
+",
+    )
+    .unwrap();
 
     let mut cmd = harness.cmd(&["auth", "status", "--profile", "nonexistent-profile"]);
     cmd.env("AWS_CONFIG_FILE", &aws_config_path);

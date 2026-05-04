@@ -1,5 +1,5 @@
-use deadline_config::config_file;
 use crate::common::json_with_spaces;
+use deadline_config::config_file;
 
 /// CLI-specific error type that distinguishes known operation errors
 /// from unexpected errors for the error handler in main.rs.
@@ -19,9 +19,10 @@ impl From<crate::common::CliConfigError> for CliError {
     fn from(e: crate::common::CliConfigError) -> Self {
         match e {
             crate::common::CliConfigError::Operation(msg) => CliError::Operation(msg),
-            crate::common::CliConfigError::MissingRequired(msg) => {
-                CliError::ExitCode { code: 2, message: msg }
-            }
+            crate::common::CliConfigError::MissingRequired(msg) => CliError::ExitCode {
+                code: 2,
+                message: msg,
+            },
         }
     }
 }
@@ -34,18 +35,11 @@ pub(crate) enum ConfigAction {
         output: OutputFormat,
     },
     /// Print the value of a workstation configuration setting
-    Get {
-        setting_name: String,
-    },
+    Get { setting_name: String },
     /// Set a workstation configuration setting
-    Set {
-        setting_name: String,
-        value: String,
-    },
+    Set { setting_name: String, value: String },
     /// Clear a workstation configuration setting to restore its default
-    Clear {
-        setting_name: String,
-    },
+    Clear { setting_name: String },
     /// Open the workstation configuration settings GUI
     Gui {
         /// Install GUI dependencies if not already installed
@@ -64,7 +58,10 @@ pub(crate) fn run(action: ConfigAction) -> Result<(), CliError> {
     match action {
         ConfigAction::Show { output } => show(output),
         ConfigAction::Get { setting_name } => get(&setting_name),
-        ConfigAction::Set { setting_name, value } => set(&setting_name, &value),
+        ConfigAction::Set {
+            setting_name,
+            value,
+        } => set(&setting_name, &value),
         ConfigAction::Clear { setting_name } => clear(&setting_name),
         ConfigAction::Gui { install_gui } => run_config_gui(install_gui),
     }

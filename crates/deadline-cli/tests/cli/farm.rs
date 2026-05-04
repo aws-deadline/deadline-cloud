@@ -1,7 +1,7 @@
 //! Level 2 tests for `deadline farm` subcommands.
 
 use deadline_test_server::TestHarness;
-use deadline_test_server::deadline_api::{farms, errors, telemetry};
+use deadline_test_server::deadline_api::{errors, farms, telemetry};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
@@ -177,11 +177,18 @@ async fn farm_list_sends_latency_telemetry() {
 #[tokio::test]
 async fn farm_get_sends_latency_telemetry() {
     let harness = TestHarness::new().await;
-    farms::mock_get_farm(&harness.server, json!({
-        "farmId": "farm-abc", "displayName": "My Farm",
-        "createdAt": "2024-01-01T00:00:00Z", "createdBy": "user",
-    })).await;
+    farms::mock_get_farm(
+        &harness.server,
+        json!({
+            "farmId": "farm-abc", "displayName": "My Farm",
+            "createdAt": "2024-01-01T00:00:00Z", "createdBy": "user",
+        }),
+    )
+    .await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
-    harness.cli(&["farm", "get", "--farm-id", "farm-abc"]).assert().success();
+    harness
+        .cli(&["farm", "get", "--farm-id", "farm-abc"])
+        .assert()
+        .success();
 }

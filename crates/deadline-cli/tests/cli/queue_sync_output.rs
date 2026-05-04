@@ -3,8 +3,10 @@
 //! Tests exercise the full orchestration through the CLI binary:
 //! `SearchJobs` → `GetJob` → `ListSessions` → `ListSessionActions` → S3 download.
 
-use deadline_test_server::deadline_api::{errors, jobs, queues, queue_resources, sessions, s3, sts, telemetry};
 use deadline_test_server::TestHarness;
+use deadline_test_server::deadline_api::{
+    errors, jobs, queue_resources, queues, s3, sessions, sts, telemetry,
+};
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 use std::fs;
@@ -64,7 +66,10 @@ fn active_job(job_id: &str, name: &str, succeeded: i64, ready: i64) -> serde_jso
     })
 }
 
-fn job_detail_with_attachments(job_id: &str, storage_profile_id: Option<&str>) -> serde_json::Value {
+fn job_detail_with_attachments(
+    job_id: &str,
+    storage_profile_id: Option<&str>,
+) -> serde_json::Value {
     let mut j = json!({
         "jobId": job_id,
         "name": "Test Job",
@@ -91,13 +96,27 @@ fn job_detail_no_attachments(job_id: &str) -> serde_json::Value {
 }
 
 async fn setup_config(harness: &TestHarness) {
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-aaa"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-aaa"])
+        .assert()
+        .success();
 }
 
 async fn setup_config_with_storage_profile(harness: &TestHarness) {
     setup_config(harness).await;
-    harness.cli(&["config", "set", "settings.storage_profile_id", "sp-linux-123"]).assert().success();
+    harness
+        .cli(&[
+            "config",
+            "set",
+            "settings.storage_profile_id",
+            "sp-linux-123",
+        ])
+        .assert()
+        .success();
 }
 
 fn timestamp_filters() -> insta::Settings {
@@ -109,8 +128,14 @@ fn timestamp_filters() -> insta::Settings {
     settings.add_filter(r"Continuing from: .*", "Continuing from: [TIMESTAMP]");
     settings.add_filter(r"Checkpoint: .*", "Checkpoint: [PATH]");
     settings.add_filter(r"\.\.\.retrieval completed.*", "...retrieval completed");
-    settings.add_filter(r"\.\.\.categorization completed.*", "...categorization completed");
-    settings.add_filter(r"\.\.\.downloaded manifests in.*", "...downloaded manifests in [DURATION]");
+    settings.add_filter(
+        r"\.\.\.categorization completed.*",
+        "...categorization completed",
+    );
+    settings.add_filter(
+        r"\.\.\.downloaded manifests in.*",
+        "...downloaded manifests in [DURATION]",
+    );
     settings.add_filter(r"\.\.\.downloaded in.*", "...downloaded in [DURATION]");
     settings.add_filter(r"\.\.\.populated in.*", "...populated in [DURATION]");
     settings
@@ -128,10 +153,13 @@ async fn sync_output_storage_profile_and_ignore_mutual_exclusion() {
     let checkpoint_dir = TempDir::new().unwrap();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--storage-profile-id", "sp-123",
+        "queue",
+        "sync-output",
+        "--storage-profile-id",
+        "sp-123",
         "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -143,8 +171,10 @@ async fn sync_output_no_storage_profile_configured_returns_error() {
     let checkpoint_dir = TempDir::new().unwrap();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "queue",
+        "sync-output",
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -157,25 +187,39 @@ async fn sync_output_checkpoint_storage_profile_mismatch_returns_error() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
 
-    let checkpoint_file = checkpoint_dir.path().join("queue-aaa_sp-linux-123_download_checkpoint.json");
-    fs::write(&checkpoint_file, serde_json::to_string_pretty(&json!({
-        "localStorageProfileId": "sp-OTHER-999",
-        "downloadsStartedTimestamp": "2024-06-15T10:00:00Z",
-        "downloadsCompletedTimestamp": "2024-06-15T10:00:00Z",
-        "eventualConsistencyMaxSeconds": 120,
-        "jobs": []
-    })).unwrap()).unwrap();
+    let checkpoint_file = checkpoint_dir
+        .path()
+        .join("queue-aaa_sp-linux-123_download_checkpoint.json");
+    fs::write(
+        &checkpoint_file,
+        serde_json::to_string_pretty(&json!({
+            "localStorageProfileId": "sp-OTHER-999",
+            "downloadsStartedTimestamp": "2024-06-15T10:00:00Z",
+            "downloadsCompletedTimestamp": "2024-06-15T10:00:00Z",
+            "eventualConsistencyMaxSeconds": 120,
+            "jobs": []
+        }))
+        .unwrap(),
+    )
+    .unwrap();
 
     let mut settings = insta::Settings::clone_current();
     settings.add_filter(r"Checkpoint: .*", "Checkpoint: [PATH]");
     let _guard = settings.bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "queue",
+        "sync-output",
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -188,12 +232,19 @@ async fn sync_output_queue_no_attachments_returns_error() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_without_attachments()).await;
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "queue",
+        "sync-output",
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -204,8 +255,10 @@ async fn sync_output_checkpoint_dir_not_writable_returns_error() {
     setup_config_with_storage_profile(&harness).await;
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--checkpoint-dir", "/nonexistent/readonly/dir",
+        "queue",
+        "sync-output",
+        "--checkpoint-dir",
+        "/nonexistent/readonly/dir",
     ]));
 }
 
@@ -218,11 +271,18 @@ async fn sync_output_pid_lock_prevents_concurrent_runs() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
 
     // Create PID lock with current process PID (which is alive)
-    let pid_file = checkpoint_dir.path().join("queue-aaa_sp-linux-123_download_checkpoint.json.pid");
+    let pid_file = checkpoint_dir
+        .path()
+        .join("queue-aaa_sp-linux-123_download_checkpoint.json.pid");
     fs::write(&pid_file, format!("{}", std::process::id())).unwrap();
 
     let mut settings = insta::Settings::clone_current();
@@ -231,8 +291,10 @@ async fn sync_output_pid_lock_prevents_concurrent_runs() {
     let _guard = settings.bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "queue",
+        "sync-output",
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -248,8 +310,13 @@ async fn sync_output_first_run_no_jobs() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
     sts::mock_get_caller_identity(&harness.server).await;
     s3::mock_s3_list_empty(&harness.server).await;
@@ -258,13 +325,18 @@ async fn sync_output_first_run_no_jobs() {
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--bootstrap-lookback-minutes", "60",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "queue",
+        "sync-output",
+        "--bootstrap-lookback-minutes",
+        "60",
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 
     // Verify checkpoint was saved
-    let checkpoint_file = checkpoint_dir.path().join("queue-aaa_sp-linux-123_download_checkpoint.json");
+    let checkpoint_file = checkpoint_dir
+        .path()
+        .join("queue-aaa_sp-linux-123_download_checkpoint.json");
     assert!(checkpoint_file.exists(), "checkpoint file should be saved");
 }
 
@@ -288,8 +360,13 @@ async fn sync_output_first_run_one_new_job_with_attachments() {
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
 
     // GetJob returns attachments
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_with_attachments("job-001", None)).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_with_attachments("job-001", None),
+    )
+    .await;
 
     // ListSessions returns empty (no sessions yet)
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-001", &[]).await;
@@ -297,9 +374,11 @@ async fn sync_output_first_run_one_new_job_with_attachments() {
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
+        "queue",
+        "sync-output",
         "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -322,15 +401,22 @@ async fn sync_output_job_without_attachments_skipped() {
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
 
     // GetJob returns no attachments
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_no_attachments("job-noatt")).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_no_attachments("job-noatt"),
+    )
+    .await;
 
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
+        "queue",
+        "sync-output",
         "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -353,9 +439,11 @@ async fn sync_output_ignore_storage_profiles() {
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
+        "queue",
+        "sync-output",
         "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -371,28 +459,42 @@ async fn sync_output_subsequent_run_resumes_from_checkpoint() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
     sts::mock_get_caller_identity(&harness.server).await;
     s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     // Write existing checkpoint
-    let checkpoint_file = checkpoint_dir.path().join("queue-aaa_sp-linux-123_download_checkpoint.json");
-    fs::write(&checkpoint_file, serde_json::to_string_pretty(&json!({
-        "localStorageProfileId": "sp-linux-123",
-        "downloadsStartedTimestamp": "2024-06-15T10:00:00Z",
-        "downloadsCompletedTimestamp": "2024-06-15T11:00:00Z",
-        "eventualConsistencyMaxSeconds": 120,
-        "jobs": []
-    })).unwrap()).unwrap();
+    let checkpoint_file = checkpoint_dir
+        .path()
+        .join("queue-aaa_sp-linux-123_download_checkpoint.json");
+    fs::write(
+        &checkpoint_file,
+        serde_json::to_string_pretty(&json!({
+            "localStorageProfileId": "sp-linux-123",
+            "downloadsStartedTimestamp": "2024-06-15T10:00:00Z",
+            "downloadsCompletedTimestamp": "2024-06-15T11:00:00Z",
+            "eventualConsistencyMaxSeconds": 120,
+            "jobs": []
+        }))
+        .unwrap(),
+    )
+    .unwrap();
 
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "queue",
+        "sync-output",
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -408,30 +510,45 @@ async fn sync_output_force_bootstrap_overwrites_checkpoint() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
     sts::mock_get_caller_identity(&harness.server).await;
     s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
     // Write existing checkpoint
-    let checkpoint_file = checkpoint_dir.path().join("queue-aaa_sp-linux-123_download_checkpoint.json");
-    fs::write(&checkpoint_file, serde_json::to_string_pretty(&json!({
-        "localStorageProfileId": "sp-linux-123",
-        "downloadsStartedTimestamp": "2024-06-15T10:00:00Z",
-        "downloadsCompletedTimestamp": "2024-06-15T11:00:00Z",
-        "eventualConsistencyMaxSeconds": 120,
-        "jobs": []
-    })).unwrap()).unwrap();
+    let checkpoint_file = checkpoint_dir
+        .path()
+        .join("queue-aaa_sp-linux-123_download_checkpoint.json");
+    fs::write(
+        &checkpoint_file,
+        serde_json::to_string_pretty(&json!({
+            "localStorageProfileId": "sp-linux-123",
+            "downloadsStartedTimestamp": "2024-06-15T10:00:00Z",
+            "downloadsCompletedTimestamp": "2024-06-15T11:00:00Z",
+            "eventualConsistencyMaxSeconds": 120,
+            "jobs": []
+        }))
+        .unwrap(),
+    )
+    .unwrap();
 
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
+        "queue",
+        "sync-output",
         "--force-bootstrap",
-        "--bootstrap-lookback-minutes", "30",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--bootstrap-lookback-minutes",
+        "30",
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -452,25 +569,36 @@ async fn sync_output_dry_run_does_not_save_checkpoint() {
 
     let job = active_job("job-dry", "Dry Run Job", 1, 1);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_with_attachments("job-dry", None)).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_with_attachments("job-dry", None),
+    )
+    .await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-dry", &[]).await;
 
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
+        "queue",
+        "sync-output",
         "--dry-run",
         "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 
     // Verify no checkpoint file was created
-    let entries: Vec<_> = fs::read_dir(checkpoint_dir.path()).unwrap()
+    let entries: Vec<_> = fs::read_dir(checkpoint_dir.path())
+        .unwrap()
         .filter_map(Result::ok)
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
         .collect();
-    assert!(entries.is_empty(), "dry-run should not save checkpoint file");
+    assert!(
+        entries.is_empty(),
+        "dry-run should not save checkpoint file"
+    );
 }
 
 // =========================================================================
@@ -485,8 +613,13 @@ async fn sync_output_conflict_resolution_skip() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
     sts::mock_get_caller_identity(&harness.server).await;
     s3::mock_s3_list_empty(&harness.server).await;
@@ -495,9 +628,12 @@ async fn sync_output_conflict_resolution_skip() {
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
-        "--conflict-resolution", "SKIP",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "queue",
+        "sync-output",
+        "--conflict-resolution",
+        "SKIP",
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -520,10 +656,12 @@ async fn sync_output_json_output() {
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
+        "queue",
+        "sync-output",
         "--json",
         "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -544,22 +682,36 @@ async fn sync_output_job_with_session_actions_no_manifests() {
 
     let job = active_job("job-sa", "Session Action Job", 1, 1);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_with_attachments("job-sa", None)).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_with_attachments("job-sa", None),
+    )
+    .await;
 
     // Session with one succeeded taskRun action
-    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-sa", &[
-        json!({
+    sessions::mock_list_sessions(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-sa",
+        &[json!({
             "sessionId": "session-001",
             "fleetId": "fleet-001",
             "workerId": "worker-001",
             "startedAt": "2024-06-15T10:00:00Z",
             "lifecycleStatus": "STARTED"
-        })
-    ]).await;
+        })],
+    )
+    .await;
 
     sessions::mock_list_session_actions(
-        &harness.server, "farm-abc", "queue-aaa", "job-sa", "session-001",
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-sa",
+        "session-001",
         &[json!({
             "sessionActionId": "sessionaction-001-0",
             "status": "SUCCEEDED",
@@ -571,15 +723,18 @@ async fn sync_output_job_with_session_actions_no_manifests() {
                     "stepId": "step-001"
                 }
             }
-        })]
-    ).await;
+        })],
+    )
+    .await;
 
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
+        "queue",
+        "sync-output",
         "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -604,9 +759,11 @@ async fn sync_output_search_jobs_fails_returns_error() {
     let _guard = timestamp_filters().bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "queue", "sync-output",
+        "queue",
+        "sync-output",
         "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
+        "--checkpoint-dir",
+        checkpoint_dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -628,34 +785,62 @@ async fn sync_output_multi_run_job_unchanged_on_second_run() {
     // Job with 1 succeeded task
     let job = active_job("job-multi", "Multi Run Job", 1, 1);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job], 1).await;
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_with_attachments("job-multi", None)).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_with_attachments("job-multi", None),
+    )
+    .await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-multi", &[]).await;
 
     // Run 1: bootstrap
-    harness.cli(&[
-        "queue", "sync-output",
-        "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).assert().success();
+    harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
 
     // Verify checkpoint was saved
-    let checkpoint_file = checkpoint_dir.path().join("queue-aaa_ignore-storage-profiles_download_checkpoint.json");
-    assert!(checkpoint_file.exists(), "checkpoint should exist after run 1");
+    let checkpoint_file = checkpoint_dir
+        .path()
+        .join("queue-aaa_ignore-storage-profiles_download_checkpoint.json");
+    assert!(
+        checkpoint_file.exists(),
+        "checkpoint should exist after run 1"
+    );
 
     // Run 2: same job, same state → should be UNCHANGED
-    let output = harness.cli(&[
-        "queue", "sync-output",
-        "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("run 2 should execute");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("run 2 should execute");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "run 2 should succeed: {stderr}");
-    assert!(stderr.contains("Checkpoint found"), "should load checkpoint: {stderr}");
-    assert!(stderr.contains("UNCHANGED Job: Multi Run Job (job-multi)"),
-        "job should be unchanged on second run: {stderr}");
-    assert!(stderr.contains("unchanged: 1"), "summary should show 1 unchanged: {stderr}");
+    assert!(
+        stderr.contains("Checkpoint found"),
+        "should load checkpoint: {stderr}"
+    );
+    assert!(
+        stderr.contains("UNCHANGED Job: Multi Run Job (job-multi)"),
+        "job should be unchanged on second run: {stderr}"
+    );
+    assert!(
+        stderr.contains("unchanged: 1"),
+        "summary should show 1 unchanged: {stderr}"
+    );
 }
 
 // =========================================================================
@@ -676,14 +861,25 @@ async fn sync_output_multi_run_job_existing_task_count_changed() {
     // Run 1: job with 1/3 succeeded
     let job1 = active_job("job-ex", "Existing Job", 1, 2);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_with_attachments("job-ex", None)).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_with_attachments("job-ex", None),
+    )
+    .await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-ex", &[]).await;
 
-    harness.cli(&[
-        "queue", "sync-output", "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).assert().success();
+    harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
 
     // Run 2: same job now has 2/3 succeeded
     harness.server.reset().await;
@@ -695,17 +891,35 @@ async fn sync_output_multi_run_job_existing_task_count_changed() {
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job2], 1).await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-ex", &[]).await;
 
-    let output = harness.cli(&[
-        "queue", "sync-output", "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("run 2");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("run 2");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "run 2 should succeed: {stderr}");
-    assert!(stderr.contains("EXISTING Job: Existing Job (job-ex)"), "should show EXISTING: {stderr}");
-    assert!(stderr.contains("Succeeded tasks (before): 1 / 3"), "should show before count: {stderr}");
-    assert!(stderr.contains("Succeeded tasks (now)   : 2 / 3"), "should show after count: {stderr}");
-    assert!(stderr.contains("updated: 1"), "summary should show 1 updated: {stderr}");
+    assert!(
+        stderr.contains("EXISTING Job: Existing Job (job-ex)"),
+        "should show EXISTING: {stderr}"
+    );
+    assert!(
+        stderr.contains("Succeeded tasks (before): 1 / 3"),
+        "should show before count: {stderr}"
+    );
+    assert!(
+        stderr.contains("Succeeded tasks (now)   : 2 / 3"),
+        "should show after count: {stderr}"
+    );
+    assert!(
+        stderr.contains("updated: 1"),
+        "summary should show 1 updated: {stderr}"
+    );
 }
 
 // =========================================================================
@@ -728,14 +942,25 @@ async fn sync_output_multi_run_job_finished_tracking_succeeded() {
     job1["endedAt"] = json!("2024-06-15T11:00:00Z");
     job1["taskRunStatus"] = json!("SUCCEEDED");
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_with_attachments("job-fin", None)).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_with_attachments("job-fin", None),
+    )
+    .await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-fin", &[]).await;
 
-    harness.cli(&[
-        "queue", "sync-output", "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).assert().success();
+    harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
 
     // Run 2: job no longer in SearchJobs results → FINISHED TRACKING
     harness.server.reset().await;
@@ -745,17 +970,31 @@ async fn sync_output_multi_run_job_finished_tracking_succeeded() {
     s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
-    let output = harness.cli(&[
-        "queue", "sync-output", "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("run 2");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("run 2");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "run 2 should succeed: {stderr}");
-    assert!(stderr.contains("FINISHED TRACKING Job: Finished Job (job-fin)"),
-        "should show FINISHED TRACKING: {stderr}");
-    assert!(stderr.contains("Job succeeded"), "should say job succeeded: {stderr}");
-    assert!(stderr.contains("inactive: 1"), "summary should show 1 inactive: {stderr}");
+    assert!(
+        stderr.contains("FINISHED TRACKING Job: Finished Job (job-fin)"),
+        "should show FINISHED TRACKING: {stderr}"
+    );
+    assert!(
+        stderr.contains("Job succeeded"),
+        "should say job succeeded: {stderr}"
+    );
+    assert!(
+        stderr.contains("inactive: 1"),
+        "summary should show 1 inactive: {stderr}"
+    );
 }
 
 // =========================================================================
@@ -776,14 +1015,25 @@ async fn sync_output_multi_run_job_canceled() {
     // Run 1: job with 1/2 succeeded (still running)
     let job1 = active_job("job-can", "Canceled Job", 1, 1);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_with_attachments("job-can", None)).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_with_attachments("job-can", None),
+    )
+    .await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-can", &[]).await;
 
-    harness.cli(&[
-        "queue", "sync-output", "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).assert().success();
+    harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
 
     // Run 2: job no longer in SearchJobs → canceled/failed
     harness.server.reset().await;
@@ -793,18 +1043,33 @@ async fn sync_output_multi_run_job_canceled() {
     s3::mock_s3_list_empty(&harness.server).await;
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
-    let output = harness.cli(&[
-        "queue", "sync-output", "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("run 2");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("run 2");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "run 2 should succeed: {stderr}");
-    assert!(stderr.contains("FINISHED TRACKING Job: Canceled Job (job-can)"),
-        "should show FINISHED TRACKING: {stderr}");
-    assert!(stderr.contains("Job is not a download candidate anymore (likely suspended, canceled or failed)"),
-        "should explain reason: {stderr}");
-    assert!(stderr.contains("inactive: 1"), "summary should show 1 inactive: {stderr}");
+    assert!(
+        stderr.contains("FINISHED TRACKING Job: Canceled Job (job-can)"),
+        "should show FINISHED TRACKING: {stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "Job is not a download candidate anymore (likely suspended, canceled or failed)"
+        ),
+        "should explain reason: {stderr}"
+    );
+    assert!(
+        stderr.contains("inactive: 1"),
+        "summary should show 1 inactive: {stderr}"
+    );
 }
 
 // =========================================================================
@@ -825,13 +1090,24 @@ async fn sync_output_multi_run_job_without_attachments_tracked() {
     // Run 1: job without attachments
     let job1 = active_job("job-noatt2", "No Att Job", 1, 0);
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1.clone()], 1).await;
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa",
-        job_detail_no_attachments("job-noatt2")).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        job_detail_no_attachments("job-noatt2"),
+    )
+    .await;
 
-    harness.cli(&[
-        "queue", "sync-output", "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).assert().success();
+    harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
 
     // Run 2: same job still active → should be attachments-free again (not call GetJob)
     harness.server.reset().await;
@@ -842,15 +1118,26 @@ async fn sync_output_multi_run_job_without_attachments_tracked() {
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1], 1).await;
     // Note: NOT mocking GetJob — if the code calls it, the test will fail
 
-    let output = harness.cli(&[
-        "queue", "sync-output", "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("run 2");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("run 2");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "run 2 should succeed without calling GetJob: {stderr}");
-    assert!(stderr.contains("not using job attachments: 1"),
-        "should still count as attachments-free: {stderr}");
+    assert!(
+        output.status.success(),
+        "run 2 should succeed without calling GetJob: {stderr}"
+    );
+    assert!(
+        stderr.contains("not using job attachments: 1"),
+        "should still count as attachments-free: {stderr}"
+    );
 }
 
 // =========================================================================
@@ -870,8 +1157,13 @@ async fn sync_output_storage_profile_path_mapping_rules_printed() {
 
     // Local storage profile (Linux)
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
 
     // Job submitted from a macOS machine with different storage profile
     let job = active_job("job-map", "Mapped Job", 1, 1);
@@ -883,7 +1175,10 @@ async fn sync_output_storage_profile_path_mapping_rules_printed() {
 
     // Mock the job's storage profile (macOS with different paths)
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-macos-456",
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-macos-456",
         json!({
             "storageProfileId": "sp-macos-456",
             "displayName": "macOS Profile",
@@ -892,21 +1187,35 @@ async fn sync_output_storage_profile_path_mapping_rules_printed() {
                 {"name": "shared", "path": "/Volumes/shared", "type": "SHARED"}
             ]
         }),
-    ).await;
+    )
+    .await;
 
-    let output = harness.cli(&[
-        "queue", "sync-output",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("should run");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("should run");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "should succeed: {stderr}");
-    assert!(stderr.contains("Local storage profile is Linux Profile (sp-linux-123)"),
-        "should print local profile: {stderr}");
+    assert!(
+        stderr.contains("Local storage profile is Linux Profile (sp-linux-123)"),
+        "should print local profile: {stderr}"
+    );
     assert!(stderr.contains("Path mapping rules for 1 download candidate jobs with storage profile macOS Profile (sp-macos-456)"),
         "should print mapping header: {stderr}");
-    assert!(stderr.contains("- from: /Volumes/shared"), "should print source path: {stderr}");
-    assert!(stderr.contains("to:   /mnt/shared"), "should print dest path: {stderr}");
+    assert!(
+        stderr.contains("- from: /Volumes/shared"),
+        "should print source path: {stderr}"
+    );
+    assert!(
+        stderr.contains("to:   /mnt/shared"),
+        "should print dest path: {stderr}"
+    );
 }
 
 // =========================================================================
@@ -935,18 +1244,27 @@ async fn sync_output_downloads_files_to_disk() {
     jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
 
     // Session with one succeeded taskRun action
-    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-dl", &[
-        json!({
+    sessions::mock_list_sessions(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-dl",
+        &[json!({
             "sessionId": "session-dl1",
             "fleetId": "fleet-001",
             "workerId": "worker-001",
             "startedAt": "2024-06-15T10:00:00Z",
             "lifecycleStatus": "ENDED"
-        })
-    ]).await;
+        })],
+    )
+    .await;
 
     sessions::mock_list_session_actions(
-        &harness.server, "farm-abc", "queue-aaa", "job-dl", "session-dl1",
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-dl",
+        "session-dl1",
         &[json!({
             "sessionActionId": "sessionaction-dl1-0",
             "status": "SUCCEEDED",
@@ -958,8 +1276,9 @@ async fn sync_output_downloads_files_to_disk() {
                     "stepId": "step-001"
                 }
             }
-        })]
-    ).await;
+        })],
+    )
+    .await;
 
     // Mock S3 ListObjectsV2 for output manifests — realistic key with colons
     let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-dl/step-001/task-001/2024-06-15T10:02:00Z_sessionaction-dl1-0/abcdef.manifest";
@@ -977,7 +1296,8 @@ async fn sync_output_downloads_files_to_disk() {
             "mtime": 1_700_000_000_000_000_i64
         }],
         "totalSize": 5
-    })).unwrap();
+    }))
+    .unwrap();
 
     // Mock S3 GetObject for the manifest (with asset-root metadata).
     s3::mock_s3_get_object_with_metadata(
@@ -985,38 +1305,55 @@ async fn sync_output_downloads_files_to_disk() {
         &format!("my-bucket/{manifest_key}"),
         manifest_json.as_bytes(),
         &[("asset-root", download_root)],
-    ).await;
+    )
+    .await;
 
     // Mock S3 GetObject for the actual file content (CAS path)
     s3::mock_s3_get_object(
         &harness.server,
         &format!("my-bucket/DeadlineCloud/Data/{file_hash}.xxh128"),
         b"hello",
-    ).await;
+    )
+    .await;
 
     let _guard = timestamp_filters().bind_to_scope();
 
-    let output = harness.cli(&[
-        "queue", "sync-output",
-        "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("should run");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("should run");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "should succeed: {stderr}");
 
     // The key assertion: files were actually downloaded
-    assert!(!stderr.contains("Downloaded files: 0"),
-        "should have downloaded files, not 0: {stderr}");
-    assert!(stderr.contains("Downloaded files: 1") || stderr.contains("downloaded_files\": 1"),
-        "should show 1 downloaded file: {stderr}");
+    assert!(
+        !stderr.contains("Downloaded files: 0"),
+        "should have downloaded files, not 0: {stderr}"
+    );
+    assert!(
+        stderr.contains("Downloaded files: 1") || stderr.contains("downloaded_files\": 1"),
+        "should show 1 downloaded file: {stderr}"
+    );
 
     // Verify the file exists on disk
     let downloaded_file = download_dir.path().join("output/render.exr");
-    assert!(downloaded_file.exists(),
-        "file should be downloaded to {}", downloaded_file.display());
-    assert_eq!(fs::read_to_string(&downloaded_file).unwrap(), "hello",
-        "file content should match");
+    assert!(
+        downloaded_file.exists(),
+        "file should be downloaded to {}",
+        downloaded_file.display()
+    );
+    assert_eq!(
+        fs::read_to_string(&downloaded_file).unwrap(),
+        "hello",
+        "file content should match"
+    );
 }
 
 // =====================================================================
@@ -1035,8 +1372,13 @@ async fn sync_output_paginates_beyond_100_jobs() {
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
     queue_resources::mock_get_storage_profile_for_queue(
-        &harness.server, "farm-abc", "queue-aaa", "sp-linux-123", storage_profile(),
-    ).await;
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "sp-linux-123",
+        storage_profile(),
+    )
+    .await;
     sts::mock_get_caller_identity(&harness.server).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
     s3::mock_s3_list_empty(&harness.server).await;
@@ -1067,11 +1409,14 @@ async fn sync_output_paginates_beyond_100_jobs() {
     // The pagination algorithm deduplicates by jobId.
     // "ANY_EQUALS" marker differentiates active-jobs from ended-jobs queries.
     jobs::mock_search_jobs_paginated(
-        &harness.server, "farm-abc",
+        &harness.server,
+        "farm-abc",
         "ANY_EQUALS",
-        &[job_a, job_b.clone()], 3,
+        &[job_a, job_b.clone()],
+        3,
         &[job_b, job_c],
-    ).await;
+    )
+    .await;
 
     // Ended jobs query returns empty (separate from active-jobs pagination)
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
@@ -1079,18 +1424,26 @@ async fn sync_output_paginates_beyond_100_jobs() {
     // GetJob for each new job (to get attachments)
     for job_id in &["job-aaa", "job-bbb", "job-ccc"] {
         jobs::mock_get_job(
-            &harness.server, "farm-abc", "queue-aaa",
+            &harness.server,
+            "farm-abc",
+            "queue-aaa",
             job_detail_no_attachments(job_id),
-        ).await;
+        )
+        .await;
     }
 
     let _guard = timestamp_filters().bind_to_scope();
 
-    let output = harness.cli(&[
-        "queue", "sync-output",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-        "--dry-run",
-    ]).output().expect("should run");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+            "--dry-run",
+        ])
+        .output()
+        .expect("should run");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1133,19 +1486,28 @@ async fn sync_output_session_action_count_excludes_no_output_actions() {
     job_detail["attachments"]["manifests"][0]["rootPath"] = json!(download_root);
     jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
 
-    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-mix", &[
-        json!({
+    sessions::mock_list_sessions(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-mix",
+        &[json!({
             "sessionId": "session-mix1",
             "fleetId": "fleet-001",
             "workerId": "worker-001",
             "startedAt": "2024-06-15T10:00:00Z",
             "lifecycleStatus": "ENDED"
-        })
-    ]).await;
+        })],
+    )
+    .await;
 
     // Two succeeded taskRun actions
     sessions::mock_list_session_actions(
-        &harness.server, "farm-abc", "queue-aaa", "job-mix", "session-mix1",
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-mix",
+        "session-mix1",
         &[
             json!({
                 "sessionActionId": "sessionaction-mix1-0",
@@ -1161,8 +1523,9 @@ async fn sync_output_session_action_count_excludes_no_output_actions() {
                 "endedAt": "2024-06-15T10:04:00Z",
                 "definition": { "taskRun": { "taskId": "task-002", "stepId": "step-002" } }
             }),
-        ]
-    ).await;
+        ],
+    )
+    .await;
 
     // S3: only action 1 has an output manifest; action 0 has none
     let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-mix/step-002/task-002/2024-06-15T10:04:00Z_sessionaction-mix1-1/abc.manifest";
@@ -1181,24 +1544,33 @@ async fn sync_output_session_action_count_excludes_no_output_actions() {
         &format!("my-bucket/{manifest_key}"),
         manifest_json.as_bytes(),
         &[("asset-root", download_root)],
-    ).await;
+    )
+    .await;
 
     s3::mock_s3_get_object(
         &harness.server,
         &format!("my-bucket/DeadlineCloud/Data/{file_hash}.xxh128"),
         b"resultdata",
-    ).await;
+    )
+    .await;
 
-    let output = harness.cli(&[
-        "queue", "sync-output",
-        "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("should run");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("should run");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     // SYNC-001: count should be 1 (only the action with a manifest), not 2
-    assert!(stderr.contains("Downloaded session actions: 1"),
-        "Should count only session actions with output manifests, not all succeeded actions.\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("Downloaded session actions: 1"),
+        "Should count only session actions with output manifests, not all succeeded actions.\nstderr:\n{stderr}"
+    );
 }
 
 // =========================================================================
@@ -1238,19 +1610,30 @@ async fn sync_output_new_job_prints_manifest_file_system_paths() {
     jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
     sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-mfp", &[]).await;
 
-    let output = harness.cli(&[
-        "queue", "sync-output",
-        "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("should run");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("should run");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Manifest file system paths:"),
-        "Should print 'Manifest file system paths:' header for new jobs with attachments.\nstderr:\n{stderr}");
-    assert!(stderr.contains("- /mnt/shared (posix)"),
-        "Should list first manifest root path.\nstderr:\n{stderr}");
-    assert!(stderr.contains("- /mnt/output (posix)"),
-        "Should list second manifest root path.\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("Manifest file system paths:"),
+        "Should print 'Manifest file system paths:' header for new jobs with attachments.\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("- /mnt/shared (posix)"),
+        "Should list first manifest root path.\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("- /mnt/output (posix)"),
+        "Should list second manifest root path.\nstderr:\n{stderr}"
+    );
 }
 
 // =========================================================================
@@ -1280,19 +1663,28 @@ async fn sync_output_warning_for_session_actions_without_manifests() {
     job_detail["attachments"]["manifests"][0]["rootPath"] = json!(download_root);
     jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
 
-    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-warn", &[
-        json!({
+    sessions::mock_list_sessions(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-warn",
+        &[json!({
             "sessionId": "session-w1",
             "fleetId": "fleet-001",
             "workerId": "worker-001",
             "startedAt": "2024-06-15T10:00:00Z",
             "lifecycleStatus": "ENDED"
-        })
-    ]).await;
+        })],
+    )
+    .await;
 
     // Two succeeded taskRun actions, but only one has output on S3
     sessions::mock_list_session_actions(
-        &harness.server, "farm-abc", "queue-aaa", "job-warn", "session-w1",
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-warn",
+        "session-w1",
         &[
             json!({
                 "sessionActionId": "sessionaction-w1-0",
@@ -1308,8 +1700,9 @@ async fn sync_output_warning_for_session_actions_without_manifests() {
                 "endedAt": "2024-06-15T10:04:00Z",
                 "definition": { "taskRun": { "taskId": "task-002", "stepId": "step-002" } }
             }),
-        ]
-    ).await;
+        ],
+    )
+    .await;
 
     // Only step-002/task-002 has a manifest; step-001/task-001 has none
     let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-warn/step-002/task-002/2024-06-15T10:04:00Z_sessionaction-w1-1/abc.manifest";
@@ -1328,25 +1721,38 @@ async fn sync_output_warning_for_session_actions_without_manifests() {
         &format!("my-bucket/{manifest_key}"),
         manifest_json.as_bytes(),
         &[("asset-root", download_root)],
-    ).await;
+    )
+    .await;
 
     s3::mock_s3_get_object(
         &harness.server,
         &format!("my-bucket/DeadlineCloud/Data/{file_hash}.xxh128"),
         b"resultdata",
-    ).await;
+    )
+    .await;
 
-    let output = harness.cli(&[
-        "queue", "sync-output",
-        "--ignore-storage-profiles",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("should run");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("should run");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("WARNING: Job Warning Job (job-warn) ran 1 / 2 session actions with no output."),
-        "Should print WARNING about session actions without output manifests.\nstderr:\n{stderr}");
-    assert!(stderr.contains("This may indicate steps in the job that strictly perform validation"),
-        "Should print explanation about validation steps.\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains(
+            "WARNING: Job Warning Job (job-warn) ran 1 / 2 session actions with no output."
+        ),
+        "Should print WARNING about session actions without output manifests.\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("This may indicate steps in the job that strictly perform validation"),
+        "Should print explanation about validation steps.\nstderr:\n{stderr}"
+    );
 }
 
 // =========================================================================
@@ -1375,26 +1781,36 @@ async fn sync_output_path_summary_shows_per_file_listing() {
     job_detail["attachments"]["manifests"][0]["rootPath"] = json!(download_root);
     jobs::mock_get_job(&harness.server, "farm-abc", "queue-aaa", job_detail).await;
 
-    sessions::mock_list_sessions(&harness.server, "farm-abc", "queue-aaa", "job-sum", &[
-        json!({
+    sessions::mock_list_sessions(
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-sum",
+        &[json!({
             "sessionId": "session-sum1",
             "fleetId": "fleet-001",
             "workerId": "worker-001",
             "startedAt": "2024-06-15T10:00:00Z",
             "lifecycleStatus": "ENDED"
-        })
-    ]).await;
+        })],
+    )
+    .await;
 
     sessions::mock_list_session_actions(
-        &harness.server, "farm-abc", "queue-aaa", "job-sum", "session-sum1",
+        &harness.server,
+        "farm-abc",
+        "queue-aaa",
+        "job-sum",
+        "session-sum1",
         &[json!({
             "sessionActionId": "sessionaction-sum1-0",
             "status": "SUCCEEDED",
             "startedAt": "2024-06-15T10:01:00Z",
             "endedAt": "2024-06-15T10:02:00Z",
             "definition": { "taskRun": { "taskId": "task-001", "stepId": "step-001" } }
-        })]
-    ).await;
+        })],
+    )
+    .await;
 
     let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-sum/step-001/task-001/2024-06-15T10:02:00Z_sessionaction-sum1-0/abc.manifest";
     s3::mock_s3_list_objects(&harness.server, &[manifest_key]).await;
@@ -1417,25 +1833,33 @@ async fn sync_output_path_summary_shows_per_file_listing() {
         &format!("my-bucket/{manifest_key}"),
         manifest_json.as_bytes(),
         &[("asset-root", download_root)],
-    ).await;
+    )
+    .await;
 
     s3::mock_s3_get_object(
         &harness.server,
         &format!("my-bucket/DeadlineCloud/Data/{hash_a}.xxh128"),
         &vec![0u8; 1_500_000],
-    ).await;
+    )
+    .await;
     s3::mock_s3_get_object(
         &harness.server,
         &format!("my-bucket/DeadlineCloud/Data/{hash_b}.xxh128"),
         &vec![0u8; 1_500_000],
-    ).await;
+    )
+    .await;
 
-    let output = harness.cli(&[
-        "queue", "sync-output",
-        "--ignore-storage-profiles",
-        "--dry-run",
-        "--checkpoint-dir", checkpoint_dir.path().to_str().unwrap(),
-    ]).output().expect("should run");
+    let output = harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--dry-run",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("should run");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     // SYNC-004: Should show per-file listing, not just aggregate "2 files, 3.0 MB"
@@ -1444,14 +1868,25 @@ async fn sync_output_path_summary_shows_per_file_listing() {
     //   /path/to/renders/ (2 files, 3 MB):
     //     frame_001.exr (1 file)
     //     frame_002.exr (1 file)
-    let summary_section = stderr.split("Summary of paths to download:").nth(1).unwrap_or("");
-    assert!(summary_section.contains("renders/") || summary_section.contains("renders\\"),
-        "Path summary should show directory grouping.\nstderr:\n{stderr}");
-    assert!(summary_section.contains("frame_001.exr") || summary_section.contains("frame_%d.exr"),
-        "Path summary should show individual files or sequence patterns.\nstderr:\n{stderr}");
+    let summary_section = stderr
+        .split("Summary of paths to download:")
+        .nth(1)
+        .unwrap_or("");
+    assert!(
+        summary_section.contains("renders/") || summary_section.contains("renders\\"),
+        "Path summary should show directory grouping.\nstderr:\n{stderr}"
+    );
+    assert!(
+        summary_section.contains("frame_001.exr") || summary_section.contains("frame_%d.exr"),
+        "Path summary should show individual files or sequence patterns.\nstderr:\n{stderr}"
+    );
     // SYNC-007: Dry-run should still report would-be file/byte counts
-    assert!(stderr.contains("Downloaded files: 2"),
-        "Dry-run should report would-be file count.\nstderr:\n{stderr}");
-    assert!(stderr.contains("Downloaded bytes: 3 MB"),
-        "Dry-run should report would-be byte count.\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("Downloaded files: 2"),
+        "Dry-run should report would-be file count.\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("Downloaded bytes: 3 MB"),
+        "Dry-run should report would-be byte count.\nstderr:\n{stderr}"
+    );
 }

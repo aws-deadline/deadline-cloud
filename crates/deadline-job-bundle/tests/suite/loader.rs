@@ -103,7 +103,10 @@ fn read_yaml_or_json_both_exist_returns_error() {
     fs::write(dir.path().join("template.json"), "{}").unwrap();
     fs::write(dir.path().join("template.yaml"), "key: val").unwrap();
     let err = read_yaml_or_json(dir.path().to_str().unwrap(), "template", true).unwrap_err();
-    assert!(err.to_string().contains("only one is permitted"), "got: {err}");
+    assert!(
+        err.to_string().contains("only one is permitted"),
+        "got: {err}"
+    );
 }
 
 #[test]
@@ -111,7 +114,8 @@ fn read_yaml_or_json_neither_exists_required_returns_error() {
     let dir = TempDir::new().unwrap();
     let err = read_yaml_or_json(dir.path().to_str().unwrap(), "template", true).unwrap_err();
     assert!(
-        err.to_string().contains("lacks a template.json or template.yaml"),
+        err.to_string()
+            .contains("lacks a template.json or template.yaml"),
         "got: {err}"
     );
 }
@@ -150,19 +154,28 @@ fn parse_valid_yaml() {
 #[test]
 fn parse_invalid_json_returns_error() {
     let err = parse_yaml_or_json_content("{bad", "JSON", "/tmp", "test").unwrap_err();
-    assert!(err.to_string().contains("Error loading 'test.json'"), "got: {err}");
+    assert!(
+        err.to_string().contains("Error loading 'test.json'"),
+        "got: {err}"
+    );
 }
 
 #[test]
 fn parse_invalid_yaml_returns_error() {
     let err = parse_yaml_or_json_content(":\n  :\n    - :", "YAML", "/tmp", "test").unwrap_err();
-    assert!(err.to_string().contains("Error loading 'test.yaml'"), "got: {err}");
+    assert!(
+        err.to_string().contains("Error loading 'test.yaml'"),
+        "got: {err}"
+    );
 }
 
 #[test]
 fn parse_unknown_type_returns_error() {
     let err = parse_yaml_or_json_content("<xml/>", "XML", "/tmp", "test").unwrap_err();
-    assert!(err.to_string().contains("Unexpected file type"), "got: {err}");
+    assert!(
+        err.to_string().contains("Unexpected file type"),
+        "got: {err}"
+    );
 }
 
 // ── read_yaml_or_json_object ────────────────────────────────────────
@@ -208,16 +221,26 @@ fn save_json_writes_pretty_printed() {
     let data = serde_json::json!({"key": "value"});
     save_yaml_or_json_to_file(dir.path().to_str().unwrap(), "out", "JSON", &data).unwrap();
     let contents = fs::read_to_string(dir.path().join("out.json")).unwrap();
-    assert!(contents.contains("  \"key\""), "Expected indented JSON, got:\n{contents}");
+    assert!(
+        contents.contains("  \"key\""),
+        "Expected indented JSON, got:\n{contents}"
+    );
 }
 
 #[test]
 fn save_unknown_type_returns_error() {
     let dir = TempDir::new().unwrap();
-    let err =
-        save_yaml_or_json_to_file(dir.path().to_str().unwrap(), "out", "XML", &serde_json::json!({}))
-            .unwrap_err();
-    assert!(err.to_string().contains("Unexpected file type"), "got: {err}");
+    let err = save_yaml_or_json_to_file(
+        dir.path().to_str().unwrap(),
+        "out",
+        "XML",
+        &serde_json::json!({}),
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("Unexpected file type"),
+        "got: {err}"
+    );
 }
 
 // ── deadline_yaml_dump ──────────────────────────────────────────────
@@ -239,7 +262,10 @@ fn yaml_dump_singleline_no_block_literal() {
     let data = serde_json::json!({"name": "hello"});
     let yaml = deadline_yaml_dump(&data);
     assert!(yaml.contains("name:"));
-    assert!(!yaml.contains('|'), "Single-line should not use block literal");
+    assert!(
+        !yaml.contains('|'),
+        "Single-line should not use block literal"
+    );
 }
 
 #[test]
@@ -250,7 +276,10 @@ fn yaml_dump_preserves_insertion_order() {
     let yaml = deadline_yaml_dump(&serde_json::Value::Object(map));
     let z = yaml.find("zebra").unwrap();
     let a = yaml.find("alpha").unwrap();
-    assert!(z < a, "Expected insertion order (zebra before alpha), got:\n{yaml}");
+    assert!(
+        z < a,
+        "Expected insertion order (zebra before alpha), got:\n{yaml}"
+    );
 }
 
 // ── Roundtrip ───────────────────────────────────────────────────────

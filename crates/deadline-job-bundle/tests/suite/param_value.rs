@@ -52,7 +52,11 @@ fn validate_value_constraint_violation(
     input: serde_json::Value,
     expected_msg: &str,
 ) {
-    let param_type = if constraint.contains("Length") { "STRING" } else { "INT" };
+    let param_type = if constraint.contains("Length") {
+        "STRING"
+    } else {
+        "INT"
+    };
     let param = serde_json::json!({"name": "P", "type": param_type, constraint: limit});
     let err = validate_job_parameter_value(&param, &input).unwrap_err();
     assert!(err.to_string().contains(expected_msg), "got: {err}");
@@ -62,7 +66,10 @@ fn validate_value_constraint_violation(
 fn validate_value_not_in_allowed_values_returns_error() {
     let param = serde_json::json!({"name": "P", "type": "STRING", "allowedValues": ["a", "b"]});
     let err = validate_job_parameter_value(&param, &serde_json::json!("c")).unwrap_err();
-    assert!(err.to_string().contains("not an allowed value"), "got: {err}");
+    assert!(
+        err.to_string().contains("not an allowed value"),
+        "got: {err}"
+    );
 }
 
 #[test]

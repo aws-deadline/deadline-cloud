@@ -21,7 +21,12 @@ async fn manifest_snapshot_creates_manifest_file() {
     fs::write(dir.path().join("b.txt"), b"world").unwrap();
 
     let output = harness
-        .cli(&["manifest", "snapshot", "--root", dir.path().to_str().unwrap()])
+        .cli(&[
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+        ])
         .output()
         .expect("failed to run");
 
@@ -59,9 +64,12 @@ async fn manifest_snapshot_writes_to_destination() {
 
     let output = harness
         .cli(&[
-            "manifest", "snapshot",
-            "--root", root.path().to_str().unwrap(),
-            "--destination", dest.path().to_str().unwrap(),
+            "manifest",
+            "snapshot",
+            "--root",
+            root.path().to_str().unwrap(),
+            "--destination",
+            dest.path().to_str().unwrap(),
         ])
         .output()
         .expect("failed to run");
@@ -94,9 +102,12 @@ async fn manifest_snapshot_uses_provided_name() {
 
     let output = harness
         .cli(&[
-            "manifest", "snapshot",
-            "--root", dir.path().to_str().unwrap(),
-            "--name", "my-snapshot",
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--name",
+            "my-snapshot",
         ])
         .output()
         .expect("failed to run");
@@ -126,10 +137,14 @@ async fn manifest_snapshot_include_exclude_filters() {
 
     let output = harness
         .cli(&[
-            "manifest", "snapshot",
-            "--root", dir.path().to_str().unwrap(),
-            "--include", "*.exr",
-            "--exclude", "*.tmp",
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--include",
+            "*.exr",
+            "--exclude",
+            "*.tmp",
         ])
         .output()
         .expect("failed to run");
@@ -153,7 +168,10 @@ async fn manifest_snapshot_include_exclude_filters() {
 async fn manifest_snapshot_nonexistent_root_exits_with_error() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&[
-        "manifest", "snapshot", "--root", "/nonexistent/path/abc123"
+        "manifest",
+        "snapshot",
+        "--root",
+        "/nonexistent/path/abc123"
     ]));
 }
 
@@ -171,7 +189,12 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
 
     // Create snapshot
     let output = harness
-        .cli(&["manifest", "snapshot", "--root", dir.path().to_str().unwrap()])
+        .cli(&[
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+        ])
         .output()
         .expect("failed to run");
     assert!(output.status.success());
@@ -183,7 +206,11 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
         .expect("manifest should exist");
 
     // Modify: change content (different size triggers fast diff)
-    fs::write(dir.path().join("will_modify.txt"), b"after modification with more bytes").unwrap();
+    fs::write(
+        dir.path().join("will_modify.txt"),
+        b"after modification with more bytes",
+    )
+    .unwrap();
     // Delete
     fs::remove_file(dir.path().join("will_delete.txt")).unwrap();
     // Add new
@@ -192,9 +219,12 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
     // Run diff with --json
     let output = harness
         .cli(&[
-            "manifest", "diff",
-            "--manifest", manifest_file.path().to_str().unwrap(),
-            "--root", dir.path().to_str().unwrap(),
+            "manifest",
+            "diff",
+            "--manifest",
+            manifest_file.path().to_str().unwrap(),
+            "--root",
+            dir.path().to_str().unwrap(),
             "--json",
         ])
         .output()
@@ -205,15 +235,30 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
     let json: serde_json::Value = serde_json::from_str(&stdout).expect("should be valid JSON");
 
     // Verify root-relative paths (not absolute)
-    let new_files: Vec<&str> = json["new"].as_array().unwrap()
-        .iter().filter_map(|v| v.as_str()).collect();
-    let modified: Vec<&str> = json["modified"].as_array().unwrap()
-        .iter().filter_map(|v| v.as_str()).collect();
-    let deleted: Vec<&str> = json["deleted"].as_array().unwrap()
-        .iter().filter_map(|v| v.as_str()).collect();
+    let new_files: Vec<&str> = json["new"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    let modified: Vec<&str> = json["modified"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    let deleted: Vec<&str> = json["deleted"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
 
     assert!(new_files.contains(&"added.txt"), "new: {new_files:?}");
-    assert!(modified.contains(&"will_modify.txt"), "modified: {modified:?}");
+    assert!(
+        modified.contains(&"will_modify.txt"),
+        "modified: {modified:?}"
+    );
     assert!(deleted.contains(&"will_delete.txt"), "deleted: {deleted:?}");
     // original.txt should not appear in any diff list
     assert!(!new_files.contains(&"original.txt"));
@@ -236,9 +281,12 @@ async fn manifest_snapshot_diff_only_includes_changed_files() {
     // Initial snapshot
     let output = harness
         .cli(&[
-            "manifest", "snapshot",
-            "--root", dir.path().to_str().unwrap(),
-            "--destination", dest.path().to_str().unwrap(),
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--destination",
+            dest.path().to_str().unwrap(),
         ])
         .output()
         .expect("failed to run");
@@ -251,16 +299,25 @@ async fn manifest_snapshot_diff_only_includes_changed_files() {
         .expect("first manifest should exist");
 
     // Modify one file (different size)
-    fs::write(dir.path().join("will_change.txt"), b"after with more content").unwrap();
+    fs::write(
+        dir.path().join("will_change.txt"),
+        b"after with more content",
+    )
+    .unwrap();
 
     // Diff snapshot
     let output = harness
         .cli(&[
-            "manifest", "snapshot",
-            "--root", dir.path().to_str().unwrap(),
-            "--destination", dest.path().to_str().unwrap(),
-            "--diff", first_manifest.path().to_str().unwrap(),
-            "--name", "diff-snap",
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--destination",
+            dest.path().to_str().unwrap(),
+            "--diff",
+            first_manifest.path().to_str().unwrap(),
+            "--name",
+            "diff-snap",
         ])
         .output()
         .expect("failed to run");
@@ -280,7 +337,12 @@ async fn manifest_snapshot_diff_only_includes_changed_files() {
     let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
     let paths = parsed["paths"].as_array().unwrap();
     // Should only contain the changed file, not unchanged.txt
-    assert_eq!(paths.len(), 1, "diff manifest should have 1 file, got {}", paths.len());
+    assert_eq!(
+        paths.len(),
+        1,
+        "diff manifest should have 1 file, got {}",
+        paths.len()
+    );
     assert_eq!(paths[0]["path"], "will_change.txt");
 }
 
@@ -293,9 +355,12 @@ async fn manifest_diff_nonexistent_manifest_exits_with_error() {
     let harness = TestHarness::new().await;
     let dir = TempDir::new().unwrap();
     assert_cmd_snapshot!(harness.cmd(&[
-        "manifest", "diff",
-        "--manifest", "/nonexistent/manifest.file",
-        "--root", dir.path().to_str().unwrap(),
+        "manifest",
+        "diff",
+        "--manifest",
+        "/nonexistent/manifest.file",
+        "--root",
+        dir.path().to_str().unwrap(),
     ]));
 }
 
@@ -310,9 +375,12 @@ async fn manifest_diff_nonexistent_root_exits_with_error() {
     let manifest_path = dir.path().join("dummy.manifest");
     fs::write(&manifest_path, "{}").unwrap();
     assert_cmd_snapshot!(harness.cmd(&[
-        "manifest", "diff",
-        "--manifest", manifest_path.to_str().unwrap(),
-        "--root", "/nonexistent/root/abc123",
+        "manifest",
+        "diff",
+        "--manifest",
+        manifest_path.to_str().unwrap(),
+        "--root",
+        "/nonexistent/root/abc123",
     ]));
 }
 
@@ -324,9 +392,13 @@ async fn manifest_diff_nonexistent_root_exits_with_error() {
 async fn manifest_upload_nonexistent_file_exits_with_error() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&[
-        "manifest", "upload", "/nonexistent/manifest.file",
-        "--s3-cas-uri", "s3://bucket/prefix",
-        "--profile", "test",
+        "manifest",
+        "upload",
+        "/nonexistent/manifest.file",
+        "--s3-cas-uri",
+        "s3://bucket/prefix",
+        "--profile",
+        "test",
     ]));
 }
 
@@ -338,10 +410,15 @@ async fn manifest_upload_nonexistent_file_exits_with_error() {
 async fn manifest_download_nonexistent_dir_exits_with_error() {
     let harness = TestHarness::new().await;
     assert_cmd_snapshot!(harness.cmd(&[
-        "manifest", "download", "/nonexistent/dir",
-        "--job-id", "job-abc",
-        "--farm-id", "farm-abc",
-        "--queue-id", "queue-abc",
+        "manifest",
+        "download",
+        "/nonexistent/dir",
+        "--job-id",
+        "job-abc",
+        "--farm-id",
+        "farm-abc",
+        "--queue-id",
+        "queue-abc",
     ]));
 }
 
@@ -351,20 +428,31 @@ async fn manifest_download_nonexistent_dir_exits_with_error() {
 
 #[tokio::test]
 async fn manifest_upload_derives_s3_settings_from_queue() {
-    use deadline_test_server::deadline_api::{queues, sts, s3};
+    use deadline_test_server::deadline_api::{queues, s3, sts};
 
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
-    queues::mock_get_queue(&harness.server, "farm-abc", json!({
-        "queueId": "queue-abc",
-        "displayName": "Test Queue",
-        "jobAttachmentSettings": {
-            "s3BucketName": "test-bucket",
-            "rootPrefix": "root-prefix"
-        }
-    })).await;
+    queues::mock_get_queue(
+        &harness.server,
+        "farm-abc",
+        json!({
+            "queueId": "queue-abc",
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "root-prefix"
+            }
+        }),
+    )
+    .await;
     sts::mock_get_caller_identity(&harness.server).await;
     s3::mock_s3_put_success(&harness.server).await;
 
@@ -380,9 +468,14 @@ async fn manifest_upload_derives_s3_settings_from_queue() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Should succeed and show upload message with bucket from queue
-    assert!(stdout.contains("test-bucket"), "Expected bucket name in output: {stdout}");
-    assert!(stdout.contains("Uploading successful") || output.status.success(),
-        "Expected success, got: {stdout}");
+    assert!(
+        stdout.contains("test-bucket"),
+        "Expected bucket name in output: {stdout}"
+    );
+    assert!(
+        stdout.contains("Uploading successful") || output.status.success(),
+        "Expected success, got: {stdout}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -397,9 +490,7 @@ async fn manifest_upload_no_s3_uri_no_queue_exits_with_error() {
     let manifest_path = dir.path().join("test.manifest");
     fs::write(&manifest_path, r#"{"hashAlg":"xxh128","paths":[]}"#).unwrap();
 
-    assert_cmd_snapshot!(harness.cmd(&[
-        "manifest", "upload", manifest_path.to_str().unwrap(),
-    ]));
+    assert_cmd_snapshot!(harness.cmd(&["manifest", "upload", manifest_path.to_str().unwrap(),]));
 }
 
 // ===========================================================================
@@ -408,34 +499,51 @@ async fn manifest_upload_no_s3_uri_no_queue_exits_with_error() {
 
 #[tokio::test]
 async fn manifest_download_fetches_manifests_from_s3() {
-    use deadline_test_server::deadline_api::{jobs, queues, sts, s3};
+    use deadline_test_server::deadline_api::{jobs, queues, s3, sts};
 
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
-    queues::mock_get_queue(&harness.server, "farm-abc", json!({
-        "queueId": "queue-abc",
-        "displayName": "Test Queue",
-        "jobAttachmentSettings": {
-            "s3BucketName": "test-bucket",
-            "rootPrefix": "root-prefix"
-        }
-    })).await;
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-abc",
-        "name": "Test Job",
-        "attachments": {
-            "manifests": [{
-                "rootPath": "/tmp/outputs",
-                "rootPathFormat": "posix",
-                "inputManifestPath": "Manifests/input.manifest",
-                "inputManifestHash": "abc123",
-                "outputRelativeDirectories": ["outputs"]
-            }],
-            "fileSystem": "COPIED"
-        }
-    })).await;
+    queues::mock_get_queue(
+        &harness.server,
+        "farm-abc",
+        json!({
+            "queueId": "queue-abc",
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "root-prefix"
+            }
+        }),
+    )
+    .await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-abc",
+            "name": "Test Job",
+            "attachments": {
+                "manifests": [{
+                    "rootPath": "/tmp/outputs",
+                    "rootPathFormat": "posix",
+                    "inputManifestPath": "Manifests/input.manifest",
+                    "inputManifestHash": "abc123",
+                    "outputRelativeDirectories": ["outputs"]
+                }],
+                "fileSystem": "COPIED"
+            }
+        }),
+    )
+    .await;
     sts::mock_get_caller_identity(&harness.server).await;
     // Mock S3 list and get for manifest download
     s3::mock_s3_list_empty(&harness.server).await;
@@ -443,8 +551,11 @@ async fn manifest_download_fetches_manifests_from_s3() {
     let dir = TempDir::new().unwrap();
     let output = harness
         .cli(&[
-            "manifest", "download", dir.path().to_str().unwrap(),
-            "--job-id", "job-abc",
+            "manifest",
+            "download",
+            dir.path().to_str().unwrap(),
+            "--job-id",
+            "job-abc",
         ])
         .output()
         .expect("failed to run");
@@ -453,8 +564,10 @@ async fn manifest_download_fetches_manifests_from_s3() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let combined = format!("{stdout}{stderr}");
-    assert!(!combined.contains("not yet wired"),
-        "Should not show stub error, got: {combined}");
+    assert!(
+        !combined.contains("not yet wired"),
+        "Should not show stub error, got: {combined}"
+    );
 }
 
 // ===========================================================================
@@ -466,14 +579,25 @@ async fn manifest_upload_queue_no_attachment_settings_exits_with_error() {
     use deadline_test_server::deadline_api::{queues, sts};
 
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
     // Queue exists but has no jobAttachmentSettings
-    queues::mock_get_queue(&harness.server, "farm-abc", json!({
-        "queueId": "queue-abc",
-        "displayName": "No Attachments Queue",
-    })).await;
+    queues::mock_get_queue(
+        &harness.server,
+        "farm-abc",
+        json!({
+            "queueId": "queue-abc",
+            "displayName": "No Attachments Queue",
+        }),
+    )
+    .await;
     sts::mock_get_caller_identity(&harness.server).await;
 
     let dir = TempDir::new().unwrap();
@@ -485,7 +609,10 @@ async fn manifest_upload_queue_no_attachment_settings_exits_with_error() {
         .output()
         .expect("failed to run");
 
-    assert!(!output.status.success(), "Should fail when queue has no attachment settings");
+    assert!(
+        !output.status.success(),
+        "Should fail when queue has no attachment settings"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let combined = format!("{stdout}{stderr}");
@@ -510,34 +637,57 @@ async fn manifest_download_job_no_attachments_exits_with_error() {
     use deadline_test_server::deadline_api::{jobs, queues, sts};
 
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
-    queues::mock_get_queue(&harness.server, "farm-abc", json!({
-        "queueId": "queue-abc",
-        "displayName": "Test Queue",
-        "jobAttachmentSettings": {
-            "s3BucketName": "test-bucket",
-            "rootPrefix": "root-prefix"
-        }
-    })).await;
+    queues::mock_get_queue(
+        &harness.server,
+        "farm-abc",
+        json!({
+            "queueId": "queue-abc",
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "root-prefix"
+            }
+        }),
+    )
+    .await;
     // Job has no attachments field
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-abc",
-        "name": "No Attachments Job",
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-abc",
+            "name": "No Attachments Job",
+        }),
+    )
+    .await;
     sts::mock_get_caller_identity(&harness.server).await;
 
     let dir = TempDir::new().unwrap();
     let output = harness
         .cli(&[
-            "manifest", "download", dir.path().to_str().unwrap(),
-            "--job-id", "job-abc",
+            "manifest",
+            "download",
+            dir.path().to_str().unwrap(),
+            "--job-id",
+            "job-abc",
         ])
         .output()
         .expect("failed to run");
 
-    assert!(!output.status.success(), "Should fail when job has no attachments");
+    assert!(
+        !output.status.success(),
+        "Should fail when job has no attachments"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let combined = format!("{stdout}{stderr}");
@@ -564,11 +714,17 @@ async fn manifest_snapshot_ie_short_alias() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("a.txt"), b"hello").unwrap();
 
-    let output = harness.cli(&[
-        "manifest", "snapshot",
-        "--root", dir.path().to_str().unwrap(),
-        "-ie", r#"{"include": ["**/*"], "exclude": []}"#,
-    ]).output().expect("failed to run");
+    let output = harness
+        .cli(&[
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+            "-ie",
+            r#"{"include": ["**/*"], "exclude": []}"#,
+        ])
+        .output()
+        .expect("failed to run");
 
     assert!(
         output.status.success(),
@@ -590,10 +746,15 @@ async fn manifest_diff_root_optional() {
     fs::write(dir.path().join("a.txt"), b"hello").unwrap();
 
     // First create a snapshot to get a manifest file
-    let output = harness.cli(&[
-        "manifest", "snapshot",
-        "--root", dir.path().to_str().unwrap(),
-    ]).output().expect("failed to run snapshot");
+    let output = harness
+        .cli(&[
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run snapshot");
     assert!(output.status.success());
 
     // Find the manifest file
@@ -605,10 +766,15 @@ async fn manifest_diff_root_optional() {
         .path();
 
     // Run diff WITHOUT --root — should derive root from manifest path
-    let output = harness.cli(&[
-        "manifest", "diff",
-        "--manifest", manifest_file.to_str().unwrap(),
-    ]).output().expect("failed to run diff");
+    let output = harness
+        .cli(&[
+            "manifest",
+            "diff",
+            "--manifest",
+            manifest_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run diff");
 
     assert!(
         output.status.success(),
@@ -630,11 +796,16 @@ async fn manifest_snapshot_json_only_json_on_stdout() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("a.txt"), b"hello").unwrap();
 
-    let output = harness.cli(&[
-        "manifest", "snapshot",
-        "--root", dir.path().to_str().unwrap(),
-        "--json",
-    ]).output().expect("failed to run");
+    let output = harness
+        .cli(&[
+            "manifest",
+            "snapshot",
+            "--root",
+            dir.path().to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .expect("failed to run");
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -651,10 +822,7 @@ async fn manifest_snapshot_json_only_json_on_stdout() {
 
     // stdout should be valid JSON
     let trimmed = stdout.trim();
-    assert!(
-        !trimmed.is_empty(),
-        "Expected JSON output on stdout"
-    );
+    assert!(!trimmed.is_empty(), "Expected JSON output on stdout");
     let parsed: Result<serde_json::Value, _> = serde_json::from_str(trimmed);
     assert!(
         parsed.is_ok(),

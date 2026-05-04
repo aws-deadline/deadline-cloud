@@ -22,8 +22,8 @@ Install prerequisites and build:
 # Rust toolchain (stable channel, edition 2024)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Snapshot test reviewer
-cargo install cargo-insta
+# Install dev tools (cargo-insta, cargo-deny, cargo-nextest, etc.)
+make setup-tools
 
 # Python venv (needed for GUI and wheel builds)
 python3 -m venv .venv && source .venv/bin/activate
@@ -52,6 +52,11 @@ For Rust-only work (no GUI), you can skip the venv and use
 | Run single crate tests | `cargo test -p deadline-config` |
 | Review snapshot changes | `cargo insta review` |
 | Lint | `make lint` |
+| Format code | `cargo fmt` |
+| Check formatting | `cargo fmt --check` |
+| Audit dependencies | `cargo deny check` |
+| Find outdated deps | `cargo outdated -R` |
+| Analyze binary size | `cargo bloat --release -p deadline-cli --crates` |
 | Clean all artifacts | `make clean` |
 
 The CLI binary is at `target/debug/deadline` (or on PATH after `make`).

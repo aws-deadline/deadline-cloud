@@ -8,9 +8,7 @@ use std::fs;
 use deadline_job_attachments::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
 };
-use deadline_job_attachments::manifest_ops::{
-    manifest_download, manifest_upload, AssetType,
-};
+use deadline_job_attachments::manifest_ops::{AssetType, manifest_download, manifest_upload};
 use deadline_job_attachments::models::JobAttachmentS3Settings;
 use tempfile::TempDir;
 use wiremock::matchers::{method, path_regex};
@@ -201,17 +199,16 @@ async fn manifest_download_input_manifests_downloaded_and_written() {
     let s3_settings = JobAttachmentS3Settings::from_root_path("test-bucket/root-prefix").unwrap();
 
     // Job attachments with one input manifest
-    let job_attachments: HashMap<String, serde_json::Value> = serde_json::from_value(
-        serde_json::json!({
+    let job_attachments: HashMap<String, serde_json::Value> =
+        serde_json::from_value(serde_json::json!({
             "manifests": [
                 {
                     "rootPath": "/tmp/assets",
                     "inputManifestPath": "farm-1/queue-1/Inputs/abc123/manifest_input"
                 }
             ]
-        }),
-    )
-    .unwrap();
+        }))
+        .unwrap();
 
     let result = manifest_download(
         dir.path().to_str().unwrap(),
@@ -252,17 +249,16 @@ async fn manifest_download_input_only_skips_output_manifests() {
     let s3_client = build_s3_client(&server).await;
     let s3_settings = JobAttachmentS3Settings::from_root_path("test-bucket/root-prefix").unwrap();
 
-    let job_attachments: HashMap<String, serde_json::Value> = serde_json::from_value(
-        serde_json::json!({
+    let job_attachments: HashMap<String, serde_json::Value> =
+        serde_json::from_value(serde_json::json!({
             "manifests": [
                 {
                     "rootPath": "/tmp/assets",
                     "inputManifestPath": "farm-1/queue-1/Inputs/abc/manifest_input"
                 }
             ]
-        }),
-    )
-    .unwrap();
+        }))
+        .unwrap();
 
     // asset_type=Input — should download inputs but not call get_output_manifests
     let result = manifest_download(

@@ -35,8 +35,14 @@ fn mock_jobs() -> Vec<serde_json::Value> {
 #[tokio::test]
 async fn job_list_prints_jobs_with_count() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
     jobs::mock_search_jobs(&harness.server, "farm-abc", &mock_jobs(), 12).await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "list"]));
@@ -45,8 +51,14 @@ async fn job_list_prints_jobs_with_count() {
 #[tokio::test]
 async fn job_list_with_page_size_and_offset() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
     jobs::mock_search_jobs(&harness.server, "farm-abc", &mock_jobs()[..1], 12).await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "list", "--page-size", "1", "--item-offset", "3"]));
@@ -55,14 +67,29 @@ async fn job_list_with_page_size_and_offset() {
 #[tokio::test]
 async fn job_get_prints_details() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
-        "lifecycleStatusMessage": "", "priority": 50,
-        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
-    })).await;
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "", "priority": 50,
+            "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
+        }),
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
 }
@@ -70,8 +97,14 @@ async fn job_get_prints_details() {
 #[tokio::test]
 async fn job_get_no_job_id_exits_with_error() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
 }
@@ -81,13 +114,21 @@ async fn job_get_no_job_id_exits_with_error() {
 #[tokio::test]
 async fn job_list_api_failure_prints_error_with_suggestions() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
     errors::mock_search_jobs_access_denied(&harness.server, "farm-abc").await;
     queues::mock_list_queues(
-        &harness.server, "farm-abc",
+        &harness.server,
+        "farm-abc",
         &[json!({"queueId": "queue-111", "displayName": "Good Queue"})],
-    ).await;
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "list"]));
 }
@@ -95,15 +136,30 @@ async fn job_list_api_failure_prints_error_with_suggestions() {
 #[tokio::test]
 async fn job_get_prints_estimated_time_remaining() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
-        "lifecycleStatusMessage": "", "priority": 50,
-        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
-        "taskRunStatusCounts": {"SUCCEEDED": 5, "RUNNING": 2, "PENDING": 3},
-    })).await;
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "", "priority": 50,
+            "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
+            "taskRunStatusCounts": {"SUCCEEDED": 5, "RUNNING": 2, "PENDING": 3},
+        }),
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get"]));
 }
@@ -117,8 +173,14 @@ async fn job_get_prints_estimated_time_remaining() {
 #[tokio::test]
 async fn job_list_sends_latency_telemetry() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
     jobs::mock_search_jobs(&harness.server, "farm-abc", &mock_jobs(), 12).await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
@@ -128,12 +190,27 @@ async fn job_list_sends_latency_telemetry() {
 #[tokio::test]
 async fn job_get_sends_latency_telemetry() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.job_id", "job-aaa"]).assert().success();
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
-    })).await;
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.job_id", "job-aaa"])
+        .assert()
+        .success();
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaa", "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE",
+        }),
+    )
+    .await;
     telemetry::mock_telemetry_endpoint(&harness.server).await;
 
     harness.cli(&["job", "get"]).assert().success();
@@ -147,15 +224,27 @@ async fn job_get_sends_latency_telemetry() {
 #[tokio::test]
 async fn job_get_search_term_is_job_id() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
-        "name": "Render Job",
-        "lifecycleStatus": "CREATE_COMPLETE",
-        "lifecycleStatusMessage": "", "priority": 50,
-        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
-    })).await;
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+            "name": "Render Job",
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "", "priority": 50,
+            "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
+        }),
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "job-aaf4cdf8aae242f58fb84c5bb19f199b"]));
 }
@@ -164,26 +253,44 @@ async fn job_get_search_term_is_job_id() {
 #[tokio::test]
 async fn job_get_search_term_single_match_shows_details() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
     // Search returns 1 result
-    jobs::mock_search_jobs(&harness.server, "farm-abc", &[json!({
-        "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
-        "name": "Render Job",
-        "taskRunStatus": "SUCCEEDED",
-        "taskRunStatusCounts": {"SUCCEEDED": 10},
-        "createdAt": "2023-01-27T07:34:41Z",
-    })], 1).await;
+    jobs::mock_search_jobs(
+        &harness.server,
+        "farm-abc",
+        &[json!({
+            "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+            "name": "Render Job",
+            "taskRunStatus": "SUCCEEDED",
+            "taskRunStatusCounts": {"SUCCEEDED": 10},
+            "createdAt": "2023-01-27T07:34:41Z",
+        })],
+        1,
+    )
+    .await;
 
     // Then get_job for the details
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
-        "name": "Render Job",
-        "lifecycleStatus": "CREATE_COMPLETE",
-        "lifecycleStatusMessage": "", "priority": 50,
-        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
-    })).await;
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+            "name": "Render Job",
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "", "priority": 50,
+            "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
+        }),
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
 }
@@ -192,30 +299,45 @@ async fn job_get_search_term_single_match_shows_details() {
 #[tokio::test]
 async fn job_get_search_term_multiple_matches_shows_summary() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
-    jobs::mock_search_jobs(&harness.server, "farm-abc", &[
-        json!({
-            "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
-            "name": "Render Job 1",
-            "taskRunStatus": "SUCCEEDED",
-            "taskRunStatusCounts": {"SUCCEEDED": 10},
-            "createdAt": "2023-01-27T07:34:41Z",
-        }),
-        json!({
-            "jobId": "job-0d239749fa05435f90263b3a8be54144",
-            "name": "Render Job 2",
-            "taskRunStatus": "RUNNING",
-            "taskRunStatusCounts": {"RUNNING": 5, "PENDING": 3},
-            "createdAt": "2023-01-28T10:00:00Z",
-        }),
-    ], 2).await;
+    jobs::mock_search_jobs(
+        &harness.server,
+        "farm-abc",
+        &[
+            json!({
+                "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+                "name": "Render Job 1",
+                "taskRunStatus": "SUCCEEDED",
+                "taskRunStatusCounts": {"SUCCEEDED": 10},
+                "createdAt": "2023-01-27T07:34:41Z",
+            }),
+            json!({
+                "jobId": "job-0d239749fa05435f90263b3a8be54144",
+                "name": "Render Job 2",
+                "taskRunStatus": "RUNNING",
+                "taskRunStatusCounts": {"RUNNING": 5, "PENDING": 3},
+                "createdAt": "2023-01-28T10:00:00Z",
+            }),
+        ],
+        2,
+    )
+    .await;
 
     // Redact local timezone in timestamps (e.g. "2023-01-27 00:34:41 -0700" → "[LOCAL_TIMESTAMP]")
     // to prevent snapshot flakiness across timezone/DST changes.
     let mut settings = insta::Settings::clone_current();
-    settings.add_filter(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}", "[LOCAL_TIMESTAMP]");
+    settings.add_filter(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}",
+        "[LOCAL_TIMESTAMP]",
+    );
     let _guard = settings.bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
@@ -225,31 +347,46 @@ async fn job_get_search_term_multiple_matches_shows_summary() {
 #[tokio::test]
 async fn job_get_search_term_shows_interrupting_and_not_compatible() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
-    jobs::mock_search_jobs(&harness.server, "farm-abc", &[
-        json!({
-            "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
-            "name": "Render Job 1",
-            "taskRunStatus": "RUNNING",
-            "taskRunStatusCounts": {
-                "RUNNING": 3, "INTERRUPTING": 2, "NOT_COMPATIBLE": 1,
-                "SUCCEEDED": 5, "FAILED": 1
-            },
-            "createdAt": "2023-01-27T07:34:41Z",
-        }),
-        json!({
-            "jobId": "job-0d239749fa05435f90263b3a8be54144",
-            "name": "Render Job 2",
-            "taskRunStatus": "FAILED",
-            "taskRunStatusCounts": {"NOT_COMPATIBLE": 4, "FAILED": 6},
-            "createdAt": "2023-01-28T10:00:00Z",
-        }),
-    ], 2).await;
+    jobs::mock_search_jobs(
+        &harness.server,
+        "farm-abc",
+        &[
+            json!({
+                "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+                "name": "Render Job 1",
+                "taskRunStatus": "RUNNING",
+                "taskRunStatusCounts": {
+                    "RUNNING": 3, "INTERRUPTING": 2, "NOT_COMPATIBLE": 1,
+                    "SUCCEEDED": 5, "FAILED": 1
+                },
+                "createdAt": "2023-01-27T07:34:41Z",
+            }),
+            json!({
+                "jobId": "job-0d239749fa05435f90263b3a8be54144",
+                "name": "Render Job 2",
+                "taskRunStatus": "FAILED",
+                "taskRunStatusCounts": {"NOT_COMPATIBLE": 4, "FAILED": 6},
+                "createdAt": "2023-01-28T10:00:00Z",
+            }),
+        ],
+        2,
+    )
+    .await;
 
     let mut settings = insta::Settings::clone_current();
-    settings.add_filter(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}", "[LOCAL_TIMESTAMP]");
+    settings.add_filter(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}",
+        "[LOCAL_TIMESTAMP]",
+    );
     let _guard = settings.bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
@@ -259,8 +396,14 @@ async fn job_get_search_term_shows_interrupting_and_not_compatible() {
 #[tokio::test]
 async fn job_get_search_term_no_matches() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
 
     jobs::mock_search_jobs(&harness.server, "farm-abc", &[], 0).await;
 
@@ -271,8 +414,14 @@ async fn job_get_search_term_no_matches() {
 #[tokio::test]
 async fn job_get_search_term_api_failure() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
     errors::mock_search_jobs_access_denied(&harness.server, "farm-abc").await;
 
     assert_cmd_snapshot!(harness.cmd(&["job", "get", "render"]));
@@ -282,20 +431,35 @@ async fn job_get_search_term_api_failure() {
 #[tokio::test]
 async fn job_get_job_id_flag_takes_precedence_over_search_term() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
-        "name": "Specific Job",
-        "lifecycleStatus": "CREATE_COMPLETE",
-        "lifecycleStatusMessage": "", "priority": 50,
-        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
-    })).await;
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+            "name": "Specific Job",
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "", "priority": 50,
+            "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
+        }),
+    )
+    .await;
 
     // --job-id should win; search term "render" should be ignored
     assert_cmd_snapshot!(harness.cmd(&[
-        "job", "get", "render",
-        "--job-id", "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+        "job",
+        "get",
+        "render",
+        "--job-id",
+        "job-aaf4cdf8aae242f58fb84c5bb19f199b",
     ]));
 }
 
@@ -303,24 +467,38 @@ async fn job_get_job_id_flag_takes_precedence_over_search_term() {
 #[tokio::test]
 async fn job_get_yaml_11_boolean_strings_are_quoted() {
     let harness = TestHarness::new().await;
-    harness.cli(&["config", "set", "defaults.farm_id", "farm-abc"]).assert().success();
-    harness.cli(&["config", "set", "defaults.queue_id", "queue-abc"]).assert().success();
-    jobs::mock_get_job(&harness.server, "farm-abc", "queue-abc", json!({
-        "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
-        "name": "Render Job",
-        "lifecycleStatus": "CREATE_COMPLETE",
-        "lifecycleStatusMessage": "", "priority": 50,
-        "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
-        "parameters": {
-            "MultiFrameRendering": {"string": "OFF"},
-            "IgnoreMissing": {"string": "ON"},
-            "Verbose": {"string": "YES"},
-            "DryRun": {"string": "NO"},
-        },
-    })).await;
+    harness
+        .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
+        .assert()
+        .success();
+    harness
+        .cli(&["config", "set", "defaults.queue_id", "queue-abc"])
+        .assert()
+        .success();
+    jobs::mock_get_job(
+        &harness.server,
+        "farm-abc",
+        "queue-abc",
+        json!({
+            "jobId": "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+            "name": "Render Job",
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "", "priority": 50,
+            "createdAt": "2024-01-15T10:30:00Z", "createdBy": "user-abc",
+            "parameters": {
+                "MultiFrameRendering": {"string": "OFF"},
+                "IgnoreMissing": {"string": "ON"},
+                "Verbose": {"string": "YES"},
+                "DryRun": {"string": "NO"},
+            },
+        }),
+    )
+    .await;
 
     assert_cmd_snapshot!(harness.cmd(&[
-        "job", "get",
-        "--job-id", "job-aaf4cdf8aae242f58fb84c5bb19f199b",
+        "job",
+        "get",
+        "--job-id",
+        "job-aaf4cdf8aae242f58fb84c5bb19f199b",
     ]));
 }

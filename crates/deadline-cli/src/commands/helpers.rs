@@ -1,5 +1,5 @@
-use deadline_config::ini::IniConfig;
 use deadline_api::{client, session};
+use deadline_config::ini::IniConfig;
 
 /// When an API call fails with AccessDenied/ResourceNotFound/ValidationException,
 /// try to list available resources to help the user identify typos.
@@ -33,9 +33,6 @@ pub(crate) async fn suggest_resources_on_client_error(
             } else {
                 try_list_farms(config, &mut suggestions).await
             }
-        }
-        "GetFarm" | "ListFarms" => {
-            try_list_farms(config, &mut suggestions).await
         }
         "GetFleet" | "ListFleets" => {
             if let Some(fid) = farm_id {
@@ -89,7 +86,8 @@ pub(crate) async fn suggest_resources_on_client_error(
 
     if suggestions.is_empty() {
         "\nCould not list available resources to suggest alternatives.\n\
-         This may indicate your IAM policy is missing List permissions.".to_owned()
+         This may indicate your IAM policy is missing List permissions."
+            .to_owned()
     } else {
         suggestions.join("\n")
     }
@@ -104,7 +102,9 @@ async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bo
             let items: Vec<serde_json::Value> = pages
                 .iter()
                 .flat_map(aws_sdk_deadline::operation::list_farms::ListFarmsOutput::farms)
-                .map(|f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name()}))
+                .map(
+                    |f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name()}),
+                )
                 .collect();
             format_suggestions(
                 Some(&items),
@@ -171,10 +171,12 @@ async fn try_list_jobs(
     out: &mut Vec<String>,
 ) -> bool {
     let dl = session::deadline_client(config).await;
-    let builder = client::apply_dcm_principal(dl.list_jobs().farm_id(farm_id).queue_id(queue_id), config);
+    let builder =
+        client::apply_dcm_principal(dl.list_jobs().farm_id(farm_id).queue_id(queue_id), config);
     match client::collect_paginated(builder.into_paginator().send()).await {
         Ok(pages) => {
-            let items: Vec<serde_json::Value> = pages.iter()
+            let items: Vec<serde_json::Value> = pages
+                .iter()
                 .flat_map(aws_sdk_deadline::operation::list_jobs::ListJobsOutput::jobs)
                 .map(|j| serde_json::json!({"jobId": j.job_id(), "name": j.name()}))
                 .collect();
@@ -197,7 +199,8 @@ async fn try_list_workers(
     out: &mut Vec<String>,
 ) -> bool {
     let dl = session::deadline_client(config).await;
-    let resp = dl.search_workers()
+    let resp = dl
+        .search_workers()
         .farm_id(farm_id)
         .fleet_ids(fleet_id)
         .item_offset(0)
@@ -207,11 +210,15 @@ async fn try_list_workers(
     match resp {
         Ok(output) => {
             let workers = output.workers();
-            if workers.is_empty() { return false; }
+            if workers.is_empty() {
+                return false;
+            }
             out.push(format!("\nAvailable workers in fleet {fleet_id}:"));
             for w in workers.iter().take(10) {
                 let id = w.worker_id().unwrap_or("");
-                let status = w.status().map_or("", aws_sdk_deadline::types::WorkerStatus::as_str);
+                let status = w
+                    .status()
+                    .map_or("", aws_sdk_deadline::types::WorkerStatus::as_str);
                 out.push(format!("  {id}  {status}"));
             }
             let total = i64::from(output.total_results());
@@ -232,9 +239,15 @@ async fn try_list_storage_profiles(
 ) -> bool {
     let client = session::deadline_client(config).await;
     match client::collect_paginated(
-        client.list_storage_profiles_for_queue().farm_id(farm_id).queue_id(queue_id)
-            .into_paginator().send()
-    ).await {
+        client
+            .list_storage_profiles_for_queue()
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .into_paginator()
+            .send(),
+    )
+    .await
+    {
         Ok(pages) => {
             let profiles: Vec<serde_json::Value> = pages.iter()
                 .flat_map(aws_sdk_deadline::operation::list_storage_profiles_for_queue::ListStorageProfilesForQueueOutput::storage_profiles)

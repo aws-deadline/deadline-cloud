@@ -40,7 +40,12 @@ impl AssetReferences {
         let extract = |parent: &Value, key: &str| -> BTreeSet<String> {
             parent[key]
                 .as_array()
-                .map(|a| a.iter().filter_map(|v| v.as_str()).map(normalize_path).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str())
+                        .map(normalize_path)
+                        .collect()
+                })
                 .unwrap_or_default()
         };
         let inputs = &ar["inputs"];
@@ -88,7 +93,11 @@ pub fn normalize_path(s: &str) -> String {
     if parts.is_empty() {
         ".".into()
     } else {
-        parts.iter().collect::<PathBuf>().to_string_lossy().into_owned()
+        parts
+            .iter()
+            .collect::<PathBuf>()
+            .to_string_lossy()
+            .into_owned()
     }
 }
 
@@ -101,7 +110,10 @@ const DEFAULT_SUPPORTED_APP_PARAMETER_NAMES: &[&str] = &[
     "maxWorkerCount",
 ];
 
-#[allow(clippy::type_complexity, reason = "return type is a tuple of two JSON maps, a type alias would not improve clarity")]
+#[allow(
+    clippy::type_complexity,
+    reason = "return type is a tuple of two JSON maps, a type alias would not improve clarity"
+)]
 pub fn split_parameter_args(
     parameters: &[Value],
     job_bundle_dir: &str,
@@ -122,8 +134,12 @@ pub fn split_parameter_args(
     let mut job_parameters = serde_json::Map::new();
 
     for param in parameters {
-        let Some(value) = param.get("value") else { continue };
-        let Some(name) = param["name"].as_str() else { continue };
+        let Some(value) = param.get("value") else {
+            continue;
+        };
+        let Some(name) = param["name"].as_str() else {
+            continue;
+        };
 
         if let Some(app_param) = name.strip_prefix(&prefix) {
             if supported.contains(&app_param) {
@@ -136,7 +152,11 @@ pub fn split_parameter_args(
         } else if name.contains(':') {
             // Other app prefix — silently drop
         } else {
-            let ptype = param.get("type").and_then(|t| t.as_str()).unwrap_or("STRING").to_lowercase();
+            let ptype = param
+                .get("type")
+                .and_then(|t| t.as_str())
+                .unwrap_or("STRING")
+                .to_lowercase();
             let val_str = match value {
                 Value::String(s) => s.clone(),
                 other => other.to_string(),
@@ -148,7 +168,8 @@ pub fn split_parameter_args(
 }
 
 static FRAME_RANGE_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(r"^(?P<start>-?\d+)(-(?P<stop>-?\d+)(:(?P<step>-?\d+))?)?$").expect("valid regex")
+    regex::Regex::new(r"^(?P<start>-?\d+)(-(?P<stop>-?\d+)(:(?P<step>-?\d+))?)?$")
+        .expect("valid regex")
 });
 
 pub fn parse_frame_range(frame_string: &str) -> Result<Vec<i64>, DeadlineError> {
@@ -156,12 +177,21 @@ pub fn parse_frame_range(frame_string: &str) -> Result<Vec<i64>, DeadlineError> 
         .captures(frame_string)
         .ok_or_else(|| op_err("Framelist not valid".into()))?;
 
-    let start: i64 = caps["start"].parse()
+    let start: i64 = caps["start"]
+        .parse()
         .map_err(|_| op_err(format!("Frame number '{}' out of range", &caps["start"])))?;
-    let stop: i64 = caps.name("stop").map_or(Ok(start), |m| m.as_str().parse::<i64>()
-        .map_err(|_| op_err(format!("Frame number '{}' out of range", m.as_str()))))?;
-    let step: i64 = caps.name("step").map_or(Ok(if start <= stop { 1 } else { -1 }), |m| m.as_str().parse::<i64>()
-        .map_err(|_| op_err(format!("Frame step '{}' out of range", m.as_str()))))?;
+    let stop: i64 = caps.name("stop").map_or(Ok(start), |m| {
+        m.as_str()
+            .parse::<i64>()
+            .map_err(|_| op_err(format!("Frame number '{}' out of range", m.as_str())))
+    })?;
+    let step: i64 = caps
+        .name("step")
+        .map_or(Ok(if start <= stop { 1 } else { -1 }), |m| {
+            m.as_str()
+                .parse::<i64>()
+                .map_err(|_| op_err(format!("Frame step '{}' out of range", m.as_str())))
+        })?;
 
     if step == 0 {
         return Err(op_err("Frame step cannot be zero".into()));
@@ -170,9 +200,15 @@ pub fn parse_frame_range(frame_string: &str) -> Result<Vec<i64>, DeadlineError> 
     let mut frames = Vec::new();
     let mut cur = start;
     if step > 0 {
-        while cur <= stop { frames.push(cur); cur += step; }
+        while cur <= stop {
+            frames.push(cur);
+            cur += step;
+        }
     } else {
-        while cur >= stop { frames.push(cur); cur += step; }
+        while cur >= stop {
+            frames.push(cur);
+            cur += step;
+        }
     }
     Ok(frames)
 }
@@ -190,7 +226,9 @@ use crate::loader::{
     deadline_yaml_dump, parse_yaml_or_json_content, read_yaml_or_json, read_yaml_or_json_object,
     validate_directory_symlink_containment,
 };
-use crate::parameters::{apply_job_parameters, merge_queue_job_parameters, read_job_bundle_parameters};
+use crate::parameters::{
+    apply_job_parameters, merge_queue_job_parameters, read_job_bundle_parameters,
+};
 
 use deadline_api::{api, client, queue_parameters, session};
 use deadline_config::config_file;
@@ -201,7 +239,7 @@ use deadline_job_attachments::models::{
 use deadline_job_attachments::progress_tracker::ProgressReportMetadata;
 use deadline_job_attachments::upload;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Parameters for job submission.
 pub struct SubmitJobParams<'a> {
@@ -240,8 +278,13 @@ fn get_setting(name: &str, config: Option<&IniConfig>) -> String {
 }
 
 /// Submit a job bundle to Deadline Cloud. Returns the job ID on success.
-#[allow(clippy::too_many_lines, reason = "end-to-end job submission pipeline with 11 sequential phases")]
-pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<Option<String>, DeadlineError> {
+#[allow(
+    clippy::too_many_lines,
+    reason = "end-to-end job submission pipeline with 11 sequential phases"
+)]
+pub async fn create_job_from_job_bundle(
+    params: SubmitJobParams<'_>,
+) -> Result<Option<String>, DeadlineError> {
     let print = &params.print_callback;
     let submitter_name = params.submitter_name.as_deref().unwrap_or("Custom");
 
@@ -251,12 +294,14 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     validate_directory_symlink_containment(&params.job_bundle_dir)?;
 
     // 1b. Load hooks from bundle and/or environment
-    let allow_bundle_hooks = config_file::str2bool(
-        &get_setting("settings.allow_bundle_hooks", params.config),
-    ).unwrap_or(false);
-    let allow_env_hooks = config_file::str2bool(
-        &get_setting("settings.allow_environment_hooks", params.config),
-    ).unwrap_or(false);
+    let allow_bundle_hooks =
+        config_file::str2bool(&get_setting("settings.allow_bundle_hooks", params.config))
+            .unwrap_or(false);
+    let allow_env_hooks = config_file::str2bool(&get_setting(
+        "settings.allow_environment_hooks",
+        params.config,
+    ))
+    .unwrap_or(false);
     let env_hooks_dir = std::env::var("DEADLINE_HOOKS_DIR").ok();
 
     let mut merged_hooks: Option<hooks::HookConfiguration> = None;
@@ -270,10 +315,14 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                     merged_hooks = Some(eh.clone());
                 }
             } else {
-                print(&format!("Warning: DEADLINE_HOOKS_DIR '{ehd}' is not a valid directory"));
+                print(&format!(
+                    "Warning: DEADLINE_HOOKS_DIR '{ehd}' is not a valid directory"
+                ));
             }
         } else {
-            print("Warning: DEADLINE_HOOKS_DIR is set but environment hooks are disabled.\nEnable with: deadline config set settings.allow_environment_hooks true");
+            print(
+                "Warning: DEADLINE_HOOKS_DIR is set but environment hooks are disabled.\nEnable with: deadline config set settings.allow_environment_hooks true",
+            );
         }
     }
 
@@ -281,56 +330,79 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let mut bundle_mgr = HookManager::new(&params.job_bundle_dir, Box::new(|_| {}));
     let bundle_hooks = bundle_mgr.load_hooks()?;
     if let Some(bh) = bundle_hooks
-        && (!bh.pre_submission.is_empty() || !bh.post_submission.is_empty()) {
-            if allow_bundle_hooks {
-                match merged_hooks.as_mut() {
-                    Some(mh) => {
-                        mh.pre_submission.extend(bh.pre_submission.clone());
-                        mh.post_submission.extend(bh.post_submission.clone());
-                    }
-                    None => merged_hooks = Some(bh.clone()),
+        && (!bh.pre_submission.is_empty() || !bh.post_submission.is_empty())
+    {
+        if allow_bundle_hooks {
+            match merged_hooks.as_mut() {
+                Some(mh) => {
+                    mh.pre_submission.extend(bh.pre_submission.clone());
+                    mh.post_submission.extend(bh.post_submission.clone());
                 }
-            } else {
-                print("Note: Job bundle contains hooks.yaml but bundle hooks are disabled.\nEnable with: deadline config set settings.allow_bundle_hooks true");
+                None => merged_hooks = Some(bh.clone()),
             }
+        } else {
+            print(
+                "Note: Job bundle contains hooks.yaml but bundle hooks are disabled.\nEnable with: deadline config set settings.allow_bundle_hooks true",
+            );
         }
+    }
 
     // Show confirmation and build the hook manager we'll actually use
-    #[allow(clippy::print_stderr, reason = "hook manager output goes to stderr by design, matching Python CLI behavior")]
-    let mut hook_manager = HookManager::new(&params.job_bundle_dir,
-        Box::new(|s| { eprintln!("{s}"); }));
+    #[allow(
+        clippy::print_stderr,
+        reason = "hook manager output goes to stderr by design, matching Python CLI behavior"
+    )]
+    let mut hook_manager = HookManager::new(
+        &params.job_bundle_dir,
+        Box::new(|s| {
+            eprintln!("{s}");
+        }),
+    );
     hook_manager.hooks = merged_hooks.clone();
 
     if let Some(ref mh) = merged_hooks
         && (!mh.pre_submission.is_empty() || !mh.post_submission.is_empty())
-            && !params.auto_accept {
-                let msg = hooks::generate_hooks_confirmation_message(mh, &params.job_bundle_dir);
-                match &params.interactive_confirmation_callback {
-                    None => {
-                        print(&msg);
-                        print("Job submission canceled (hooks present but user confirmation not available).");
-                        return Err(op_err("Job submission canceled.".into()));
-                    }
-                    Some(cb) => {
-                        if !cb(&format!("{msg}Do you want to run these hooks?"), true) {
-                            return Err(op_err("Job submission canceled (user declined hooks).".into()));
-                        }
-                    }
+        && !params.auto_accept
+    {
+        let msg = hooks::generate_hooks_confirmation_message(mh, &params.job_bundle_dir);
+        match &params.interactive_confirmation_callback {
+            None => {
+                print(&msg);
+                print(
+                    "Job submission canceled (hooks present but user confirmation not available).",
+                );
+                return Err(op_err("Job submission canceled.".into()));
+            }
+            Some(cb) => {
+                if !cb(&format!("{msg}Do you want to run these hooks?"), true) {
+                    return Err(op_err(
+                        "Job submission canceled (user declined hooks).".into(),
+                    ));
                 }
             }
+        }
+    }
 
     // 2. Load template
-    let (mut file_contents, file_type) = read_yaml_or_json(&params.job_bundle_dir, "template", true)?;
+    let (mut file_contents, file_type) =
+        read_yaml_or_json(&params.job_bundle_dir, "template", true)?;
 
     if let Some(ref name) = params.name {
-        let mut template_obj = parse_yaml_or_json_content(&file_contents, &file_type, &params.job_bundle_dir, "template")?;
-        template_obj.as_object_mut()
+        let mut template_obj = parse_yaml_or_json_content(
+            &file_contents,
+            &file_type,
+            &params.job_bundle_dir,
+            "template",
+        )?;
+        template_obj
+            .as_object_mut()
             .ok_or_else(|| op_err("Template is not a JSON object".into()))?
             .insert("name".into(), json!(name));
         file_contents = if file_type == "YAML" {
             deadline_yaml_dump(&template_obj)
         } else {
-            serde_json::to_string(&template_obj).map_err(|e| op_err(format!("Failed to serialize template: {e}")))?
+            serde_json::to_string(&template_obj)
+                .map_err(|e| op_err(format!("Failed to serialize template: {e}")))?
         };
     }
 
@@ -338,9 +410,13 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let farm_id = get_setting("defaults.farm_id", params.config);
     let queue_id = get_setting("defaults.queue_id", params.config);
 
-    let queue = session::deadline_client(params.config).await
-        .get_queue().farm_id(&farm_id).queue_id(&queue_id)
-        .send().await
+    let queue = session::deadline_client(params.config)
+        .await
+        .get_queue()
+        .farm_id(&farm_id)
+        .queue_id(&queue_id)
+        .send()
+        .await
         .map_err(client::deadline_error)?;
     let queue_display_name = queue.display_name();
     print(&format!("Submitting to Queue: {queue_display_name}\n"));
@@ -350,10 +426,14 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     let storage_profile = if storage_profile_id.is_empty() {
         None
     } else {
-        let sp_output = session::deadline_client(params.config).await
+        let sp_output = session::deadline_client(params.config)
+            .await
             .get_storage_profile_for_queue()
-            .farm_id(&farm_id).queue_id(&queue_id).storage_profile_id(&storage_profile_id)
-            .send().await
+            .farm_id(&farm_id)
+            .queue_id(&queue_id)
+            .storage_profile_id(&storage_profile_id)
+            .send()
+            .await
             .map_err(client::deadline_error)?;
         let sp_json = storage_profile_output_to_value(&sp_output);
         StorageProfile::from_json(&sp_json)
@@ -362,12 +442,13 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     // 5. Load and merge parameters
     let job_bundle_parameters = read_job_bundle_parameters(&params.job_bundle_dir)?;
 
-    let asset_references_obj = read_yaml_or_json_object(&params.job_bundle_dir, "asset_references", false)?;
+    let asset_references_obj =
+        read_yaml_or_json_object(&params.job_bundle_dir, "asset_references", false)?;
     let mut asset_references = AssetReferences::from_dict(asset_references_obj.as_ref());
 
-    let queue_parameter_definitions = queue_parameters::get_queue_parameter_definitions(
-        &farm_id, &queue_id, params.config,
-    ).await?;
+    let queue_parameter_definitions =
+        queue_parameters::get_queue_parameter_definitions(&farm_id, &queue_id, params.config)
+            .await?;
 
     let mut parameters = merge_queue_job_parameters(
         &job_bundle_parameters,
@@ -383,13 +464,16 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     )?;
 
     // 6. Split parameters
-    let (app_parameters, job_parameters) = split_parameter_args(&parameters, &params.job_bundle_dir, None, None)?;
+    let (app_parameters, job_parameters) =
+        split_parameter_args(&parameters, &params.job_bundle_dir, None, None)?;
 
-    let ja_file_system = params.job_attachments_file_system
+    let ja_file_system = params
+        .job_attachments_file_system
         .unwrap_or_else(|| get_setting("defaults.job_attachments_file_system", params.config));
 
     let force_s3_check = params.force_s3_check.unwrap_or_else(|| {
-        config_file::str2bool(&get_setting("settings.force_s3_check", params.config)).unwrap_or(false)
+        config_file::str2bool(&get_setting("settings.force_s3_check", params.config))
+            .unwrap_or(false)
     });
 
     // 8. Build CreateJob args
@@ -405,55 +489,103 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     }
 
     // 6b. Execute pre-submission hooks (before hashing/uploading)
-    if hook_manager.hooks.as_ref().is_some_and(|h| !h.pre_submission.is_empty()) {
-        let template_obj = parse_yaml_or_json_content(&file_contents, &file_type, &params.job_bundle_dir, "template")?;
+    if hook_manager
+        .hooks
+        .as_ref()
+        .is_some_and(|h| !h.pre_submission.is_empty())
+    {
+        let template_obj = parse_yaml_or_json_content(
+            &file_contents,
+            &file_type,
+            &params.job_bundle_dir,
+            "template",
+        )?;
         let mut hook_metadata = HookMetadata {
-            job_name: template_obj.get("name").and_then(|v| v.as_str()).unwrap_or("").to_owned(),
+            job_name: template_obj
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned(),
             priority: params.priority.unwrap_or(50),
             farm_id: farm_id.clone(),
             queue_id: queue_id.clone(),
             job_bundle_dir: std::fs::canonicalize(&params.job_bundle_dir)
                 .unwrap_or_else(|_| PathBuf::from(&params.job_bundle_dir))
-                .to_string_lossy().into_owned(),
-            parameters: parameters.iter()
-                .filter_map(|p| Some((p.get("name")?.as_str()?.to_owned(), p.get("value").cloned().unwrap_or(Value::Null))))
+                .to_string_lossy()
+                .into_owned(),
+            parameters: parameters
+                .iter()
+                .filter_map(|p| {
+                    Some((
+                        p.get("name")?.as_str()?.to_owned(),
+                        p.get("value").cloned().unwrap_or(Value::Null),
+                    ))
+                })
                 .collect(),
             submitter_name: submitter_name.to_owned(),
             asset_references: asset_references.to_dict(),
             submission_payload: serde_json::json!({}),
-            storage_profile_id: if storage_profile_id.is_empty() { None } else { Some(storage_profile_id.clone()) },
+            storage_profile_id: if storage_profile_id.is_empty() {
+                None
+            } else {
+                Some(storage_profile_id.clone())
+            },
             job_id: None,
         };
-        let hook_result = hook_manager.execute_pre_submission_hooks(&mut hook_metadata, serde_json::json!({}))?;
+        let hook_result =
+            hook_manager.execute_pre_submission_hooks(&mut hook_metadata, serde_json::json!({}))?;
 
         // Merge any asset references from hooks
-        if let Some(refs) = hook_result.get("attachments").and_then(|a| a.get("assetReferences")) {
+        if let Some(refs) = hook_result
+            .get("attachments")
+            .and_then(|a| a.get("assetReferences"))
+        {
             if let Some(arr) = refs.get("inputFilenames").and_then(|v| v.as_array()) {
-                for f in arr { if let Some(s) = f.as_str() { asset_references.input_filenames.insert(s.to_owned()); } }
+                for f in arr {
+                    if let Some(s) = f.as_str() {
+                        asset_references.input_filenames.insert(s.to_owned());
+                    }
+                }
             }
             if let Some(arr) = refs.get("inputDirectories").and_then(|v| v.as_array()) {
-                for d in arr { if let Some(s) = d.as_str() { asset_references.input_directories.insert(s.to_owned()); } }
+                for d in arr {
+                    if let Some(s) = d.as_str() {
+                        asset_references.input_directories.insert(s.to_owned());
+                    }
+                }
             }
             if let Some(arr) = refs.get("outputDirectories").and_then(|v| v.as_array()) {
-                for d in arr { if let Some(s) = d.as_str() { asset_references.output_directories.insert(s.to_owned()); } }
+                for d in arr {
+                    if let Some(s) = d.as_str() {
+                        asset_references.output_directories.insert(s.to_owned());
+                    }
+                }
             }
             if let Some(arr) = refs.get("referencedPaths").and_then(|v| v.as_array()) {
-                for p in arr { if let Some(s) = p.as_str() { asset_references.referenced_paths.insert(s.to_owned()); } }
+                for p in arr {
+                    if let Some(s) = p.as_str() {
+                        asset_references.referenced_paths.insert(s.to_owned());
+                    }
+                }
             }
         }
     }
 
     // 7. Handle attachments
-    let has_attachment_settings = queue.job_attachment_settings()
+    let has_attachment_settings = queue
+        .job_attachment_settings()
         .is_some_and(|s| !s.s3_bucket_name().is_empty());
 
     if asset_references.is_non_empty() && has_attachment_settings {
         expand_input_directories(&mut asset_references, params.require_paths_exist)?;
 
         let mut known_paths = params.known_asset_paths.clone();
-        known_paths.push(std::fs::canonicalize(&params.job_bundle_dir)
-            .unwrap_or_else(|_| Path::new(&params.job_bundle_dir).to_path_buf())
-            .to_string_lossy().into_owned());
+        known_paths.push(
+            std::fs::canonicalize(&params.job_bundle_dir)
+                .unwrap_or_else(|_| Path::new(&params.job_bundle_dir).to_path_buf())
+                .to_string_lossy()
+                .into_owned(),
+        );
 
         if let Some(ref sp) = storage_profile {
             for loc in &sp.file_system_locations {
@@ -469,14 +601,21 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
             known_paths.extend(configured_known.split(path_list_sep).map(String::from));
         }
 
-        let known_param_names: std::collections::HashSet<String> = params.job_parameters.iter()
+        let known_param_names: std::collections::HashSet<String> = params
+            .job_parameters
+            .iter()
             .filter_map(|p| p.get("name")?.as_str().map(String::from))
             .collect();
         for param in &parameters {
             let is_known_path_param = param.get("type").and_then(|v| v.as_str()) == Some("PATH")
                 && known_param_names.contains(param["name"].as_str().unwrap_or(""));
-            if let (true, Some(val)) = (is_known_path_param, param.get("value").and_then(|v| v.as_str())) {
-                if val.is_empty() { continue; }
+            if let (true, Some(val)) = (
+                is_known_path_param,
+                param.get("value").and_then(|v| v.as_str()),
+            ) {
+                if val.is_empty() {
+                    continue;
+                }
                 if param.get("objectType").and_then(|v| v.as_str()) == Some("FILE") {
                     if let Some(parent) = Path::new(val).parent() {
                         known_paths.push(parent.to_string_lossy().into_owned());
@@ -491,15 +630,19 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
 
         // Warn about files outside known paths
         if !asset_references.input_filenames.is_empty() {
-            let outside: Vec<&String> = asset_references.input_filenames.iter()
-                .filter(|f| !known_paths.iter().any(|kp| {
-                    let kp_sep = if kp.ends_with(std::path::MAIN_SEPARATOR) {
-                        kp.clone()
-                    } else {
-                        format!("{kp}{}", std::path::MAIN_SEPARATOR)
-                    };
-                    f.starts_with(&kp_sep) || *f == kp
-                }))
+            let outside: Vec<&String> = asset_references
+                .input_filenames
+                .iter()
+                .filter(|f| {
+                    !known_paths.iter().any(|kp| {
+                        let kp_sep = if kp.ends_with(std::path::MAIN_SEPARATOR) {
+                            kp.clone()
+                        } else {
+                            format!("{kp}{}", std::path::MAIN_SEPARATOR)
+                        };
+                        f.starts_with(&kp_sep) || *f == kp
+                    })
+                })
                 .collect();
             if !outside.is_empty() {
                 print(&format!(
@@ -513,14 +656,17 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                     print(&format!("  ... and {} more", outside.len() - 10));
                 }
                 if params.auto_accept {
-                    print("Job submission canceled (settings.auto_accept enabled and there were unknown paths).");
+                    print(
+                        "Job submission canceled (settings.auto_accept enabled and there were unknown paths).",
+                    );
                     return Err(op_err("Job submission canceled (settings.auto_accept enabled and there were unknown paths).".into()));
                 }
                 let msg = format!(
                     "WARNING: {} file(s) found outside of known asset paths.\nDo you wish to proceed?",
                     outside.len()
                 );
-                let should_continue = params.interactive_confirmation_callback
+                let should_continue = params
+                    .interactive_confirmation_callback
                     .as_ref()
                     .is_none_or(|cb| cb(&msg, false));
                 if !should_continue {
@@ -530,22 +676,40 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
         }
 
         let queue_sdk_config = session::get_queue_user_config(
-            Some(&farm_id), Some(&queue_id),
+            Some(&farm_id),
+            Some(&queue_id),
             Some(queue_display_name.to_owned()),
-            false, params.config,
-        ).await?;
+            false,
+            params.config,
+        )
+        .await?;
 
-        let s3_client = deadline_job_attachments::s3::build_s3_client(&queue_sdk_config, params.config);
-        let account_id = deadline_job_attachments::s3::get_account_id(&queue_sdk_config).await
+        let s3_client =
+            deadline_job_attachments::s3::build_s3_client(&queue_sdk_config, params.config);
+        let account_id = deadline_job_attachments::s3::get_account_id(&queue_sdk_config)
+            .await
             .map_err(|e| op_err(format!("Failed to get account ID: {e}")))?;
 
         let upload_group = upload::prepare_paths_for_upload(
-            &asset_references.input_filenames.iter().cloned().collect::<Vec<_>>(),
-            &asset_references.output_directories.iter().cloned().collect::<Vec<_>>(),
-            &asset_references.referenced_paths.iter().cloned().collect::<Vec<_>>(),
+            &asset_references
+                .input_filenames
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            &asset_references
+                .output_directories
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            &asset_references
+                .referenced_paths
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
             storage_profile.as_ref(),
             params.require_paths_exist,
-        ).map_err(|e| op_err(e.to_string()))?;
+        )
+        .map_err(|e| op_err(e.to_string()))?;
 
         if !upload_group.asset_groups.is_empty() {
             // Print upload summary (matches Python's _generate_message_for_asset_paths)
@@ -553,7 +717,11 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 "Job submission contains {} input file{} totaling {}. \
                  All input files will be uploaded to S3 if they are not already present in the job attachments bucket.\n",
                 upload_group.total_input_files,
-                if upload_group.total_input_files == 1 { "" } else { "s" },
+                if upload_group.total_input_files == 1 {
+                    ""
+                } else {
+                    "s"
+                },
                 deadline_api::path_utils::human_readable_file_size(upload_group.total_input_bytes),
             ));
 
@@ -566,7 +734,8 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 upload_group.total_input_bytes,
                 cache_dir_str,
                 params.hashing_progress_callback,
-            ).map_err(|e| op_err(e.to_string()))?;
+            )
+            .map_err(|e| op_err(e.to_string()))?;
 
             if hashing_summary.processed_files > 0 {
                 print("Hashing Summary:");
@@ -580,42 +749,64 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 let mut details = std::collections::HashMap::new();
                 details.insert("total_files".into(), json!(hashing_summary.total_files));
                 details.insert("total_bytes".into(), json!(hashing_summary.total_bytes));
-                details.insert("processed_files".into(), json!(hashing_summary.processed_files));
-                details.insert("processed_bytes".into(), json!(hashing_summary.processed_bytes));
+                details.insert(
+                    "processed_files".into(),
+                    json!(hashing_summary.processed_files),
+                );
+                details.insert(
+                    "processed_bytes".into(),
+                    json!(hashing_summary.processed_bytes),
+                );
                 details.insert("skipped_files".into(), json!(hashing_summary.skipped_files));
                 details.insert("skipped_bytes".into(), json!(hashing_summary.skipped_bytes));
                 details.insert("total_time".into(), json!(hashing_summary.total_time));
                 details.insert("transfer_rate".into(), json!(hashing_summary.transfer_rate));
-                tc.record_event("com.amazon.rum.deadline.job_attachments.hashing_summary", details, false);
+                tc.record_event(
+                    "com.amazon.rum.deadline.job_attachments.hashing_summary",
+                    details,
+                    false,
+                );
             }
 
-            let ja_settings = queue.job_attachment_settings().expect("checked has_attachment_settings above");
+            let ja_settings = queue
+                .job_attachment_settings()
+                .expect("checked has_attachment_settings above");
             let s3_settings = JobAttachmentS3Settings::from_root_path(&format!(
                 "{}/{}",
                 ja_settings.s3_bucket_name(),
                 ja_settings.root_prefix(),
-            )).map_err(|e| op_err(e.to_string()))?;
+            ))
+            .map_err(|e| op_err(e.to_string()))?;
 
             let upload_ctx = upload::S3UploadContext::new(s3_client, account_id, params.config)
                 .map_err(|e| op_err(e.to_string()))?;
 
-            let (upload_summary, attachments) = if let Some(ref snap_dir) = params.debug_snapshot_dir {
-                // F8: Snapshot assets locally instead of uploading to S3
-                upload::snapshot_assets(
-                    &farm_id, &queue_id, &s3_settings,
-                    Path::new(snap_dir),
-                    &manifests,
-                    params.upload_progress_callback,
-                ).map_err(|e| op_err(e.to_string()))?
-            } else {
-                upload::upload_assets(
-                    &farm_id, &queue_id, &s3_settings,
-                    &manifests, &upload_ctx,
-                    params.upload_progress_callback,
-                    cache_dir_str,
-                    Some(force_s3_check),
-                ).await.map_err(|e| op_err(e.to_string()))?
-            };
+            let (upload_summary, attachments) =
+                if let Some(ref snap_dir) = params.debug_snapshot_dir {
+                    // F8: Snapshot assets locally instead of uploading to S3
+                    upload::snapshot_assets(
+                        &farm_id,
+                        &queue_id,
+                        &s3_settings,
+                        Path::new(snap_dir),
+                        &manifests,
+                        params.upload_progress_callback,
+                    )
+                    .map_err(|e| op_err(e.to_string()))?
+                } else {
+                    upload::upload_assets(
+                        &farm_id,
+                        &queue_id,
+                        &s3_settings,
+                        &manifests,
+                        &upload_ctx,
+                        params.upload_progress_callback,
+                        cache_dir_str,
+                        Some(force_s3_check),
+                    )
+                    .await
+                    .map_err(|e| op_err(e.to_string()))?
+                };
 
             if upload_summary.processed_files > 0 {
                 print("Upload Summary:");
@@ -629,19 +820,33 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 let mut details = std::collections::HashMap::new();
                 details.insert("total_files".into(), json!(upload_summary.total_files));
                 details.insert("total_bytes".into(), json!(upload_summary.total_bytes));
-                details.insert("processed_files".into(), json!(upload_summary.processed_files));
-                details.insert("processed_bytes".into(), json!(upload_summary.processed_bytes));
+                details.insert(
+                    "processed_files".into(),
+                    json!(upload_summary.processed_files),
+                );
+                details.insert(
+                    "processed_bytes".into(),
+                    json!(upload_summary.processed_bytes),
+                );
                 details.insert("skipped_files".into(), json!(upload_summary.skipped_files));
                 details.insert("skipped_bytes".into(), json!(upload_summary.skipped_bytes));
                 details.insert("total_time".into(), json!(upload_summary.total_time));
                 details.insert("transfer_rate".into(), json!(upload_summary.transfer_rate));
-                tc.record_event("com.amazon.rum.deadline.job_attachments.upload_summary", details, false);
+                tc.record_event(
+                    "com.amazon.rum.deadline.job_attachments.upload_summary",
+                    details,
+                    false,
+                );
             }
 
             let mut att_json = attachments.to_json();
             att_json.as_object_mut().expect("value is object").insert(
                 "fileSystem".into(),
-                json!(if ja_file_system == "VIRTUAL" { "VIRTUAL" } else { "COPIED" }),
+                json!(if ja_file_system == "VIRTUAL" {
+                    "VIRTUAL"
+                } else {
+                    "COPIED"
+                }),
             );
             create_job_args.insert("attachments".into(), att_json);
         }
@@ -649,7 +854,8 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
         // No files to process — call callbacks once at 100% to close progress bars
         if let Some(ref cb) = params.hashing_progress_callback {
             cb(ProgressReportMetadata {
-                status: deadline_job_attachments::progress_tracker::ProgressStatus::PreparingInProgress,
+                status:
+                    deadline_job_attachments::progress_tracker::ProgressStatus::PreparingInProgress,
                 progress: 100.0,
                 transfer_rate: 0.0,
                 progress_message: "No files to hash".into(),
@@ -658,7 +864,8 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
         }
         if let Some(ref cb) = params.upload_progress_callback {
             cb(ProgressReportMetadata {
-                status: deadline_job_attachments::progress_tracker::ProgressStatus::UploadInProgress,
+                status:
+                    deadline_job_attachments::progress_tracker::ProgressStatus::UploadInProgress,
                 progress: 100.0,
                 transfer_rate: 0.0,
                 progress_message: "No files to upload".into(),
@@ -692,7 +899,10 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     // 9. Record submission telemetry and call CreateJob
     if let Some(tc) = params.telemetry {
         let mut details = std::collections::HashMap::new();
-        details.insert("submitter_name".into(), Value::String(submitter_name.to_owned()));
+        details.insert(
+            "submitter_name".into(),
+            Value::String(submitter_name.to_owned()),
+        );
         tc.record_event("com.amazon.rum.deadline.submission", details, false);
     }
 
@@ -718,7 +928,12 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
                 }).collect::<Vec<_>>(),
             })
         });
-        save_debug_snapshot(snapshot_dir, &create_job_args, &queue_json, sp_json.as_ref())?;
+        save_debug_snapshot(
+            snapshot_dir,
+            &create_job_args,
+            &queue_json,
+            sp_json.as_ref(),
+        )?;
         return Ok(None);
     }
 
@@ -729,11 +944,18 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     // 10. Poll for completion
     print("Waiting for Job to be created...");
 
-    let continue_cb = params.continue_callback.unwrap_or_else(|| Box::new(|| true));
+    let continue_cb = params
+        .continue_callback
+        .unwrap_or_else(|| Box::new(|| true));
 
     let (success, status_message) = api::wait_for_create_job_to_complete(
-        &farm_id, &queue_id, &job_id, params.config, &*continue_cb,
-    ).await?;
+        &farm_id,
+        &queue_id,
+        &job_id,
+        params.config,
+        &*continue_cb,
+    )
+    .await?;
 
     // Record create_job telemetry
     if let Some(tc) = params.telemetry {
@@ -743,29 +965,52 @@ pub async fn create_job_from_job_bundle(params: SubmitJobParams<'_>) -> Result<O
     }
 
     if !success {
-        return Err(op_err(format!("Job {job_id} creation failed: {status_message}")));
+        return Err(op_err(format!(
+            "Job {job_id} creation failed: {status_message}"
+        )));
     }
 
-    print(&format!("Submitted job bundle:\n   {}", params.job_bundle_dir));
+    print(&format!(
+        "Submitted job bundle:\n   {}",
+        params.job_bundle_dir
+    ));
     print(&format!("{status_message}\n{job_id}"));
 
     // 11. Execute post-submission hooks
-    if hook_manager.hooks.as_ref().is_some_and(|h| !h.post_submission.is_empty()) {
-        let template_obj = parse_yaml_or_json_content(&file_contents, &file_type, &params.job_bundle_dir, "template")
-            .unwrap_or(serde_json::json!({}));
+    if hook_manager
+        .hooks
+        .as_ref()
+        .is_some_and(|h| !h.post_submission.is_empty())
+    {
+        let template_obj = parse_yaml_or_json_content(
+            &file_contents,
+            &file_type,
+            &params.job_bundle_dir,
+            "template",
+        )
+        .unwrap_or(serde_json::json!({}));
         let post_metadata = HookMetadata {
-            job_name: template_obj.get("name").and_then(|v| v.as_str()).unwrap_or("").to_owned(),
+            job_name: template_obj
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned(),
             priority: params.priority.unwrap_or(50),
             farm_id: farm_id.clone(),
             queue_id: queue_id.clone(),
             job_bundle_dir: std::fs::canonicalize(&params.job_bundle_dir)
                 .unwrap_or_else(|_| PathBuf::from(&params.job_bundle_dir))
-                .to_string_lossy().into_owned(),
+                .to_string_lossy()
+                .into_owned(),
             parameters: std::collections::HashMap::new(),
             submitter_name: submitter_name.to_owned(),
             asset_references: serde_json::json!({}),
             submission_payload: serde_json::json!({}),
-            storage_profile_id: if storage_profile_id.is_empty() { None } else { Some(storage_profile_id.clone()) },
+            storage_profile_id: if storage_profile_id.is_empty() {
+                None
+            } else {
+                Some(storage_profile_id.clone())
+            },
             job_id: Some(job_id.clone()),
         };
         hook_manager.execute_post_submission_hooks(&post_metadata);
@@ -793,7 +1038,8 @@ fn save_debug_snapshot(
     fs::write(
         Path::new(snapshot_dir).join("create_job_args.json"),
         &args_json,
-    ).map_err(|e| op_err(format!("Failed to write create_job_args.json: {e}")))?;
+    )
+    .map_err(|e| op_err(format!("Failed to write create_job_args.json: {e}")))?;
 
     // 2. Per-parameter files + CLI args list
     let mut cli_args: Vec<(String, String)> = Vec::new();
@@ -802,24 +1048,20 @@ fn save_debug_snapshot(
         match param_value {
             Value::Object(_) | Value::Array(_) => {
                 let file_name = format!("{kebab}_param.json");
-                let content = serde_json::to_string_pretty(param_value)
-                    .unwrap_or_default();
-                let _ = fs::write(
-                    Path::new(snapshot_dir).join(&file_name),
-                    &content,
-                );
+                let content = serde_json::to_string_pretty(param_value).unwrap_or_default();
+                let _ = fs::write(Path::new(snapshot_dir).join(&file_name), &content);
                 cli_args.push((format!("--{kebab}"), format!("file://{file_name}")));
             }
             Value::String(s) if s.contains('\n') => {
                 let file_name = format!("{kebab}_param.data");
-                let _ = fs::write(
-                    Path::new(snapshot_dir).join(&file_name),
-                    s.as_bytes(),
-                );
+                let _ = fs::write(Path::new(snapshot_dir).join(&file_name), s.as_bytes());
                 cli_args.push((format!("--{kebab}"), format!("file://{file_name}")));
             }
             _ => {
-                cli_args.push((format!("--{kebab}"), param_value.to_string().trim_matches('"').to_owned()));
+                cli_args.push((
+                    format!("--{kebab}"),
+                    param_value.to_string().trim_matches('"').to_owned(),
+                ));
             }
         }
     }
@@ -837,15 +1079,18 @@ fn save_debug_snapshot(
     let mut sh = fs::File::create(&sh_path)
         .map_err(|e| op_err(format!("Failed to create submit_job.sh: {e}")))?;
     writeln!(sh, "#!/bin/sh").ok();
-    writeln!(sh, "# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.").ok();
+    writeln!(
+        sh,
+        "# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved."
+    )
+    .ok();
     writeln!(sh, "set -xeuo pipefail").ok();
     writeln!(sh, "cd \"$(dirname \"$0\")\"").ok();
     writeln!(sh).ok();
-    if has_attachments
-        && let Some(ref base) = s3_base {
-            write_s3_copy_commands(&mut sh, base, " \\\n")
-                .map_err(|e| op_err(format!("Failed to write submit_job.sh: {e}")))?;
-        }
+    if has_attachments && let Some(ref base) = s3_base {
+        write_s3_copy_commands(&mut sh, base, " \\\n")
+            .map_err(|e| op_err(format!("Failed to write submit_job.sh: {e}")))?;
+    }
     write_create_job_commands(&mut sh, &cli_args, " \\\n", shell_quote)
         .map_err(|e| op_err(format!("Failed to write submit_job.sh: {e}")))?;
 
@@ -853,33 +1098,33 @@ fn save_debug_snapshot(
     let bat_path = Path::new(snapshot_dir).join("submit_job.bat");
     let mut bat = fs::File::create(&bat_path)
         .map_err(|e| op_err(format!("Failed to create submit_job.bat: {e}")))?;
-    writeln!(bat, "REM Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.").ok();
+    writeln!(
+        bat,
+        "REM Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved."
+    )
+    .ok();
     writeln!(bat, "cd /d \"%~dp0\"").ok();
     writeln!(bat).ok();
-    if has_attachments
-        && let Some(ref base) = s3_base {
-            write_s3_copy_commands(&mut bat, base, " ^\r\n")
-                .map_err(|e| op_err(format!("Failed to write submit_job.bat: {e}")))?;
-        }
+    if has_attachments && let Some(ref base) = s3_base {
+        write_s3_copy_commands(&mut bat, base, " ^\r\n")
+            .map_err(|e| op_err(format!("Failed to write submit_job.bat: {e}")))?;
+    }
     write_create_job_commands(&mut bat, &cli_args, " ^\r\n", bat_quote)
         .map_err(|e| op_err(format!("Failed to write submit_job.bat: {e}")))?;
 
     // 5. queue.json — full queue response
-    let queue_str = serde_json::to_string_pretty(queue_json)
-        .unwrap_or_else(|_| "{}".to_owned());
-    fs::write(
-        Path::new(snapshot_dir).join("queue.json"),
-        &queue_str,
-    ).map_err(|e| op_err(format!("Failed to write queue.json: {e}")))?;
+    let queue_str = serde_json::to_string_pretty(queue_json).unwrap_or_else(|_| "{}".to_owned());
+    fs::write(Path::new(snapshot_dir).join("queue.json"), &queue_str)
+        .map_err(|e| op_err(format!("Failed to write queue.json: {e}")))?;
 
     // 6. storage_profile.json — when storage profile is configured
     if let Some(sp) = storage_profile_json {
-        let sp_str = serde_json::to_string_pretty(sp)
-            .unwrap_or_else(|_| "{}".to_owned());
+        let sp_str = serde_json::to_string_pretty(sp).unwrap_or_else(|_| "{}".to_owned());
         fs::write(
             Path::new(snapshot_dir).join("storage_profile.json"),
             &sp_str,
-        ).map_err(|e| op_err(format!("Failed to write storage_profile.json: {e}")))?;
+        )
+        .map_err(|e| op_err(format!("Failed to write storage_profile.json: {e}")))?;
     }
 
     Ok(())
@@ -891,7 +1136,7 @@ fn write_s3_copy_commands(
     continuation: &str,
 ) -> std::io::Result<()> {
     for subdir in ["Data", "Manifests"] {
-        write!(w, "aws s3 cp{continuation}", )?;
+        write!(w, "aws s3 cp{continuation}",)?;
         write!(w, "    --recursive{continuation}")?;
         write!(w, "    ./{subdir}{continuation}")?;
         writeln!(w, "    {s3_base}/{subdir}")?;
@@ -1024,7 +1269,9 @@ pub fn filter_redundant_known_paths(paths: &[String]) -> Vec<String> {
 }
 
 /// Convert `GetStorageProfileForQueueOutput` to a `serde_json::Value` matching the API JSON shape.
-fn storage_profile_output_to_value(output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput) -> Value {
+fn storage_profile_output_to_value(
+    output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput,
+) -> Value {
     deadline_api::type_conversions::storage_profile_output_to_value(output)
 }
 
@@ -1047,19 +1294,13 @@ mod tests {
 
     #[test]
     fn filter_redundant_child_path_removed() {
-        let paths = vec![
-            "/mnt/prod".to_owned(),
-            "/mnt/prod/project".to_owned(),
-        ];
+        let paths = vec!["/mnt/prod".to_owned(), "/mnt/prod/project".to_owned()];
         assert_eq!(filter_redundant_known_paths(&paths), vec!["/mnt/prod"]);
     }
 
     #[test]
     fn filter_redundant_unrelated_paths_kept() {
-        let paths = vec![
-            "/mnt/prod".to_owned(),
-            "/home/user".to_owned(),
-        ];
+        let paths = vec!["/mnt/prod".to_owned(), "/home/user".to_owned()];
         let result = filter_redundant_known_paths(&paths);
         assert_eq!(result.len(), 2);
         assert!(result.contains(&"/mnt/prod".to_owned()));
@@ -1068,10 +1309,7 @@ mod tests {
 
     #[test]
     fn filter_redundant_duplicate_path_removed() {
-        let paths = vec![
-            "/mnt/prod".to_owned(),
-            "/mnt/prod".to_owned(),
-        ];
+        let paths = vec!["/mnt/prod".to_owned(), "/mnt/prod".to_owned()];
         assert_eq!(filter_redundant_known_paths(&paths), vec!["/mnt/prod"]);
     }
 
@@ -1088,10 +1326,7 @@ mod tests {
     #[test]
     fn filter_redundant_similar_prefix_not_confused() {
         // /mnt/production should NOT be filtered by /mnt/prod
-        let paths = vec![
-            "/mnt/prod".to_owned(),
-            "/mnt/production".to_owned(),
-        ];
+        let paths = vec!["/mnt/prod".to_owned(), "/mnt/production".to_owned()];
         let result = filter_redundant_known_paths(&paths);
         assert_eq!(result.len(), 2);
     }
@@ -1105,13 +1340,17 @@ mod tests {
         std::fs::create_dir_all(&empty_dir).unwrap();
 
         let mut refs = AssetReferences::new();
-        refs.input_directories.insert(empty_dir.to_string_lossy().into_owned());
+        refs.input_directories
+            .insert(empty_dir.to_string_lossy().into_owned());
 
         expand_input_directories(&mut refs, false).unwrap();
 
         assert!(refs.input_filenames.is_empty());
         assert!(refs.input_directories.is_empty());
-        assert!(refs.referenced_paths.contains(&empty_dir.to_string_lossy().into_owned()));
+        assert!(
+            refs.referenced_paths
+                .contains(&empty_dir.to_string_lossy().into_owned())
+        );
     }
 
     #[test]
@@ -1123,7 +1362,8 @@ mod tests {
         std::fs::write(input_dir.join("b.txt"), "world").unwrap();
 
         let mut refs = AssetReferences::new();
-        refs.input_directories.insert(input_dir.to_string_lossy().into_owned());
+        refs.input_directories
+            .insert(input_dir.to_string_lossy().into_owned());
 
         expand_input_directories(&mut refs, false).unwrap();
 
@@ -1138,7 +1378,12 @@ mod tests {
 
         let result = expand_input_directories(&mut refs, true);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Non-existent directories"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Non-existent directories")
+        );
     }
 
     #[test]
@@ -1162,7 +1407,8 @@ mod tests {
         std::fs::write(sub_dir.join("nested.txt"), "nested").unwrap();
 
         let mut refs = AssetReferences::new();
-        refs.input_directories.insert(input_dir.to_string_lossy().into_owned());
+        refs.input_directories
+            .insert(input_dir.to_string_lossy().into_owned());
 
         expand_input_directories(&mut refs, false).unwrap();
 
@@ -1180,6 +1426,9 @@ mod tests {
 
         // Verify MAIN_SEPARATOR would destroy paths (the bug)
         let bad: Vec<&str> = input.split(std::path::MAIN_SEPARATOR).collect();
-        assert!(bad.len() > 2, "MAIN_SEPARATOR splits paths incorrectly: {bad:?}");
+        assert!(
+            bad.len() > 2,
+            "MAIN_SEPARATOR splits paths incorrectly: {bad:?}"
+        );
     }
 }

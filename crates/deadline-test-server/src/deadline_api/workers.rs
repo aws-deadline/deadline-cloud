@@ -12,12 +12,10 @@ pub async fn mock_search_workers(
 ) {
     Mock::given(method("POST"))
         .and(path(format!("/2023-10-12/farms/{farm_id}/search/workers")))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
-                "workers": workers,
-                "totalResults": total_results,
-            })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "workers": workers,
+            "totalResults": total_results,
+        })))
         .mount(server)
         .await;
 }

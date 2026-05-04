@@ -37,11 +37,13 @@ pub fn generate_path_mapping_rules(
         .file_system_locations
         .iter()
         .filter_map(|loc| {
-            dest_locations.get(loc.name.as_str()).map(|dest_path| PathMappingRule {
-                source_path_format: format.to_owned(),
-                source_path: loc.path.clone(),
-                destination_path: dest_path.to_string(),
-            })
+            dest_locations
+                .get(loc.name.as_str())
+                .map(|dest_path| PathMappingRule {
+                    source_path_format: format.to_owned(),
+                    source_path: loc.path.clone(),
+                    destination_path: dest_path.to_string(),
+                })
         })
         .collect()
 }
@@ -85,8 +87,10 @@ impl PathMappingRuleApplier {
 
         let format = &rules[0].source_path_format;
         if !rules.iter().all(|r| r.source_path_format == *format) {
-            let mut formats: Vec<&str> =
-                rules.iter().map(|r| r.source_path_format.as_str()).collect();
+            let mut formats: Vec<&str> = rules
+                .iter()
+                .map(|r| r.source_path_format.as_str())
+                .collect();
             formats.sort_unstable();
             formats.dedup();
             return Err(JobAttachmentsError::AssetSync(format!(
@@ -101,7 +105,7 @@ impl PathMappingRuleApplier {
             other => {
                 return Err(JobAttachmentsError::AssetSync(format!(
                     "Unexpected source path format {other}"
-                )))
+                )));
             }
         };
 
@@ -177,9 +181,10 @@ impl PathMappingRuleApplier {
     /// Returns error if no rule matches.
     pub fn strict_transform(&self, source_path: &str) -> Result<PathBuf, JobAttachmentsError> {
         if self.source_path_format.is_some()
-            && let Some(result) = self.try_transform(source_path) {
-                return Ok(result);
-            }
+            && let Some(result) = self.try_transform(source_path)
+        {
+            return Ok(result);
+        }
         Err(JobAttachmentsError::AssetSync(
             "No path mapping rule could be applied".to_owned(),
         ))
@@ -328,7 +333,10 @@ mod tests {
     fn generate_rules_matching_names_returns_rules() {
         // matching location names produce one rule each
         let src = linux_profile("sp-1", vec![("shared", "/mnt/shared"), ("temp", "/tmp")]);
-        let dst = linux_profile("sp-2", vec![("shared", "/opt/shared"), ("temp", "/var/tmp")]);
+        let dst = linux_profile(
+            "sp-2",
+            vec![("shared", "/opt/shared"), ("temp", "/var/tmp")],
+        );
         let rules = generate_path_mapping_rules(&src, &dst);
         assert_eq!(rules.len(), 2);
         assert!(rules.contains(&rule("posix", "/mnt/shared", "/opt/shared")));
@@ -365,7 +373,10 @@ mod tests {
     fn generate_rules_windows_source_uses_windows_format() {
         // Windows source → WINDOWS format
         let src = windows_profile("sp-w", vec![("shared", "C:\\shared"), ("temp", "C:\\temp")]);
-        let dst = windows_profile("sp-w2", vec![("shared", "D:\\shared"), ("temp", "D:\\temp")]);
+        let dst = windows_profile(
+            "sp-w2",
+            vec![("shared", "D:\\shared"), ("temp", "D:\\temp")],
+        );
         let rules = generate_path_mapping_rules(&src, &dst);
         assert_eq!(rules.len(), 2);
         for r in &rules {
@@ -430,19 +441,15 @@ mod tests {
 
     #[test]
     fn transform_exact_match_returns_destination() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(applier.transform("/mnt/shared"), "/opt/shared");
     }
 
     #[test]
     fn transform_child_path_returns_joined_destination() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(
             applier.transform("/mnt/shared/subdir/file.txt"),
             "/opt/shared/subdir/file.txt"
@@ -451,10 +458,8 @@ mod tests {
 
     #[test]
     fn transform_no_match_returns_original() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(applier.transform("/other/path"), "/other/path");
     }
 
@@ -480,10 +485,9 @@ mod tests {
     #[test]
     fn transform_windows_case_insensitive() {
         // Windows paths match case-insensitively
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("windows", "C:\\Shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("windows", "C:\\Shared", "/opt/shared")])
+                .unwrap();
         assert_eq!(applier.transform("C:\\ShArEd"), "/opt/shared");
         assert_eq!(
             applier.transform("C:\\SHARED\\file.txt"),
@@ -503,10 +507,8 @@ mod tests {
 
     #[test]
     fn strict_transform_match_returns_path() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(
             applier.strict_transform("/mnt/shared/file.txt").unwrap(),
             PathBuf::from("/opt/shared/file.txt")
@@ -515,10 +517,8 @@ mod tests {
 
     #[test]
     fn strict_transform_no_match_returns_error() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         let err = applier.strict_transform("/other/path").unwrap_err();
         assert!(
             err.to_string()
@@ -542,7 +542,9 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(
-            applier.strict_transform("/mnt/shared/projects/f.txt").unwrap(),
+            applier
+                .strict_transform("/mnt/shared/projects/f.txt")
+                .unwrap(),
             PathBuf::from("/dest/long/f.txt")
         );
     }
@@ -553,38 +555,30 @@ mod tests {
 
     #[test]
     fn transform_posix_empty_string_returns_empty() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(applier.transform(""), "");
     }
 
     #[test]
     fn transform_posix_root_returns_root() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(applier.transform("/"), "/");
     }
 
     #[test]
     fn transform_posix_case_sensitive() {
         // POSIX is case-sensitive: /Mnt/shared ≠ /mnt/shared
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(applier.transform("/Mnt/shared"), "/Mnt/shared");
     }
 
     #[test]
     fn transform_posix_unicode_path() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(
             applier.transform("/mnt/shared/файл.txt"),
             "/opt/shared/файл.txt"
@@ -593,10 +587,8 @@ mod tests {
 
     #[test]
     fn transform_posix_spaces_in_path() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(
             applier.transform("/mnt/shared/file with spaces.txt"),
             "/opt/shared/file with spaces.txt"
@@ -606,10 +598,9 @@ mod tests {
     #[test]
     fn transform_windows_case_preserving_tail() {
         // Windows: case-insensitive match but tail preserves original case
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("windows", "C:\\proJects", "/dest/projects"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("windows", "C:\\proJects", "/dest/projects")])
+                .unwrap();
         assert_eq!(
             applier.transform("C:\\PROJECTS\\Case\\Of\\tail\\PreServed"),
             "/dest/projects/Case/Of/tail/PreServed"
@@ -618,10 +609,9 @@ mod tests {
 
     #[test]
     fn transform_windows_unicode_path() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("windows", "C:\\shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("windows", "C:\\shared", "/opt/shared")])
+                .unwrap();
         assert_eq!(
             applier.transform("C:\\shared\\файл.txt"),
             "/opt/shared/файл.txt"
@@ -630,10 +620,9 @@ mod tests {
 
     #[test]
     fn transform_windows_spaces_in_path() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("windows", "C:\\shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("windows", "C:\\shared", "/opt/shared")])
+                .unwrap();
         assert_eq!(
             applier.transform("C:\\shared\\file with spaces.txt"),
             "/opt/shared/file with spaces.txt"
@@ -647,10 +636,7 @@ mod tests {
             rule("windows", "C:\\shared\\projects", "/dest/long"),
         ])
         .unwrap();
-        assert_eq!(
-            applier.transform("C:\\shared\\projects"),
-            "/dest/long"
-        );
+        assert_eq!(applier.transform("C:\\shared\\projects"), "/dest/long");
         assert_eq!(
             applier.transform("C:\\shared\\projects\\file.txt"),
             "/dest/long/file.txt"
@@ -698,28 +684,24 @@ mod tests {
     #[test]
     fn transform_posix_partial_component_no_match() {
         // "/mnt/other/path" should NOT match rule for "/mnt/shared"
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("posix", "/mnt/shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("posix", "/mnt/shared", "/opt/shared")]).unwrap();
         assert_eq!(applier.transform("/mnt/other/path"), "/mnt/other/path");
     }
 
     #[test]
     fn transform_windows_no_match_returns_original() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("windows", "C:\\shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("windows", "C:\\shared", "/opt/shared")])
+                .unwrap();
         assert_eq!(applier.transform("C:\\other\\path"), "C:\\other\\path");
     }
 
     #[test]
     fn strict_transform_windows_no_match_returns_error() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("windows", "C:\\Shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("windows", "C:\\Shared", "/opt/shared")])
+                .unwrap();
         assert!(applier.strict_transform("C:\\other\\path").is_err());
     }
 
@@ -734,9 +716,18 @@ mod tests {
         assert_eq!(applier.transform("/mnt/shared"), "/d1");
         assert_eq!(applier.transform("/mnt/projects"), "/d2");
         assert_eq!(applier.transform("/tmp"), "/d3");
-        assert_eq!(applier.strict_transform("/mnt/shared").unwrap(), PathBuf::from("/d1"));
-        assert_eq!(applier.strict_transform("/mnt/projects").unwrap(), PathBuf::from("/d2"));
-        assert_eq!(applier.strict_transform("/tmp").unwrap(), PathBuf::from("/d3"));
+        assert_eq!(
+            applier.strict_transform("/mnt/shared").unwrap(),
+            PathBuf::from("/d1")
+        );
+        assert_eq!(
+            applier.strict_transform("/mnt/projects").unwrap(),
+            PathBuf::from("/d2")
+        );
+        assert_eq!(
+            applier.strict_transform("/tmp").unwrap(),
+            PathBuf::from("/d3")
+        );
     }
 
     #[test]
@@ -750,17 +741,25 @@ mod tests {
         assert_eq!(applier.transform("C:\\Shared"), "/d1");
         assert_eq!(applier.transform("C:\\proJects"), "/d2");
         assert_eq!(applier.transform("D:\\tmp"), "/d3");
-        assert_eq!(applier.strict_transform("C:\\Shared").unwrap(), PathBuf::from("/d1"));
-        assert_eq!(applier.strict_transform("C:\\proJects").unwrap(), PathBuf::from("/d2"));
-        assert_eq!(applier.strict_transform("D:\\tmp").unwrap(), PathBuf::from("/d3"));
+        assert_eq!(
+            applier.strict_transform("C:\\Shared").unwrap(),
+            PathBuf::from("/d1")
+        );
+        assert_eq!(
+            applier.strict_transform("C:\\proJects").unwrap(),
+            PathBuf::from("/d2")
+        );
+        assert_eq!(
+            applier.strict_transform("D:\\tmp").unwrap(),
+            PathBuf::from("/d3")
+        );
     }
 
     #[test]
     fn transform_windows_empty_string_returns_empty() {
-        let applier = PathMappingRuleApplier::new(vec![
-            rule("windows", "C:\\shared", "/opt/shared"),
-        ])
-        .unwrap();
+        let applier =
+            PathMappingRuleApplier::new(vec![rule("windows", "C:\\shared", "/opt/shared")])
+                .unwrap();
         assert_eq!(applier.transform(""), "");
     }
 }

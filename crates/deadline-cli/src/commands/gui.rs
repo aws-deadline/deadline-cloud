@@ -29,12 +29,13 @@ pub(crate) fn find_python() -> Result<PathBuf, CliError> {
 
     // 2. Bundled Python next to the binary (installer layout)
     if let Ok(exe) = std::env::current_exe()
-        && let Some(exe_dir) = exe.parent() {
-            let bundled = exe_dir.join("_internal").join("Python");
-            if bundled.exists() {
-                return Ok(bundled);
-            }
+        && let Some(exe_dir) = exe.parent()
+    {
+        let bundled = exe_dir.join("_internal").join("Python");
+        if bundled.exists() {
+            return Ok(bundled);
         }
+    }
 
     // 3. System Python on PATH
     if let Ok(p) = which("python3") {
@@ -66,9 +67,9 @@ pub(crate) fn launch_gui(
         cmd.arg("--install-gui");
     }
 
-    let output = cmd.output().map_err(|e| {
-        CliError::Operation(format!("Failed to launch Python GUI process: {e}"))
-    })?;
+    let output = cmd
+        .output()
+        .map_err(|e| CliError::Operation(format!("Failed to launch Python GUI process: {e}")))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

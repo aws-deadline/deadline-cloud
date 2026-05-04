@@ -159,7 +159,10 @@ impl DownloadSummaryStatistics {
     pub fn aggregate(&mut self, other: &DownloadSummaryStatistics) {
         self.stats.aggregate(&other.stats);
         for (k, v) in &other.file_counts_by_root_directory {
-            *self.file_counts_by_root_directory.entry(k.clone()).or_insert(0) += v;
+            *self
+                .file_counts_by_root_directory
+                .entry(k.clone())
+                .or_insert(0) += v;
         }
     }
 }
@@ -302,12 +305,9 @@ impl ProgressTracker {
             .last_report_time
             .map_or(0.0, |t| now.duration_since(t).as_secs_f64());
 
-        let all_done =
-            inner.processed_files + inner.skipped_files == self.total_files;
-        let time_trigger = inner.last_report_time.is_none()
-            || elapsed >= CALLBACK_INTERVAL_SECS;
-        let chunk_trigger =
-            inner.completed_files_in_chunk >= self.reporting_files_per_chunk;
+        let all_done = inner.processed_files + inner.skipped_files == self.total_files;
+        let time_trigger = inner.last_report_time.is_none() || elapsed >= CALLBACK_INTERVAL_SECS;
+        let chunk_trigger = inner.completed_files_in_chunk >= self.reporting_files_per_chunk;
 
         if time_trigger || chunk_trigger || all_done {
             let metadata = self.build_metadata(inner, elapsed);
@@ -369,7 +369,10 @@ impl ProgressTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, atomic::{AtomicBool, AtomicU32, Ordering}};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+    };
     use std::thread;
     use std::time::Duration;
 
@@ -396,12 +399,7 @@ mod tests {
 
     #[test]
     fn progress_tracker_new_without_callback_defaults_to_noop() {
-        let tracker = ProgressTracker::new(
-            ProgressStatus::UploadInProgress,
-            5,
-            500,
-            None,
-        );
+        let tracker = ProgressTracker::new(ProgressStatus::UploadInProgress, 5, 500, None);
         // Should not panic, report_progress returns true (no cancellation)
         assert!(tracker.report_progress());
     }
@@ -410,12 +408,7 @@ mod tests {
 
     #[test]
     fn increase_processed_increments_files_and_bytes() {
-        let tracker = ProgressTracker::new(
-            ProgressStatus::PreparingInProgress,
-            10,
-            10000,
-            None,
-        );
+        let tracker = ProgressTracker::new(ProgressStatus::PreparingInProgress, 10, 10000, None);
         tracker.increase_processed(1, 1000);
         let stats = tracker.get_summary_statistics();
         assert_eq!(stats.processed_files, 1);
@@ -426,12 +419,7 @@ mod tests {
 
     #[test]
     fn increase_skipped_increments_files_and_bytes() {
-        let tracker = ProgressTracker::new(
-            ProgressStatus::PreparingInProgress,
-            10,
-            10000,
-            None,
-        );
+        let tracker = ProgressTracker::new(ProgressStatus::PreparingInProgress, 10, 10000, None);
         tracker.increase_skipped(1, 500);
         let stats = tracker.get_summary_statistics();
         assert_eq!(stats.skipped_files, 1);
@@ -557,12 +545,7 @@ mod tests {
 
     #[test]
     fn get_summary_statistics_returns_correct_totals() {
-        let tracker = ProgressTracker::new(
-            ProgressStatus::PreparingInProgress,
-            10,
-            5000,
-            None,
-        );
+        let tracker = ProgressTracker::new(ProgressStatus::PreparingInProgress, 10, 5000, None);
         tracker.increase_processed(3, 2000);
         tracker.increase_skipped(2, 1000);
         tracker.set_total_time(2.0);
@@ -581,12 +564,7 @@ mod tests {
 
     #[test]
     fn get_summary_statistics_zero_time_zero_rate() {
-        let tracker = ProgressTracker::new(
-            ProgressStatus::PreparingInProgress,
-            10,
-            5000,
-            None,
-        );
+        let tracker = ProgressTracker::new(ProgressStatus::PreparingInProgress, 10, 5000, None);
         tracker.increase_processed(3, 2000);
         // total_time defaults to 0.0
         let stats = tracker.get_summary_statistics();
@@ -664,20 +642,21 @@ mod tests {
             transfer_rate: 200.0,
         };
         let output = stats.to_string();
-        assert!(output.contains("Processed 1 file totaling"), "expected singular 'file', got: {output}");
-        assert!(!output.contains("1 files"), "should not have plural 'files' for count 1");
+        assert!(
+            output.contains("Processed 1 file totaling"),
+            "expected singular 'file', got: {output}"
+        );
+        assert!(
+            !output.contains("1 files"),
+            "should not have plural 'files' for count 1"
+        );
     }
 
     // === track_progress with file_done=true increments both ===
 
     #[test]
     fn track_progress_file_done_increments_files_and_bytes() {
-        let tracker = ProgressTracker::new(
-            ProgressStatus::UploadInProgress,
-            10,
-            10000,
-            None,
-        );
+        let tracker = ProgressTracker::new(ProgressStatus::UploadInProgress, 10, 10000, None);
         tracker.track_progress(500, true);
         let stats = tracker.get_summary_statistics();
         assert_eq!(stats.processed_bytes, 500);
@@ -688,12 +667,7 @@ mod tests {
 
     #[test]
     fn track_progress_not_file_done_only_increments_bytes() {
-        let tracker = ProgressTracker::new(
-            ProgressStatus::UploadInProgress,
-            10,
-            10000,
-            None,
-        );
+        let tracker = ProgressTracker::new(ProgressStatus::UploadInProgress, 10, 10000, None);
         tracker.track_progress(500, false);
         let stats = tracker.get_summary_statistics();
         assert_eq!(stats.processed_bytes, 500);

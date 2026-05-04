@@ -43,9 +43,10 @@ pub fn create_job_history_bundle_dir(
             if name.starts_with(&prefix) {
                 let after = &name[prefix.len()..];
                 if let Some(num_str) = after.split('-').next()
-                    && let Ok(n) = num_str.parse::<u32>() {
-                        number = number.max(n + 1);
-                    }
+                    && let Ok(n) = num_str.parse::<u32>()
+                {
+                    number = number.max(n + 1);
+                }
             }
         }
     }

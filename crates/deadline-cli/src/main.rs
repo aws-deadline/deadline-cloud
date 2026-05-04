@@ -1,5 +1,9 @@
 // CLI binary — printing to stdout/stderr is its primary job.
-#![allow(clippy::print_stdout, clippy::print_stderr, reason = "CLI binary outputs to stdout/stderr by design")]
+#![allow(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "CLI binary outputs to stdout/stderr by design"
+)]
 
 use clap::Parser;
 use log::debug;
@@ -48,7 +52,9 @@ fn parse_log_level(s: &str) -> Result<String, String> {
     if VALID_LOG_LEVELS.contains(&upper.as_str()) {
         Ok(upper)
     } else {
-        Err(format!("invalid value '{s}' for '--log-level': valid values: ERROR, WARNING, INFO, DEBUG"))
+        Err(format!(
+            "invalid value '{s}' for '--log-level': valid values: ERROR, WARNING, INFO, DEBUG"
+        ))
     }
 }
 
@@ -125,9 +131,7 @@ fn resolve_log_level(cli_level: Option<&str>) -> String {
     if VALID_LOG_LEVELS.contains(&config_level.as_str()) {
         config_level
     } else {
-        eprintln!(
-            "Log Level '{config_level}' not in {VALID_LOG_LEVELS:?}. Defaulting to WARNING"
-        );
+        eprintln!("Log Level '{config_level}' not in {VALID_LOG_LEVELS:?}. Defaulting to WARNING");
         "WARNING".to_owned()
     }
 }
@@ -152,61 +156,91 @@ fn init_logging(level: &str) {
 /// E.g. `Commands::Farm` { List { .. } } → "deadline.farm.list"
 fn command_name(cmd: &Commands) -> String {
     let (group, action) = match cmd {
-        Commands::Config { action } => ("config", match action {
-            commands::config::ConfigAction::Show { .. } => "show",
-            commands::config::ConfigAction::Get { .. } => "get",
-            commands::config::ConfigAction::Set { .. } => "set",
-            commands::config::ConfigAction::Clear { .. } => "clear",
-            commands::config::ConfigAction::Gui { .. } => "gui",
-        }),
-        Commands::Auth { action } => ("auth", match action {
-            commands::auth::AuthAction::Login => "login",
-            commands::auth::AuthAction::Logout => "logout",
-            commands::auth::AuthAction::Status { .. } => "status",
-        }),
-        Commands::Farm { action } => ("farm", match action {
-            commands::farm::FarmAction::List { .. } => "list",
-            commands::farm::FarmAction::Get { .. } => "get",
-        }),
-        Commands::Fleet { action } => ("fleet", match action {
-            commands::fleet::FleetAction::List { .. } => "list",
-            commands::fleet::FleetAction::Get { .. } => "get",
-        }),
-        Commands::Queue { action } => ("queue", match action {
-            commands::queue::QueueAction::List { .. } => "list",
-            commands::queue::QueueAction::Get { .. } => "get",
-            commands::queue::QueueAction::ExportCredentials { .. } => "export-credentials",
-            commands::queue::QueueAction::Paramdefs { .. } => "paramdefs",
-            commands::queue::QueueAction::SyncOutput { .. } => "sync-output",
-        }),
-        Commands::Job { action } => ("job", match action {
-            commands::job::JobAction::List { .. } => "list",
-            commands::job::JobAction::Get { .. } => "get",
-            commands::job::JobAction::Wait { .. } => "wait",
-            commands::job::JobAction::Logs { .. } => "logs",
-            commands::job::JobAction::Cancel { .. } => "cancel",
-            commands::job::JobAction::RequeueTasks { .. } => "requeue-tasks",
-            commands::job::JobAction::TraceSchedule { .. } => "trace-schedule",
-            commands::job::JobAction::DownloadOutput { .. } => "download-output",
-        }),
-        Commands::Worker { action } => ("worker", match action {
-            commands::worker::WorkerAction::List { .. } => "list",
-            commands::worker::WorkerAction::Get { .. } => "get",
-        }),
-        Commands::Attachment { action } => ("attachment", match action {
-            commands::attachment::AttachmentAction::Download { .. } => "download",
-            commands::attachment::AttachmentAction::Upload { .. } => "upload",
-        }),
-        Commands::Manifest { action } => ("manifest", match action {
-            commands::manifest::ManifestAction::Snapshot { .. } => "snapshot",
-            commands::manifest::ManifestAction::Diff { .. } => "diff",
-            commands::manifest::ManifestAction::Download { .. } => "download",
-            commands::manifest::ManifestAction::Upload { .. } => "upload",
-        }),
-        Commands::Bundle { action } => ("bundle", match action {
-            commands::bundle::BundleAction::Submit { .. } => "submit",
-            commands::bundle::BundleAction::GuiSubmit { .. } => "gui-submit",
-        }),
+        Commands::Config { action } => (
+            "config",
+            match action {
+                commands::config::ConfigAction::Show { .. } => "show",
+                commands::config::ConfigAction::Get { .. } => "get",
+                commands::config::ConfigAction::Set { .. } => "set",
+                commands::config::ConfigAction::Clear { .. } => "clear",
+                commands::config::ConfigAction::Gui { .. } => "gui",
+            },
+        ),
+        Commands::Auth { action } => (
+            "auth",
+            match action {
+                commands::auth::AuthAction::Login => "login",
+                commands::auth::AuthAction::Logout => "logout",
+                commands::auth::AuthAction::Status { .. } => "status",
+            },
+        ),
+        Commands::Farm { action } => (
+            "farm",
+            match action {
+                commands::farm::FarmAction::List { .. } => "list",
+                commands::farm::FarmAction::Get { .. } => "get",
+            },
+        ),
+        Commands::Fleet { action } => (
+            "fleet",
+            match action {
+                commands::fleet::FleetAction::List { .. } => "list",
+                commands::fleet::FleetAction::Get { .. } => "get",
+            },
+        ),
+        Commands::Queue { action } => (
+            "queue",
+            match action {
+                commands::queue::QueueAction::List { .. } => "list",
+                commands::queue::QueueAction::Get { .. } => "get",
+                commands::queue::QueueAction::ExportCredentials { .. } => "export-credentials",
+                commands::queue::QueueAction::Paramdefs { .. } => "paramdefs",
+                commands::queue::QueueAction::SyncOutput { .. } => "sync-output",
+            },
+        ),
+        Commands::Job { action } => (
+            "job",
+            match action {
+                commands::job::JobAction::List { .. } => "list",
+                commands::job::JobAction::Get { .. } => "get",
+                commands::job::JobAction::Wait { .. } => "wait",
+                commands::job::JobAction::Logs { .. } => "logs",
+                commands::job::JobAction::Cancel { .. } => "cancel",
+                commands::job::JobAction::RequeueTasks { .. } => "requeue-tasks",
+                commands::job::JobAction::TraceSchedule { .. } => "trace-schedule",
+                commands::job::JobAction::DownloadOutput { .. } => "download-output",
+            },
+        ),
+        Commands::Worker { action } => (
+            "worker",
+            match action {
+                commands::worker::WorkerAction::List { .. } => "list",
+                commands::worker::WorkerAction::Get { .. } => "get",
+            },
+        ),
+        Commands::Attachment { action } => (
+            "attachment",
+            match action {
+                commands::attachment::AttachmentAction::Download { .. } => "download",
+                commands::attachment::AttachmentAction::Upload { .. } => "upload",
+            },
+        ),
+        Commands::Manifest { action } => (
+            "manifest",
+            match action {
+                commands::manifest::ManifestAction::Snapshot { .. } => "snapshot",
+                commands::manifest::ManifestAction::Diff { .. } => "diff",
+                commands::manifest::ManifestAction::Download { .. } => "download",
+                commands::manifest::ManifestAction::Upload { .. } => "upload",
+            },
+        ),
+        Commands::Bundle { action } => (
+            "bundle",
+            match action {
+                commands::bundle::BundleAction::Submit { .. } => "submit",
+                commands::bundle::BundleAction::GuiSubmit { .. } => "gui-submit",
+            },
+        ),
         Commands::HandleWebUrl(_) => ("handle-web-url", ""),
         Commands::McpServer => ("mcp-server", ""),
     };
@@ -240,10 +274,15 @@ fn redirect_std_to_file(file: &std::fs::File) {
     // SAFETY: SetStdHandle replaces the process's stdout/stderr handles.
     // Same rationale as the Unix dup2 variant — only called at startup for
     // the windowless binary (deadlinew).
-    #[allow(unsafe_code, reason = "redirecting stdout/stderr requires Win32 SetStdHandle")]
+    #[allow(
+        unsafe_code,
+        reason = "redirecting stdout/stderr requires Win32 SetStdHandle"
+    )]
     unsafe {
         // SetStdHandle(STD_OUTPUT_HANDLE, handle)
-        extern "system" { fn SetStdHandle(nStdHandle: u32, hHandle: *mut std::ffi::c_void) -> i32; }
+        extern "system" {
+            fn SetStdHandle(nStdHandle: u32, hHandle: *mut std::ffi::c_void) -> i32;
+        }
         SetStdHandle(0xFFFF_FFF5, handle as *mut _); // STD_OUTPUT_HANDLE = -11 as u32
         SetStdHandle(0xFFFF_FFF4, handle as *mut _); // STD_ERROR_HANDLE = -12 as u32
     }
@@ -253,7 +292,13 @@ fn main() {
     // Rewrite `-ie` → `--include-exclude-config` before clap parses args.
     // Python click supports multi-char short flags; clap does not.
     let args: Vec<String> = std::env::args()
-        .map(|a| if a == "-ie" { "--include-exclude-config".into() } else { a })
+        .map(|a| {
+            if a == "-ie" {
+                "--include-exclude-config".into()
+            } else {
+                a
+            }
+        })
         .collect();
     let cli = Cli::parse_from(args);
 

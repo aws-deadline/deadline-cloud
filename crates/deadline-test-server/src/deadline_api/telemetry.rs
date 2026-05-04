@@ -1,4 +1,4 @@
-use wiremock::matchers::{method, path, body_string_contains};
+use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Mount a telemetry endpoint that accepts POST to /2023-10-12/telemetry.

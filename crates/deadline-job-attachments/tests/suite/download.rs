@@ -43,7 +43,8 @@ fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> AssetManifest {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(&file_path, content).unwrap();
-        let hash = deadline_job_attachments::asset_manifests::hash_data(content, HashAlgorithm::Xxh128);
+        let hash =
+            deadline_job_attachments::asset_manifests::hash_data(content, HashAlgorithm::Xxh128);
         let meta = fs::metadata(&file_path).unwrap();
         paths.push(ManifestPath {
             path: name.to_string(),
@@ -86,10 +87,7 @@ fn make_manifest_no_files(entries: &[(&str, &str, u64)]) -> AssetManifest {
 /// Mount S3 `GetObject` returning file content.
 async fn mock_s3_get_object(server: &MockServer, body: &[u8]) {
     Mock::given(method("GET"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_bytes(body.to_vec()),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(body.to_vec()))
         .mount(server)
         .await;
 }
@@ -100,9 +98,8 @@ async fn mock_s3_get_object(server: &MockServer, body: &[u8]) {
 
 #[test]
 fn merge_single_manifest_returns_same() {
-    let manifest = make_manifest_no_files(&[
-        ("file1.txt", "aabbccdd11223344aabbccdd11223344", 100),
-    ]);
+    let manifest =
+        make_manifest_no_files(&[("file1.txt", "aabbccdd11223344aabbccdd11223344", 100)]);
     let result = merge_asset_manifests(&[manifest]).unwrap();
     assert!(result.is_some());
     let merged = result.unwrap();
@@ -113,12 +110,8 @@ fn merge_single_manifest_returns_same() {
 
 #[test]
 fn merge_two_manifests_non_overlapping_paths() {
-    let m1 = make_manifest_no_files(&[
-        ("file1.txt", "aabbccdd11223344aabbccdd11223344", 100),
-    ]);
-    let m2 = make_manifest_no_files(&[
-        ("file2.txt", "11223344aabbccdd11223344aabbccdd", 200),
-    ]);
+    let m1 = make_manifest_no_files(&[("file1.txt", "aabbccdd11223344aabbccdd11223344", 100)]);
+    let m2 = make_manifest_no_files(&[("file2.txt", "11223344aabbccdd11223344aabbccdd", 200)]);
     let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
     assert_eq!(result.paths.len(), 2);
     assert_eq!(result.total_size, 300);
@@ -126,12 +119,8 @@ fn merge_two_manifests_non_overlapping_paths() {
 
 #[test]
 fn merge_two_manifests_overlapping_paths_later_wins() {
-    let m1 = make_manifest_no_files(&[
-        ("file1.txt", "aaaa000000000000aaaa000000000000", 100),
-    ]);
-    let m2 = make_manifest_no_files(&[
-        ("file1.txt", "bbbb000000000000bbbb000000000000", 200),
-    ]);
+    let m1 = make_manifest_no_files(&[("file1.txt", "aaaa000000000000aaaa000000000000", 100)]);
+    let m2 = make_manifest_no_files(&[("file1.txt", "bbbb000000000000bbbb000000000000", 200)]);
     let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
     assert_eq!(result.paths.len(), 1);
     // Later manifest's entry wins
@@ -149,9 +138,7 @@ fn merge_empty_list_returns_ok_none() {
 
 #[test]
 fn merge_single_manifest_returns_ok_some() {
-    let manifest = make_manifest_no_files(&[
-        ("a.txt", "aabbccdd11223344aabbccdd11223344", 10),
-    ]);
+    let manifest = make_manifest_no_files(&[("a.txt", "aabbccdd11223344aabbccdd11223344", 10)]);
     // Should return Result<Option<...>>, not bare Option.
     let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[manifest]);
     let merged = result.unwrap().unwrap();
@@ -164,12 +151,8 @@ fn merge_different_hash_algorithms_returns_error() {
     // exists. When a second algorithm is added, this test should use two
     // different algorithms. For now, we test the function accepts matching
     // algorithms without error.
-    let m1 = make_manifest_no_files(&[
-        ("a.txt", "aabbccdd11223344aabbccdd11223344", 10),
-    ]);
-    let m2 = make_manifest_no_files(&[
-        ("b.txt", "11223344aabbccdd11223344aabbccdd", 20),
-    ]);
+    let m1 = make_manifest_no_files(&[("a.txt", "aabbccdd11223344aabbccdd11223344", 10)]);
+    let m2 = make_manifest_no_files(&[("b.txt", "11223344aabbccdd11223344aabbccdd", 20)]);
     // Same algorithm — should return Ok(Some(...))
     let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[m1, m2]);
     assert!(result.unwrap().is_some());
@@ -181,9 +164,7 @@ fn merge_recalculates_total_size_after_dedup() {
         ("file1.txt", "aaaa000000000000aaaa000000000000", 100),
         ("file2.txt", "bbbb000000000000bbbb000000000000", 200),
     ]);
-    let m2 = make_manifest_no_files(&[
-        ("file1.txt", "cccc000000000000cccc000000000000", 50),
-    ]);
+    let m2 = make_manifest_no_files(&[("file1.txt", "cccc000000000000cccc000000000000", 50)]);
     let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
     // file1.txt replaced (50), file2.txt kept (200) = 250
     assert_eq!(result.total_size, 250);
@@ -274,9 +255,10 @@ async fn download_file_404_retries_without_algorithm_suffix() {
     // First request (with .xxh128 suffix) returns 404
     Mock::given(method("GET"))
         .and(path_regex(r".*\.xxh128$"))
-        .respond_with(ResponseTemplate::new(404).set_body_string(
-            r#"<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>"#,
-        ))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .set_body_string(r#"<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>"#),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -284,9 +266,7 @@ async fn download_file_404_retries_without_algorithm_suffix() {
     // Second request (without suffix) returns 200
     Mock::given(method("GET"))
         .and(path_regex(r".*/aabbccdd11223344aabbccdd11223344$"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_bytes(b"fallback content".to_vec()),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"fallback content".to_vec()))
         .expect(1)
         .mount(&server)
         .await;
@@ -325,9 +305,10 @@ async fn download_file_404_on_both_attempts_returns_error() {
     let download_dir = TempDir::new().unwrap();
 
     Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(404).set_body_string(
-            r#"<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>"#,
-        ))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .set_body_string(r#"<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>"#),
+        )
         .mount(&server)
         .await;
 
@@ -393,7 +374,10 @@ async fn download_file_403_non_kms_returns_get_object_guidance() {
     .unwrap_err();
 
     let msg = err.to_string();
-    assert!(msg.contains("s3:GetObject"), "expected GetObject guidance: {msg}");
+    assert!(
+        msg.contains("s3:GetObject"),
+        "expected GetObject guidance: {msg}"
+    );
 }
 
 #[tokio::test]
@@ -570,9 +554,7 @@ async fn download_files_from_manifests_single_manifest_downloads_all() {
 
     mock_s3_get_object(&server, b"file content").await;
 
-    let manifest = make_manifest_no_files(&[
-        ("a.txt", "aabbccdd11223344aabbccdd11223344", 12),
-    ]);
+    let manifest = make_manifest_no_files(&[("a.txt", "aabbccdd11223344aabbccdd11223344", 12)]);
 
     let mut manifests_by_root = HashMap::new();
     manifests_by_root.insert(root.clone(), manifest);
@@ -602,12 +584,8 @@ async fn download_files_from_manifests_multiple_roots() {
 
     mock_s3_get_object(&server, b"content").await;
 
-    let m1 = make_manifest_no_files(&[
-        ("f1.txt", "aabbccdd11223344aabbccdd11223344", 7),
-    ]);
-    let m2 = make_manifest_no_files(&[
-        ("f2.txt", "11223344aabbccdd11223344aabbccdd", 7),
-    ]);
+    let m1 = make_manifest_no_files(&[("f1.txt", "aabbccdd11223344aabbccdd11223344", 7)]);
+    let m2 = make_manifest_no_files(&[("f2.txt", "11223344aabbccdd11223344aabbccdd", 7)]);
 
     let mut manifests_by_root = HashMap::new();
     manifests_by_root.insert(root1.path().to_str().unwrap().to_owned(), m1);
@@ -677,9 +655,8 @@ async fn download_files_from_manifests_skip_existing_tracks_skipped() {
     // Pre-create the file
     fs::write(download_dir.path().join("existing.txt"), b"old").unwrap();
 
-    let manifest = make_manifest_no_files(&[
-        ("existing.txt", "aabbccdd11223344aabbccdd11223344", 3),
-    ]);
+    let manifest =
+        make_manifest_no_files(&[("existing.txt", "aabbccdd11223344aabbccdd11223344", 3)]);
 
     let mut manifests_by_root = HashMap::new();
     manifests_by_root.insert(root, manifest);
@@ -779,13 +756,9 @@ async fn download_rejects_path_traversal_in_manifest() {
     let root = download_dir.path().to_str().unwrap().to_owned();
 
     // Manifest with a path traversal attack
-    let evil_manifest = make_manifest_no_files(&[
-        ("../../etc/passwd", "deadbeef", 100),
-    ]);
+    let evil_manifest = make_manifest_no_files(&[("../../etc/passwd", "deadbeef", 100)]);
 
-    let manifests_by_root = HashMap::from([
-        (root.clone(), evil_manifest),
-    ]);
+    let manifests_by_root = HashMap::from([(root.clone(), evil_manifest)]);
 
     let result = download_files_from_manifests(
         "test-bucket",
@@ -795,9 +768,13 @@ async fn download_rejects_path_traversal_in_manifest() {
         "123456789012",
         None,
         FileConflictResolution::CreateCopy,
-    ).await;
+    )
+    .await;
 
-    assert!(result.is_err(), "path traversal should be rejected before download");
+    assert!(
+        result.is_err(),
+        "path traversal should be rejected before download"
+    );
     let msg = result.unwrap_err().to_string();
     assert!(
         msg.contains("outside") || msg.contains("not under") || msg.contains("traversal"),
@@ -838,9 +815,10 @@ async fn download_manifest_from_s3_returns_last_modified() {
         .mount(&server)
         .await;
 
-    let (asset_root, last_modified, manifest) = download_manifest_from_s3(
-        &s3_client, "test-bucket", "manifest-key", "123456789012",
-    ).await.unwrap();
+    let (asset_root, last_modified, manifest) =
+        download_manifest_from_s3(&s3_client, "test-bucket", "manifest-key", "123456789012")
+            .await
+            .unwrap();
 
     assert_eq!(asset_root, Some("/mnt/shared".to_owned()));
     assert_eq!(manifest.paths.len(), 1);
@@ -911,10 +889,18 @@ async fn get_output_manifests_merges_by_last_modified_order() {
         .await;
 
     let result = get_output_manifests_by_asset_root(
-        &s3_settings, "farm-1", "queue-1", "job-1",
-        Some("step-1"), Some("task-1"), None,
-        &s3_client, "123456789012",
-    ).await.unwrap();
+        &s3_settings,
+        "farm-1",
+        "queue-1",
+        "job-1",
+        Some("step-1"),
+        Some("task-1"),
+        None,
+        &s3_client,
+        "123456789012",
+    )
+    .await
+    .unwrap();
 
     // Should have one asset root with one merged manifest
     let manifests = result.get("/mnt/shared").expect("missing /mnt/shared root");
@@ -924,7 +910,6 @@ async fn get_output_manifests_merges_by_last_modified_order() {
     assert_eq!(merged.paths.len(), 1);
     assert_eq!(merged.paths[0].hash, "fff666eee555ddd444ccc333bbb22211");
 }
-
 
 // =====================================================================
 // Batch 3: compute_download_workers (#9 download side)
@@ -947,10 +932,7 @@ fn compute_download_workers_default_pool() {
 #[test]
 fn compute_download_workers_small_pool() {
     // 5 / 10 = 0 → clamped to 1
-    assert_eq!(
-        deadline_job_attachments::s3::compute_download_workers(5),
-        1
-    );
+    assert_eq!(deadline_job_attachments::s3::compute_download_workers(5), 1);
 }
 
 #[test]
@@ -961,4 +943,3 @@ fn compute_download_workers_exact_concurrency() {
         1
     );
 }
-

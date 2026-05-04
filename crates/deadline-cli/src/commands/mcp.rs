@@ -1,8 +1,10 @@
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::{schemars, tool, tool_handler, tool_router, ServerHandler, ServiceExt, transport::stdio};
 use rmcp::model::{ServerCapabilities, ServerInfo};
+use rmcp::{
+    ServerHandler, ServiceExt, schemars, tool, tool_handler, tool_router, transport::stdio,
+};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::config::CliError;
 
@@ -68,7 +70,8 @@ When asked about authentication or which profile/credentials are being used, ref
 "#;
 
 fn ok_result(value: Value) -> String {
-    serde_json::to_string(&value).unwrap_or_else(|e| error_json("SerializationError", &e.to_string()))
+    serde_json::to_string(&value)
+        .unwrap_or_else(|e| error_json("SerializationError", &e.to_string()))
 }
 
 fn error_json(error_type: &str, message: &str) -> String {
@@ -78,40 +81,90 @@ fn error_json(error_type: &str, message: &str) -> String {
 // --- Parameter structs ---
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[allow(clippy::empty_structs_with_brackets, reason = "serde requires braced struct to deserialize from JSON {}")]
+#[allow(
+    clippy::empty_structs_with_brackets,
+    reason = "serde requires braced struct to deserialize from JSON {}"
+)]
 struct ListFarmsParams {}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListQueuesParams { farm_id: String }
+struct ListQueuesParams {
+    farm_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListJobsParams { farm_id: String, queue_id: String }
+struct ListJobsParams {
+    farm_id: String,
+    queue_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListFleetsParams { farm_id: String }
+struct ListFleetsParams {
+    farm_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ListStorageProfilesParams { farm_id: String, queue_id: String }
+struct ListStorageProfilesParams {
+    farm_id: String,
+    queue_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
-struct GetJobParams { farm_id: String, queue_id: String, job_id: String }
+#[allow(
+    clippy::struct_field_names,
+    reason = "field names match the Deadline API JSON schema"
+)]
+struct GetJobParams {
+    farm_id: String,
+    queue_id: String,
+    job_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
-struct GetSessionParams { farm_id: String, queue_id: String, job_id: String, session_id: String }
+#[allow(
+    clippy::struct_field_names,
+    reason = "field names match the Deadline API JSON schema"
+)]
+struct GetSessionParams {
+    farm_id: String,
+    queue_id: String,
+    job_id: String,
+    session_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
-struct ListSessionsParams { farm_id: String, queue_id: String, job_id: String }
+#[allow(
+    clippy::struct_field_names,
+    reason = "field names match the Deadline API JSON schema"
+)]
+struct ListSessionsParams {
+    farm_id: String,
+    queue_id: String,
+    job_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
-struct ListStepsParams { farm_id: String, queue_id: String, job_id: String }
+#[allow(
+    clippy::struct_field_names,
+    reason = "field names match the Deadline API JSON schema"
+)]
+struct ListStepsParams {
+    farm_id: String,
+    queue_id: String,
+    job_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[allow(clippy::struct_field_names, reason = "field names match the Deadline API JSON schema")]
-struct ListTasksParams { farm_id: String, queue_id: String, job_id: String, step_id: String }
+#[allow(
+    clippy::struct_field_names,
+    reason = "field names match the Deadline API JSON schema"
+)]
+struct ListTasksParams {
+    farm_id: String,
+    queue_id: String,
+    job_id: String,
+    step_id: String,
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SearchJobsParams {
@@ -125,29 +178,49 @@ struct SearchJobsParams {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct GetSessionLogsParams {
-    farm_id: String, queue_id: String, session_id: String,
-    job_id: Option<String>, limit: Option<i32>, next_token: Option<String>,
+    farm_id: String,
+    queue_id: String,
+    session_id: String,
+    job_id: Option<String>,
+    limit: Option<i32>,
+    next_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SubmitJobParams {
-    job_bundle_dir: String, job_parameters: Option<String>, name: Option<String>,
-    farm_id: Option<String>, queue_id: Option<String>, storage_profile_id: Option<String>,
-    priority: Option<i32>, max_failed_tasks_count: Option<i32>, max_retries_per_task: Option<i32>,
-    max_worker_count: Option<i32>, job_attachments_file_system: Option<String>,
-    require_paths_exist: Option<bool>, submitter_name: Option<String>,
+    job_bundle_dir: String,
+    job_parameters: Option<String>,
+    name: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    storage_profile_id: Option<String>,
+    priority: Option<i32>,
+    max_failed_tasks_count: Option<i32>,
+    max_retries_per_task: Option<i32>,
+    max_worker_count: Option<i32>,
+    job_attachments_file_system: Option<String>,
+    require_paths_exist: Option<bool>,
+    submitter_name: Option<String>,
     known_asset_paths: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct DownloadJobOutputParams {
-    farm_id: Option<String>, queue_id: Option<String>, job_id: Option<String>,
-    step_id: Option<String>, task_id: Option<String>, conflict_resolution: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    step_id: Option<String>,
+    task_id: Option<String>,
+    conflict_resolution: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct GetSessionAndWorkerLogsParams {
-    farm_id: String, queue_id: String, job_id: String, session_id: String, limit: Option<i32>,
+    farm_id: String,
+    queue_id: String,
+    job_id: String,
+    session_id: String,
+    limit: Option<i32>,
 }
 
 // --- Server ---
@@ -180,7 +253,8 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_queues")]
     async fn list_queues(&self, Parameters(p): Parameters<ListQueuesParams>) -> String {
         let dl = deadline_api::session::deadline_client(None).await;
-        let builder = deadline_api::client::apply_dcm_principal(dl.list_queues().farm_id(&p.farm_id), None);
+        let builder =
+            deadline_api::client::apply_dcm_principal(dl.list_queues().farm_id(&p.farm_id), None);
         let resp = deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
         match resp {
             Ok(pages) => {
@@ -199,7 +273,10 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_jobs")]
     async fn list_jobs(&self, Parameters(p): Parameters<ListJobsParams>) -> String {
         let dl = deadline_api::session::deadline_client(None).await;
-        let builder = deadline_api::client::apply_dcm_principal(dl.list_jobs().farm_id(&p.farm_id).queue_id(&p.queue_id), None);
+        let builder = deadline_api::client::apply_dcm_principal(
+            dl.list_jobs().farm_id(&p.farm_id).queue_id(&p.queue_id),
+            None,
+        );
         match deadline_api::client::collect_paginated(builder.into_paginator().send()).await {
             Ok(pages) => {
                 let jobs: Vec<Value> = pages.iter()
@@ -216,7 +293,8 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_fleets")]
     async fn list_fleets(&self, Parameters(p): Parameters<ListFleetsParams>) -> String {
         let dl = deadline_api::session::deadline_client(None).await;
-        let builder = deadline_api::client::apply_dcm_principal(dl.list_fleets().farm_id(&p.farm_id), None);
+        let builder =
+            deadline_api::client::apply_dcm_principal(dl.list_fleets().farm_id(&p.farm_id), None);
         let resp = deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
         match resp {
             Ok(pages) => {
@@ -233,12 +311,21 @@ impl DeadlineServer {
 
     /// List storage profiles for a queue.
     #[tool(name = "deadline_list_storage_profiles_for_queue")]
-    async fn list_storage_profiles_for_queue(&self, Parameters(p): Parameters<ListStorageProfilesParams>) -> String {
+    async fn list_storage_profiles_for_queue(
+        &self,
+        Parameters(p): Parameters<ListStorageProfilesParams>,
+    ) -> String {
         let client = deadline_api::session::deadline_client(None).await;
         match deadline_api::client::collect_paginated(
-            client.list_storage_profiles_for_queue().farm_id(&p.farm_id).queue_id(&p.queue_id)
-                .into_paginator().send()
-        ).await {
+            client
+                .list_storage_profiles_for_queue()
+                .farm_id(&p.farm_id)
+                .queue_id(&p.queue_id)
+                .into_paginator()
+                .send(),
+        )
+        .await
+        {
             Ok(pages) => {
                 let profiles: Vec<Value> = pages.iter()
                     .flat_map(aws_sdk_deadline::operation::list_storage_profiles_for_queue::ListStorageProfilesForQueueOutput::storage_profiles)
@@ -271,9 +358,18 @@ impl DeadlineServer {
     #[tool(name = "deadline_get_session_logs")]
     async fn get_session_logs(&self, Parameters(p): Parameters<GetSessionLogsParams>) -> String {
         match deadline_api::log_retrieval::get_session_logs(
-            &p.farm_id, &p.queue_id, Some(&p.session_id), p.job_id.as_deref(),
-            p.limit.unwrap_or(100), None, None, p.next_token.as_deref(), None,
-        ).await {
+            &p.farm_id,
+            &p.queue_id,
+            Some(&p.session_id),
+            p.job_id.as_deref(),
+            p.limit.unwrap_or(100),
+            None,
+            None,
+            p.next_token.as_deref(),
+            None,
+        )
+        .await
+        {
             Ok((r, _)) => ok_result(json!({
                 "log_group": r.log_group,
                 "events": r.events.iter().map(|e| json!({
@@ -288,9 +384,15 @@ impl DeadlineServer {
     /// Get detailed information about a specific job.
     #[tool(name = "deadline_get_job")]
     async fn get_job(&self, Parameters(p): Parameters<GetJobParams>) -> String {
-        match deadline_api::session::deadline_client(None).await
-            .get_job().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id)
-            .send().await {
+        match deadline_api::session::deadline_client(None)
+            .await
+            .get_job()
+            .farm_id(&p.farm_id)
+            .queue_id(&p.queue_id)
+            .job_id(&p.job_id)
+            .send()
+            .await
+        {
             Ok(output) => {
                 let resp = deadline_api::responses::JobResponse::from(output);
                 ok_result(serde_json::to_value(&resp).unwrap_or_default())
@@ -302,9 +404,16 @@ impl DeadlineServer {
     /// Get detailed information about a specific session.
     #[tool(name = "deadline_get_session")]
     async fn get_session(&self, Parameters(p): Parameters<GetSessionParams>) -> String {
-        match deadline_api::session::deadline_client(None).await
-            .get_session().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id).session_id(&p.session_id)
-            .send().await {
+        match deadline_api::session::deadline_client(None)
+            .await
+            .get_session()
+            .farm_id(&p.farm_id)
+            .queue_id(&p.queue_id)
+            .job_id(&p.job_id)
+            .session_id(&p.session_id)
+            .send()
+            .await
+        {
             Ok(output) => {
                 let resp = deadline_api::responses::SessionResponse::from(output);
                 ok_result(serde_json::to_value(&resp).unwrap_or_default())
@@ -318,9 +427,16 @@ impl DeadlineServer {
     async fn list_sessions(&self, Parameters(p): Parameters<ListSessionsParams>) -> String {
         let client = deadline_api::session::deadline_client(None).await;
         match deadline_api::client::collect_paginated(
-            client.list_sessions().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id)
-                .into_paginator().send()
-        ).await {
+            client
+                .list_sessions()
+                .farm_id(&p.farm_id)
+                .queue_id(&p.queue_id)
+                .job_id(&p.job_id)
+                .into_paginator()
+                .send(),
+        )
+        .await
+        {
             Ok(pages) => {
                 let sessions: Vec<Value> = pages.iter()
                     .flat_map(aws_sdk_deadline::operation::list_sessions::ListSessionsOutput::sessions)
@@ -337,9 +453,16 @@ impl DeadlineServer {
     async fn list_steps(&self, Parameters(p): Parameters<ListStepsParams>) -> String {
         let client = deadline_api::session::deadline_client(None).await;
         match deadline_api::client::collect_paginated(
-            client.list_steps().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id)
-                .into_paginator().send()
-        ).await {
+            client
+                .list_steps()
+                .farm_id(&p.farm_id)
+                .queue_id(&p.queue_id)
+                .job_id(&p.job_id)
+                .into_paginator()
+                .send(),
+        )
+        .await
+        {
             Ok(pages) => {
                 let steps: Vec<Value> = pages.iter()
                     .flat_map(aws_sdk_deadline::operation::list_steps::ListStepsOutput::steps)
@@ -356,9 +479,17 @@ impl DeadlineServer {
     async fn list_tasks(&self, Parameters(p): Parameters<ListTasksParams>) -> String {
         let client = deadline_api::session::deadline_client(None).await;
         match deadline_api::client::collect_paginated(
-            client.list_tasks().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id).step_id(&p.step_id)
-                .into_paginator().send()
-        ).await {
+            client
+                .list_tasks()
+                .farm_id(&p.farm_id)
+                .queue_id(&p.queue_id)
+                .job_id(&p.job_id)
+                .step_id(&p.step_id)
+                .into_paginator()
+                .send(),
+        )
+        .await
+        {
             Ok(pages) => {
                 let tasks: Vec<Value> = pages.iter()
                     .flat_map(aws_sdk_deadline::operation::list_tasks::ListTasksOutput::tasks)
@@ -383,10 +514,15 @@ impl DeadlineServer {
         if let Some(ref name) = p.name_contains {
             filters.push(json!({"searchTermFilter": {"searchTerm": name}}));
         }
-        let filter_expr = if filters.is_empty() { None }
-        else { Some(json!({"filters": filters, "operator": "AND"})) };
+        let filter_expr = if filters.is_empty() {
+            None
+        } else {
+            Some(json!({"filters": filters, "operator": "AND"}))
+        };
 
-        let filter = filter_expr.as_ref().map(deadline_api::api::build_filter_expressions);
+        let filter = filter_expr
+            .as_ref()
+            .map(deadline_api::api::build_filter_expressions);
         let filter = match filter {
             Some(Ok(f)) => Some(f),
             Some(Err(e)) => return error_json("DeadlineError", &e.to_string()),
@@ -394,7 +530,8 @@ impl DeadlineServer {
         };
 
         let dl = deadline_api::session::deadline_client(None).await;
-        let mut req = dl.search_jobs()
+        let mut req = dl
+            .search_jobs()
             .farm_id(&p.farm_id)
             .set_queue_ids(Some(p.queue_ids.clone()))
             .item_offset(item_offset)
@@ -404,15 +541,13 @@ impl DeadlineServer {
             req = req.filter_expressions(f.clone());
         }
 
-        req = req.sort_expressions(
-            aws_sdk_deadline::types::SearchSortExpression::FieldSort(
-                aws_sdk_deadline::types::FieldSortExpression::builder()
-                    .name("CREATED_AT")
-                    .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
-                    .build()
-                    .expect("required fields set"),
-            ),
-        );
+        req = req.sort_expressions(aws_sdk_deadline::types::SearchSortExpression::FieldSort(
+            aws_sdk_deadline::types::FieldSortExpression::builder()
+                .name("CREATED_AT")
+                .sort_order(aws_sdk_deadline::types::SortOrder::Descending)
+                .build()
+                .expect("required fields set"),
+        ));
 
         match req.send().await {
             Ok(output) => {
@@ -433,10 +568,16 @@ impl DeadlineServer {
         // Validate directory
         let path = std::path::Path::new(&p.job_bundle_dir);
         if !path.exists() {
-            return error_json("ValueError", &format!("Job bundle directory does not exist: {}", p.job_bundle_dir));
+            return error_json(
+                "ValueError",
+                &format!("Job bundle directory does not exist: {}", p.job_bundle_dir),
+            );
         }
         if !path.is_dir() {
-            return error_json("ValueError", &format!("Path is not a directory: {}", p.job_bundle_dir));
+            return error_json(
+                "ValueError",
+                &format!("Path is not a directory: {}", p.job_bundle_dir),
+            );
         }
 
         // Parse job_parameters
@@ -444,29 +585,54 @@ impl DeadlineServer {
             match serde_json::from_str::<Value>(params_str) {
                 Ok(Value::Array(arr)) => arr,
                 Ok(_) => return error_json("ValueError", "job_parameters must be a JSON array"),
-                Err(e) => return error_json("ValueError", &format!("job_parameters is not valid JSON: {e}")),
+                Err(e) => {
+                    return error_json(
+                        "ValueError",
+                        &format!("job_parameters is not valid JSON: {e}"),
+                    );
+                }
             }
         } else {
             Vec::new()
         };
 
         // Parse known_asset_paths
-        let parsed_known_asset_paths: Vec<String> = if let Some(ref paths_str) = p.known_asset_paths {
+        let parsed_known_asset_paths: Vec<String> = if let Some(ref paths_str) = p.known_asset_paths
+        {
             match serde_json::from_str::<Value>(paths_str) {
-                Ok(Value::Array(arr)) => arr.into_iter().filter_map(|v| v.as_str().map(String::from)).collect(),
-                Ok(_) => return error_json("ValueError", "known_asset_paths must be a JSON array of strings"),
-                Err(e) => return error_json("ValueError", &format!("known_asset_paths is not valid JSON: {e}")),
+                Ok(Value::Array(arr)) => arr
+                    .into_iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect(),
+                Ok(_) => {
+                    return error_json(
+                        "ValueError",
+                        "known_asset_paths must be a JSON array of strings",
+                    );
+                }
+                Err(e) => {
+                    return error_json(
+                        "ValueError",
+                        &format!("known_asset_paths is not valid JSON: {e}"),
+                    );
+                }
             }
         } else {
             Vec::new()
         };
 
         // Resolve farm_id / queue_id from params or config
-        let farm_id = p.farm_id.unwrap_or_else(|| deadline_config::config_file::get_setting_from_disk("defaults.farm_id").unwrap_or_default());
+        let farm_id = p.farm_id.unwrap_or_else(|| {
+            deadline_config::config_file::get_setting_from_disk("defaults.farm_id")
+                .unwrap_or_default()
+        });
         if farm_id.is_empty() {
             return error_json("ValueError", "farm_id is required");
         }
-        let queue_id = p.queue_id.unwrap_or_else(|| deadline_config::config_file::get_setting_from_disk("defaults.queue_id").unwrap_or_default());
+        let queue_id = p.queue_id.unwrap_or_else(|| {
+            deadline_config::config_file::get_setting_from_disk("defaults.queue_id")
+                .unwrap_or_default()
+        });
         if queue_id.is_empty() {
             return error_json("ValueError", "queue_id is required");
         }
@@ -478,8 +644,12 @@ impl DeadlineServer {
         deadline_config::config_file::set_setting("defaults.queue_id", &queue_id, &mut config)
             .expect("known valid setting");
         if let Some(ref sp) = p.storage_profile_id {
-            deadline_config::config_file::set_setting("defaults.storage_profile_id", sp, &mut config)
-                .expect("known valid setting");
+            deadline_config::config_file::set_setting(
+                "defaults.storage_profile_id",
+                sp,
+                &mut config,
+            )
+            .expect("known valid setting");
         }
 
         let bundle_dir = p.job_bundle_dir.clone();
@@ -522,7 +692,8 @@ impl DeadlineServer {
                 };
                 deadline_job_bundle::submission::create_job_from_job_bundle(submit_params).await
             })
-        }).join();
+        })
+        .join();
 
         match result {
             Ok(Ok(Some(job_id))) => {
@@ -542,7 +713,10 @@ impl DeadlineServer {
 
     /// Download job output files from AWS Deadline Cloud.
     #[tool(name = "deadline_download_job_output")]
-    async fn download_job_output(&self, Parameters(p): Parameters<DownloadJobOutputParams>) -> String {
+    async fn download_job_output(
+        &self,
+        Parameters(p): Parameters<DownloadJobOutputParams>,
+    ) -> String {
         let start = std::time::Instant::now();
 
         // Validation
@@ -555,15 +729,28 @@ impl DeadlineServer {
         };
         if let Some(ref cr) = p.conflict_resolution {
             let upper = cr.to_uppercase();
-            if upper.parse::<deadline_job_attachments::models::FileConflictResolution>().is_err() {
-                return error_json("ValueError",
-                    &format!("Invalid conflict_resolution: {cr}. Must be SKIP, OVERWRITE, or CREATE_COPY"));
+            if upper
+                .parse::<deadline_job_attachments::models::FileConflictResolution>()
+                .is_err()
+            {
+                return error_json(
+                    "ValueError",
+                    &format!(
+                        "Invalid conflict_resolution: {cr}. Must be SKIP, OVERWRITE, or CREATE_COPY"
+                    ),
+                );
             }
         }
 
         // Resolve farm/queue from params or config
-        let farm_id = p.farm_id.unwrap_or_else(|| deadline_config::config_file::get_setting_from_disk("defaults.farm_id").unwrap_or_default());
-        let queue_id = p.queue_id.unwrap_or_else(|| deadline_config::config_file::get_setting_from_disk("defaults.queue_id").unwrap_or_default());
+        let farm_id = p.farm_id.unwrap_or_else(|| {
+            deadline_config::config_file::get_setting_from_disk("defaults.farm_id")
+                .unwrap_or_default()
+        });
+        let queue_id = p.queue_id.unwrap_or_else(|| {
+            deadline_config::config_file::get_setting_from_disk("defaults.queue_id")
+                .unwrap_or_default()
+        });
 
         if farm_id.is_empty() {
             return error_json("ValueError", "farm_id is required");
@@ -580,12 +767,17 @@ impl DeadlineServer {
         deadline_config::config_file::set_setting("settings.auto_accept", "true", &mut config)
             .expect("known valid setting");
         if let Some(ref cr) = p.conflict_resolution {
-            deadline_config::config_file::set_setting("settings.conflict_resolution", &cr.to_uppercase(), &mut config)
-                .expect("known valid setting");
+            deadline_config::config_file::set_setting(
+                "settings.conflict_resolution",
+                &cr.to_uppercase(),
+                &mut config,
+            )
+            .expect("known valid setting");
         }
 
         let conflict = p.conflict_resolution.as_deref().and_then(|cr| {
-            cr.parse::<deadline_job_attachments::models::FileConflictResolution>().ok()
+            cr.parse::<deadline_job_attachments::models::FileConflictResolution>()
+                .ok()
         });
 
         let step_id = p.step_id;
@@ -597,12 +789,20 @@ impl DeadlineServer {
         let result = std::thread::spawn(move || {
             handle.block_on(async {
                 super::job::download_output_impl(
-                    &config, &farm_id, &queue_id, &job_id,
-                    step_id.as_deref(), task_id.as_deref(),
-                    conflict, false, true,
-                ).await
+                    &config,
+                    &farm_id,
+                    &queue_id,
+                    &job_id,
+                    step_id.as_deref(),
+                    task_id.as_deref(),
+                    conflict,
+                    false,
+                    true,
+                )
+                .await
             })
-        }).join();
+        })
+        .join();
 
         match result {
             Ok(Ok(())) => {
@@ -622,27 +822,48 @@ impl DeadlineServer {
 
     /// Get both session logs AND worker logs for a session in one call.
     #[tool(name = "deadline_get_session_and_worker_logs")]
-    async fn get_session_and_worker_logs(&self, Parameters(p): Parameters<GetSessionAndWorkerLogsParams>) -> String {
+    async fn get_session_and_worker_logs(
+        &self,
+        Parameters(p): Parameters<GetSessionAndWorkerLogsParams>,
+    ) -> String {
         let limit = p.limit.unwrap_or(100);
 
         // Get session details
-        let session = match deadline_api::session::deadline_client(None).await
-            .get_session().farm_id(&p.farm_id).queue_id(&p.queue_id).job_id(&p.job_id).session_id(&p.session_id)
-            .send().await {
+        let session = match deadline_api::session::deadline_client(None)
+            .await
+            .get_session()
+            .farm_id(&p.farm_id)
+            .queue_id(&p.queue_id)
+            .job_id(&p.job_id)
+            .session_id(&p.session_id)
+            .send()
+            .await
+        {
             Ok(v) => v,
-            Err(e) => return error_json("DeadlineError", &deadline_api::client::format_sdk_error(&e)),
+            Err(e) => {
+                return error_json("DeadlineError", &deadline_api::client::format_sdk_error(&e));
+            }
         };
 
         let worker_id = {
             let wid = session.worker_id();
-            if wid.is_empty() { None } else { Some(wid.to_owned()) }
+            if wid.is_empty() {
+                None
+            } else {
+                Some(wid.to_owned())
+            }
         };
         let fleet_id = {
             let fid = session.fleet_id();
-            if fid.is_empty() { None } else { Some(fid.to_owned()) }
+            if fid.is_empty() {
+                None
+            } else {
+                Some(fid.to_owned())
+            }
         };
 
-        let host_props = session.host_properties()
+        let host_props = session
+            .host_properties()
             .map(deadline_api::type_conversions::host_properties_to_value);
 
         let mut result = json!({
@@ -655,9 +876,18 @@ impl DeadlineServer {
 
         // Get session logs
         match deadline_api::log_retrieval::get_session_logs(
-            &p.farm_id, &p.queue_id, Some(&p.session_id), None,
-            limit, None, None, None, None,
-        ).await {
+            &p.farm_id,
+            &p.queue_id,
+            Some(&p.session_id),
+            None,
+            limit,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        {
             Ok((r, _)) => {
                 result["session_logs"] = json!({
                     "log_group": r.log_group,
@@ -677,7 +907,9 @@ impl DeadlineServer {
         if let (Some(wid), Some(fid)) = (&worker_id, &fleet_id) {
             match deadline_api::log_retrieval::get_worker_logs(
                 &p.farm_id, fid, wid, limit, None, None, None, None,
-            ).await {
+            )
+            .await
+            {
                 Ok(r) => {
                     result["worker_logs"] = json!({
                         "log_group": r.log_group,
@@ -689,7 +921,8 @@ impl DeadlineServer {
                     });
                 }
                 Err(e) => {
-                    result["worker_logs"] = json!({"events": [], "count": 0, "error": e.to_string()});
+                    result["worker_logs"] =
+                        json!({"events": [], "count": 0, "error": e.to_string()});
                 }
             }
         } else {
@@ -714,12 +947,14 @@ pub(crate) fn run() -> Result<(), CliError> {
     tokio::runtime::Runtime::new()
         .map_err(|e| CliError::Operation(format!("Failed to start async runtime: {e}")))?
         .block_on(async {
-            let service = DeadlineServer.serve(stdio()).await.map_err(|e| {
-                CliError::Operation(format!("MCP server failed to start: {e}"))
-            })?;
-            service.waiting().await.map_err(|e| {
-                CliError::Operation(format!("MCP server error: {e}"))
-            })?;
+            let service = DeadlineServer
+                .serve(stdio())
+                .await
+                .map_err(|e| CliError::Operation(format!("MCP server failed to start: {e}")))?;
+            service
+                .waiting()
+                .await
+                .map_err(|e| CliError::Operation(format!("MCP server error: {e}")))?;
             Ok(())
         })
 }

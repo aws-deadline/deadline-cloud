@@ -39,21 +39,19 @@ pub async fn mock_s3_list_empty(server: &MockServer) {
 /// Mount an S3 `ListObjectsV2` response that returns the given keys.
 pub async fn mock_s3_list_objects(server: &MockServer, keys: &[&str]) {
     use std::fmt::Write;
-    let contents = keys
-        .iter()
-        .fold(String::new(), |mut acc, k| {
-            let _ = write!(
-                acc,
-                "<Contents>\
+    let contents = keys.iter().fold(String::new(), |mut acc, k| {
+        let _ = write!(
+            acc,
+            "<Contents>\
                  <Key>{k}</Key>\
                  <LastModified>2024-06-15T10:30:00.000Z</LastModified>\
                  <ETag>\"d41d8cd98f00b204e9800998ecf8427e\"</ETag>\
                  <Size>100</Size>\
                  <StorageClass>STANDARD</StorageClass>\
                  </Contents>"
-            );
-            acc
-        });
+        );
+        acc
+    });
     Mock::given(method("GET"))
         .and(query_param("list-type", "2"))
         .respond_with(ResponseTemplate::new(200).set_body_string(format!(
