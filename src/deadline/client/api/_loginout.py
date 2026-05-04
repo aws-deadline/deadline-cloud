@@ -64,7 +64,12 @@ def _login_deadline_cloud_monitor(
     # And wait for the user to complete login
     while True:
         # Deadline Cloud monitor is a GUI app that will keep on running
-        # So we sit here and test that profile for validity until it works
+        # So we sit here and test that profile for validity until it works.
+        # Force-refresh the session each iteration so the next probe picks up
+        # profile keys DCM writes (user_id, identity_store_id, monitor_id) as
+        # login completes — the GUI does the same on file-watch events in
+        # DeadlineAuthenticationStatus.files_changed, but CLI has no watcher.
+        _session.get_boto3_session(force_refresh=True, config=config)
         if check_authentication_status(config) == AwsAuthenticationStatus.AUTHENTICATED:
             return f"Deadline Cloud monitor profile: {profile_name}"
         if on_cancellation_check:

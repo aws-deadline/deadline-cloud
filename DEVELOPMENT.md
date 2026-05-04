@@ -44,16 +44,6 @@ To develop the Python code in this repository you will need:
 You can develop on a Linux, MacOS, or Windows workstation, but you may find that some of the support scripting is specific to
 Linux/MacOS workstations.
 
-If you are making changes to the Job Attachments files, then you will also need the following to be able to run the integration
-tests:
-
-1. A valid AWS Account
-2. An AWS Deadline Cloud Farm and Queue.
-   *  You can create these via AWS Deadline Cloud's AWS Console quick Farm create workflow.
-      The Queue's configuration must include a Job Attachments bucket. If used only for running these tests then the cost of
-      this infrastructure should be negligible, but do keep an eye on your costs and destroy the infrastructure (especially S3 buckets)
-      when you no longer need it.
-
 ## The Development Loop
 
 We have configured [hatch](https://github.com/pypa/hatch) commands to support a standard development loop. You can run the following
@@ -151,8 +141,6 @@ Some of the unit tests in this package require a docker environment to run. Thes
 In order to run these tests, please run the `run_sudo_tests.sh` script located in the `scripts` directory. For detailed instructions,
 please refer to [scripts/README.md](./scripts/README.md).
 
-If you make changes to the `download` or `asset_sync` modules, it's highly recommended to run and ensure these tests pass.
-
 ### Integration Tests
 
 Integration tests are all located under the `test/integ` directory of this repository. You should consider
@@ -196,14 +184,6 @@ hatch run integ:test
 Notes:
 * If you are not one of the AWS Deadline Cloud developers then you may see test failures in tests marked with
   `pytest.mark.cross_account`. That's okay, just ignore them; they'll be tested with the required setup in our CI.
-* If you are adding/changing code related to the Job Attachments' file-upload interactions with S3, then if you have a second
-  AWS account then we request that you also ensure that the tests marked with the `pytest.mark.cross_account` marker also pass.
-  If you don't have a second account, then don't worry about it. These tests will run in our CI. To run these tests:
-  1. Create an S3 bucket in the same region as your testing resources but in your second AWS Account. If the bucket doesn't exist, you may see S3 PermanentRedirect error.
-  2. Set the access policy of that S3 bucket to allow your first AWS Account to perform all operations on the bucket. Do
-     NOT open the bucket up to the world for reading/writing!
-  3. `export INTEG_TEST_JA_CROSS_ACCOUNT_BUCKET=<your-bucket-name-in-the-second-account>`
-  4. Run the integration tests.
 * AWS Developers note: If testing with a non-production deployment of AWS Deadline Cloud then you will have to
 define the `AWS_ENDPOINT_URL_DEADLINE` environment variable to the non-production endpoint URL. For example,
 production endpoints look like: `export AWS_ENDPOINT_URL_DEADLINE="https://deadline.$AWS_DEFAULT_REGION.amazonaws.com"`
@@ -508,34 +488,4 @@ These are the manual test cases for the client software release cycle, covering 
 | Verify 'Load a different job bundle' button in GUI Submitter | Launch GUI Submitter using `deadline bundle gui-submit --browse`, select a job bundle. Verify correct defaults/details. Hit 'Load a different job bundle' button and select a second job bundle. Verify correct defaults/details for the second bundle. | |
 | Verify 'Export job bundle' button in GUI Submitter | | |
 | Verify all GUI Submitter dialogue controls work | Verify all dropdown options, menus, input fields, toggles, checkboxes, radio buttons work as expected. Verify all tabs: Shared job settings, Job-specific settings, Job attachments, Host requirements (both 'Run on all worker hosts' and 'Run on worker hosts that meet the following requirements' options). | |
-| Verify download output for a job in DCM browser | With the Deadline CLI registered as the download handler, verify download output for a job in DCM browser. | macOS: handler not currently supported, must use direct CLI commands. |
 | Test Deadline Cloud release candidate against currently released DCC Submitter | A Blender manual install might be easiest. Build deadline-cloud from the release candidate branch and pip install it into the submitter dependencies instead of the latest in PyPi. | |
-| `deadline fleet get` | Verify correct information is displayed. | |
-| `deadline fleet list` | Verify correct information is displayed. | |
-| `deadline worker get` | Verify correct information is displayed. | Include `--fleet-id` and `--worker-id` parameter. |
-| `deadline worker list` | Verify correct information is displayed. | Include `--fleet-id` parameter. |
-| `deadline handle-web-url --install` | | macOS: Verify 'Installing the web URL handler is not supported on OS darwin' message appears. |
-| `deadline handle-web-url --uninstall` | | macOS: Verify 'Uninstalling the web URL handler is not supported on OS darwin' message appears. |
-| `deadline --help` | Verify correct information is displayed. | |
-| `deadline -h` | Verify correct information is displayed. | |
-| `deadline --log-level ERROR` | Must include command after level (e.g. `deadline --log-level ERROR farm list`). | |
-| `deadline --log-level WARNING` | | |
-| `deadline --log-level INFO` | | |
-| `deadline --log-level DEBUG` | | |
-
-## Job Attachments Tests
-
-| Test Case | Test Steps | Notes |
-|---|---|---|
-| Submit render job with job attachments | | |
-| Verify job attachments are uploaded to s3 during the render submission process | | |
-| `deadline attachment upload` command | | |
-| `deadline attachment download` command | | |
-| `deadline manifest snapshot` | | |
-| `deadline manifest diff` command | | |
-| `deadline manifest download` | | |
-| `deadline manifest upload` | | |
-| Path mapping rules | | |
-| `deadline job download-output` with overwrite files option | Download output to a folder where output already exists, select overwrite. | |
-| `deadline job download-output` with skip option | Download output to a folder where output already exists, select skip. | |
-| `deadline job download-output` with create copy/append option | Download output to a folder where output already exists, select create copy/append. | |

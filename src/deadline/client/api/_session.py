@@ -82,10 +82,7 @@ def get_boto3_session(
 
 @lru_cache
 def _get_boto3_session_for_profile(profile_name: str):
-    # Use regional STS endpoint to avoid cross-region calls to the global endpoint.
-    botocore_session = get_botocore_session()
-    botocore_session.set_config_variable("sts_regional_endpoints", "regional")
-    session = boto3.Session(profile_name=profile_name, botocore_session=botocore_session)
+    session = boto3.Session(profile_name=profile_name)
 
     # By default, DCM returns creds that expire after 15 minutes, and boto3's RefreshableCredentials
     # class refreshes creds that are within 15 minutes of expiring, so credentials would never be reused.
@@ -143,7 +140,7 @@ def get_session_client(session: boto3.Session, service_name: str):
 
     Args:
         session: The boto3 Session to use for creating the client
-        service_name: The name of the AWS service (e.g., 's3', 'sts', 'ec2')
+        service_name: The name of the AWS service (e.g., 'deadline', 's3')
 
     Returns:
         A boto3 client for the specified service
@@ -286,12 +283,34 @@ def _modified_logging_level(logger, level):
         logger.setLevel(old_level)
 
 
+def _list_farms_for_auth_probe(config: Optional[ConfigParser] = None) -> None:
+    """
+    Makes a minimal ``deadline:ListFarms`` call used as an auth/reachability
+    probe by :func:`check_authentication_status` and
+    :func:`check_deadline_api_available`.
+
+    For Deadline Cloud monitor profiles, injects ``principalId`` so the call
+    is scoped to the caller's IdC user (matching the :func:`api.list_farms`
+    wrapper). Without it, IdC-issued sessions get denied by the service and
+    the auth-login poll loop never resolves to AUTHENTICATED.
+
+    Raises whatever exception the underlying boto3 call raises; callers are
+    responsible for exception handling.
+    """
+    from ._list_apis import _apply_principal_id_filter
+
+    list_farm_params: dict = {"maxResults": 1}
+    _apply_principal_id_filter(list_farm_params, config=config)
+    get_boto3_client("deadline", config=config).list_farms(**list_farm_params)
+
+
 def check_authentication_status(
     config: Optional[ConfigParser] = None,
 ) -> AwsAuthenticationStatus:
     """
-    Checks the status of the provided session, by
-    calling the sts::GetCallerIdentity API.
+    Checks the status of the provided session by making a small ``deadline:ListFarms``
+    API call. This validates both that credentials are usable and that the session can
+    reach the Deadline Cloud API.
 
     Args:
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
@@ -305,7 +324,7 @@ def check_authentication_status(
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
         try:
-            get_boto3_session(config=config).client("sts").get_caller_identity()
+            _list_farms_for_auth_probe(config=config)
             return AwsAuthenticationStatus.AUTHENTICATED
         except Exception:
             # We assume that the presence of a Deadline Cloud monitor profile

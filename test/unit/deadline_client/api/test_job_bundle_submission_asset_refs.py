@@ -458,4 +458,6 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
                     )
                 },
             },
+            maxFailedTasksCount=20,
+            maxRetriesPerTask=5,
         )

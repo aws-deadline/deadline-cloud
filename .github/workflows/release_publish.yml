@@ -62,8 +62,22 @@ jobs:
       os: windows
       tag: ${{ needs.TagRelease.outputs.tag }}
 
+  MacOSIntegrationTests:
+    name: MacOS Integration Tests
+    needs: [TagRelease, UnitTests]
+    permissions:
+      id-token: write
+      contents: read
+    uses: aws-deadline/.github/.github/workflows/reusable_integration_test.yml@mainline
+    secrets: inherit
+    with:
+      repository: ${{ github.event.repository.name }}
+      environment: release
+      os: macos
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
   PreRelease:
-    needs: [TagRelease, LinuxIntegrationTests, WindowsIntegrationTests]
+    needs: [TagRelease, LinuxIntegrationTests, WindowsIntegrationTests, MacOSIntegrationTests]
     uses: aws-deadline/.github/.github/workflows/reusable_prerelease.yml@mainline
     permissions:
       id-token: write
@@ -84,8 +98,15 @@ jobs:
       tag: ${{ needs.TagRelease.outputs.tag }}
       oses: "['Linux', 'Windows', 'MacOS']"
 
-  Release:
+  ManualTestGate:
     needs: [TagRelease, BuildAndStageInstallers]
+    runs-on: ubuntu-latest
+    environment: release-gate
+    steps:
+      - run: echo "Manual testing approved for ${{ needs.TagRelease.outputs.tag }}"
+
+  Release:
+    needs: [TagRelease, ManualTestGate]
     uses: aws-deadline/.github/.github/workflows/reusable_release.yml@mainline
     secrets: inherit
     permissions:

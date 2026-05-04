@@ -208,18 +208,23 @@ def safe_check_for_updates(
         try:
             manifest = _fetch_manifest()
         except urllib.error.URLError as e:
+            logger.debug("Update check failed with network error: %s", e)
             return UpdateCheckResult(
                 status=UpdateCheckStatus.NETWORK_ERROR,
                 current_version=current_version,
                 error_message=f"Network error: {e}",
             )
         except (TimeoutError, socket.timeout):
+            logger.debug(
+                "Update check failed: request timed out after %ss", MANIFEST_TIMEOUT_SECONDS
+            )
             return UpdateCheckResult(
                 status=UpdateCheckStatus.TIMEOUT_ERROR,
                 current_version=current_version,
                 error_message="Request timed out",
             )
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.debug("Update check failed to parse manifest: %s", e)
             return UpdateCheckResult(
                 status=UpdateCheckStatus.PARSE_ERROR,
                 current_version=current_version,
@@ -229,6 +234,7 @@ def safe_check_for_updates(
         # Resolve platform data
         platform_data = _get_platform_data(manifest, platform)
         if platform_data is None:
+            logger.debug("Update check failed: platform '%s' not found in manifest", platform)
             return UpdateCheckResult(
                 status=UpdateCheckStatus.PARSE_ERROR,
                 current_version=current_version,
@@ -238,6 +244,11 @@ def safe_check_for_updates(
         # Look up the integration version
         latest_version_str = platform_data.get("componentVersions", {}).get(integration_name)
         if latest_version_str is None:
+            logger.debug(
+                "Update check failed: integration '%s' not found in manifest for platform '%s'",
+                integration_name,
+                platform,
+            )
             return UpdateCheckResult(
                 status=UpdateCheckStatus.INTEGRATION_NOT_FOUND,
                 current_version=current_version,
@@ -247,6 +258,12 @@ def safe_check_for_updates(
         try:
             update_available = _compare_versions(current_version, latest_version_str)
         except InvalidVersion as e:
+            logger.debug(
+                "Update check failed: invalid version string (current=%s, latest=%s): %s",
+                current_version,
+                latest_version_str,
+                e,
+            )
             return UpdateCheckResult(
                 status=UpdateCheckStatus.INVALID_VERSION,
                 current_version=current_version,

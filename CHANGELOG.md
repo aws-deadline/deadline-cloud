@@ -1,3 +1,13 @@
+## 0.56.0 (2026-04-20)
+
+### Features
+* The `deadline job trace-schedule` command now uses batch get APIs for tasks and steps, significantly improving performance for jobs with many tasks. (#1117)
+* Job bundles now support pre-submission and post-submission hooks via `hooks.yaml`/`hooks.json` files or the `DEADLINE_HOOKS_DIR` environment variable. Pre-submission hooks can modify the submission before upload, and post-submission hooks run after job creation for notifications or integrations. Hooks are disabled by default and require user confirmation before execution. (#986)
+* The `deadline bundle gui-submit` command now accepts a `--name` option to set the job name. (#1053)
+
+### Bug Fixes
+* Fixed an issue on Windows where logging in with Deadline Cloud Monitor could corrupt the `~/.deadline/config` file due to backslash path separator handling differences between .ini libraries. Path separators are now normalized to forward slashes. (#1098)
+* Improved the error message when a job output download fails because the target directory cannot be created (e.g., due to cross-OS path incompatibilities). The error now clearly explains the failure and suggests re-running the download to choose a valid local path. (#1034)
 ## 0.55.1 (2026-04-07)
 
 

@@ -355,7 +355,9 @@ def get_session_logs(
                     ),
                     message=event["message"].rstrip(),
                     ingestion_time=(
-                        datetime.datetime.fromtimestamp(event["ingestionTime"] / 1000)
+                        datetime.datetime.fromtimestamp(
+                            event["ingestionTime"] / 1000, tz=datetime.timezone.utc
+                        )
                         if "ingestionTime" in event
                         else None
                     ),
@@ -479,7 +481,9 @@ def get_worker_logs(
                 ),
                 message=event["message"].rstrip(),
                 ingestion_time=(
-                    datetime.datetime.fromtimestamp(event["ingestionTime"] / 1000)
+                    datetime.datetime.fromtimestamp(
+                        event["ingestionTime"] / 1000, tz=datetime.timezone.utc
+                    )
                     if "ingestionTime" in event
                     else None
                 ),

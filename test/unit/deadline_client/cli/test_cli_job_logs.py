@@ -300,11 +300,15 @@ def test_cli_job_logs_with_time_params(fresh_deadline_config):
 
         assert result.exit_code == 0
 
-        # Verify the API was called with correct parameters
+        # Verify the API was called with correct parameters (parsed to tz-aware datetimes).
         mock_get_logs.assert_called_once()
         _, kwargs = mock_get_logs.call_args
-        assert kwargs["start_time"] == "2023-01-01T12:00:00Z"
-        assert kwargs["end_time"] == "2023-01-01T13:00:00Z"
+        assert kwargs["start_time"] == datetime.datetime(
+            2023, 1, 1, 12, 0, tzinfo=datetime.timezone.utc
+        )
+        assert kwargs["end_time"] == datetime.datetime(
+            2023, 1, 1, 13, 0, tzinfo=datetime.timezone.utc
+        )
 
 
 def test_cli_job_logs_with_next_token(fresh_deadline_config):

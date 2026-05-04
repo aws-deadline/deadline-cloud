@@ -11,7 +11,6 @@ helpers around the service's API. It can function as a pipeline tool, a standalo
 Notable features include:
 
 * A command-line interface with subcommands for querying your AWS Deadline Cloud resources, and submitting jobs to your AWS Deadline Cloud Farm.
-* A library of functions that implement AWS Deadline Cloud's Job Attachments functionality.
 * A library of functions for creating a job submission UI within any content creation tool that supports Python 3.8+ based plugins and
   the Qt GUI framework.
 * A Model Context Protocol (MCP) server for AI assistant integration, enabling natural language interaction with AWS Deadline Cloud resources.
@@ -142,7 +141,7 @@ $ deadline config show --output json
 ```
 Which will output:
 ```sh
-{"settings.config_file_path": "~/.deadline/config", "deadline-cloud-monitor.path": "", "defaults.aws_profile_name": "(default)", "settings.job_history_dir": "~/.deadline/job_history/(default)", "defaults.farm_id": "", "settings.storage_profile_id": "", "defaults.queue_id": "", "defaults.job_id": "", "settings.auto_accept": "false", "settings.conflict_resolution": "NOT_SELECTED", "settings.log_level": "WARNING", "telemetry.opt_out": "false", "telemetry.identifier": "00000000-0000-0000-0000-000000000000", "defaults.job_attachments_file_system": "COPIED", "settings.s3_max_pool_connections": "50", "settings.small_file_threshold_multiplier": "20"}
+{"settings.config_file_path": "~/.deadline/config", "deadline-cloud-monitor.path": "", "defaults.aws_profile_name": "(default)", "settings.job_history_dir": "~/.deadline/job_history/(default)", "defaults.farm_id": "", "settings.storage_profile_id": "", "defaults.queue_id": "", "defaults.job_id": "", "settings.auto_accept": "false", "settings.conflict_resolution": "NOT_SELECTED", "settings.log_level": "WARNING", "telemetry.opt_out": "false", "telemetry.identifier": "", "defaults.job_attachments_file_system": "COPIED", "settings.s3_max_pool_connections": "50", "settings.small_file_threshold_multiplier": "20", "settings.known_asset_paths": "", "settings.locale": "", "settings.force_s3_check": "false", "settings.allow_bundle_hooks": "false", "settings.allow_environment_hooks": "false", "settings.submitter_update_notification": "true", "settings.max_retries_per_task": "5", "settings.max_failed_tasks_count": "20"}
 ```
 
 To see a list of settings that can be configured, run:
@@ -156,6 +155,11 @@ $ deadline config gui
 ```
 
 By default, configuration of AWS Deadline Cloud is provided at `~/.deadline/config`, however this can be overridden by the `DEADLINE_CONFIG_FILE_PATH` environment variable.
+
+Submitter integrations check for newer versions on startup. To deactivate these notifications:
+```sh
+$ deadline config set settings.submitter_update_notification false
+```
 
 ## Authentication
 

@@ -23,7 +23,7 @@ from deadline.client.cli._deadline_web_url import (
     validate_id_format,
     validate_resource_ids,
 )
-from deadline.client.cli._groups import handle_web_url_command, job_group
+from deadline.client.cli._groups import job_group
 from deadline.client.exceptions import DeadlineOperationError
 from deadline.job_attachments.models import (
     FileConflictResolution,
@@ -275,7 +275,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
         boto3_client_mock().get_job.return_value = {
@@ -306,6 +306,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
             task_id=None,
             session_action_id=None,
             session=ANY,
+            include_filters=None,
         )
         mock_download.assert_called_once_with(
             file_conflict_resolution=FileConflictResolution.CREATE_COPY,
@@ -332,7 +333,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
         boto3_client_mock().get_job.return_value = {
@@ -371,6 +372,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
             task_id=MOCK_TASK_ID,
             session_action_id=MOCK_SESSION_ACTION_ID,
             session=ANY,
+            include_filters=None,
         )
         mock_download.assert_called_once_with(
             file_conflict_resolution=FileConflictResolution.CREATE_COPY,
@@ -544,55 +546,229 @@ def test_cli_handle_web_url_install_pip_console_script(fresh_deadline_config, mo
         isfile_mock.assert_called_once_with(script_path + ".exe")
 
 
-@pytest.mark.parametrize("install_command", ["install", "uninstall"])
-@pytest.mark.parametrize("all_users", [True, False])
-def test_cli_handle_web_url_install(fresh_deadline_config, install_command, all_users):
-    """
-    Confirm that the install command calls the implementation function
-    """
-    with patch.object(
-        handle_web_url_command, f"{install_command}_deadline_web_url_handler"
-    ) as mock_install:
+def test_cli_handle_web_url_install_linux(fresh_deadline_config, tmp_path):
+    """Tests that --install succeeds on Linux via CliRunner with platform monkeypatched."""
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    with patch.object(sys, "platform", "linux"), patch.object(
+        sys, "argv", ["/usr/bin/deadline"]
+    ), patch.object(shutil, "which", return_value="/usr/bin/deadline"), patch.object(
+        os.path,
+        "expanduser",
+        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+            "~/.config", str(config_dir)
+        ),
+    ), patch.object(subprocess, "run"), patch.object(os, "makedirs"):
         runner = CliRunner()
-        cli_options = ["handle-web-url", f"--{install_command}"]
-        if all_users:
-            cli_options.append("--all-users")
-        result = runner.invoke(main, cli_options)
+        result = runner.invoke(main, ["handle-web-url", "--install"])
 
-        mock_install.assert_called_once_with(all_users=all_users)
-        assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
+    assert "Web URL handler installed successfully." in result.output
 
 
-@pytest.mark.parametrize("all_users", [True, False])
-def test_cli_handle_web_url_install_prints_success_message(fresh_deadline_config, all_users):
-    """
-    Confirm that --install prints a success message on completion.
-    """
-    with patch.object(handle_web_url_command, "install_deadline_web_url_handler"):
+def test_cli_handle_web_url_install_windows(fresh_deadline_config, monkeypatch):
+    """Tests that --install succeeds on Windows via CliRunner with platform monkeypatched."""
+    winreg_mock = MagicMock()
+    monkeypatch.setitem(sys.modules, "winreg", winreg_mock)
+    winreg_mock.HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
+    winreg_mock.HKEY_CLASSES_ROOT = "HKEY_CLASSES_ROOT"
+    winreg_mock.REG_SZ = "REG_SZ"
+    winreg_mock.CreateKeyEx.side_effect = ["KEY1", "KEY2"]
+
+    with patch.object(sys, "platform", "win32"), patch.object(os.path, "isfile", return_value=True):
         runner = CliRunner()
-        cli_options = ["handle-web-url", "--install"]
-        if all_users:
-            cli_options.append("--all-users")
-        result = runner.invoke(main, cli_options)
+        result = runner.invoke(main, ["handle-web-url", "--install"])
 
-        assert result.exit_code == 0
-        assert "Web URL handler installed successfully." in result.output
+    assert result.exit_code == 0, result.output
+    assert "Web URL handler installed successfully." in result.output
 
 
-@pytest.mark.parametrize("all_users", [True, False])
-def test_cli_handle_web_url_uninstall_prints_success_message(fresh_deadline_config, all_users):
-    """
-    Confirm that --uninstall prints a success message on completion.
-    """
-    with patch.object(handle_web_url_command, "uninstall_deadline_web_url_handler"):
+def test_cli_handle_web_url_install_mac(fresh_deadline_config):
+    """Tests that --install fails on macOS."""
+    with patch.object(sys, "platform", "darwin"):
         runner = CliRunner()
-        cli_options = ["handle-web-url", "--uninstall"]
-        if all_users:
-            cli_options.append("--all-users")
-        result = runner.invoke(main, cli_options)
+        result = runner.invoke(main, ["handle-web-url", "--install"])
 
-        assert result.exit_code == 0
-        assert "Web URL handler uninstalled successfully." in result.output
+    assert result.exit_code != 0
+    assert "only supported on Windows and Linux" in result.output
+
+
+def test_cli_handle_web_url_uninstall_linux(fresh_deadline_config, tmp_path):
+    """Tests that --uninstall succeeds on Linux via CliRunner with platform monkeypatched."""
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    (entry_dir / "deadline.desktop").write_text("[Desktop Entry]\n")
+
+    with patch.object(sys, "platform", "linux"), patch.object(
+        shutil, "which", return_value="/usr/bin/update-desktop-database"
+    ), patch.object(
+        os.path,
+        "expanduser",
+        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)),
+    ), patch.object(subprocess, "run"):
+        runner = CliRunner()
+        result = runner.invoke(main, ["handle-web-url", "--uninstall"])
+
+    assert result.exit_code == 0, result.output
+    assert "Web URL handler uninstalled successfully." in result.output
+
+
+def test_cli_handle_web_url_uninstall_windows(fresh_deadline_config, monkeypatch):
+    """Tests that --uninstall succeeds on Windows via CliRunner with platform monkeypatched."""
+    winreg_mock = MagicMock()
+    monkeypatch.setitem(sys.modules, "winreg", winreg_mock)
+    winreg_mock.HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
+    winreg_mock.HKEY_CLASSES_ROOT = "HKEY_CLASSES_ROOT"
+    winreg_mock.REG_SZ = "REG_SZ"
+    winreg_mock.OpenKeyEx.side_effect = ["OPENED_KEY"]
+
+    with patch.object(sys, "platform", "win32"), patch.object(os.path, "isfile", return_value=True):
+        runner = CliRunner()
+        result = runner.invoke(main, ["handle-web-url", "--uninstall"])
+
+    assert result.exit_code == 0, result.output
+    assert "Web URL handler uninstalled successfully." in result.output
+
+
+def test_cli_handle_web_url_uninstall_mac(fresh_deadline_config):
+    """Tests that --uninstall fails on macOS."""
+    with patch.object(sys, "platform", "darwin"):
+        runner = CliRunner()
+        result = runner.invoke(main, ["handle-web-url", "--uninstall"])
+
+    assert result.exit_code != 0
+    assert "only supported on Windows and Linux" in result.output
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux-only: tests xdg-open URL dispatch")
+def test_cli_handle_web_url_install_open_url_uninstall_real_linux(fresh_deadline_config, tmp_path):
+    """
+    Real end-to-end test on Linux using xdg-open.
+
+    Installs the handler (real file I/O), then uses xdg-open to open a deadline:// URL.
+    xdg-open reads ~/.config/mimeapps.list, finds deadline.desktop, and execs the
+    deadline CLI. The only fake is update-desktop-database (a no-op script on PATH).
+    """
+    runner = CliRunner()
+    deadline_path = shutil.which("deadline")
+    assert deadline_path, "deadline CLI must be on PATH"
+
+    fake_bin = tmp_path / "fake_bin"
+    fake_bin.mkdir()
+    fake_udd = fake_bin / "update-desktop-database"
+    fake_udd.write_text("#!/bin/sh\nexit 0\n")
+    fake_udd.chmod(0o755)
+    os.environ["PATH"] = f"{fake_bin}:{os.environ['PATH']}"
+
+    os.makedirs(os.path.expanduser("~/.config"), exist_ok=True)
+
+    # Set XDG vars so xdg-mime finds files in the temp HOME
+    os.environ["XDG_CONFIG_HOME"] = os.path.expanduser("~/.config")
+    os.environ["XDG_DATA_HOME"] = os.path.expanduser("~/.local/share")
+
+    # Step 1: Install
+    with patch.object(sys, "argv", [deadline_path]):
+        result = runner.invoke(main, ["handle-web-url", "--install"])
+    assert result.exit_code == 0, result.output
+
+    # Step 2: Verify desktop file
+    desktop_path = os.path.expanduser("~/.local/share/applications/deadline.desktop")
+    assert Path(desktop_path).is_file()
+    assert "x-scheme-handler/deadline" in Path(desktop_path).read_text()
+
+    # Step 3: Verify xdg-mime resolves the deadline:// scheme to our desktop file,
+    # then invoke the handler directly as a subprocess (what xdg-open would do).
+    # We use xdg-mime instead of xdg-open because CI has no desktop environment.
+    web_url = f"deadline://download-output?farm-id={MOCK_FARM_ID}&queue-id={MOCK_QUEUE_ID}&job-id={MOCK_JOB_ID}"
+    mime_result = subprocess.run(
+        ["xdg-mime", "query", "default", "x-scheme-handler/deadline"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        env=os.environ,
+    )
+    assert "deadline.desktop" in mime_result.stdout, (
+        f"xdg-mime did not resolve deadline:// scheme: {mime_result.stdout}"
+    )
+
+    # Now invoke the handler directly — the same command the desktop file's Exec= runs.
+    # The CLI will fail on the AWS call (no credentials) — that's expected.
+    handler_result = subprocess.run(
+        [deadline_path, "handle-web-url", web_url],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    combined = handler_result.stdout + handler_result.stderr
+    assert "AWS Deadline Cloud CLI encountered the following exception" in combined
+
+    # Step 4: Uninstall
+    with patch.object(sys, "argv", [deadline_path]):
+        result = runner.invoke(main, ["handle-web-url", "--uninstall"])
+    assert result.exit_code == 0, result.output
+
+    # Step 5: Verify cleanup
+    assert not Path(desktop_path).exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only: tests registry URL dispatch")
+def test_cli_handle_web_url_install_open_url_uninstall_real_windows(
+    fresh_deadline_config, tmp_path
+):
+    """
+    Real end-to-end test on Windows using the registry and cmd start.
+
+    Installs the handler (real registry writes), then uses `start` to open a deadline://
+    URL. Windows looks up the scheme in the registry and execs the handler.
+    """
+    import winreg  # type: ignore[import-not-found]  # Windows-only module
+
+    runner = CliRunner()
+    deadline_path = shutil.which("deadline")
+    assert deadline_path, "deadline CLI must be on PATH"
+
+    # Step 1: Install — real registry writes
+    with patch.object(sys, "argv", [deadline_path]), patch.object(
+        os.path, "isfile", return_value=True
+    ):
+        result = runner.invoke(main, ["handle-web-url", "--install"])
+    assert result.exit_code == 0, result.output
+
+    # Step 2: Verify registry
+    key = winreg.OpenKeyEx(  # type: ignore[attr-defined]
+        winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
+        r"Software\Classes\deadline\shell\open\command",
+    )
+    value, _ = winreg.QueryValueEx(key, "")  # type: ignore[attr-defined]
+    winreg.CloseKey(key)  # type: ignore[attr-defined]
+    assert "handle-web-url" in value
+
+    # Step 3: Invoke the handler directly as a subprocess — the same command
+    # the registry's shell\open\command would run.
+    # The CLI will fail on the AWS call (no credentials) — that's expected.
+    web_url = f"deadline://download-output?farm-id={MOCK_FARM_ID}&queue-id={MOCK_QUEUE_ID}&job-id={MOCK_JOB_ID}"
+    handler_result = subprocess.run(
+        [deadline_path, "handle-web-url", web_url],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    combined = handler_result.stdout + handler_result.stderr
+    assert "AWS Deadline Cloud CLI encountered the following exception" in combined
+
+    # Step 4: Uninstall — real registry deletes
+    result = runner.invoke(main, ["handle-web-url", "--uninstall"])
+    assert result.exit_code == 0, result.output
+
+    # Step 5: Verify registry cleaned up
+    with pytest.raises(FileNotFoundError):
+        winreg.OpenKeyEx(  # type: ignore[attr-defined]
+            winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
+            r"Software\Classes\deadline\shell\open\command",
+        )
 
 
 def test_cli_handle_web_url_install_current_user_monkeypatched_windows(

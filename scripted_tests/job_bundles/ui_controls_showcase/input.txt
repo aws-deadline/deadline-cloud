@@ -1,3 +1,0 @@
-This is a sample input file for the UI Controls Showcase.
-It demonstrates the InputFile PATH parameter.
-Created for testing purposes.

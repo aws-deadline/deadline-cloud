@@ -621,7 +621,8 @@ def _get_license_info(python_interpreter: PythonInstall, dev: bool) -> list[_Pac
                 pip_license_info,
             )
             for pip_license_info in pip_licenses_parsed
-            if pip_license_info["Name"] != "deadline"
+            if pip_license_info["Name"] not in _BUNDLED_OWN_PACKAGES
+            and pip_license_info["Name"].replace("-", "_") not in _BUNDLED_OWN_PACKAGES
         ]
 
 

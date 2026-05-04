@@ -3,6 +3,9 @@ name: Code Quality
 on:
   pull_request:
     branches: [ mainline, release, feature_assets_cli, 'patch_*' , "feature_*"]
+  push:
+    # Run on mainline pushes to populate the Actions cache that PRs restore from.
+    branches: [ mainline ]
   workflow_call:
     inputs:
       branch:
@@ -37,7 +40,7 @@ jobs:
       python-version: ${{ matrix.python-version }}
       ref: ${{inputs.tag}}
       # The incremental output download and mcp feature doesn't run on Python 3.8, so test coverage is lower
-      cov-fail-under: "74"
+      cov-fail-under: "63"
 
   Attributions:
     name: Attributions

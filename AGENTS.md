@@ -21,10 +21,6 @@ src/deadline/
 │   ├── ui/           # Qt/PySide GUI components
 │   ├── job_bundle/   # Job bundle handling and history
 │   └── dataclasses/  # Data structures
-├── job_attachments/  # File transfer to/from S3
-│   ├── api/          # Public job attachments API
-│   ├── caches/       # Hash and S3 check caches
-│   └── asset_manifests/  # Manifest handling
 ├── mcp/              # MCP server (public)
 ├── _mcp/             # MCP server (internal)
 └── common/           # Shared utilities
@@ -99,6 +95,10 @@ git commit -s            # Always sign commits with -s
 ```
 
 ## Testing
+
+**Every code change — new or modified — must include tests.** See
+[test/README.md](test/README.md) for the test suite layers and how to
+pick the right one.
 
 - **Unit tests:** `test/unit/` - Run with `hatch run test`
 - **Integration tests:** `test/integ/` - Requires AWS resources
