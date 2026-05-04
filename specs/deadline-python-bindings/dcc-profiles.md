@@ -26,9 +26,8 @@ must remain subclassable.
 Unreal Engine.
 
 Uses Unreal's native Slate/UMG C++ widgets — no Qt. Calls
-`deadline.client.api.create_job_from_job_bundle()` from Python in a
-subprocess of Unreal's own Python interpreter. Does NOT depend on
-`deadline.client.ui`.
+`deadline.client.api` functions directly from Python in Unreal's own
+Python interpreter. Does NOT depend on `deadline.client.ui`.
 
 ### Pattern C: CLI Binary (1 DCC)
 
@@ -41,80 +40,118 @@ Pure ExtendScript (JSX) — no Python, no Qt. Shells out to the
 
 Houdini uses the shared Qt dialogs for config and login, but bypasses
 `SubmitJobToDeadlineDialog` for submission. It manually orchestrates
-uploads via `S3AssetManager` + `JobAttachmentS3Settings` and imports
-the private `api._queue_parameters` module. These are deep library APIs
-not exposed via `_native`.
+uploads via `S3AssetManager` + `JobAttachmentS3Settings` and calls
+`api.get_boto3_client` / `api.get_queue_user_boto3_session` for
+credential management. These are deep boto3-based APIs that cannot
+exist in the Rust package.
+
+Additionally, Houdini is pinned to `deadline == 0.49.*` and calls
+`SubmitJobProgressDialog.start_submission(...)` which no longer exists
+in the current Python package (renamed to `start_job_submission` with
+a different signature). Houdini is already incompatible with the latest
+`deadline-cloud-python`.
 
 **Recommended approach:** Modify the Houdini submitter to call
 `create_job_from_job_bundle` instead of manual orchestration. This
 handles the full upload+submit flow with progress callbacks, aligning
 Houdini with the same submission path as the other 6 Qt-based DCCs.
-The Houdini HDA parameter UI stays unchanged (native Houdini, not Qt).
 
-## Import Inventory and Gap Analysis (verified 2026-04-27)
+## Runtime Compatibility Analysis (verified 2026-05-04)
 
-Imports verified by grepping all 9 DCC submitter repos.
+Verified by grepping all 9 DCC submitter repos AND testing actual
+runtime behavior (method calls, attribute access, return types).
 
-### What `gui/` already provides
-
-These import paths are fully functional — backed by `_native` (PyO3) or
-pure Python code in `gui/`:
+### What `gui/` already provides (fully functional)
 
 - `deadline.client.ui.*` — all Qt widgets, dialogs, utilities
 - `deadline.client.exceptions` — `DeadlineOperationError`, `UserInitiatedCancel`, etc.
-- `deadline.client.job_bundle.*` — `AssetReferences`, `deadline_yaml_dump`, `JobParameter`, `parameters`, `submission`, `loader`, `saver`
-- `deadline.client.config` — `get_setting`, `set_setting`, `read_config`, `str2bool`, `config_file`
+- `deadline.client.job_bundle.*` — `AssetReferences`, `deadline_yaml_dump`, `JobParameter`, `parameters`, `submission`, `loader`, `saver`, `create_job_history_bundle_dir`
+- `deadline.client.config` — `get_setting`, `set_setting`, `read_config`, `str2bool`, `config_file` (with `write_config`)
+- `deadline.client.api.create_job_from_job_bundle` — full submission with callbacks
+- `deadline.client.api.AwsCredentialsSource`, `AwsAuthenticationStatus` — enums
+- `deadline.client.api.precache_clients` — no-op (Rust handles caching)
+- `deadline.client.api.get_queue_parameter_definitions` — via `_native`
+- `deadline.job_attachments.models.FileConflictResolution` — enum
+- `deadline.job_attachments.progress_tracker.ProgressReportMetadata` — dataclass
+- `deadline.job_attachments.progress_tracker.ProgressStatus` — enum
 
-### What `gui/` is missing (shim work, no submitter changes)
+### Remaining gaps: TelemetryClient methods (Batch A2)
 
-`gui/deadline/client/api/__init__.py` is currently a minimal stub. These
-need to be re-exported from `_native`:
+The PyO3 `TelemetryClient` only exposes `record_event(event_type, details)`
+and `close()`. DCC submitters call additional methods at runtime:
 
-| Import | Used by |
-|--------|---------|
-| `deadline.client.api.get_deadline_cloud_library_telemetry_client` | Blender, Maya, Nuke, Houdini, Unreal, VRED |
-| `deadline.client.api.TelemetryClient` | Blender, Maya, Nuke, Houdini, Unreal |
-| `deadline.client.api.create_job_from_job_bundle` | Unreal |
-| `deadline.client.api.AwsCredentialsSource` | Unreal |
-| `deadline.client.api.AwsAuthenticationStatus` | Unreal |
-| `deadline.client.api.precache_clients` | Unreal |
-| `deadline.client.job_bundle.create_job_history_bundle_dir` | Houdini, Unreal |
+| Missing method | Signature | Used by | Fix |
+|---|---|---|---|
+| `update_common_details(dict)` | `(self, details: dict)` | ALL adaptors (Blender, Maya, Nuke, Houdini, Unreal) | Add to PyO3 class — store dict, merge into events |
+| `record_error(...)` | `(self, event_details: dict, exception_type: str, from_gui: bool = False)` | Unreal | Add to PyO3 class — thin wrapper around `record_event` |
+| `record_event` `from_gui` kwarg | `(self, event_type, event_details, *, from_gui=False)` | Unreal, Houdini | Add kwarg to existing PyO3 method |
 
-### What requires submitter-side changes
+**Impact:** Without these, ALL 6 Pattern A DCCs crash at runtime when
+calling `telemetry_client.update_common_details(...)` even though the
+import succeeds.
 
-| Import | Used by | Notes |
-|--------|---------|-------|
-| `deadline.job_attachments.upload.S3AssetManager` | Houdini | Deep API — recommend `create_job_from_job_bundle` instead |
-| `deadline.job_attachments.models.JobAttachmentS3Settings` | Houdini | Used alongside `S3AssetManager` |
-| `deadline.client.api._queue_parameters.get_queue_parameter_definitions` | Houdini | Private module import — should use public API |
-| `deadline.job_attachments.models.FileConflictResolution` | Unreal | Enum — can be re-exported as pure Python class |
-| `deadline.job_attachments.progress_tracker.ProgressReportMetadata` | Unreal | Data class — can be re-exported as pure Python class |
-| `deadline.job_attachments.progress_tracker.ProgressStatus` | Unreal | Data class — can be re-exported as pure Python class |
+### Remaining gaps: `api` module functions (Batch A3 — Unreal only)
 
-### Switchover impact per DCC
+Unreal's `settings.py` calls `api.*` functions directly (not through
+the Qt dialog). These need thin Python wrappers around `_native`:
 
-| DCC | Submitter changes needed? | Blocking gaps |
-|-----|--------------------------|---------------|
-| After Effects | No | CLI binary only — already works |
-| 3ds Max | No | None — all imports provided |
-| Cinema 4D | No | None — all imports provided |
-| Blender | No | `api` shim needs `TelemetryClient` + telemetry helper |
-| Maya | No | Same as Blender |
-| Nuke | No | Same as Blender |
-| VRED | No | Same as Blender |
-| Unreal | **Maybe** | Most gaps are shimmable; `precache_clients` needs design decision |
-| Houdini | **Yes** | `S3AssetManager`, `JobAttachmentS3Settings`, private `_queue_parameters` import |
+| Missing function | Used by | Resolution |
+|---|---|---|
+| `api.list_farms()` | Unreal | Wrap `_native.list_farms()`, return `{"farms": [...]}` |
+| `api.list_queues(farmId=...)` | Unreal | Wrap `_native.list_queues(farm_id)` |
+| `api.list_storage_profiles_for_queue(...)` | Unreal | Wrap `_native.list_storage_profiles_for_queue(...)` |
+| `api.get_credentials_source(config=...)` | Unreal | Wrap `_native.get_credentials_source()`, return enum |
+| `api.check_authentication_status(config=...)` | Unreal | Wrap `_native.check_auth_status()` |
+| `api.check_deadline_api_available(config=...)` | Unreal | Wrap `_native.check_api_available()` |
+| `api.login(...)` | Unreal | Wrap `_native.login()` |
+| `api.logout()` | Unreal | Wrap `_native.logout()` |
+| `api.get_boto3_client("deadline")` | Unreal | Return dummy object (only passed to `precache_clients` which is a no-op) |
 
-### Switchover action items
+### Unsupported (requires submitter rewrite — Houdini only)
 
-1. **Complete `gui/deadline/client/api/__init__.py`** — re-export
-   `TelemetryClient`, `get_deadline_cloud_library_telemetry_client`,
-   `create_job_from_job_bundle`, `AwsCredentialsSource`,
-   `AwsAuthenticationStatus` from `_native`. Unblocks 6 DCCs.
-2. **Add `job_attachments` data class re-exports** — `FileConflictResolution`,
-   `ProgressReportMetadata`, `ProgressStatus` as pure Python classes in
-   `gui/deadline/job_attachments/`. Unblocks Unreal.
-3. **Decide on `precache_clients`** — Unreal calls this. Either implement
-   as a no-op (Rust handles caching internally) or expose via `_native`.
-4. **Houdini submitter change** — modify to use `create_job_from_job_bundle`
-   instead of `S3AssetManager` + manual orchestration.
+| Function | Why it can't be shimmed |
+|---|---|
+| `api.get_boto3_client("deadline")` (for real use) | Returns a boto3 client. Rust doesn't use boto3. |
+| `api.get_queue_user_boto3_session(...)` | Returns a boto3 session with queue-scoped credentials. |
+| `S3AssetManager` | Complex stateful class for manual upload orchestration. |
+| `JobAttachmentS3Settings` | Only used with `S3AssetManager`. |
+| `SubmitJobProgressDialog.start_submission(...)` | Deprecated method (removed in deadline 0.50+). |
+
+### Switchover readiness per DCC
+
+| DCC | Works today? | Remaining work | Submitter changes? |
+|-----|---|---|---|
+| After Effects | ✅ Yes | None | No |
+| 3ds Max | ❌ Runtime crash | Batch A2 (TelemetryClient methods) | No |
+| Cinema 4D | ❌ Runtime crash | Batch A2 | No |
+| Blender | ❌ Runtime crash | Batch A2 | No |
+| Maya | ❌ Runtime crash | Batch A2 | No |
+| Nuke | ❌ Runtime crash | Batch A2 | No |
+| VRED | ❌ Runtime crash | Batch A2 | No |
+| Unreal | ❌ Runtime crash | Batch A2 + A3 | Minor (remove `get_boto3_client` usage) |
+| Houdini | ❌ Incompatible | Submitter rewrite | **Yes** (major) |
+
+### Switchover action plan
+
+**Batch A2 — TelemetryClient methods (this repo, Rust changes):**
+1. Add `update_common_details(dict)` to PyO3 `TelemetryClient`
+2. Add `from_gui: bool = False` kwarg to `record_event`
+3. Add `record_error(event_details, exception_type, from_gui=False)` method
+4. Unblocks: Blender, Maya, Nuke, Cinema 4D, VRED, 3ds Max (zero submitter changes)
+
+**Batch A3 — api module resource/auth wrappers (this repo, Python only):**
+1. Add `list_farms`, `list_queues`, `list_storage_profiles_for_queue` wrappers
+2. Add `get_credentials_source`, `check_authentication_status`, `check_deadline_api_available`
+3. Add `login`, `logout` wrappers
+4. Add `get_boto3_client` stub (returns dummy, only used for `precache_clients`)
+5. Unblocks: Unreal (with minor submitter cleanup PR to remove `get_boto3_client` real usage)
+
+**Batch B — Houdini submitter rewrite (separate repo):**
+1. Replace `S3AssetManager` + `JobAttachmentS3Settings` with `create_job_from_job_bundle`
+2. Replace `api.get_boto3_client` / `api.get_queue_user_boto3_session` (eliminated by above)
+3. Replace `start_submission(...)` with `start_job_submission(...)` (already needed for latest Python)
+4. Change private `api._queue_parameters` import to public `api.get_queue_parameter_definitions`
+
+**Batch C — Dependency switch (all DCC repos, blocked on #24):**
+1. Update `pyproject.toml` to depend on new package from `deadline-cloud-rs`
+2. Verify each DCC's test suite passes

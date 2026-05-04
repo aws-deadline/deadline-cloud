@@ -69,7 +69,7 @@ pick and execute work items.
 | 16d2 | GUI CLI commands (`bundle gui-submit`, `config gui`) | ✅ Done | `cli.md` | 16d |
 | 16d3 | GUI widget rendering fixes (config shim types) | ✅ Done | — | 16d2 |
 | 16e | Python packaging (`gui/pyproject.toml`) | ✅ Done | — | 16d3 |
-| 16f | DCC submitter dependency switchover | Not started | — | 16e |
+| 16f | DCC submitter dependency switchover | In progress | — | 16e |
 | 17 | MCP server | ✅ Done | `mcp.md` | 1-14 |
 | 18 | Submission hooks | ✅ Done | `submission_hooks.md` | 11 |
 | 19 | Update checker | ✅ Done | `new_features.md` | 0g |
