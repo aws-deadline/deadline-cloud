@@ -2,9 +2,12 @@ use crate::errors::JobAttachmentsError;
 
 use crate::asset_manifests::{HashAlgorithm, hash_data};
 
+use serde::Serialize;
+
 // --- PathFormat ---
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PathFormat {
     Windows,
     Posix,
@@ -334,56 +337,24 @@ impl JobAttachmentS3Settings {
 
 // --- ManifestProperties ---
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ManifestProperties {
     pub root_path: String,
     pub root_path_format: PathFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub file_system_location_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub input_manifest_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub input_manifest_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output_relative_directories: Option<Vec<String>>,
 }
 
 impl ManifestProperties {
     pub fn to_json(&self) -> serde_json::Value {
-        let mut map = serde_json::Map::new();
-        map.insert(
-            "rootPath".into(),
-            serde_json::Value::String(self.root_path.clone()),
-        );
-        if let Some(ref name) = self.file_system_location_name {
-            map.insert(
-                "fileSystemLocationName".into(),
-                serde_json::Value::String(name.clone()),
-            );
-        }
-        map.insert(
-            "rootPathFormat".into(),
-            serde_json::Value::String(self.root_path_format.as_str().into()),
-        );
-        if let Some(ref path) = self.input_manifest_path {
-            map.insert(
-                "inputManifestPath".into(),
-                serde_json::Value::String(path.clone()),
-            );
-        }
-        if let Some(ref hash) = self.input_manifest_hash {
-            map.insert(
-                "inputManifestHash".into(),
-                serde_json::Value::String(hash.clone()),
-            );
-        }
-        if let Some(ref dirs) = self.output_relative_directories {
-            map.insert(
-                "outputRelativeDirectories".into(),
-                serde_json::Value::Array(
-                    dirs.iter()
-                        .map(|d| serde_json::Value::String(d.clone()))
-                        .collect(),
-                ),
-            );
-        }
-        serde_json::Value::Object(map)
+        serde_json::to_value(self).expect("ManifestProperties is always serializable")
     }
 
     pub fn as_output_metadata(&self) -> serde_json::Value {

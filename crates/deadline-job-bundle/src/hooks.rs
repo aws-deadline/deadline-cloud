@@ -6,6 +6,7 @@
 //! (failures only warn).
 
 use deadline_api::errors::DeadlineError;
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::Write as _;
@@ -83,7 +84,8 @@ impl HookConfiguration {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HookMetadata {
     pub job_name: String,
     pub priority: i32,
@@ -94,39 +96,19 @@ pub struct HookMetadata {
     pub submitter_name: String,
     pub asset_references: Value,
     pub submission_payload: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub storage_profile_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub job_id: Option<String>,
 }
 
 impl HookMetadata {
     pub fn to_dict(&self) -> Value {
-        let mut m = serde_json::Map::new();
-        m.insert("jobName".into(), Value::String(self.job_name.clone()));
-        m.insert("priority".into(), serde_json::json!(self.priority));
-        m.insert("farmId".into(), Value::String(self.farm_id.clone()));
-        m.insert("queueId".into(), Value::String(self.queue_id.clone()));
-        m.insert(
-            "jobBundleDir".into(),
-            Value::String(self.job_bundle_dir.clone()),
-        );
-        m.insert("parameters".into(), serde_json::json!(self.parameters));
-        m.insert(
-            "submitterName".into(),
-            Value::String(self.submitter_name.clone()),
-        );
-        m.insert("assetReferences".into(), self.asset_references.clone());
-        m.insert("submissionPayload".into(), self.submission_payload.clone());
-        if let Some(ref sp) = self.storage_profile_id {
-            m.insert("storageProfileId".into(), Value::String(sp.clone()));
-        }
-        if let Some(ref jid) = self.job_id {
-            m.insert("jobId".into(), Value::String(jid.clone()));
-        }
-        Value::Object(m)
+        serde_json::to_value(self).expect("HookMetadata is always serializable")
     }
 
     pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(&self.to_dict()).unwrap_or_default()
+        serde_json::to_string_pretty(&self).unwrap_or_default()
     }
 
     pub fn to_environment_variables(&self) -> HashMap<String, String> {

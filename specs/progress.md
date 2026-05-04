@@ -89,7 +89,7 @@ pick and execute work items.
 | 28b | CLI feature parity: remove Rust-only features (AUDIT-108,109) | ✅ Done | — | — |
 | 28c | Strict clippy lint resolution (2064 → 0 warnings) | ✅ Done | — | — |
 | 29 | Investigate Python `--save-debug-snapshot` bug on no-attachment bundles | Not started | — | — |
-| 30 | Rust tooling and optimization setup | Not started | — | — |
+| 30 | Rust tooling and optimization setup | In progress | — | — |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |

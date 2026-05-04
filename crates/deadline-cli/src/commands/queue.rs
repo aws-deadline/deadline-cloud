@@ -856,8 +856,8 @@ async fn incremental_output_download(
     );
 
     // Copy attachments from checkpoint for updated jobs
-    for job_id in updated_job_ids.clone() {
-        if let Some(cp_job) = checkpoint_jobs_map.get(&job_id) {
+    for job_id in &updated_job_ids {
+        if let Some(cp_job) = checkpoint_jobs_map.get(job_id.as_str()) {
             if cp_job
                 .job
                 .get("attachments")
@@ -866,7 +866,7 @@ async fn incremental_output_download(
                 attachments_free_ids.insert(job_id.clone());
                 continue;
             }
-            if let Some(dc_job) = download_candidates.get_mut(&job_id) {
+            if let Some(dc_job) = download_candidates.get_mut(job_id.as_str()) {
                 if let Some(att) = cp_job.job.get("attachments") {
                     dc_job["attachments"] = att.clone();
                 }
@@ -882,10 +882,10 @@ async fn incremental_output_download(
         .collect();
 
     // Detect unchanged jobs (same SUCCEEDED count and endedAt)
-    for job_id in updated_job_ids.clone() {
+    for job_id in &updated_job_ids {
         if let (Some(cp_job), Some(dc_job)) = (
-            checkpoint_jobs_map.get(&job_id),
-            download_candidates.get(&job_id),
+            checkpoint_jobs_map.get(job_id.as_str()),
+            download_candidates.get(job_id.as_str()),
         ) {
             let cp_succeeded = cp_job
                 .job
@@ -903,7 +903,7 @@ async fn incremental_output_download(
             if cp_succeeded == dc_succeeded && cp_ended == dc_ended {
                 let name = dc_job["name"].as_str().unwrap_or("unknown");
                 eprintln!("UNCHANGED Job: {name} ({job_id})");
-                unchanged_job_ids.insert(job_id);
+                unchanged_job_ids.insert(job_id.clone());
             }
         }
     }
@@ -990,12 +990,12 @@ async fn incremental_output_download(
 
     // For new jobs, call GetJob to get attachments
     let dl = session::deadline_client(Some(config)).await;
-    for job_id in new_job_ids.clone() {
+    for job_id in &new_job_ids {
         let job_detail = dl
             .get_job()
             .farm_id(farm_id)
             .queue_id(queue_id)
-            .job_id(&job_id)
+            .job_id(job_id.as_str())
             .send()
             .await
             .map_err(|e| {
@@ -1004,7 +1004,7 @@ async fn incremental_output_download(
                     client::format_sdk_error(&e)
                 ))
             })?;
-        if let Some(dc_job) = download_candidates.get_mut(&job_id) {
+        if let Some(dc_job) = download_candidates.get_mut(job_id.as_str()) {
             dc_job["attachments"] = job_detail.attachments.as_ref().map_or(
                 serde_json::Value::Null,
                 deadline_api::type_conversions::attachments_to_value,
@@ -1013,7 +1013,7 @@ async fn incremental_output_download(
                 serde_json::json!(job_detail.storage_profile_id.as_deref());
         }
 
-        let dc_job = &download_candidates[&job_id];
+        let dc_job = &download_candidates[job_id.as_str()];
         let name = dc_job["name"].as_str().unwrap_or("unknown");
         let counts = &dc_job["taskRunStatusCounts"];
         let succeeded = counts
@@ -1452,8 +1452,7 @@ async fn incremental_output_download(
             eprintln!("  (no files to download)");
         } else {
             // SYNC-004: Use summarize_path_list with sizes instead of aggregate count
-            let local_paths: Vec<String> = manifest_paths.iter().map(|p| p.path.clone()).collect();
-            let path_refs: Vec<&str> = local_paths.iter().map(String::as_str).collect();
+            let path_refs: Vec<&str> = manifest_paths.iter().map(|p| p.path.as_str()).collect();
             let size_by_path: std::collections::HashMap<String, u64> = manifest_paths
                 .iter()
                 .map(|p| (p.path.clone(), p.size))

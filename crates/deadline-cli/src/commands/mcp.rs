@@ -667,7 +667,7 @@ impl DeadlineServer {
         let result = std::thread::spawn(move || {
             handle.block_on(async {
                 let submit_params = deadline_job_bundle::submission::SubmitJobParams {
-                    job_bundle_dir: bundle_dir.clone(),
+                    job_bundle_dir: bundle_dir,
                     job_parameters: job_params,
                     name,
                     priority,

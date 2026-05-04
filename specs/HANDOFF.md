@@ -33,9 +33,12 @@ Active work item: #30 — Rust tooling and optimization setup.
 
 ### Optimization investigation
 
-8. **Audit `.clone()` in hot paths** — 217 clone calls in production
-   code. Many are Python-port artifacts where borrowing would suffice.
-   Focus on file hashing and S3 transfer paths first.
+8. ✅ **Audit `.clone()` in hot paths** — Done. 221 clones audited.
+   Fixed 3 whole-collection iteration clones, 1 clone-then-borrow,
+   1 clone-where-move-suffices. Replaced manual JSON building with
+   `#[derive(Serialize)]` in `HookMetadata` (12 clones) and
+   `ManifestProperties` (8 clones). ~170 remaining clones are correct
+   (pre-move, struct field extraction, HashMap insert).
 9. **Reduce `serde_json::Value` usage** — 108 references in CLI code.
    AWS SDK returns typed structs; converting to Value for display loses
    type safety and adds heap allocation. Address incrementally.
