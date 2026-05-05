@@ -41,30 +41,19 @@ Without these, all 6 Pattern A DCCs crash on `telemetry_client.update_common_det
 
 **Unblocks:** Blender, Maya, Nuke, Cinema 4D, VRED, 3ds Max (zero submitter changes)
 
-### Batch A3 — API module wrappers for Unreal
+### Batch A3 — API module wrappers for Unreal ✅ Done
 
-**Essential reading:** `specs/deadline-python-bindings/` — especially
-`python-package-contract.md` (Python-side API) and `dcc-profiles.md`
-(per-DCC integration patterns and switchover readiness).
+Python wrappers in `gui/deadline/client/api/__init__.py` and Rust login
+callback support. Unblocks Unreal (zero submitter changes).
 
-Python wrappers in `gui/deadline/client/api/__init__.py` that translate
-Unreal's calling conventions to `_native` functions.
-
-**Python wrappers (camelCase → snake_case translation):**
-1. `list_farms(config=None)` → `_native.list_farms()`
-2. `list_queues(farmId=None, config=None)` → `_native.list_queues(farm_id=farmId)`
-3. `list_storage_profiles_for_queue(farmId=None, queueId=None, config=None)` → `_native.list_storage_profiles_for_queue(...)`
-4. `get_credentials_source(config=None)` → `_native.get_credentials_source()`, return `AwsCredentialsSource` enum
-5. `check_authentication_status(config=None)` → `_native.check_auth_status()`, return `AwsAuthenticationStatus` enum
-6. `check_deadline_api_available(config=None)` → `_native.check_api_available()`
-7. `login(on_pending_authorization=None, on_cancellation_check=None, config=None)` → `_native.login(...)` with callbacks
-8. `logout(config=None)` → `_native.logout()`
-9. `get_boto3_client(service_name, config=None)` → returns `None` (stub; only used for `precache_clients`)
-
-**Rust (`crates/deadline-python-bindings/src/auth.rs`):**
-10. Add `on_pending_authorization` and `on_cancellation_check` callback params to `login()`
-
-**Unblocks:** Unreal (zero submitter changes)
+Committed items:
+- Resource wrappers: `list_farms`, `list_queues`, `list_storage_profiles_for_queue`
+- Auth wrappers: `get_credentials_source`, `check_authentication_status`,
+  `check_deadline_api_available`, `login` (with callbacks), `logout`
+- `get_boto3_client` stub (returns None)
+- `create_job_from_job_bundle` flat keyword-arg wrapper with ProgressReportMetadata conversion
+- Rust `login()` now accepts `on_pending_authorization` and `on_cancellation_check`
+- camelCase property aliases on `ProgressReportMetadata` for Unreal compat
 
 ### Batch B — Houdini submitter rewrite (separate repo)
 

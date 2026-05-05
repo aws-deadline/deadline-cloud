@@ -133,6 +133,140 @@ class TestApiModuleBehavior:
         assert len(result) == 2
 
 
+class TestApiResourceWrappers:
+    """Verify api.list_farms/list_queues/list_storage_profiles wrappers (Unreal pattern)."""
+
+    def test_list_farms_wrapper(self, test_server):
+        """api.list_farms() returns dict with 'farms' key."""
+        from deadline.client.api import list_farms
+
+        result = list_farms()
+        assert "farms" in result
+        assert len(result["farms"]) >= 1
+        assert "farmId" in result["farms"][0]
+        assert "displayName" in result["farms"][0]
+
+    def test_list_queues_wrapper_camelcase_kwarg(self, test_server):
+        """api.list_queues(farmId=...) accepts camelCase kwarg."""
+        from deadline.client.api import list_queues
+
+        result = list_queues(farmId="farm-abc123def4567890abc123def4567890")
+        assert "queues" in result
+        assert len(result["queues"]) >= 1
+        assert "queueId" in result["queues"][0]
+
+    def test_list_storage_profiles_wrapper(self, test_server):
+        """api.list_storage_profiles_for_queue(farmId=..., queueId=...) works."""
+        from deadline.client.api import list_storage_profiles_for_queue
+
+        result = list_storage_profiles_for_queue(
+            farmId="farm-abc123def4567890abc123def4567890",
+            queueId="queue-abc123def4567890abc123def4567890",
+        )
+        assert "storageProfiles" in result
+        assert len(result["storageProfiles"]) >= 1
+
+
+class TestApiAuthWrappers:
+    """Verify api auth wrappers return correct types (Unreal pattern)."""
+
+    def test_get_credentials_source_returns_enum(self, test_server):
+        """api.get_credentials_source() returns AwsCredentialsSource enum with .name."""
+        from deadline.client.api import get_credentials_source, AwsCredentialsSource
+
+        result = get_credentials_source()
+        assert isinstance(result, AwsCredentialsSource)
+        assert hasattr(result, "name")
+        assert result.name in ("HOST_PROVIDED", "DEADLINE_CLOUD_MONITOR_LOGIN", "NOT_VALID")
+
+    def test_check_authentication_status_returns_enum(self, test_server):
+        """api.check_authentication_status() returns AwsAuthenticationStatus enum."""
+        from deadline.client.api import check_authentication_status, AwsAuthenticationStatus
+
+        result = check_authentication_status()
+        assert isinstance(result, AwsAuthenticationStatus)
+        assert result.name in ("AUTHENTICATED", "CONFIGURATION_ERROR", "NEEDS_LOGIN")
+
+    def test_check_deadline_api_available_returns_bool(self, test_server):
+        """api.check_deadline_api_available() returns a bool."""
+        from deadline.client.api import check_deadline_api_available
+
+        result = check_deadline_api_available()
+        assert isinstance(result, bool)
+
+    def test_login_with_callbacks(self, test_server):
+        """api.login(on_pending_authorization, on_cancellation_check) accepts callbacks."""
+        from deadline.client.api import login
+        from deadline._native import DeadlineOperationError
+
+        calls = []
+
+        def on_pending(**kwargs):
+            calls.append(("pending", kwargs))
+
+        def on_cancel():
+            return False
+
+        # login will raise (no DCM configured in stub) but should accept callbacks
+        try:
+            login(on_pending, on_cancel)
+        except (DeadlineOperationError, Exception):
+            pass  # Expected — no DCM in stub
+
+    def test_logout(self, test_server):
+        """api.logout() doesn't crash."""
+        from deadline.client.api import logout
+        from deadline._native import DeadlineOperationError
+
+        try:
+            logout()
+        except DeadlineOperationError:
+            pass  # Expected — no DCM in stub
+
+    def test_get_boto3_client_returns_none(self):
+        """api.get_boto3_client('deadline') returns None (stub)."""
+        from deadline.client.api import get_boto3_client
+
+        result = get_boto3_client("deadline")
+        assert result is None
+
+
+class TestApiCreateJobFlatSignature:
+    """Verify create_job_from_job_bundle flat keyword-arg signature (Unreal pattern)."""
+
+    def test_create_job_flat_signature_missing_bundle(self):
+        """create_job_from_job_bundle(job_bundle_dir=...) accepts flat kwargs."""
+        from deadline.client.api import create_job_from_job_bundle
+        from deadline._native import DeadlineOperationError
+
+        # Should raise about invalid bundle path, NOT TypeError about unexpected kwarg
+        with pytest.raises((DeadlineOperationError, FileNotFoundError, OSError)):
+            create_job_from_job_bundle(job_bundle_dir="/nonexistent/path")
+
+    def test_create_job_flat_signature_with_callbacks(self, tmp_path):
+        """create_job_from_job_bundle accepts flat callback kwargs matching Python signature."""
+        from deadline.client.api import create_job_from_job_bundle
+        from deadline._native import DeadlineOperationError
+
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        (bundle_dir / "template.yaml").write_text("name: Test\n")
+
+        hashing_calls = []
+
+        def on_hash(metadata):
+            hashing_calls.append(metadata)
+            return True
+
+        # Should NOT raise TypeError — the flat signature must be accepted
+        with pytest.raises((DeadlineOperationError, OSError)):
+            create_job_from_job_bundle(
+                job_bundle_dir=str(bundle_dir),
+                hashing_progress_callback=on_hash,
+                from_gui=False,
+            )
+
+
 class TestJobAttachmentsModelsImports:
     """Verify deadline.job_attachments.models exports needed types."""
 

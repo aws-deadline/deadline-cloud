@@ -45,6 +45,20 @@ class ProgressReportMetadata:
     progress_message: str = ""
     processed_files: int = 0
 
+    # camelCase aliases for compatibility with DCC submitters that access
+    # the original Python field names (e.g., Unreal's job_submit_wrapper.py)
+    @property
+    def transferRate(self):
+        return self.transfer_rate
+
+    @property
+    def progressMessage(self):
+        return self.progress_message
+
+    @property
+    def processedFiles(self):
+        return self.processed_files
+
     @classmethod
     def from_dict(cls, data: dict) -> "ProgressReportMetadata":
         """Convert a dict from the Rust PyO3 boundary."""

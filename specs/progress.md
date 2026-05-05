@@ -211,3 +211,5 @@ story. See `specs/HANDOFF.md` for detailed analysis.
   that serialize SDK map types to ensure deterministic output order.
   The Python CLI preserved wire order via JSON parsing; Rust needs
   explicit sorting wherever maps are displayed.
+- **Python formatting/linting**: Add ruff (format + lint) for `gui/`
+  Python code. Currently no Python formatter is configured.

@@ -30,8 +30,17 @@ The primary entry point for DCC submitters. Routes to `_native` or
 |--------|--------|---------|
 | `TelemetryClient` | `_native` | Telemetry recording |
 | `get_deadline_cloud_library_telemetry_client()` | shim | Returns a `TelemetryClient` instance |
-| `create_job_from_job_bundle(params, ...)` | `_native` | Full submission with callbacks |
+| `create_job_from_job_bundle(job_bundle_dir, ...)` | shim → `_native` | Full submission (flat kwargs) |
 | `get_queue_parameter_definitions(...)` | `_native` | Queue parameter definitions |
+| `list_farms(config=None, **kwargs)` | shim → `_native` | List farms |
+| `list_queues(config=None, **kwargs)` | shim → `_native` | List queues (accepts `farmId=`) |
+| `list_storage_profiles_for_queue(config=None, **kwargs)` | shim → `_native` | List storage profiles (accepts `farmId=`, `queueId=`) |
+| `get_credentials_source(config=None)` | shim → `_native` | Returns `AwsCredentialsSource` enum |
+| `check_authentication_status(config=None)` | shim → `_native` | Returns `AwsAuthenticationStatus` enum |
+| `check_deadline_api_available(config=None)` | shim → `_native` | Returns bool |
+| `login(on_pending_authorization=None, on_cancellation_check=None, config=None)` | shim → `_native` | DCM login with callbacks |
+| `logout(config=None)` | shim → `_native` | DCM logout |
+| `get_boto3_client(service_name, config=None)` | shim | Returns `None` (stub) |
 | `AwsCredentialsSource` | `_compat` | Enum: HOST_PROVIDED, DEADLINE_CLOUD_MONITOR_LOGIN, NOT_VALID |
 | `AwsAuthenticationStatus` | `_compat` | Enum: AUTHENTICATED, CONFIGURATION_ERROR, NEEDS_LOGIN |
 | `precache_clients(...)` | shim | No-op (Rust handles caching) |
@@ -95,6 +104,14 @@ class ProgressReportMetadata:
     progress_message: str = ""      # snake_case Python attribute
     processed_files: int = 0        # snake_case Python attribute
 
+    # camelCase property aliases (read-only) for DCC submitter compat
+    @property
+    def transferRate(self): ...
+    @property
+    def progressMessage(self): ...
+    @property
+    def processedFiles(self): ...
+
     @classmethod
     def from_dict(cls, data: dict) -> "ProgressReportMetadata":
         # Reads camelCase keys from Rust callback dict
@@ -104,7 +121,8 @@ class ProgressReportMetadata:
 **Key naming convention:**
 - Rust callback dict → camelCase keys (`transferRate`, `progressMessage`, `processedFiles`)
 - Python dataclass attributes → snake_case (`transfer_rate`, `progress_message`, `processed_files`)
-- `from_dict` bridges the two conventions
+- camelCase property aliases → read-only, for DCC submitters that access original field names
+- `from_dict` bridges the Rust dict to the dataclass
 
 ## Known Gaps (deferred)
 
@@ -112,4 +130,3 @@ class ProgressReportMetadata:
 |-----|--------|---------|
 | `status` field not included in progress callback dict | None — GUI doesn't read it | Fix when touching `submission.rs` |
 | `from_gui` in `create_job_from_job_bundle` params is ignored | Telemetry tagged CLI instead of GUI | #21g |
-| Unreal accesses camelCase attributes (`.progressMessage`) on metadata object | Breaks on switchover | Batch A3 |

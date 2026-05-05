@@ -78,12 +78,50 @@ pub fn check_api_available(config_path: Option<&str>) -> PyResult<bool> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (config_path=None))]
-pub fn login(config_path: Option<&str>) -> PyResult<String> {
+#[pyo3(signature = (config_path=None, on_pending_authorization=None, on_cancellation_check=None))]
+pub fn login(
+    config_path: Option<&str>,
+    on_pending_authorization: Option<PyObject>,
+    on_cancellation_check: Option<PyObject>,
+) -> PyResult<String> {
     let config = crate::load_config(config_path).ok();
+
+    let pending_cb = on_pending_authorization.as_ref().map(|cb| {
+        move |source: deadline_api::auth::AwsCredentialsSource| {
+            Python::with_gil(|py| {
+                let kwargs = pyo3::types::PyDict::new(py);
+                let source_enum = py
+                    .import("deadline.client._compat")
+                    .and_then(|m| m.getattr("AwsCredentialsSource"))
+                    .and_then(|cls| cls.call1((source.to_string(),)));
+                if let Ok(val) = source_enum {
+                    let _ = kwargs.set_item("credentials_source", val);
+                }
+                let _ = cb.call(py, (), Some(&kwargs));
+            });
+        }
+    });
+
+    let cancel_cb = on_cancellation_check.as_ref().map(|cb| {
+        move || -> bool {
+            Python::with_gil(|py| {
+                cb.call0(py)
+                    .map(|r| r.is_truthy(py).unwrap_or(false))
+                    .unwrap_or(false)
+            })
+        }
+    });
+
     let rt = crate::make_runtime()?;
-    rt.block_on(deadline_api::auth::login(None, None, config.as_ref(), None))
-        .map_err(DeadlineOperationError::new_err)
+    rt.block_on(deadline_api::auth::login(
+        pending_cb
+            .as_ref()
+            .map(|f| f as &dyn Fn(deadline_api::auth::AwsCredentialsSource)),
+        cancel_cb.as_ref().map(|f| f as &dyn Fn() -> bool),
+        config.as_ref(),
+        None,
+    ))
+    .map_err(DeadlineOperationError::new_err)
 }
 
 #[pyfunction]
