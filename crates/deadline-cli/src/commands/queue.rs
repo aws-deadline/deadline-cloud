@@ -233,7 +233,10 @@ impl Drop for PidFileLock {
 // Subcommand dispatch
 // =========================================================================
 
-#[allow(clippy::too_many_lines, reason = "queue subcommands are sequential pipelines")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "queue subcommands are sequential pipelines"
+)]
 async fn run_async(action: QueueAction) -> Result<(), CliError> {
     match action {
         QueueAction::List { profile, farm_id } => {

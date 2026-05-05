@@ -74,6 +74,56 @@ class TestApiModuleBehavior:
         client = get_deadline_cloud_library_telemetry_client()
         assert isinstance(client, TelemetryClient)
 
+    def test_telemetry_client_update_common_details(self):
+        """update_common_details accepts a dict (DCC submitter pattern)."""
+        from deadline.client.api import get_deadline_cloud_library_telemetry_client
+
+        client = get_deadline_cloud_library_telemetry_client()
+        client.update_common_details({
+            "deadline-cloud-for-blender-submitter-version": "1.0.0",
+            "blender-version": "4.1.0",
+        })
+
+    def test_telemetry_client_update_common_details_then_record_event(self):
+        """update_common_details followed by record_event (full DCC adaptor pattern)."""
+        from deadline.client.api import get_deadline_cloud_library_telemetry_client
+
+        client = get_deadline_cloud_library_telemetry_client()
+        client.update_common_details({"submitter": "maya", "version": "2.0.0"})
+        client.record_event("com.amazon.rum.deadline.adaptor.runtime.start", {})
+
+    def test_telemetry_client_record_event_from_gui(self):
+        """record_event accepts from_gui kwarg."""
+        from deadline.client.api import get_deadline_cloud_library_telemetry_client
+
+        client = get_deadline_cloud_library_telemetry_client()
+        client.record_event(
+            "com.amazon.rum.deadline.submission",
+            {"action": "submit"},
+            from_gui=True,
+        )
+
+    def test_telemetry_client_record_error(self):
+        """record_error accepts event_details and exception_type (DCC adaptor pattern)."""
+        from deadline.client.api import get_deadline_cloud_library_telemetry_client
+
+        client = get_deadline_cloud_library_telemetry_client()
+        client.record_error(
+            {"exit_code": 1, "exception_scope": "on_run"},
+            "RuntimeError",
+        )
+
+    def test_telemetry_client_record_error_from_gui(self):
+        """record_error accepts from_gui kwarg."""
+        from deadline.client.api import get_deadline_cloud_library_telemetry_client
+
+        client = get_deadline_cloud_library_telemetry_client()
+        client.record_error(
+            {"exit_code": 1, "exception_scope": "on_run"},
+            "RuntimeError",
+            from_gui=True,
+        )
+
     def test_precache_clients_returns_tuple(self):
         """precache_clients returns a tuple without crashing."""
         from deadline.client.api import precache_clients
@@ -112,16 +162,16 @@ class TestJobAttachmentsProgressTrackerImports:
 
         assert ProgressReportMetadata is not None
 
-    def test_progress_report_metadata_from_dict(self):
-        """ProgressReportMetadata.from_dict constructs from a dict."""
+    def test_progress_report_metadata_from_dict_camelcase(self):
+        """ProgressReportMetadata.from_dict constructs from camelCase keys (Rust FFI contract)."""
         from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 
         data = {
             "status": "UPLOADING",
             "progress": 0.5,
-            "transfer_rate": 1024.0,
-            "progress_message": "50%",
-            "processed_files": 3,
+            "transferRate": 1024.0,
+            "progressMessage": "50%",
+            "processedFiles": 3,
         }
         meta = ProgressReportMetadata.from_dict(data)
         assert meta.status == "UPLOADING"

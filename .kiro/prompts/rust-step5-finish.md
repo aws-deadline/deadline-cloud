@@ -18,7 +18,8 @@ Check for alignment:
 
 Produce a written findings list. For each finding, categorize as: Bug,
 Missing coverage, or Improvement. If no findings, state "Audit clean —
-no findings."
+no findings." If bugs are outside the scope of your changes, still
+document them as bugs to fix in this iteration.
 
 Fix findings: bugs → fix code + verify tests catch it. Missing
 coverage → add or strengthen tests. Improvements → implement if
@@ -40,7 +41,13 @@ implementation mechanics, internal APIs, and forego update if changes are minor.
 Update `specs/{crate}/README.md` index if new files were created.
 
 **Step 7 — Commit:**
-1. Run `cargo test` — all tests must pass
+1. Run pre-commit checks (all must pass before committing):
+   ```bash
+   make fmt          # cargo fmt --check (no formatting drift)
+   make lint         # cargo clippy -- -D warnings (no lint warnings)
+   make test         # cargo test + pytest gui/tests/ (all tests green)
+   ```
+   If `make fmt` fails, run `cargo fmt` and include the fixes in your commit.
 2. Verify specs are updated
 3. Update `specs/progress.md` work items table (status only — no audit details)
 4. If audit findings were resolved, verify they are updated in

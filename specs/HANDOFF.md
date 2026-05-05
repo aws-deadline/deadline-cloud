@@ -20,28 +20,32 @@ Pure Python re-exports so DCC submitter import paths resolve.
 - `gui/deadline/job_attachments/` — `FileConflictResolution`, `ProgressReportMetadata`, `ProgressStatus`
 - Committed: `7f1d84a`
 
-### Batch A2 — TelemetryClient + ProgressReportMetadata (next)
+### Batch A2 — TelemetryClient + ProgressReportMetadata ✅ Done
 
 Rust changes to make DCC submitters work at **runtime** (not just import time).
 Without these, all 6 Pattern A DCCs crash on `telemetry_client.update_common_details(...)`.
 
 **Rust (`crates/deadline-python-bindings/src/telemetry.rs`):**
-1. Add `update_common_details(dict)` method to PyO3 `TelemetryClient`
-2. Add `from_gui: bool = False` kwarg to existing `record_event`
-3. Add `record_error(event_details, exception_type, from_gui=False)` method
+1. ✅ Added `update_common_details(dict)` method to PyO3 `TelemetryClient`
+2. ✅ Added `from_gui: bool = False` kwarg to existing `record_event`
+3. ✅ Added `record_error(event_details, exception_type, from_gui=False)` method
 
 **Rust (`crates/deadline-python-bindings/src/submission.rs`):**
-4. Change progress callback dict keys to camelCase to match Python contract:
+4. ✅ Changed progress callback dict keys to camelCase to match Python contract:
    - `transfer_rate` → `transferRate`
    - `progress_message` → `progressMessage`
    - `processed_files` → `processedFiles`
 
 **Python (`gui/deadline/client/_compat.py`):**
-5. Update `ProgressReportMetadata.from_dict()` to read camelCase keys
+5. ✅ Updated `ProgressReportMetadata.from_dict()` to read camelCase keys
 
 **Unblocks:** Blender, Maya, Nuke, Cinema 4D, VRED, 3ds Max (zero submitter changes)
 
 ### Batch A3 — API module wrappers for Unreal
+
+**Essential reading:** `specs/deadline-python-bindings/` — especially
+`python-package-contract.md` (Python-side API) and `dcc-profiles.md`
+(per-DCC integration patterns and switchover readiness).
 
 Python wrappers in `gui/deadline/client/api/__init__.py` that translate
 Unreal's calling conventions to `_native` functions.

@@ -72,13 +72,16 @@ async fn farm_list_shows_farms_in_yaml() {
 }
 ```
 
-### Decision Tree
+### Choosing the Right Level
 
-```
-Can the CLI exercise it?
-├─ YES → Level 2
-└─ NO → Level 1
-```
+Test at the highest interface that reliably exercises the behavior.
+
+1. CLI can exercise it → Level 2. (output, exit code, file side effects)
+2. CLI can't reach it → Level 1, at the highest consumer-facing entry point. (PyO3 bindings, library-only APIs)
+3. Higher entry point can't reliably assert it → test the function directly. (internal caching, atomicity, error variants swallowed by callers)
+
+Repeat rule 3 recursively: only drop to a lower function when its
+behavior can't be verified through a caller above it.
 
 ### When Both Levels Add Value
 

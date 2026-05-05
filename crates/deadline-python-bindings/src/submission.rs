@@ -80,9 +80,9 @@ pub fn create_job_from_job_bundle(
                 Python::with_gil(|py| {
                     let dict = PyDict::new(py);
                     let _ = dict.set_item("progress", meta.progress);
-                    let _ = dict.set_item("transfer_rate", meta.transfer_rate);
-                    let _ = dict.set_item("progress_message", &meta.progress_message);
-                    let _ = dict.set_item("processed_files", meta.processed_files);
+                    let _ = dict.set_item("transferRate", meta.transfer_rate);
+                    let _ = dict.set_item("progressMessage", &meta.progress_message);
+                    let _ = dict.set_item("processedFiles", meta.processed_files);
                     cb.call1(py, (dict,))
                         .map(|r| r.is_truthy(py).unwrap_or(true))
                         .unwrap_or(true)
@@ -100,9 +100,9 @@ pub fn create_job_from_job_bundle(
                 Python::with_gil(|py| {
                     let dict = PyDict::new(py);
                     let _ = dict.set_item("progress", meta.progress);
-                    let _ = dict.set_item("transfer_rate", meta.transfer_rate);
-                    let _ = dict.set_item("progress_message", &meta.progress_message);
-                    let _ = dict.set_item("processed_files", meta.processed_files);
+                    let _ = dict.set_item("transferRate", meta.transfer_rate);
+                    let _ = dict.set_item("progressMessage", &meta.progress_message);
+                    let _ = dict.set_item("processedFiles", meta.processed_files);
                     cb.call1(py, (dict,))
                         .map(|r| r.is_truthy(py).unwrap_or(true))
                         .unwrap_or(true)

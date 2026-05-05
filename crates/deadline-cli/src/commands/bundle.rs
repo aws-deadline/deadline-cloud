@@ -152,7 +152,10 @@ pub(crate) fn run(action: BundleAction) -> Result<(), CliError> {
         .block_on(run_async(action))
 }
 
-#[allow(clippy::too_many_lines, reason = "bundle submit orchestrates validation, attachment upload, and job creation")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "bundle submit orchestrates validation, attachment upload, and job creation"
+)]
 async fn run_async(action: BundleAction) -> Result<(), CliError> {
     match action {
         BundleAction::Submit {

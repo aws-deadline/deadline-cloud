@@ -31,7 +31,13 @@ impl TelemetryClient {
     }
 
     /// Record a telemetry event.
-    fn record_event(&self, event_type: &str, details: &Bound<'_, PyDict>) -> PyResult<()> {
+    #[pyo3(signature = (event_type, details, *, from_gui=false))]
+    fn record_event(
+        &self,
+        event_type: &str,
+        details: &Bound<'_, PyDict>,
+        from_gui: bool,
+    ) -> PyResult<()> {
         let client = self
             .inner
             .as_ref()
@@ -42,7 +48,49 @@ impl TelemetryClient {
             let json_val = python_to_json_value(&value)?;
             map.insert(k, json_val);
         }
-        client.record_event(event_type, map, true);
+        client.record_event(event_type, map, from_gui);
+        Ok(())
+    }
+
+    /// Record an error telemetry event.
+    #[pyo3(signature = (event_details, exception_type, from_gui=false))]
+    fn record_error(
+        &self,
+        event_details: &Bound<'_, PyDict>,
+        exception_type: &str,
+        from_gui: bool,
+    ) -> PyResult<()> {
+        let client = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| DeadlineOperationError::new_err("telemetry client is closed"))?;
+        let mut map = HashMap::new();
+        for (key, value) in event_details.iter() {
+            let k: String = key.extract()?;
+            let json_val = python_to_json_value(&value)?;
+            map.insert(k, json_val);
+        }
+        map.insert(
+            "exception_type".into(),
+            serde_json::Value::String(exception_type.to_owned()),
+        );
+        client.record_event("com.amazon.rum.deadline.error", map, from_gui);
+        Ok(())
+    }
+
+    /// Update common details merged into every future telemetry event.
+    fn update_common_details(&mut self, details: &Bound<'_, PyDict>) -> PyResult<()> {
+        let client = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| DeadlineOperationError::new_err("telemetry client is closed"))?;
+        let mut map = HashMap::new();
+        for (key, value) in details.iter() {
+            let k: String = key.extract()?;
+            let json_val = python_to_json_value(&value)?;
+            map.insert(k, json_val);
+        }
+        client.update_common_details(map);
         Ok(())
     }
 

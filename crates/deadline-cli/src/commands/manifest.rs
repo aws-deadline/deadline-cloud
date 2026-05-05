@@ -217,7 +217,10 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
     }
 }
 
-#[allow(clippy::too_many_lines, reason = "manifest download/upload are sequential pipelines")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "manifest download/upload are sequential pipelines"
+)]
 async fn run_async(action: ManifestAction) -> Result<(), CliError> {
     match action {
         ManifestAction::Download {
