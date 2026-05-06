@@ -7,6 +7,8 @@ Active work item: None.
 
 ---
 
+---
+
 ## #16f — DCC Submitter Dependency Switchover
 
 **Goal:** All DCC submitters (except Houdini) work with zero code changes
@@ -85,12 +87,6 @@ Cannot happen until #24 (production distribution) publishes the package.
 - **pyo3** 0.24 → 0.28 (major, breaking API changes)
 - **rustls-webpki** advisories pinned by transitive hyper-rustls 0.24
   (awaiting AWS SDK upstream fix). See `deny.toml`.
-
-## Queued small items
-
-- **#21e** — `deadlinew` windowless launcher (~7 lines)
-- **#21f** — Windows config path normalization (~50 lines)
-- **#21g** — Telemetry parity: success/fail events (~50 lines)
 
 ---
 

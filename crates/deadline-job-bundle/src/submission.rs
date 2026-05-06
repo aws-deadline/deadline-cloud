@@ -781,7 +781,7 @@ pub async fn create_job_from_job_bundle(
             let upload_ctx = upload::S3UploadContext::new(s3_client, account_id, params.config)
                 .map_err(|e| op_err(e.to_string()))?;
 
-            let (upload_summary, attachments) =
+            let upload_result: Result<_, DeadlineError> =
                 if let Some(ref snap_dir) = params.debug_snapshot_dir {
                     // F8: Snapshot assets locally instead of uploading to S3
                     upload::snapshot_assets(
@@ -792,7 +792,7 @@ pub async fn create_job_from_job_bundle(
                         &manifests,
                         params.upload_progress_callback,
                     )
-                    .map_err(|e| op_err(e.to_string()))?
+                    .map_err(|e| op_err(e.to_string()))
                 } else {
                     upload::upload_assets(
                         &farm_id,
@@ -805,8 +805,21 @@ pub async fn create_job_from_job_bundle(
                         Some(force_s3_check),
                     )
                     .await
-                    .map_err(|e| op_err(e.to_string()))?
+                    .map_err(|e| op_err(e.to_string()))
                 };
+
+            // Emit asset_upload or asset_snapshot success/fail telemetry
+            if let Some(tc) = params.telemetry {
+                let metric = if params.debug_snapshot_dir.is_some() {
+                    "asset_snapshot"
+                } else {
+                    "asset_upload"
+                };
+                let unit_result = upload_result.as_ref().map(|_| ());
+                deadline_api::telemetry::record_success_fail(tc, metric, &unit_result);
+            }
+
+            let (upload_summary, attachments) = upload_result?;
 
             if upload_summary.processed_files > 0 {
                 print("Upload Summary:");

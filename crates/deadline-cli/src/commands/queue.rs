@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Local, Utc};
 use clap::Subcommand;
-use deadline_api::telemetry::create_telemetry;
+use deadline_api::telemetry::{create_telemetry, record_success_fail};
 use deadline_api::{api, client, session};
 use deadline_config::config_file;
 use deadline_job_attachments::incremental_download::IncrementalDownloadJob;
@@ -454,7 +454,8 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             conflict_resolution,
             dry_run,
         } => {
-            run_sync_output(
+            let tc = create_telemetry(None);
+            let result = run_sync_output(
                 profile,
                 farm_id,
                 queue_id,
@@ -467,7 +468,9 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                 conflict_resolution,
                 dry_run,
             )
-            .await
+            .await;
+            record_success_fail(&tc, "queue_sync_output", &result);
+            result
         }
     }
 }

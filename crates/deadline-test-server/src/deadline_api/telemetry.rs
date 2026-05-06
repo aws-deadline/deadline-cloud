@@ -34,20 +34,23 @@ pub async fn mock_telemetry_endpoint_expect_at_least(server: &MockServer, min_ca
 }
 
 /// Mount a telemetry endpoint that expects a specific event type string
-/// in the request body. Also mounts a generic catch-all (mounted first,
-/// lower priority) to accept latency events and keep the telemetry thread alive.
+/// in the request body. Also mounts a generic catch-all to accept latency
+/// events and keep the telemetry thread alive.
 pub async fn mock_telemetry_event_type(server: &MockServer, event_type: &str) {
-    // Generic catch-all (mounted first = lower priority in wiremock).
+    // Generic catch-all (default priority 5).
     Mock::given(method("POST"))
         .and(path("/2023-10-12/telemetry"))
         .respond_with(ResponseTemplate::new(200))
         .mount(server)
         .await;
-    // Specific matcher (mounted last = higher priority in wiremock).
+    // Specific matcher with higher priority so it wins over the catch-all.
+    // wiremock uses first-mounted precedence at equal priority, so we use
+    // with_priority(1) to make intent explicit.
     Mock::given(method("POST"))
         .and(path("/2023-10-12/telemetry"))
         .and(body_string_contains(event_type))
         .respond_with(ResponseTemplate::new(200))
+        .with_priority(1)
         .expect(1..)
         .mount(server)
         .await;

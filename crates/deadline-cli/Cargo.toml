@@ -5,9 +5,17 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "deadline_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "deadline"
 path = "src/main.rs"
+
+[[bin]]
+name = "deadlinew"
+path = "src/deadlinew.rs"
 
 [dependencies]
 deadline-config = { workspace = true }

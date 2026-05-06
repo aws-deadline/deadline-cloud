@@ -78,9 +78,13 @@ pick and execute work items.
 | 21b | Spec drift detection | ✅ Done | — | — |
 | 21c | Python GUI boundary contract | Not started | — | 16c |
 | 21d | CLI backward-compat flags | ✅ Done | — | — |
-| 21e | `deadlinew` windowless launcher | Not started | — | — |
-| 21f | Windows config path normalization | Not started | — | — |
-| 21g | Telemetry parity (success/fail events) | Not started | — | — |
+| 21e | `deadlinew` windowless launcher | ✅ Done | — | — |
+| 21f | Windows config path normalization | ✅ Done | — | — |
+| 21g | Telemetry parity (success/fail events) | ✅ Done | — | — |
+| 21h | Telemetry body-content test coverage | Not started | — | 21g |
+| 21i | Telemetry `exception_type` format parity | Not started | — | 21g |
+| 21j | `queue_sync_output_stats` telemetry event | Not started | — | — |
+| 21k | MCP telemetry (`mcp.latency`, `mcp.usage`) | Not started | — | 17 |
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
 | 27 | Typed SDK API layer | ✅ Done | — | — |

@@ -1,6 +1,7 @@
 use clap::Subcommand;
 use deadline_api::log_retrieval::SessionAutoSelect;
 use deadline_api::responses::{self, JobResponse};
+use deadline_api::telemetry::{create_telemetry, record_success_fail};
 use deadline_api::{api, client, job_monitoring, log_retrieval, session};
 use deadline_config::config_file;
 use deadline_config::ini::IniConfig;
@@ -345,7 +346,8 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            run_download_output(
+            let tc = create_telemetry(None);
+            let result = run_download_output(
                 profile,
                 farm_id,
                 queue_id,
@@ -356,7 +358,9 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 yes,
                 output,
             )
-            .await
+            .await;
+            record_success_fail(&tc, "download_job_output", &result);
+            result
         }
     }
 }

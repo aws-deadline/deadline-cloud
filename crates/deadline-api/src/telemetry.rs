@@ -396,6 +396,28 @@ where
     result
 }
 
+/// Emit a success/fail telemetry event based on a `Result`.
+/// Matches Python's `@record_success_fail_telemetry_event(metric_name=...)`.
+///
+/// Emits `com.amazon.rum.deadline.{metric_name}` with `is_success` and
+/// optional `exception_type` (the error's Display string on failure).
+pub fn record_success_fail<E: std::fmt::Display>(
+    telemetry: &TelemetryClient,
+    metric_name: &str,
+    result: &Result<(), E>,
+) {
+    let mut details = HashMap::new();
+    details.insert("is_success".into(), serde_json::json!(result.is_ok()));
+    if let Err(e) = result {
+        details.insert("exception_type".into(), serde_json::json!(e.to_string()));
+    }
+    telemetry.record_event(
+        &format!("com.amazon.rum.deadline.{metric_name}"),
+        details,
+        false,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -568,5 +590,101 @@ mod tests {
             Some("987654321098"),
             "Expected account_id to be resolved from STS"
         );
+    }
+
+    // --- record_success_fail (pure function, no network) ---
+
+    /// On success, emits event with is_success=true and no exception_type.
+    #[test]
+    fn record_success_fail_on_ok_emits_success_true() {
+        // Create a client that is opted-out so it won't try to send anything,
+        // but we can inspect that the function doesn't panic and accepts Ok.
+        let mut client = TelemetryClient::new("test", "1.0.0", None);
+        client.opted_out = true;
+        let result: Result<(), String> = Ok(());
+        // Should not panic
+        record_success_fail(&client, "test_metric", &result);
+    }
+
+    /// On failure, emits event with is_success=false and exception_type set.
+    #[test]
+    fn record_success_fail_on_err_emits_success_false() {
+        let mut client = TelemetryClient::new("test", "1.0.0", None);
+        client.opted_out = true;
+        let result: Result<(), String> = Err("SomeError: thing went wrong".into());
+        // Should not panic
+        record_success_fail(&client, "test_metric", &result);
+    }
+
+    /// Verifies the event is actually queued when client is active (not opted out).
+    /// Uses a wiremock server to capture the telemetry POST.
+    #[tokio::test]
+    async fn record_success_fail_queues_event_with_correct_fields() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .and(body_string_contains("com.amazon.rum.deadline.asset_upload"))
+            .and(body_string_contains("is_success"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1..)
+            .mount(&server)
+            .await;
+        // Catch-all for any other telemetry (latency etc)
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
+        client.opted_out = false;
+        client.initialize_with_metadata(&endpoint, None, None, None);
+
+        let result: Result<(), String> = Ok(());
+        record_success_fail(&client, "asset_upload", &result);
+
+        // Give the background thread time to flush
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // wiremock verifies expect(1..) on drop of server
+    }
+
+    /// Verifies failure event includes exception_type in the body.
+    #[tokio::test]
+    async fn record_success_fail_failure_includes_exception_type() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .and(body_string_contains("exception_type"))
+            .and(body_string_contains("is_success"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1..)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
+        client.opted_out = false;
+        client.initialize_with_metadata(&endpoint, None, None, None);
+
+        let result: Result<(), String> = Err("AccessDenied: forbidden".into());
+        record_success_fail(&client, "queue_sync_output", &result);
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 }

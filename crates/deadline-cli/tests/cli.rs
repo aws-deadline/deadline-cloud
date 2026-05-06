@@ -18,6 +18,8 @@ mod config;
 mod credential_scoping;
 #[path = "cli/dcm.rs"]
 mod dcm;
+#[path = "cli/deadlinew.rs"]
+mod deadlinew;
 #[path = "cli/farm.rs"]
 mod farm;
 #[path = "cli/fleet.rs"]
@@ -56,6 +58,8 @@ mod smoke;
 mod suggest;
 #[path = "cli/telemetry.rs"]
 mod telemetry;
+#[path = "cli/telemetry_parity.rs"]
+mod telemetry_parity;
 #[path = "cli/trace_schedule.rs"]
 mod trace_schedule;
 #[path = "cli/worker.rs"]

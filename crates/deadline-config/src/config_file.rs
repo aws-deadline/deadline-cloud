@@ -18,6 +18,33 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 // ---------------------------------------------------------------------------
+// Path normalization (Windows only)
+// ---------------------------------------------------------------------------
+
+/// Normalize a path for storage in the config file.
+/// On Windows: replaces `\` with `/` to prevent corruption by tools that
+/// interpret backslashes as escape characters.
+/// On other platforms: no-op.
+pub fn normalize_path_for_config(path: &str) -> String {
+    if cfg!(windows) {
+        path.replace('\\', "/")
+    } else {
+        path.to_owned()
+    }
+}
+
+/// Normalize a path read from the config file to native OS format.
+/// On Windows: replaces `/` with `\` so consumers get native paths.
+/// On other platforms: no-op.
+pub fn normalize_path_from_config(path: &str) -> String {
+    if cfg!(windows) {
+        path.replace('/', "\\")
+    } else {
+        path.to_owned()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
 
@@ -216,9 +243,24 @@ pub fn get_setting(setting_name: &str, config: &IniConfig) -> Result<String, Con
         .expect("validated format section.key");
     let section = full_section_name(setting_name, setting_def, config);
 
-    match config.get(&section, key) {
-        Some(value) => Ok(value.to_owned()),
-        None => Ok(resolve_default(setting_def, config)),
+    let result = match config.get(&section, key) {
+        Some(value) => value.to_owned(),
+        None => resolve_default(setting_def, config),
+    };
+
+    // Normalize path settings on Windows (forward slash → native backslash)
+    if cfg!(windows) && setting_def.is_path && !result.is_empty() {
+        Ok(normalize_path_from_config(&result))
+    } else if cfg!(windows) && setting_def.is_path_list && !result.is_empty() {
+        let path_sep = if cfg!(windows) { ';' } else { ':' };
+        Ok(result
+            .split(path_sep)
+            .filter(|p| !p.is_empty())
+            .map(normalize_path_from_config)
+            .collect::<Vec<_>>()
+            .join(&path_sep.to_string()))
+    } else {
+        Ok(result)
     }
 }
 
@@ -253,6 +295,25 @@ pub fn set_setting(
         .nth(1)
         .expect("validated format section.key");
     let section = full_section_name(setting_name, setting_def, config);
+
+    // Normalize path settings on Windows (native backslash → forward slash for storage)
+    let stored_value;
+    let value = if cfg!(windows) && setting_def.is_path && !value.is_empty() {
+        stored_value = normalize_path_for_config(value);
+        &stored_value
+    } else if cfg!(windows) && setting_def.is_path_list && !value.is_empty() {
+        let path_sep = if cfg!(windows) { ';' } else { ':' };
+        stored_value = value
+            .split(path_sep)
+            .filter(|p| !p.is_empty())
+            .map(normalize_path_for_config)
+            .collect::<Vec<_>>()
+            .join(&path_sep.to_string());
+        &stored_value
+    } else {
+        value
+    };
+
     config.set(&section, key, value);
     Ok(())
 }
