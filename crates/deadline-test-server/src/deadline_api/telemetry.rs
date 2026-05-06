@@ -65,3 +65,14 @@ pub async fn mock_telemetry_endpoint_expect_none(server: &MockServer) {
         .mount(server)
         .await;
 }
+
+/// Mount a telemetry endpoint that always returns 500.
+/// Use in fire-and-forget resilience tests to verify commands succeed
+/// even when telemetry is broken.
+pub async fn mock_telemetry_endpoint_error_500(server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/2023-10-12/telemetry"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(server)
+        .await;
+}

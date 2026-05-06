@@ -13,6 +13,22 @@ use deadline_job_attachments::models::FileConflictResolution;
 use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
 
+/// Per-phase latencies for `queue_sync_output_stats` telemetry.
+/// Field names match Python's `IncrementalOutputDownloadLatencies` dataclass.
+#[derive(Default, serde::Serialize)]
+struct SyncOutputLatencies {
+    #[serde(rename = "_get_download_candidate_jobs")]
+    get_download_candidate_jobs: u64,
+    #[serde(rename = "_categorize_jobs_in_checkpoint")]
+    categorize_jobs_in_checkpoint: u64,
+    #[serde(rename = "_get_job_sessions")]
+    get_job_sessions: u64,
+    path_mapping: u64,
+    #[serde(rename = "_download_all_manifests_with_absolute_paths")]
+    download_all_manifests_with_absolute_paths: u64,
+    download: u64,
+}
+
 const DOWNLOAD_CHECKPOINT_FILE_NAME: &str = "download_checkpoint.json";
 const DEFAULT_CHECKPOINT_DIR: &str = "~/.deadline/incremental_download";
 
@@ -686,6 +702,7 @@ async fn run_sync_output(
         .map_err(|e: String| CliError::Operation(e))?;
 
     // Run the incremental output download orchestration
+    let tc = create_telemetry(None);
     let updated_checkpoint = incremental_output_download(
         &farm,
         &queue_id_str,
@@ -695,6 +712,7 @@ async fn run_sync_output(
         &local_storage_profile_id,
         conflict,
         dry_run,
+        &tc,
     )
     .await?;
 
@@ -728,6 +746,7 @@ async fn incremental_output_download(
     local_storage_profile_id: &Option<String>,
     conflict: FileConflictResolution,
     dry_run: bool,
+    telemetry: &deadline_api::telemetry::TelemetryClient,
 ) -> Result<IncrementalDownloadState, CliError> {
     let now = Utc::now();
     let new_completed = std::cmp::max(
@@ -756,6 +775,11 @@ async fn incremental_output_download(
         eprintln!("  Length: {}", format_duration(update_length));
     }
     eprintln!();
+
+    // Phase timing for telemetry (matches Python's IncrementalOutputDownloadLatencies)
+    let mut latencies = SyncOutputLatencies::default();
+    let mut phase = std::time::Instant::now();
+    let mut unmapped_paths_count: usize = 0;
 
     // Step 1: Get download candidate jobs via SearchJobs
     eprintln!("Retrieving updated data from Deadline Cloud...");
@@ -822,6 +846,8 @@ async fn incremental_output_download(
     }
 
     eprintln!("...retrieval completed");
+    latencies.get_download_candidate_jobs = phase.elapsed().as_nanos() as u64;
+    phase = std::time::Instant::now();
     eprintln!();
 
     // Step 2: Categorize jobs
@@ -1085,6 +1111,8 @@ async fn incremental_output_download(
         .collect();
 
     eprintln!("...categorization completed");
+    latencies.categorize_jobs_in_checkpoint = phase.elapsed().as_nanos() as u64;
+    phase = std::time::Instant::now();
     eprintln!();
 
     // Step 2b: Storage profile path mapping rules
@@ -1182,6 +1210,8 @@ async fn incremental_output_download(
     }
 
     // Step 3: Get sessions and session actions for jobs with downloads
+    latencies.path_mapping = phase.elapsed().as_nanos() as u64;
+    phase = std::time::Instant::now();
     let jobs_to_process: std::collections::HashSet<String> = new_job_ids
         .iter()
         .chain(updated_job_ids.iter())
@@ -1317,6 +1347,8 @@ async fn incremental_output_download(
         all_session_actions.len(),
         jobs_to_process.len()
     );
+    latencies.get_job_sessions = phase.elapsed().as_nanos() as u64;
+    phase = std::time::Instant::now();
 
     // Step 4: Download output manifests and files
     eprintln!(
@@ -1337,6 +1369,7 @@ async fn incremental_output_download(
     let mut downloaded_bytes: u64 = 0;
 
     if jobs_to_process.is_empty() {
+        latencies.download_all_manifests_with_absolute_paths = phase.elapsed().as_nanos() as u64;
         eprintln!("Summary of paths to download:");
         eprintln!("  (no files to download)");
     } else {
@@ -1409,6 +1442,7 @@ async fn incremental_output_download(
                         let _ = deadline_job_attachments::incremental_download::make_manifest_paths_absolute(
                         &asset_root, &mut manifest, None, root_path_format, &mut unmapped,
                     );
+                        unmapped_paths_count += unmapped.len();
                         downloaded_manifests.push((last_modified, manifest));
                     }
                     Ok((None, _, _)) => {
@@ -1470,6 +1504,9 @@ async fn incremental_output_download(
         eprintln!();
 
         if !dry_run && !manifest_paths.is_empty() {
+            latencies.download_all_manifests_with_absolute_paths =
+                phase.elapsed().as_nanos() as u64;
+            phase = std::time::Instant::now();
             eprintln!("Downloading {total_files} files from S3...");
 
             let s3_settings = deadline_job_attachments::models::JobAttachmentS3Settings {
@@ -1530,8 +1567,14 @@ async fn incremental_output_download(
                 }
                 Err(e) => eprintln!("Warning: download error: {e}"),
             }
+            latencies.download = phase.elapsed().as_nanos() as u64;
         } else if dry_run {
+            latencies.download_all_manifests_with_absolute_paths =
+                phase.elapsed().as_nanos() as u64;
             eprintln!("Skipping downloads due to DRY RUN");
+        } else {
+            latencies.download_all_manifests_with_absolute_paths =
+                phase.elapsed().as_nanos() as u64;
         }
     }
     eprintln!();
@@ -1570,6 +1613,58 @@ async fn incremental_output_download(
     );
     eprintln!("    unchanged: {}", unchanged_job_ids.len());
     eprintln!("    inactive: {}", finished_tracking_ids.len());
+
+    // Emit queue_sync_output_stats telemetry (matches Python _incremental_download.py:1244)
+    {
+        let downloaded_session_actions: usize = job_session_action_counts
+            .values()
+            .map(|&(_, with_output)| with_output)
+            .sum();
+        let mut details = std::collections::HashMap::new();
+        details.insert(
+            "downloaded_session_actions".into(),
+            serde_json::json!(downloaded_session_actions),
+        );
+        details.insert(
+            "downloaded_files".into(),
+            serde_json::json!(downloaded_files_count),
+        );
+        details.insert(
+            "downloaded_bytes".into(),
+            serde_json::json!(downloaded_bytes),
+        );
+        details.insert(
+            "jobs_with_downloads".into(),
+            serde_json::json!({
+                "completed": completed_job_ids.len(),
+                "added": new_job_ids.len(),
+                "updated": updated_job_ids.len(),
+            }),
+        );
+        details.insert(
+            "jobs_without_downloads".into(),
+            serde_json::json!({
+                "not_using_job_attachments": attachments_free_ids.len(),
+                "missing_storage_profile": missing_storage_profile_ids.len(),
+                "unchanged": unchanged_job_ids.len(),
+                "inactive": finished_tracking_ids.len(),
+            }),
+        );
+        details.insert(
+            "unmapped_paths".into(),
+            serde_json::json!(unmapped_paths_count),
+        );
+        details.insert("dry_run".into(), serde_json::json!(dry_run));
+        details.insert(
+            "latencies".into(),
+            serde_json::to_value(&latencies).unwrap_or_default(),
+        );
+        telemetry.record_event(
+            "com.amazon.rum.deadline.queue_sync_output_stats",
+            details,
+            false,
+        );
+    }
 
     // Update checkpoint
     let mut updated_jobs: Vec<IncrementalDownloadJob> = Vec::new();

@@ -400,7 +400,8 @@ where
 /// Matches Python's `@record_success_fail_telemetry_event(metric_name=...)`.
 ///
 /// Emits `com.amazon.rum.deadline.{metric_name}` with `is_success` and
-/// optional `exception_type` (the error's Display string on failure).
+/// optional `exception_type` (the error type name only, matching Python's
+/// `type(raised_exception).__name__`).
 pub fn record_success_fail<E: std::fmt::Display>(
     telemetry: &TelemetryClient,
     metric_name: &str,
@@ -409,7 +410,9 @@ pub fn record_success_fail<E: std::fmt::Display>(
     let mut details = HashMap::new();
     details.insert("is_success".into(), serde_json::json!(result.is_ok()));
     if let Err(e) = result {
-        details.insert("exception_type".into(), serde_json::json!(e.to_string()));
+        let full = e.to_string();
+        let exception_type = full.split(':').next().unwrap_or(&full).trim();
+        details.insert("exception_type".into(), serde_json::json!(exception_type));
     }
     telemetry.record_event(
         &format!("com.amazon.rum.deadline.{metric_name}"),
@@ -686,5 +689,53 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         drop(client);
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    /// #21i: exception_type must contain only the type name (before colon),
+    /// matching Python's `type(raised_exception).__name__`.
+    /// "AccessDeniedException: User is not authorized" → "AccessDeniedException"
+    #[tokio::test]
+    async fn record_success_fail_exception_type_is_class_name_only() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1..)
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", None);
+        client.opted_out = false;
+        client.initialize_with_metadata(&endpoint, None, None, None);
+
+        let result: Result<(), String> =
+            Err("AccessDeniedException: User is not authorized to perform this action".into());
+        record_success_fail(&client, "test_metric", &result);
+
+        // Flush
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        // Inspect the captured request body
+        let requests = server.received_requests().await.unwrap();
+        let body = requests
+            .iter()
+            .map(|r| String::from_utf8_lossy(&r.body).to_string())
+            .find(|b| b.contains("test_metric"))
+            .expect("should have received a test_metric telemetry event");
+
+        // exception_type should be just "AccessDeniedException", not the full message
+        assert!(
+            body.contains("AccessDeniedException"),
+            "body should contain the exception type name"
+        );
+        assert!(
+            !body.contains("User is not authorized"),
+            "body should NOT contain the full error message after the colon, got: {body}"
+        );
     }
 }

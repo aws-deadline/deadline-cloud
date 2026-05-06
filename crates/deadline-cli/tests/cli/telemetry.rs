@@ -19,7 +19,11 @@ async fn export_credentials_success_sends_telemetry() {
         &harness.server, "farm-abc", "queue-aaa",
         json!({"credentials": {"accessKeyId": "AK", "secretAccessKey": "SK", "sessionToken": "ST", "expiration": "2024-12-18T01:00:00Z"}}),
     ).await;
-    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    telemetry::mock_telemetry_event_type(
+        &harness.server,
+        "com.amazon.rum.deadline.queue_export_credentials",
+    )
+    .await;
 
     harness
         .cli(&["queue", "export-credentials"])
@@ -47,7 +51,11 @@ async fn export_credentials_failure_sends_telemetry() {
         "AccessDeniedException",
     )
     .await;
-    telemetry::mock_telemetry_endpoint(&harness.server).await;
+    telemetry::mock_telemetry_event_type(
+        &harness.server,
+        "com.amazon.rum.deadline.queue_export_credentials",
+    )
+    .await;
 
     harness
         .cli(&["queue", "export-credentials"])

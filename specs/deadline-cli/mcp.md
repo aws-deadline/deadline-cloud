@@ -68,4 +68,17 @@ for submission, `deadline-job-attachments` for download.
 - `download_job_output` return omits `output` text field (Rust download
   functions return structured data, not stdout text).
 - Worker logs `error` field omitted when null (Rust convention).
-- No telemetry recording yet (deferred).
+
+## Telemetry
+
+Three events emitted matching Python's `_mcp/utils.py`:
+
+- **`com.amazon.rum.deadline.mcp.server_startup`** — emitted once on
+  server start with `{usage_mode: "MCP", startup_method: "cli"}`.
+- **`com.amazon.rum.deadline.mcp.latency`** — emitted per tool call
+  with `{latency: nanos, tool_name, usage_mode: "MCP"}`.
+- **`com.amazon.rum.deadline.mcp.usage`** — emitted per tool call
+  with `{tool_name, is_success, error_type, usage_mode: "MCP"}`.
+
+All tools are wrapped via `with_mcp_telemetry!` macro. Telemetry is
+fire-and-forget — errors never affect tool results.

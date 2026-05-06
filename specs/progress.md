@@ -81,10 +81,10 @@ pick and execute work items.
 | 21e | `deadlinew` windowless launcher | ✅ Done | — | — |
 | 21f | Windows config path normalization | ✅ Done | — | — |
 | 21g | Telemetry parity (success/fail events) | ✅ Done | — | — |
-| 21h | Telemetry body-content test coverage | Not started | — | 21g |
-| 21i | Telemetry `exception_type` format parity | Not started | — | 21g |
-| 21j | `queue_sync_output_stats` telemetry event | Not started | — | — |
-| 21k | MCP telemetry (`mcp.latency`, `mcp.usage`) | Not started | — | 17 |
+| 21h | Telemetry body-content test coverage | ✅ Done | — | 21g |
+| 21i | Telemetry `exception_type` format parity | ✅ Done | — | 21g |
+| 21j | `queue_sync_output_stats` telemetry event | ✅ Done | — | — |
+| 21k | MCP telemetry (`mcp.latency`, `mcp.usage`) | ✅ Done | — | 17 |
 | 22 | Fuzz testing | Not started | — | — |
 | 23 | Failure case handling analysis | Not started | — | — |
 | 27 | Typed SDK API layer | ✅ Done | — | — |

@@ -13,7 +13,7 @@
 
 use deadline_test_server::TestHarness;
 use deadline_test_server::deadline_api::{
-    bundle, errors, jobs, queue_resources, queues, s3, sts, telemetry,
+    bundle, errors, farms, jobs, queue_resources, queues, s3, sts, telemetry,
 };
 use serde_json::json;
 use std::fs;
@@ -313,4 +313,656 @@ async fn download_output_failure_emits_telemetry_event() {
         ])
         .assert()
         .failure();
+}
+
+// =========================================================================
+// Batch 4: submission event telemetry (#21h)
+// =========================================================================
+
+/// Bundle submit emits `com.amazon.rum.deadline.submission` event with submitter_name.
+#[tokio::test]
+async fn bundle_submit_emits_submission_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "Data",
+            },
+        }),
+    )
+    .await;
+    queue_resources::mock_list_queue_environments(&harness.server, FARM, QUEUE, &[]).await;
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({"credentials": {"accessKeyId": "AK", "secretAccessKey": "SK", "sessionToken": "ST", "expiration": "2025-12-18T01:00:00Z"}}),
+    )
+    .await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_head_not_found(&harness.server).await;
+    s3::mock_s3_put_success(&harness.server).await;
+    bundle::mock_create_job(&harness.server, FARM, QUEUE, JOB).await;
+    jobs::mock_get_job(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({
+            "jobId": JOB,
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "Job created successfully",
+        }),
+    )
+    .await;
+
+    // Expect submission event containing submitter_name
+    telemetry::mock_telemetry_event_type(&harness.server, "com.amazon.rum.deadline.submission")
+        .await;
+
+    let bundle_dir = create_bundle_with_file(&harness, "submission_telem");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness
+        .cli(&["config", "set", "settings.known_asset_paths", &temp_root])
+        .assert()
+        .success();
+
+    harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes"])
+        .assert()
+        .success();
+}
+
+/// Bundle submit emits `com.amazon.rum.deadline.create_job` event with is_success.
+#[tokio::test]
+async fn bundle_submit_emits_create_job_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "Data",
+            },
+        }),
+    )
+    .await;
+    queue_resources::mock_list_queue_environments(&harness.server, FARM, QUEUE, &[]).await;
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({"credentials": {"accessKeyId": "AK", "secretAccessKey": "SK", "sessionToken": "ST", "expiration": "2025-12-18T01:00:00Z"}}),
+    )
+    .await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_head_not_found(&harness.server).await;
+    s3::mock_s3_put_success(&harness.server).await;
+    bundle::mock_create_job(&harness.server, FARM, QUEUE, JOB).await;
+    jobs::mock_get_job(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({
+            "jobId": JOB,
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "Job created successfully",
+        }),
+    )
+    .await;
+
+    // Expect create_job event
+    telemetry::mock_telemetry_event_type(&harness.server, "com.amazon.rum.deadline.create_job")
+        .await;
+
+    let bundle_dir = create_bundle_with_file(&harness, "create_job_telem");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness
+        .cli(&["config", "set", "settings.known_asset_paths", &temp_root])
+        .assert()
+        .success();
+
+    harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes"])
+        .assert()
+        .success();
+}
+
+/// Bundle submit emits `com.amazon.rum.deadline.job_attachments.hashing_summary`.
+#[tokio::test]
+async fn bundle_submit_emits_hashing_summary_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "Data",
+            },
+        }),
+    )
+    .await;
+    queue_resources::mock_list_queue_environments(&harness.server, FARM, QUEUE, &[]).await;
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({"credentials": {"accessKeyId": "AK", "secretAccessKey": "SK", "sessionToken": "ST", "expiration": "2025-12-18T01:00:00Z"}}),
+    )
+    .await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_head_not_found(&harness.server).await;
+    s3::mock_s3_put_success(&harness.server).await;
+    bundle::mock_create_job(&harness.server, FARM, QUEUE, JOB).await;
+    jobs::mock_get_job(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({
+            "jobId": JOB,
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "Job created successfully",
+        }),
+    )
+    .await;
+
+    // Expect hashing_summary event
+    telemetry::mock_telemetry_event_type(
+        &harness.server,
+        "com.amazon.rum.deadline.job_attachments.hashing_summary",
+    )
+    .await;
+
+    let bundle_dir = create_bundle_with_file(&harness, "hashing_telem");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness
+        .cli(&["config", "set", "settings.known_asset_paths", &temp_root])
+        .assert()
+        .success();
+
+    harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes"])
+        .assert()
+        .success();
+}
+
+/// Bundle submit emits `com.amazon.rum.deadline.job_attachments.upload_summary`.
+#[tokio::test]
+async fn bundle_submit_emits_upload_summary_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "Data",
+            },
+        }),
+    )
+    .await;
+    queue_resources::mock_list_queue_environments(&harness.server, FARM, QUEUE, &[]).await;
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({"credentials": {"accessKeyId": "AK", "secretAccessKey": "SK", "sessionToken": "ST", "expiration": "2025-12-18T01:00:00Z"}}),
+    )
+    .await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_head_not_found(&harness.server).await;
+    s3::mock_s3_put_success(&harness.server).await;
+    bundle::mock_create_job(&harness.server, FARM, QUEUE, JOB).await;
+    jobs::mock_get_job(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({
+            "jobId": JOB,
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "lifecycleStatusMessage": "Job created successfully",
+        }),
+    )
+    .await;
+
+    // Expect upload_summary event
+    telemetry::mock_telemetry_event_type(
+        &harness.server,
+        "com.amazon.rum.deadline.job_attachments.upload_summary",
+    )
+    .await;
+
+    let bundle_dir = create_bundle_with_file(&harness, "upload_summary_telem");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness
+        .cli(&["config", "set", "settings.known_asset_paths", &temp_root])
+        .assert()
+        .success();
+
+    harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes"])
+        .assert()
+        .success();
+}
+
+/// Bundle submit failure emits `com.amazon.rum.deadline.error` event.
+#[tokio::test]
+async fn bundle_submit_failure_emits_error_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "Data",
+            },
+        }),
+    )
+    .await;
+    queue_resources::mock_list_queue_environments(&harness.server, FARM, QUEUE, &[]).await;
+    queue_resources::mock_assume_queue_role_for_user(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({"credentials": {"accessKeyId": "AK", "secretAccessKey": "SK", "sessionToken": "ST", "expiration": "2025-12-18T01:00:00Z"}}),
+    )
+    .await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    s3::mock_s3_head_not_found(&harness.server).await;
+    s3::mock_s3_put_success(&harness.server).await;
+
+    // CreateJob returns 403 — triggers error telemetry
+    bundle::mock_create_job_error(&harness.server, FARM, QUEUE, 403, "AccessDeniedException").await;
+
+    // Expect error event
+    telemetry::mock_telemetry_event_type(&harness.server, "com.amazon.rum.deadline.error").await;
+
+    let bundle_dir = create_bundle_with_file(&harness, "error_telem");
+    let temp_root = harness.config_dir.path().to_string_lossy().to_string();
+    harness
+        .cli(&["config", "set", "settings.known_asset_paths", &temp_root])
+        .assert()
+        .success();
+
+    harness
+        .cli(&["bundle", "submit", &bundle_dir, "--yes"])
+        .assert()
+        .failure();
+}
+
+// =========================================================================
+// Batch 2: queue_sync_output_stats telemetry (#21j)
+// =========================================================================
+
+/// Successful sync-output emits `queue_sync_output_stats` event with download statistics.
+#[tokio::test]
+async fn sync_output_emits_stats_telemetry_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+            "farmId": FARM,
+            "status": "SCHEDULING",
+            "defaultBudgetAction": "NONE",
+            "jobAttachmentSettings": {
+                "s3BucketName": "my-bucket",
+                "rootPrefix": "DeadlineCloud"
+            },
+            "createdAt": "2024-06-15T10:30:00Z",
+            "createdBy": "user"
+        }),
+    )
+    .await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // No jobs found
+    jobs::mock_search_jobs(&harness.server, FARM, &[], 0).await;
+
+    // Expect queue_sync_output_stats event
+    telemetry::mock_telemetry_event_type(
+        &harness.server,
+        "com.amazon.rum.deadline.queue_sync_output_stats",
+    )
+    .await;
+
+    harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+}
+
+// =========================================================================
+// Batch 3: MCP telemetry (#21k)
+// =========================================================================
+
+/// MCP server startup emits `mcp.server_startup` telemetry event.
+#[tokio::test]
+async fn mcp_server_emits_startup_telemetry() {
+    use rmcp::ServiceExt;
+    use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
+    use tokio::process::Command;
+
+    let harness = TestHarness::new().await;
+    farms::mock_list_farms(&harness.server, &[]).await;
+
+    // Expect server_startup event
+    telemetry::mock_telemetry_event_type(
+        &harness.server,
+        "com.amazon.rum.deadline.mcp.server_startup",
+    )
+    .await;
+
+    let bin = assert_cmd::cargo::cargo_bin("deadline");
+    let ep = harness.endpoint_url();
+    let config_path = harness.config_path.clone();
+    let home = harness.config_dir.path().to_str().unwrap().to_owned();
+
+    let transport = TokioChildProcess::new(Command::new(&bin).configure(move |cmd| {
+        cmd.arg("mcp-server");
+        cmd.env("AWS_ENDPOINT_URL_DEADLINE", &ep);
+        cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+        cmd.env(
+            "AWS_SECRET_ACCESS_KEY",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        );
+        cmd.env("AWS_DEFAULT_REGION", "us-west-2");
+        cmd.env("DEADLINE_CONFIG_FILE_PATH", &config_path);
+        cmd.env("HOME", &home);
+        for var in &[
+            "AWS_PROFILE",
+            "AWS_DEFAULT_PROFILE",
+            "AWS_CONFIG_FILE",
+            "AWS_SHARED_CREDENTIALS_FILE",
+            "AWS_SESSION_TOKEN",
+            "AWS_SECURITY_TOKEN",
+            "AWS_ENDPOINT_URL",
+        ] {
+            cmd.env_remove(var);
+        }
+    }))
+    .expect("failed to spawn mcp-server");
+
+    let client = ().serve(transport).await.expect("failed to initialize MCP client");
+
+    // Give server time to emit startup telemetry
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    client.cancel().await.unwrap();
+    // wiremock verifies expect(1..) on drop
+}
+
+/// MCP tool call emits `mcp.latency` telemetry event.
+#[tokio::test]
+async fn mcp_tool_emits_latency_telemetry() {
+    use rmcp::ServiceExt;
+    use rmcp::model::CallToolRequestParams;
+    use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
+    use tokio::process::Command;
+
+    let harness = TestHarness::new().await;
+    farms::mock_list_farms(
+        &harness.server,
+        &[json!({"farmId": "farm-aaa", "displayName": "Test Farm"})],
+    )
+    .await;
+
+    // Expect mcp.latency event
+    telemetry::mock_telemetry_event_type(&harness.server, "com.amazon.rum.deadline.mcp.latency")
+        .await;
+
+    let bin = assert_cmd::cargo::cargo_bin("deadline");
+    let ep = harness.endpoint_url();
+    let config_path = harness.config_path.clone();
+    let home = harness.config_dir.path().to_str().unwrap().to_owned();
+
+    let transport = TokioChildProcess::new(Command::new(&bin).configure(move |cmd| {
+        cmd.arg("mcp-server");
+        cmd.env("AWS_ENDPOINT_URL_DEADLINE", &ep);
+        cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+        cmd.env(
+            "AWS_SECRET_ACCESS_KEY",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        );
+        cmd.env("AWS_DEFAULT_REGION", "us-west-2");
+        cmd.env("DEADLINE_CONFIG_FILE_PATH", &config_path);
+        cmd.env("HOME", &home);
+        for var in &[
+            "AWS_PROFILE",
+            "AWS_DEFAULT_PROFILE",
+            "AWS_CONFIG_FILE",
+            "AWS_SHARED_CREDENTIALS_FILE",
+            "AWS_SESSION_TOKEN",
+            "AWS_SECURITY_TOKEN",
+            "AWS_ENDPOINT_URL",
+        ] {
+            cmd.env_remove(var);
+        }
+    }))
+    .expect("failed to spawn mcp-server");
+
+    let client = ().serve(transport).await.expect("failed to initialize MCP client");
+
+    // Call a tool to trigger latency telemetry
+    let _result = client
+        .call_tool(CallToolRequestParams::new("deadline_list_farms"))
+        .await
+        .expect("call_tool failed");
+
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    client.cancel().await.unwrap();
+}
+
+/// MCP tool call emits `mcp.usage` telemetry event.
+#[tokio::test]
+async fn mcp_tool_emits_usage_telemetry() {
+    use rmcp::ServiceExt;
+    use rmcp::model::CallToolRequestParams;
+    use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
+    use tokio::process::Command;
+
+    let harness = TestHarness::new().await;
+    farms::mock_list_farms(
+        &harness.server,
+        &[json!({"farmId": "farm-aaa", "displayName": "Test Farm"})],
+    )
+    .await;
+
+    // Expect mcp.usage event
+    telemetry::mock_telemetry_event_type(&harness.server, "com.amazon.rum.deadline.mcp.usage")
+        .await;
+
+    let bin = assert_cmd::cargo::cargo_bin("deadline");
+    let ep = harness.endpoint_url();
+    let config_path = harness.config_path.clone();
+    let home = harness.config_dir.path().to_str().unwrap().to_owned();
+
+    let transport = TokioChildProcess::new(Command::new(&bin).configure(move |cmd| {
+        cmd.arg("mcp-server");
+        cmd.env("AWS_ENDPOINT_URL_DEADLINE", &ep);
+        cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+        cmd.env(
+            "AWS_SECRET_ACCESS_KEY",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        );
+        cmd.env("AWS_DEFAULT_REGION", "us-west-2");
+        cmd.env("DEADLINE_CONFIG_FILE_PATH", &config_path);
+        cmd.env("HOME", &home);
+        for var in &[
+            "AWS_PROFILE",
+            "AWS_DEFAULT_PROFILE",
+            "AWS_CONFIG_FILE",
+            "AWS_SHARED_CREDENTIALS_FILE",
+            "AWS_SESSION_TOKEN",
+            "AWS_SECURITY_TOKEN",
+            "AWS_ENDPOINT_URL",
+        ] {
+            cmd.env_remove(var);
+        }
+    }))
+    .expect("failed to spawn mcp-server");
+
+    let client = ().serve(transport).await.expect("failed to initialize MCP client");
+
+    // Call a tool to trigger usage telemetry
+    let _result = client
+        .call_tool(CallToolRequestParams::new("deadline_list_farms"))
+        .await
+        .expect("call_tool failed");
+
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    client.cancel().await.unwrap();
+}
+
+// =========================================================================
+// Fire-and-forget resilience: telemetry failure doesn't affect commands
+// =========================================================================
+
+/// MCP tool call succeeds even when telemetry endpoint returns 500.
+/// Verifies fire-and-forget: telemetry errors never stall or fail the tool.
+#[tokio::test]
+async fn mcp_tool_succeeds_when_telemetry_endpoint_errors() {
+    use rmcp::ServiceExt;
+    use rmcp::model::CallToolRequestParams;
+    use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
+    use tokio::process::Command;
+
+    let harness = TestHarness::new().await;
+    farms::mock_list_farms(
+        &harness.server,
+        &[json!({"farmId": "farm-aaa", "displayName": "Test Farm"})],
+    )
+    .await;
+
+    // Telemetry endpoint returns 500 — should not affect tool result
+    telemetry::mock_telemetry_endpoint_error_500(&harness.server).await;
+
+    let bin = assert_cmd::cargo::cargo_bin("deadline");
+    let ep = harness.endpoint_url();
+    let config_path = harness.config_path.clone();
+    let home = harness.config_dir.path().to_str().unwrap().to_owned();
+
+    let transport = TokioChildProcess::new(Command::new(&bin).configure(move |cmd| {
+        cmd.arg("mcp-server");
+        cmd.env("AWS_ENDPOINT_URL_DEADLINE", &ep);
+        cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+        cmd.env(
+            "AWS_SECRET_ACCESS_KEY",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        );
+        cmd.env("AWS_DEFAULT_REGION", "us-west-2");
+        cmd.env("DEADLINE_CONFIG_FILE_PATH", &config_path);
+        cmd.env("HOME", &home);
+        for var in &[
+            "AWS_PROFILE",
+            "AWS_DEFAULT_PROFILE",
+            "AWS_CONFIG_FILE",
+            "AWS_SHARED_CREDENTIALS_FILE",
+            "AWS_SESSION_TOKEN",
+            "AWS_SECURITY_TOKEN",
+            "AWS_ENDPOINT_URL",
+        ] {
+            cmd.env_remove(var);
+        }
+    }))
+    .expect("failed to spawn mcp-server");
+
+    let client = ().serve(transport).await.expect("failed to initialize MCP client");
+
+    // Tool call should succeed despite telemetry errors
+    let result = client
+        .call_tool(CallToolRequestParams::new("deadline_list_farms"))
+        .await
+        .expect("call_tool should succeed even with telemetry errors");
+
+    let text = result
+        .content
+        .first()
+        .and_then(|c| c.raw.as_text())
+        .expect("expected text content");
+    assert!(
+        text.text.contains("farm-aaa"),
+        "tool should return farm data"
+    );
+
+    client.cancel().await.unwrap();
+}
+
+/// sync-output succeeds even when telemetry endpoint returns 500.
+/// Verifies fire-and-forget for the new queue_sync_output_stats event.
+#[tokio::test]
+async fn sync_output_succeeds_when_telemetry_endpoint_errors() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    let checkpoint_dir = TempDir::new().unwrap();
+
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+            "farmId": FARM,
+            "status": "SCHEDULING",
+            "defaultBudgetAction": "NONE",
+            "jobAttachmentSettings": {
+                "s3BucketName": "my-bucket",
+                "rootPrefix": "DeadlineCloud"
+            },
+            "createdAt": "2024-06-15T10:30:00Z",
+            "createdBy": "user"
+        }),
+    )
+    .await;
+    sts::mock_get_caller_identity(&harness.server).await;
+    jobs::mock_search_jobs(&harness.server, FARM, &[], 0).await;
+
+    // Telemetry returns 500 — command should still succeed
+    telemetry::mock_telemetry_endpoint_error_500(&harness.server).await;
+
+    harness
+        .cli(&[
+            "queue",
+            "sync-output",
+            "--ignore-storage-profiles",
+            "--checkpoint-dir",
+            checkpoint_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
 }
