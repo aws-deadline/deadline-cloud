@@ -18,7 +18,7 @@ Verifies the Deadline Workstation Config dialog:
   - Ok/Cancel/Apply buttons exist
 
 Run with:
-    hatch run gui:test
+    hatch run test test/unit/deadline_client/ui/gui/
 """
 
 import contextlib

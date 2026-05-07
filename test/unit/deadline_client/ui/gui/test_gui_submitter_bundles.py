@@ -8,11 +8,11 @@ verifying that the Submit to AWS Deadline Cloud dialog correctly loads job bundl
 and displays their settings.
 
 Run with:
-    hatch run gui:test
+    hatch run test test/unit/deadline_client/ui/gui/
 """
 
-import os
 from configparser import ConfigParser
+from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -28,10 +28,11 @@ except ImportError:
     pytest.skip("GUI dependencies not available", allow_module_level=True)
 
 
-# Paths to the sample job bundles shipped with the Squish tests
-_SAMPLES_DIR = os.path.join(os.path.dirname(__file__), "..", "squish", "deadline_gui_test_samples")
-SIMPLE_UI_WITH_JA = os.path.join(_SAMPLES_DIR, "simple_ui_with_ja")
-SIMPLE_UI_NO_JA = os.path.join(_SAMPLES_DIR, "simple_ui_no_ja")
+# test/unit/deadline_client/ui/gui/ -> test/
+_TEST_ROOT = Path(__file__).resolve().parents[4]
+_SAMPLES_DIR = _TEST_ROOT / "squish" / "deadline_gui_test_samples"
+SIMPLE_UI_WITH_JA = str(_SAMPLES_DIR / "simple_ui_with_ja")
+SIMPLE_UI_NO_JA = str(_SAMPLES_DIR / "simple_ui_no_ja")
 
 
 class MockJobSettingsWidget(QWidget):
