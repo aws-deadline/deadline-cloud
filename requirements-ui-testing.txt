@@ -1,6 +1,6 @@
 pytest == 9.*
 pytest-timeout >= 2.3
-pytest-cov >= 4
+pytest-cov >= 7.1.0
 pytest-xdist >= 3
 xa11y == 0.7.*
 # MockDeadlineBackend._parse_template validates submitted templates using
