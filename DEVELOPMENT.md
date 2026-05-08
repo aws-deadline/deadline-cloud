@@ -192,7 +192,7 @@ production endpoints look like: `export AWS_ENDPOINT_URL_DEADLINE="https://deadl
 
 ### GUI Tests (pytest-qt)
 
-GUI tests are located under `test/unit/deadline_client/ui/gui/`. They use [pytest-qt](https://pytest-qt.readthedocs.io/) to test Qt widgets and dialogs in-process, with `MockDeadlineBackend` providing fake API responses. No AWS credentials or Squish license required.
+GUI tests are located under `test/unit/deadline_client/ui/gui/`. They use [pytest-qt](https://pytest-qt.readthedocs.io/) to test Qt widgets and dialogs in-process, with `MockDeadlineBackend` providing fake API responses. No AWS credentials required.
 
 #### Running GUI Tests
 

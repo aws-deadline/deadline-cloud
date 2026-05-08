@@ -1,25 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""
-pytest-qt proof-of-concept: settings dialogue tests.
-
-This is a pytest-qt equivalent of the Squish tst_verify_settings_dialogue test,
-demonstrating that we can replace Squish GUI tests with open-source tooling
-that runs in our existing CI pipeline with no commercial license required.
-
-Verifies the Deadline Workstation Config dialog:
-  - Dialog opens and is visible
-  - AWS profile dropdown populated
-  - Farm/queue/storage profile dropdowns populated from MockDeadlineBackend
-  - Job attachments filesystem options and tooltips
-  - Checkboxes are checkable
-  - Conflict resolution and log level dropdowns work
-  - Job history directory widget is functional
-  - Ok/Cancel/Apply buttons exist
-
-Run with:
-    hatch run test test/unit/deadline_client/ui/gui/
-"""
+"""Settings dialogue tests using pytest-qt."""
 
 import contextlib
 import sys
@@ -54,16 +35,16 @@ def _reset_singletons():
 
 @pytest.fixture
 def mock_backend(mock_deadline_backend):
-    """Seed a MockDeadlineBackend with the resources the Squish tests expect."""
+    """Seed a MockDeadlineBackend with farms, queues, and storage profiles."""
     backend = mock_deadline_backend
 
     farm = backend.create_farm(
-        displayName="Deadline Cloud Squish Farm",
-        description="Squish Automation Test Framework",
+        displayName="Test Farm",
+        description="Automated GUI Test Farm",
     )
     farm_id = farm["farmId"]
 
-    queue = backend.create_queue(farmId=farm_id, displayName="Squish Automation Queue")
+    queue = backend.create_queue(farmId=farm_id, displayName="Test Queue")
     queue_id = queue["queueId"]
 
     for name, os_family in [
@@ -186,12 +167,6 @@ def config_widget(qtbot, mock_api, deadline_config):
 
 
 class TestSettingsDialogue:
-    """
-    pytest-qt equivalent of Squish tst_verify_settings_dialogue.
-
-    Each test method corresponds to a verification from the original Squish test.
-    """
-
     def test_dialog_opens(self, qtbot, mock_api, deadline_config):
         """Verify the config dialog can be created and is visible."""
         dialog = DeadlineConfigDialog()
@@ -293,7 +268,7 @@ class TestSettingsDialogue:
         QApplication.processEvents()
 
         items = [combo.itemText(i) for i in range(combo.count())]
-        assert "Deadline Cloud Squish Farm" in items
+        assert "Test Farm" in items
 
     def test_queue_dropdown_populated_from_backend(self, qtbot, config_widget, mock_backend):
         """Verify queue dropdown gets populated for a given farm."""
@@ -307,7 +282,7 @@ class TestSettingsDialogue:
 
         queue_combo = config_widget.default_queue_box.box
         items = [queue_combo.itemText(i) for i in range(queue_combo.count())]
-        assert "Squish Automation Queue" in items
+        assert "Test Queue" in items
 
     def test_storage_profile_dropdown_populated_from_backend(
         self, qtbot, config_widget, mock_backend
@@ -345,3 +320,33 @@ class TestSettingsDialogue:
         assert ok_btn is not None
         assert cancel_btn is not None
         assert apply_btn is not None
+
+    def test_queue_resets_when_farm_changes(self, qtbot, config_widget, mock_backend):
+        """Verify queue dropdown resets when a different farm is selected."""
+        backend, farm_id, _ = mock_backend
+        controller = DeadlineUIController.getInstance()
+
+        # Populate farm dropdown
+        with qtbot.waitSignal(controller.farms_updated, timeout=5000):
+            controller.refresh_farms()
+        QApplication.processEvents()
+
+        # Populate queues for the first farm
+        with qtbot.waitSignal(controller.queues_updated, timeout=5000):
+            controller.refresh_queues(farm_id=farm_id)
+        QApplication.processEvents()
+
+        queue_combo = config_widget.default_queue_box.box
+        assert queue_combo.count() > 0
+
+        # Create a second farm with no queues
+        farm2 = backend.create_farm(displayName="Empty Farm")
+        farm2_id = farm2["farmId"]
+
+        # Switch to the new farm — queue list should be empty
+        with qtbot.waitSignal(controller.queues_updated, timeout=5000):
+            controller.refresh_queues(farm_id=farm2_id)
+        QApplication.processEvents()
+
+        items = [queue_combo.itemText(i) for i in range(queue_combo.count())]
+        assert "Test Queue" not in items

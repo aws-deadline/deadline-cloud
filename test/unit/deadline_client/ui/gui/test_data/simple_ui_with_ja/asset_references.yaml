@@ -1,0 +1,10 @@
+assetReferences:
+  inputs:
+    directories:
+    - ./simple_ui_images
+    filenames:
+    - ./simple_ui_assets/lighting/simple_ui_scene.txt
+  outputs:
+    directories:
+    - ./output_images
+  referencedPaths: []

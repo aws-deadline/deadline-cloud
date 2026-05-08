@@ -1,15 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""
-pytest-qt proof-of-concept: GUI submitter bundle tests.
-
-This is a pytest-qt equivalent of the Squish tst_verify_gui_submitter_bundles test,
-verifying that the Submit to AWS Deadline Cloud dialog correctly loads job bundles
-and displays their settings.
-
-Run with:
-    hatch run test test/unit/deadline_client/ui/gui/
-"""
+"""GUI submitter bundle tests using pytest-qt."""
 
 from configparser import ConfigParser
 from pathlib import Path
@@ -18,6 +9,8 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 
 try:
+    from qtpy.QtCore import QEvent, Qt  # type: ignore[attr-defined]
+    from qtpy.QtGui import QKeyEvent  # type: ignore[attr-defined]
     from qtpy.QtWidgets import QWidget
     from deadline.client.ui.dataclasses import JobBundleSettings
     from deadline.client.ui.dialogs.submit_job_to_deadline_dialog import (
@@ -28,11 +21,9 @@ except ImportError:
     pytest.skip("GUI dependencies not available", allow_module_level=True)
 
 
-# test/unit/deadline_client/ui/gui/ -> test/
-_TEST_ROOT = Path(__file__).resolve().parents[4]
-_SAMPLES_DIR = _TEST_ROOT / "squish" / "deadline_gui_test_samples"
-SIMPLE_UI_WITH_JA = str(_SAMPLES_DIR / "simple_ui_with_ja")
-SIMPLE_UI_NO_JA = str(_SAMPLES_DIR / "simple_ui_no_ja")
+_TEST_DATA = Path(__file__).resolve().parent / "test_data"
+SIMPLE_UI_WITH_JA = str(_TEST_DATA / "simple_ui_with_ja")
+SIMPLE_UI_NO_JA = str(_TEST_DATA / "simple_ui_no_ja")
 
 
 class MockJobSettingsWidget(QWidget):
@@ -111,35 +102,19 @@ def submitter_dialog(qtbot, mock_auth_status):
 
 
 class TestGuiSubmitterBundles:
-    """
-    pytest-qt equivalent of Squish tst_verify_gui_submitter_bundles.
-    """
-
-    def test_submitter_dialog_opens(self, submitter_dialog):
-        """Verify the submitter dialog opens with correct title."""
+    def test_submitter_dialog_structure(self, submitter_dialog):
+        """Verify the submitter dialog opens correctly with expected tabs and controls."""
         assert submitter_dialog.isVisible()
         assert submitter_dialog.windowTitle() == "Submit to AWS Deadline Cloud"
 
-    def test_shared_job_settings_tab_exists(self, submitter_dialog):
-        """Verify the Shared job settings tab is present."""
         tabs = submitter_dialog.tabs
         tab_names = [tabs.tabText(i) for i in range(tabs.count())]
         assert "Shared job settings" in tab_names
-
-    def test_job_specific_settings_tab_exists(self, submitter_dialog):
-        """Verify the Job-specific settings tab is present."""
-        tabs = submitter_dialog.tabs
-        tab_names = [tabs.tabText(i) for i in range(tabs.count())]
         assert "Job-specific settings" in tab_names
 
-    def test_job_name_matches_bundle_with_ja(self, submitter_dialog):
-        """Verify the job name matches the simple_ui_with_ja bundle."""
         props = submitter_dialog.shared_job_settings.shared_job_properties_box
         assert props.sub_name_edit.text() == "Simple UI with Job Attachments"
 
-    def test_load_bundle_button_exists(self, submitter_dialog):
-        """Verify the 'Load Bundle' button exists when browse is enabled."""
-        assert hasattr(submitter_dialog, "load_bundle_button")
         assert submitter_dialog.load_bundle_button.text() == "Load Bundle"
         assert submitter_dialog.load_bundle_button.isEnabled()
 
@@ -153,3 +128,73 @@ class TestGuiSubmitterBundles:
         )
         props = dialog.shared_job_settings.shared_job_properties_box
         assert props.sub_name_edit.text() == "Simple UI - No Job Attachments"
+
+    def test_job_attachments_tab_exists(self, submitter_dialog):
+        """Verify the Job attachments tab is present."""
+        tabs = submitter_dialog.tabs
+        tab_names = [tabs.tabText(i) for i in range(tabs.count())]
+        assert "Job attachments" in tab_names
+
+    def test_submit_button_disabled_when_api_unavailable(self, submitter_dialog):
+        """Verify submit button is disabled when API is not available."""
+        assert not submitter_dialog.submit_button.isEnabled()
+
+    def test_submit_button_tooltip_when_disabled(self, submitter_dialog):
+        """Verify submit button has informative tooltip when disabled."""
+        tooltip = submitter_dialog.submit_button.toolTip()
+        assert "Cannot submit job" in tooltip
+
+    def test_export_bundle_button_exists(self, submitter_dialog):
+        """Verify the Export bundle button is present."""
+        assert submitter_dialog.export_bundle_button.text() == "Export bundle"
+
+    def test_settings_button_exists(self, submitter_dialog):
+        """Verify the Settings button is present."""
+        assert submitter_dialog.settings_button.text() == "Settings..."
+
+    def test_host_requirements_tab_hidden_by_default(self, submitter_dialog):
+        """Verify host requirements tab is not shown by default."""
+        tabs = submitter_dialog.tabs
+        tab_names = [tabs.tabText(i) for i in range(tabs.count())]
+        assert "Host requirements" not in tab_names
+
+    def test_host_requirements_tab_shown_when_requested(self, qtbot, mock_auth_status):
+        """Verify host requirements tab appears when show_host_requirements_tab=True."""
+        with patch(
+            "deadline.client.ui.widgets.deadline_authentication_status_widget"
+            ".DeadlineAuthenticationStatus.getInstance",
+            return_value=mock_auth_status,
+        ), patch(
+            "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
+            ".DeadlineAuthenticationStatus.getInstance",
+            return_value=mock_auth_status,
+        ):
+            settings = JobBundleSettings(
+                input_job_bundle_dir=SIMPLE_UI_WITH_JA,
+                name="Test",
+            )
+            dialog = SubmitJobToDeadlineDialog(
+                job_setup_widget_type=MockJobSettingsWidget,
+                initial_job_settings=settings,
+                initial_shared_parameter_values={},
+                auto_detected_attachments=AssetReferences(),
+                attachments=AssetReferences(),
+                on_create_job_bundle_callback=MagicMock(),
+                show_host_requirements_tab=True,
+            )
+            qtbot.addWidget(dialog)
+
+            tabs = dialog.tabs
+            tab_names = [tabs.tabText(i) for i in range(tabs.count())]
+            assert "Host requirements" in tab_names
+
+    def test_enter_key_does_not_close_dialog(self, qtbot, submitter_dialog):
+        """Verify pressing Enter/Return doesn't trigger submission."""
+        event = QKeyEvent(
+            QEvent.Type.KeyPress,
+            Qt.Key.Key_Return,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        submitter_dialog.keyPressEvent(event)
+        # Dialog should still be visible (not closed/accepted)
+        assert submitter_dialog.isVisible()
