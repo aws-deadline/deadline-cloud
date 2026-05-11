@@ -34,6 +34,18 @@ pre-install-commands = [
 [envs.ui.scripts]
 test = "pytest --no-cov -vvv --numprocesses=1 -o \"testpaths=test/ui\" --confcutdir=test/ui {args:test/ui}"
 
+[envs.blender-ui]
+features = ["gui"]
+pre-install-commands = [
+  "pip install -r requirements-ui-testing.txt",
+  "pip install \"moto[server,s3]>=5\" boto3",
+  "pip install --no-deps deadline-cloud-for-blender",
+  "pip install deadline-job-attachments openjd-adaptor-runtime",
+]
+
+[envs.blender-ui.scripts]
+test = "pytest --no-cov -vvv --numprocesses=1 -o \"testpaths=test/blender_submitter_ui\" --confcutdir=test/blender_submitter_ui {args:test/blender_submitter_ui}"
+
 [envs.installer]
 pre-install-commands = ["pip install -r requirements-installer.txt"]
 

@@ -1,0 +1,233 @@
+name: Blender Submitter UI Integration Test
+
+on:
+  push:
+    branches: [mainline, release]
+  pull_request:
+    branches: [mainline, release, 'patch_*', 'feature_*']
+  workflow_dispatch:
+
+env:
+  BLENDER_VERSION: "5.0.1"
+  BLENDER_PLUGIN_VERSION: ""  # empty = latest release from PyPI
+
+jobs:
+  blender-ui-test-linux:
+    name: Blender Submitter UI (Linux)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      DISPLAY: ':99'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        id: cache-apt
+        with:
+          path: ~/apt-cache
+          key: apt-blender-ui-${{ runner.os }}-v1
+
+      - name: Install system dependencies
+        run: |
+          if [ "${{ steps.cache-apt.outputs.cache-hit }}" = "true" ]; then
+            sudo cp -r ~/apt-cache/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+          fi
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb dbus dbus-x11 at-spi2-core \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-image0 libxcb-render-util0 \
+            libxcb-xkb1 libegl1 libglib2.0-0 libfontconfig1 \
+            libdbus-1-3 libx11-xcb1 libxcb-render0 libxcb-shape0 \
+            libxcb-xfixes0 \
+            libxi6 libxxf86vm1 libxfixes3 libxrender1 \
+            libgl1-mesa-glx libsm6
+          mkdir -p ~/apt-cache
+          cp /var/cache/apt/archives/*.deb ~/apt-cache/ 2>/dev/null || true
+
+      - name: Cache Blender
+        uses: actions/cache@v4
+        id: cache-blender
+        with:
+          path: /opt/blender-${{ env.BLENDER_VERSION }}-linux-x64
+          key: blender-${{ runner.os }}-${{ env.BLENDER_VERSION }}
+
+      - name: Install Blender
+        if: steps.cache-blender.outputs.cache-hit != 'true'
+        run: |
+          BLENDER_SHORT=$(echo "$BLENDER_VERSION" | cut -d. -f1,2)
+          BLENDER_URL="https://download.blender.org/release/Blender${BLENDER_SHORT}/blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          curl -sL "$BLENDER_URL" -o /tmp/blender.tar.xz
+          sudo tar -xJf /tmp/blender.tar.xz -C /opt
+
+      - name: Set Blender path
+        run: |
+          echo "BLENDER_EXECUTABLE=/opt/blender-${BLENDER_VERSION}-linux-x64/blender" >> $GITHUB_ENV
+          # Remove Blender's bundled boto/botocore so our version is used
+          rm -rf /opt/blender-${BLENDER_VERSION}-linux-x64/*/python/lib/*/site-packages/boto* 2>/dev/null || true
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Run test under Xvfb + AT-SPI
+        run: |
+          dbus-run-session -- bash -c '
+            set -e
+            Xvfb :99 -screen 0 1920x1080x24 -ac &
+            sleep 1
+
+            export QT_ACCESSIBILITY=1
+            export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+
+            /usr/libexec/at-spi-bus-launcher --launch-immediately &
+            sleep 1
+            /usr/libexec/at-spi2-registryd &
+            sleep 1
+
+            hatch run blender-ui:test --timeout=300
+          '
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-linux
+          path: /tmp/*.png
+          if-no-files-found: ignore
+
+  blender-ui-test-macos:
+    name: Blender Submitter UI (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Cache Blender
+        uses: actions/cache@v4
+        id: cache-blender
+        with:
+          path: /Applications/Blender.app
+          key: blender-${{ runner.os }}-${{ env.BLENDER_VERSION }}
+
+      - name: Install Blender
+        if: steps.cache-blender.outputs.cache-hit != 'true'
+        run: |
+          BLENDER_SHORT=$(echo "$BLENDER_VERSION" | cut -d. -f1,2)
+          BLENDER_URL="https://download.blender.org/release/Blender${BLENDER_SHORT}/blender-${BLENDER_VERSION}-macos-arm64.dmg"
+          curl -sL "$BLENDER_URL" -o /tmp/blender.dmg
+          hdiutil attach /tmp/blender.dmg -nobrowse -mountpoint /Volumes/Blender
+          sudo cp -R /Volumes/Blender/Blender.app /Applications/Blender.app
+          hdiutil detach /Volumes/Blender
+
+      - name: Set Blender path
+        run: |
+          echo "BLENDER_EXECUTABLE=/Applications/Blender.app/Contents/MacOS/Blender" >> $GITHUB_ENV
+          rm -rf /Applications/Blender.app/Contents/Resources/*/python/lib/*/site-packages/boto* 2>/dev/null || true
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Grant accessibility TCC permission
+        run: |
+          HATCH_PYTHON=$(hatch -e blender-ui run python -c "import os,sys; print(os.path.realpath(sys.executable))")
+          SETUP_PYTHON=$(python3 -c "import os,sys; print(os.path.realpath(sys.executable))")
+          BLENDER_BIN="/Applications/Blender.app/Contents/MacOS/Blender"
+          for BIN_PATH in "$SETUP_PYTHON" "$HATCH_PYTHON" "$BLENDER_BIN"; do
+            sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+              "INSERT OR REPLACE INTO access(service,client,client_type,auth_value,auth_reason,auth_version,csreq,policy_id,indirect_object_identifier_type,indirect_object_identifier,indirect_object_code_identity,flags,last_modified) \
+              VALUES('kTCCServiceAccessibility','${BIN_PATH}',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s));"
+          done
+          sudo launchctl stop com.apple.tccd 2>/dev/null || true
+          sleep 2
+
+      - name: Run test
+        env:
+          QT_ACCESSIBILITY: "1"
+        run: hatch run blender-ui:test --timeout=300
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-macos
+          path: /tmp/*.png
+          if-no-files-found: ignore
+
+  blender-ui-test-windows:
+    name: Blender Submitter UI (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Cache Blender
+        uses: actions/cache@v4
+        id: cache-blender
+        with:
+          path: C:\Tools\blender-${{ env.BLENDER_VERSION }}-windows-x64
+          key: blender-${{ runner.os }}-${{ env.BLENDER_VERSION }}
+
+      - name: Install Blender
+        if: steps.cache-blender.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $blenderShort = "$env:BLENDER_VERSION".Split('.')[0..1] -join '.'
+          $url = "https://download.blender.org/release/Blender${blenderShort}/blender-${env:BLENDER_VERSION}-windows-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\blender.zip"
+          Expand-Archive -Path "$env:TEMP\blender.zip" -DestinationPath "C:\Tools"
+
+      - name: Install Mesa llvmpipe (software OpenGL)
+        shell: pwsh
+        run: |
+          # Mesa3D provides a software OpenGL implementation for headless rendering
+          $mesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/24.3.2/mesa3d-24.3.2-release-msvc.7z"
+          Invoke-WebRequest -Uri $mesaUrl -OutFile "$env:TEMP\mesa.7z"
+          7z x "$env:TEMP\mesa.7z" -o"$env:TEMP\mesa" -y
+          # Copy opengl32.dll next to blender.exe so it uses Mesa's software renderer
+          $blenderDir = "C:\Tools\blender-${env:BLENDER_VERSION}-windows-x64"
+          Copy-Item "$env:TEMP\mesa\x64\opengl32.dll" "$blenderDir\opengl32.dll"
+          Copy-Item "$env:TEMP\mesa\x64\libgallium_wgl.dll" "$blenderDir\libgallium_wgl.dll"
+          Copy-Item "$env:TEMP\mesa\x64\libglapi.dll" "$blenderDir\libglapi.dll"
+          Copy-Item "$env:TEMP\mesa\x64\dxil.dll" "$blenderDir\dxil.dll" -ErrorAction SilentlyContinue
+
+      - name: Set Blender path
+        shell: pwsh
+        run: |
+          $blenderExe = "C:\Tools\blender-${env:BLENDER_VERSION}-windows-x64\blender.exe"
+          echo "BLENDER_EXECUTABLE=$blenderExe" >> $env:GITHUB_ENV
+          Get-ChildItem -Path "C:\Tools\blender-${env:BLENDER_VERSION}-windows-x64" -Recurse -Directory -Filter "boto*" | Where-Object { $_.FullName -match "site-packages" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Run test
+        env:
+          QT_ACCESSIBILITY: "1"
+          GALLIUM_DRIVER: llvmpipe
+          MESA_GL_VERSION_OVERRIDE: "4.5"
+        run: hatch run blender-ui:test --timeout=300
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-windows
+          path: C:\Users\runneradmin\AppData\Local\Temp\*.png
+          if-no-files-found: ignore
