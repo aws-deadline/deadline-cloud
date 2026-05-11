@@ -1,0 +1,560 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+"""Page-object helpers for UI tests.
+
+Wraps a ``deadline`` GUI subprocess + its xa11y ``App`` handle so tests
+can drive the real CLI through the accessibility tree.
+"""
+
+from __future__ import annotations
+
+import atexit
+import json
+import subprocess
+import sys
+import time
+import weakref
+from typing import Optional, Sequence, TypeVar
+
+import xa11y
+
+# ---------------------------------------------------------------------------
+# Timeouts (seconds)
+# ---------------------------------------------------------------------------
+# Tuned for mock-backend runs over localhost HTTP. Generous ceilings
+# because Qt/AT-SPI startup under Xvfb on Linux CI and Windows UIA can
+# be substantially slower than a developer workstation.
+STARTUP_TIMEOUT = 15.0
+CLOSE_TIMEOUT = 10.0
+TERMINATE_TIMEOUT = 3.0
+SUBMIT_TIMEOUT = 20.0
+CANCEL_TIMEOUT = 10.0
+FARM_RESOLVE_TIMEOUT = 10.0
+EXPORT_TIMEOUT = 10.0
+
+# ---------------------------------------------------------------------------
+# Shared test data
+# ---------------------------------------------------------------------------
+SAMPLE_TEMPLATE = {
+    "specificationVersion": "jobtemplate-2023-09",
+    "name": "Test Render Job",
+    "description": "A test job for UI verification",
+    "steps": [
+        {
+            "name": "RenderStep",
+            "script": {
+                "actions": {"onRun": {"command": "bash", "args": ["-c", "echo hello"]}},
+            },
+        }
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# CLI helpers
+# ---------------------------------------------------------------------------
+
+
+def cli_get(env: dict, setting: str) -> str:
+    """Read a deadline config setting via the CLI subprocess."""
+    return subprocess.check_output(
+        ["deadline", "config", "get", setting], env=env, text=True, stderr=subprocess.DEVNULL
+    ).strip()
+
+
+def cli_set(env: dict, setting: str, value: str) -> None:
+    """Write a deadline config setting via the CLI subprocess."""
+    subprocess.check_call(
+        ["deadline", "config", "set", setting, value],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def last_json_object(text: str) -> dict:
+    """Return the last JSON object found in *text*.
+
+    ``deadline bundle gui-submit --output json`` prints a single object at
+    the end of the run. Other libraries may log to stdout; this helper
+    tolerates them by scanning for every ``{...}`` block that
+    ``json.JSONDecoder.raw_decode`` can parse and returning the last one.
+    """
+    decoder = json.JSONDecoder()
+    last: dict | None = None
+    i = 0
+    while i < len(text):
+        if text[i] != "{":
+            i += 1
+            continue
+        try:
+            obj, end = decoder.raw_decode(text, i)
+        except json.JSONDecodeError:
+            i += 1
+            continue
+        if isinstance(obj, dict):
+            last = obj
+        i = end
+    if last is None:
+        raise AssertionError(f"No JSON object found in stdout: {text!r}")
+    return last
+
+
+# ---------------------------------------------------------------------------
+# Accessibility selector helpers
+# ---------------------------------------------------------------------------
+
+
+def _dialog_selector(name: str) -> str:
+    """Return the xa11y selector for a Qt dialog with the given *name*.
+
+    Qt's top-level QDialog is exposed as ``dialog`` on macOS/Linux but
+    ``window`` on Windows UIA.
+    """
+    role = "window" if sys.platform.startswith("win") else "dialog"
+    return f'{role}[name="{name}"]'
+
+
+# ---------------------------------------------------------------------------
+# Process management
+# ---------------------------------------------------------------------------
+_T = TypeVar("_T", bound="DeadlineApp")
+_LIVE_PROCS: "weakref.WeakSet[subprocess.Popen]" = weakref.WeakSet()
+
+
+def _register(proc: subprocess.Popen) -> None:
+    _LIVE_PROCS.add(proc)
+
+
+def _send_signal_to_proc(proc: subprocess.Popen, sig: int) -> None:
+    """Send *sig* to the subprocess's process group (POSIX) or call
+    ``kill()``/``terminate()`` (Windows).
+
+    On POSIX the subprocess is started with ``start_new_session=True``, so
+    signalling the group also reaches any dbus / AT-SPI helpers Qt spawned.
+    """
+    if proc.poll() is not None:
+        return
+    if sys.platform != "win32":
+        import os
+
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except (ProcessLookupError, PermissionError, OSError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
+    else:
+        try:
+            # Windows has no POSIX signals; map to kill()/terminate().
+            # signal.SIGKILL (9) doesn't exist on Windows, so compare
+            # against the integer directly.
+            if sig == 9:  # SIGKILL
+                proc.kill()
+            else:
+                proc.terminate()
+        except OSError:
+            pass
+
+
+def _terminate(proc: subprocess.Popen, timeout: float = TERMINATE_TIMEOUT) -> None:
+    """SIGKILL a subprocess and reap it."""
+    if proc.poll() is not None:
+        return
+    if sys.platform != "win32":
+        import signal
+
+        _send_signal_to_proc(proc, signal.SIGKILL)
+    else:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def reap_all() -> None:
+    """Terminate any subprocesses still tracked in ``_LIVE_PROCS``."""
+    for proc in list(_LIVE_PROCS):
+        _terminate(proc)
+
+
+atexit.register(reap_all)
+
+
+def _find_app(pid: int, baseline_names: set, timeout: float) -> xa11y.App:
+    """Wait for an ``xa11y.App`` to appear for *pid*.
+
+    Falls back to matching by name because AT-SPI on Linux sometimes reports
+    the wrong PID (typically 1) for child processes.
+    """
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        apps = xa11y.App.list()
+        for a in apps:
+            if a.pid == pid:
+                return xa11y.App.by_name(a.name)
+        for a in apps:
+            if a.name not in baseline_names:
+                return xa11y.App.by_name(a.name)
+        time.sleep(0.25)
+    raise TimeoutError(f"No accessibility app found for PID {pid}")
+
+
+# ---------------------------------------------------------------------------
+# Page objects
+# ---------------------------------------------------------------------------
+
+
+class DeadlineApp:
+    """Launches a deadline subprocess and exposes its accessibility tree."""
+
+    DIALOG: str = ""  # overridden by subclasses
+
+    def __init__(self, proc: subprocess.Popen, app: xa11y.App):
+        self.proc = proc
+        self._app = app
+
+    @classmethod
+    def launch(
+        cls: type[_T],
+        args: Sequence[str],
+        env: Optional[dict] = None,
+        timeout: float = STARTUP_TIMEOUT,
+        capture_stdio: bool = False,
+        dialog_name: Optional[str] = None,
+    ) -> _T:
+        """Spawn ``deadline <args>`` and attach to its accessibility tree."""
+        cmd = [sys.executable, "-m", "deadline", *args]
+        baseline = {a.name for a in xa11y.App.list()}
+        popen_kwargs: dict = dict(
+            env=env,
+            stdout=subprocess.PIPE if capture_stdio else subprocess.DEVNULL,
+            stderr=subprocess.PIPE if capture_stdio else subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+        if sys.platform != "win32":
+            popen_kwargs["start_new_session"] = True
+        proc = subprocess.Popen(cmd, **popen_kwargs)
+        _register(proc)
+        try:
+            app = _find_app(proc.pid, baseline, timeout)
+            instance = cls(proc, app)
+            if dialog_name is not None:
+                instance._dialog_name = dialog_name  # type: ignore[attr-defined]
+            instance.dialog().wait_visible(timeout=timeout)
+            return instance
+        except Exception:
+            _terminate(proc)
+            raise
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def locator(self, selector: str) -> xa11y.Locator:
+        return self._app.locator(selector)
+
+    def elements_by_role(self, role: str) -> list:
+        """Return every element with the given *role*, depth-first."""
+        return list(_iter_by_role(self._app, role))
+
+    def tree_contains_text(self, needle: str) -> bool:
+        """True if any element in the tree has *needle* in its name or value."""
+        return any(_walk_contains_text(root, needle) for root in self._app.children())
+
+    def tab_exists(self, tab_name: str) -> bool:
+        """True if a tab with *tab_name* exists under any platform role.
+
+        Qt exposes tabs as ``radio_button`` on macOS, ``page_tab`` or
+        ``tab`` on Linux/Windows. xa11y on Windows occasionally raises
+        ``PlatformError 0x80040201``; treat those as "not found".
+        """
+        for role in ("radio_button", "page_tab", "tab"):
+            try:
+                if self.locator(f'{role}[name="{tab_name}"]').exists():
+                    return True
+            except xa11y.PlatformError:
+                continue
+        return False
+
+    def activate_tab(self, tab_name: str) -> None:
+        """Click the named tab, trying each platform role variant.
+
+        xa11y on Windows occasionally raises ``PlatformError 0x80040201``
+        when pressing a tab; swallow it and fall through to the next role.
+        """
+        last_err: Exception | None = None
+        for role in ("radio_button", "page_tab", "tab"):
+            loc = self.locator(f'{role}[name="{tab_name}"]')
+            if loc.exists():
+                try:
+                    loc.press()
+                    return
+                except xa11y.PlatformError as exc:
+                    last_err = exc
+                    continue
+        if last_err is not None:
+            raise AssertionError(f"Tab {tab_name!r} matched but press failed: {last_err!r}")
+        raise AssertionError(f"Tab {tab_name!r} not found via any role")
+
+    @property
+    def dialog_name(self) -> str:
+        return getattr(self, "_dialog_name", self.DIALOG)
+
+    def dialog(self) -> xa11y.Locator:
+        return self.locator(_dialog_selector(self.dialog_name))
+
+    def button(self, name: str) -> xa11y.Locator:
+        return self.locator(f'button[name="{name}"]')
+
+    def dump_tree(self) -> None:
+        """Print the accessibility tree to stderr for diagnostics."""
+
+        def walk(elt, depth=0):
+            try:
+                role = elt.role
+                name = elt.name or ""
+                value = getattr(elt, "value", None) or ""
+            except Exception as e:
+                sys.stderr.write(f"{'  ' * depth}<err: {e}>\n")
+                return
+            sys.stderr.write(f"{'  ' * depth}{role} name={name!r} value={value!r}\n")
+            try:
+                for child in elt.children():
+                    walk(child, depth + 1)
+            except Exception:
+                pass
+
+        sys.stderr.write("\n--- accessibility tree ---\n")
+        try:
+            for root in self._app.children():
+                walk(root)
+        except Exception as e:
+            sys.stderr.write(f"<tree error: {e}>\n")
+        sys.stderr.write("--- end tree ---\n")
+
+    def close(self, button_name: str = "Cancel") -> None:
+        """Dismiss the dialog and reap the subprocess."""
+        if self.proc.poll() is not None:
+            _terminate(self.proc)
+            return
+
+        for candidate in (button_name, "Close", "close button"):
+            if self.proc.poll() is not None:
+                break
+            try:
+                btn = self.dialog().descendant(f'button[name="{candidate}"]')
+                if btn.exists():
+                    btn.press()
+                    break
+            except xa11y.XA11yError:
+                continue
+        else:
+            self._signal_terminate()
+
+        try:
+            self.proc.wait(timeout=CLOSE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            self._signal_terminate()
+            try:
+                self.proc.wait(timeout=CLOSE_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                pass
+        _terminate(self.proc)
+
+    def _signal_terminate(self) -> None:
+        """Ask the subprocess to shut down gracefully via SIGTERM."""
+        import signal
+
+        _send_signal_to_proc(self.proc, signal.SIGTERM)
+
+
+class ConfigDialog(DeadlineApp):
+    """Page object for ``deadline config gui``."""
+
+    DIALOG = "AWS Deadline Cloud workstation configuration"
+
+    @classmethod
+    def open(cls, env: Optional[dict] = None) -> "ConfigDialog":
+        return cls.launch(["config", "gui"], env=env)
+
+    @property
+    def log_level(self) -> str:
+        return self._combo_text(group="General settings", index=1)
+
+    @property
+    def conflict_resolution(self) -> str:
+        return self._combo_text(group="General settings", index=0)
+
+    def _combo_text(self, *, group: str, index: int) -> str:
+        """Return the visible text of the Nth combo box in a group."""
+        root = self.locator(f'group[name="{group}"]').element()
+        combos = list(_iter_by_role(root, "combo_box"))
+        combo = combos[index]
+        value = getattr(combo, "value", None)
+        if value:
+            return value
+        return combo.name or ""
+
+
+class SubmitterDialog(DeadlineApp):
+    """Page object for ``deadline bundle gui-submit``."""
+
+    DIALOG = "Deadline Cloud JobBundle Submitter"
+    _PROGRESS_TITLE = "AWS Deadline Cloud submission"
+
+    @classmethod
+    def open(
+        cls,
+        bundle_dir: str,
+        env: Optional[dict] = None,
+        extra_args: Sequence[str] = (),
+        dialog_name: Optional[str] = None,
+        capture_stdio: bool = False,
+    ) -> "SubmitterDialog":
+        args = ["bundle", "gui-submit", *extra_args, bundle_dir]
+        return cls.launch(
+            args,
+            env=env,
+            dialog_name=dialog_name,
+            capture_stdio=capture_stdio,
+        )
+
+    @property
+    def _progress_selector(self) -> str:
+        return _dialog_selector(self._PROGRESS_TITLE)
+
+    @property
+    def job_name(self) -> str:
+        return self.locator('text_field[name="Name"]').element().value or ""
+
+    def wait_farm_resolved(
+        self,
+        farm_name: str = "TestFarm",
+        timeout: float = FARM_RESOLVE_TIMEOUT,
+    ) -> None:
+        """Block until the async farm/queue name refresh has populated the UI."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.tree_contains_text(farm_name):
+                return
+            time.sleep(0.25)
+        self.dump_tree()
+        raise TimeoutError(
+            f"Farm name {farm_name!r} did not appear in the submitter's "
+            f"accessibility tree within {timeout}s"
+        )
+
+    def export_bundle(self) -> None:
+        """Click 'Export bundle' and dismiss the confirmation dialog."""
+        self.button("Export bundle").press()
+        ok = self.button("OK")
+        ok.wait_visible(timeout=EXPORT_TIMEOUT)
+        ok.press()
+
+    def submit_and_ok(self, timeout: float = SUBMIT_TIMEOUT) -> None:
+        """Click Submit, wait for success, click Ok."""
+        self.button("Submit").press()
+        deadline = time.monotonic() + timeout
+        status = ""
+        while time.monotonic() < deadline:
+            status = self._progress_status_label_text()
+            if status and status != "Preparing files...":
+                break
+            time.sleep(0.2)
+        if status == "Submission complete":
+            for ok_name in ("Ok", "OK"):
+                btn = self._progress_button(ok_name)
+                if btn.exists():
+                    btn.press()
+                    return
+            self.dump_tree()
+            raise AssertionError("Submission complete but could not find Ok/OK button to press")
+        if status in ("Submission error", "Submission canceled"):
+            self.dump_tree()
+            raise AssertionError(f"Submission failed: progress dialog status is {status!r}")
+        self.dump_tree()
+        raise TimeoutError(
+            f"Progress dialog did not reach a terminal state within {timeout}s. "
+            f"Last status_label: {status!r}"
+        )
+
+    def _progress_status_label_text(self) -> str:
+        """Return the progress dialog's status_label text, or ""."""
+        terminal_labels = {
+            "Submission complete",
+            "Submission error",
+            "Submission canceled",
+        }
+        for elt in _iter_by_role(self._app, "static_text"):
+            name = (getattr(elt, "name", "") or "").strip()
+            if name == "Preparing files...":
+                return name
+            if name in terminal_labels:
+                return name
+        return ""
+
+    def submit_then_cancel(self, cancel_timeout: float = CANCEL_TIMEOUT) -> None:
+        """Click Submit then immediately Cancel on the progress dialog."""
+        self.button("Submit").press()
+        cancel = self._progress_button("Cancel")
+        try:
+            cancel.wait_visible(timeout=cancel_timeout)
+        except Exception:
+            self.dump_tree()
+            raise
+        cancel.press()
+
+    def dismiss_progress_close(self, timeout: float = CANCEL_TIMEOUT) -> None:
+        """Wait for the progress dialog to close after cancel."""
+        try:
+            close = self.locator(f'{self._progress_selector} button[name="Close"]')
+            close.wait_visible(timeout=timeout)
+            close.press()
+        except xa11y.XA11yError:
+            pass
+        try:
+            self.locator(self._progress_selector).wait_detached(timeout=timeout)
+        except xa11y.XA11yError:
+            pass
+
+    def _progress_button(self, name: str) -> xa11y.Locator:
+        """Locate a button inside the submission progress dialog."""
+        return self.locator(f'{self._progress_selector} button[name="{name}"]')
+
+
+# ---------------------------------------------------------------------------
+# Tree-walking utilities
+# ---------------------------------------------------------------------------
+
+
+def _iter_by_role(root, role: str):
+    """Depth-first traversal yielding elements whose role matches *role*."""
+    try:
+        if getattr(root, "role", None) == role:
+            yield root
+        for child in root.children():
+            yield from _iter_by_role(child, role)
+    except Exception:
+        return
+
+
+def _walk_contains_text(root, needle: str) -> bool:
+    """True iff some element under *root* has *needle* in its name/value."""
+    try:
+        for field in ("name", "value"):
+            text = getattr(root, field, None) or ""
+            if needle in text:
+                return True
+        for child in root.children():
+            if _walk_contains_text(child, needle):
+                return True
+    except Exception:
+        return False
+    return False

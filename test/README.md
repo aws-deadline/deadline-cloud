@@ -6,6 +6,7 @@ Prefer higher level tests (lower in this list) where possible. Higher level test
 |---|---|
 | Pure logic, error paths, internal helpers | `test/unit/` |
 | "Does `deadline <cmd>` produce the right output/exit code?" | `test/cli_e2e/` |
+| "Does the UI actually render correctly?" | `test/ui/` |
 | "Does it work against the real service?" | `test/integ/` |
 | Qt dialog / widget regressions | `test/squish/` |
 | Built installer / packaging | `test/installer/` |
@@ -44,6 +45,29 @@ in-process mock, it belongs in `test/unit/`.
 
 Run: `hatch run test` (runs alongside `test/unit/`).
 
+## `test/ui/` — UI tests
+
+Subprocess-based tests that launch the real `deadline` GUI commands and
+drive them through the OS accessibility tree via
+[xa11y](https://xa11y.dev/). The GUI subprocess talks to the same
+in-process mock Deadline backend used by `test/cli_e2e/`, so no real AWS
+resources are needed. **No mocking or patching inside the GUI process** —
+the full client runs end-to-end, and the tests verify that the UI
+actually renders the correct widgets, labels, and controls.
+
+The goal is to catch rendering and integration regressions that unit
+tests miss: dialog layout, widget visibility, tab navigation, form
+round-trips, and submission flows. Every major UI component (config
+dialog, submitter dialog) should have basic UI tests here to confirm it
+opens, displays the right data, and responds to user actions.
+
+Exhaustive widget-level testing (e.g. every combo-box option, every
+validation state) is better suited to a future `pytest-qt` suite, which
+can test Qt widgets in-process without rendering to the screen — faster
+and lighter weight, but lower fidelity.
+
+Run: `hatch run ui:test`
+
 ## `test/integ/` — integration tests
 
 Pytest tests that run against real AWS Deadline Cloud and S3 resources.
@@ -57,13 +81,11 @@ non-trivial setup.
 
 Run: `hatch run integ:test`
 
-## `test/squish/` — GUI tests
+## `test/squish/` — GUI tests (legacy)
 
 Automated UI tests driven by the Squish for Qt framework against the
 Deadline GUI commands. Requires a Squish license and Qt runtime.
-
-Use for: GUI regressions when you specifically want automated Qt UI
-coverage. Manual GUI testing is usually sufficient for most changes.
+Superseded by `test/ui/` for new test coverage.
 
 ## `test/installer/` — installer tests
 

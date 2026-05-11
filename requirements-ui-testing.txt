@@ -1,0 +1,11 @@
+pytest == 9.*
+pytest-timeout >= 2.3
+pytest-cov >= 7.1.0
+pytest-xdist >= 3
+xa11y == 0.7.*
+# MockDeadlineBackend._parse_template validates submitted templates using
+# openjd-model's decode_job_template so that CreateJob produces a
+# realistic step/task structure for the submitter to poll. Without it
+# CreateJob returns a 500 InternalServerException and the submission
+# progress dialog hangs on "Preparing files..."
+openjd-model >= 0.9.0
