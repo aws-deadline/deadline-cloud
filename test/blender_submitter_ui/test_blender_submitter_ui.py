@@ -240,10 +240,33 @@ def blender_env(tmp_path, mock_backend, moto_server, s3_client):
 
 
 def _tree_contains_text(app, needle: str) -> bool:
-    try:
-        return needle in app.dump()
-    except Exception:
+    """True if any element under *app* has *needle* in its name or value.
+
+    Uses a depth-first walker with early termination so the search bails out
+    on the first match. ``app.dump()`` would always traverse the full tree,
+    which is too slow on heavy trees like Blender's main window.
+    """
+
+    def walk(el):
+        try:
+            for field in ("name", "value"):
+                text = getattr(el, field, None) or ""
+                if needle in text:
+                    return True
+            for child in el.children():
+                if walk(child):
+                    return True
+        except Exception:
+            pass
         return False
+
+    try:
+        for root in app.children():
+            if walk(root):
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def _dump_tree(app):

@@ -268,23 +268,25 @@ class DeadlineApp:
         """True if any element in the tree has *needle* in its name or value."""
         return needle in self._app.dump()
 
-    def _tab_locator(self, tab_name: str) -> xa11y.Locator:
-        # Qt exposes tabs as ``radio_button`` on macOS and ``page_tab`` or
-        # ``tab`` on Linux/Windows. Comma alternation matches all variants.
-        return self.locator(
-            f'radio_button[name="{tab_name}"], '
-            f'page_tab[name="{tab_name}"], '
-            f'tab[name="{tab_name}"]'
-        )
-
     def tab_exists(self, tab_name: str) -> bool:
-        return self._tab_locator(tab_name).exists()
+        """True if a tab with *tab_name* exists under any platform role.
+
+        Qt exposes tabs as ``radio_button`` on macOS and ``page_tab`` or
+        ``tab`` on Linux/Windows.
+        """
+        for role in ("radio_button", "page_tab", "tab"):
+            if self.locator(f'{role}[name="{tab_name}"]').exists():
+                return True
+        return False
 
     def activate_tab(self, tab_name: str) -> None:
-        loc = self._tab_locator(tab_name)
-        if not loc.exists():
-            raise AssertionError(f"Tab {tab_name!r} not found via any role")
-        loc.press()
+        """Click the named tab, trying each platform role variant."""
+        for role in ("radio_button", "page_tab", "tab"):
+            loc = self.locator(f'{role}[name="{tab_name}"]')
+            if loc.exists():
+                loc.press()
+                return
+        raise AssertionError(f"Tab {tab_name!r} not found via any role")
 
     @property
     def dialog_name(self) -> str:
