@@ -40,7 +40,7 @@ jobs:
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name 'RestoreOnStartup' -Value 1 -Type DWord
 
       - name: Install deadline CLI and xa11y
-        run: pip install . 'xa11y>=0.7.1'
+        run: pip install . 'xa11y>=0.8,<0.9'
         shell: pwsh
 
       - name: Install DCM
