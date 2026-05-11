@@ -3,7 +3,123 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: None.
+Active work item: Python parity audit (2026-05-11)
+
+---
+
+## Python Parity Audit — 2026-05-11
+
+**Source:** `deadline-cloud-python` commits `78b10da..509b7bd` (15 commits)
+
+### Gaps Identified
+
+#### GAP-1 — Login loop session refresh (Bug fix, Small)
+
+**Python PR:** `3dfd14b` — "fix: restore deadline auth login after STS-to-ListFarms switch"
+
+**Problem:** In the DCM login polling loop, the Rust code calls
+`check_authentication_status(config)` which uses the cached `SdkConfig`.
+When DCM writes new profile keys (`user_id`, `identity_store_id`,
+`monitor_id`) to `~/.aws/config`, the cached config never picks them up,
+so the auth probe keeps failing and login never resolves to AUTHENTICATED.
+
+**Python fix:** Calls `_session.get_boto3_session(force_refresh=True)` before
+each `check_authentication_status` in the login loop.
+
+**Rust fix:** Add `session::invalidate_session_cache_async().await` before
+`check_authentication_status(config).await` in `auth.rs::login_inner` loop.
+
+**Files:** `crates/deadline-api/src/auth.rs`
+**Effort:** ~5 lines
+
+---
+
+#### GAP-2 — `deadline job download-input` command (New feature, Large)
+
+**Python PR:** `242bb81` — "feat(cli): Add download-input command with --include filtering"
+
+**Description:** New CLI command to download a job's input attachments.
+Supports `--include` glob filtering, `--match-paths-by JOB|LOCAL`,
+`--ignore-storage-profiles`, `--conflict-resolution`, `--yes`, `--output json`.
+
+**Implementation scope:**
+1. `deadline-job-attachments` crate:
+   - `InputDownloader` struct (reads manifests from job's `attachments` field)
+   - `filter_manifests(manifests_by_root, patterns)` function (glob matching)
+   - `apply_include_filters(&mut self, patterns)` method on both downloaders
+   - `normalize_filters(patterns)` utility function
+2. `deadline-cli` crate:
+   - New `DownloadInput` variant in `JobAction` enum
+   - `download_input_impl` function (mirrors `download_output_impl` structure)
+   - Shared helpers: `_prompt_for_os_mismatch_roots`, `_prompt_to_confirm_roots`
+
+**Depends on:** GAP-3 (shared filtering infrastructure)
+
+---
+
+#### GAP-3 — `--include` and `--match-paths-by` on `download-output` (New feature, Medium)
+
+**Python PR:** `b601164` — "feat(cli): Add --include-path selective filtering to download-output"
+
+**Description:** New `-i/--include` (repeatable) and `--match-paths-by JOB|LOCAL`
+options on `deadline job download-output`. Allows selective download of specific
+files matching glob patterns.
+
+**Implementation scope:**
+1. `deadline-job-attachments` crate:
+   - `filter_manifests(manifests_by_root, patterns)` — filters manifest paths by glob
+   - `normalize_filters(patterns)` — normalizes `\` → `/`, strips `./`, collapses `//`
+   - `OutputDownloader::apply_include_filters(&mut self, patterns)` method
+   - `OutputDownloader::get_paths_by_root()` (rename of `get_output_paths_by_root`)
+2. `deadline-cli` crate:
+   - Add `--include` (Vec<String>) and `--match-paths-by` (enum) to `DownloadOutput`
+   - Pass `include_filters` to `OutputDownloader::new()` when `match_paths_by == JOB`
+   - Call `apply_include_filters` after root editing when `match_paths_by == LOCAL`
+
+**Files:**
+- `crates/deadline-job-attachments/src/download.rs`
+- `crates/deadline-cli/src/commands/job.rs`
+
+---
+
+### Items Already Aligned (No Action Needed)
+
+| Python Change | Status |
+|---------------|--------|
+| `_session.py`: STS → ListFarms auth probe | ✅ Rust already uses ListFarms |
+| `_session.py`: Remove `sts_regional_endpoints` | ✅ N/A for Rust SDK |
+| `_list_apis.py`: `_apply_principal_id_filter` refactor | ✅ Code cleanup only |
+| `job_group.py`: job logs ISO timestamp parsing | ✅ Rust already handles this |
+
+---
+
+### Recommended Implementation Order
+
+1. **GAP-1** (bug fix, immediate) — 1 line change, high impact for DCM users
+2. **GAP-3** (feature, medium) — builds the filtering infrastructure
+3. **GAP-2** (feature, large) — reuses GAP-3 infrastructure + adds InputDownloader
+
+### Status
+
+- [x] Audit complete
+- [x] GAP-1 implemented (Steps 1-5 complete, pending manual retest with fresh SSO)
+- [ ] GAP-3 implemented
+- [ ] GAP-2 implemented
+
+### GAP-1 Implementation Details
+
+**Files changed:**
+- `crates/deadline-api/src/auth.rs` — added `session::invalidate_session_cache_async().await` in login loop
+- `crates/deadline-cli/tests/cli/auth.rs` — added `auth_login_dcm_picks_up_credentials_written_mid_login` test
+
+**Test results:** Automated test passes (2.6s with fix, failed at 10s without fix).
+All 1,342 tests pass. fmt clean. clippy clean.
+
+**Manual test TODO (2026-05-12):** Re-test `./target/debug/deadline auth login` after
+SSO session cache expires (overnight). The first login attempt on 2026-05-11 hit exit
+code 1 ("was not able to log into") which may have been the bug manifesting with a
+stale binary, OR may have been DCM exiting before a slow browser SSO flow completed.
+Need a fresh login (no cached SSO) to confirm the fix works end-to-end with real DCM.
 
 ---
 

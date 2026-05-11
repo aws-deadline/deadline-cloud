@@ -239,6 +239,98 @@ async fn auth_status_output_json_uppercase_produces_json() {
     assert_eq!(parsed["status"], "AUTHENTICATED");
 }
 
+// --- auth login: session refresh in polling loop ---
+
+// GAP-1: Login must invalidate the session cache each iteration so that
+// credentials written by DCM mid-login are picked up. Without invalidation,
+// the cached SdkConfig retains stale (empty) credentials and the auth probe
+// never succeeds.
+//
+// This test uses credential_process in the AWS profile (no env-var credentials)
+// to prove that cache invalidation is required. The monitor script writes
+// credential_process to the profile after a delay, simulating DCM's behavior.
+#[tokio::test]
+async fn auth_login_dcm_picks_up_credentials_written_mid_login() {
+    let harness = TestHarness::new().await;
+    let dir = harness.config_dir.path();
+
+    // ListFarms always succeeds (the issue is credentials, not server response)
+    farms::mock_list_farms_with_principal_id(&harness.server, "user-fake456", &[]).await;
+
+    // Credential helper script that outputs valid AWS credentials JSON
+    let cred_helper = dir.join("cred-helper");
+    std::fs::write(
+        &cred_helper,
+        "#!/bin/bash\necho '{\"Version\": 1, \"AccessKeyId\": \"AKIAIOSFODNN7EXAMPLE\", \"SecretAccessKey\": \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\", \"SessionToken\": \"token\", \"Expiration\": \"2099-01-01T00:00:00Z\"}'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&cred_helper, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    // AWS config: has monitor_id and user_id but NO credential_process initially.
+    // Without credentials, the SDK cannot sign requests → ListFarms fails.
+    let aws_config_path = dir.join("aws_config");
+    std::fs::write(
+        &aws_config_path,
+        "[profile test-dcm]\nregion = us-west-2\nmonitor_id = mon-fake123\nuser_id = user-fake456\nidentity_store_id = d-fake789\n",
+    )
+    .unwrap();
+
+    // Monitor script: waits briefly, then writes credential_process to the
+    // AWS config (simulating DCM completing login and writing credentials).
+    let monitor_script = format!(
+        "#!/bin/bash\nsleep 0.3\necho \"credential_process = {}\" >> {}\nsleep 10\n",
+        cred_helper.display(),
+        aws_config_path.display()
+    );
+    let monitor_path = dir.join("fake-monitor");
+    std::fs::write(&monitor_path, &monitor_script).unwrap();
+    std::fs::set_permissions(&monitor_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    // Deadline config
+    std::fs::write(
+        &harness.config_path,
+        format!(
+            "[defaults]\naws_profile_name = test-dcm\n\n[deadline-cloud-monitor]\npath = {}\n",
+            monitor_path.display()
+        ),
+    )
+    .unwrap();
+
+    // Build command WITHOUT env-var credentials — forces SDK to use profile
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("deadline"));
+    cmd.args(["auth", "login"]);
+    cmd.env("AWS_ENDPOINT_URL_DEADLINE", harness.endpoint_url());
+    cmd.env("AWS_CONFIG_FILE", &aws_config_path);
+    cmd.env("AWS_DEFAULT_REGION", "us-west-2");
+    cmd.env("DEADLINE_CONFIG_FILE_PATH", &harness.config_path);
+    cmd.env("HOME", dir);
+    // Remove credential env vars so SDK must use credential_process from profile
+    cmd.env_remove("AWS_ACCESS_KEY_ID");
+    cmd.env_remove("AWS_SECRET_ACCESS_KEY");
+    cmd.env_remove("AWS_SESSION_TOKEN");
+    cmd.env_remove("AWS_SECURITY_TOKEN");
+    cmd.env_remove("AWS_PROFILE");
+    cmd.env_remove("AWS_DEFAULT_PROFILE");
+    cmd.env_remove("AWS_SHARED_CREDENTIALS_FILE");
+    // Disable IMDS/ECS credential providers to avoid timeouts
+    cmd.env("AWS_EC2_METADATA_DISABLED", "true");
+    cmd.env("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "");
+
+    let output = cmd.output().expect("failed to run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "Login should succeed after credentials are written mid-login.\n\
+         stdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("Deadline Cloud monitor profile"),
+        "Expected success message, got stdout: {stdout}"
+    );
+}
+
 // B-1: Non-existent profile should show Source: NOT_VALID, not HOST_PROVIDED
 #[tokio::test]
 async fn auth_status_nonexistent_profile_shows_not_valid() {

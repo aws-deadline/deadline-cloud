@@ -240,6 +240,11 @@ async fn login_inner(
 
     // Poll authentication status until success or process exit
     loop {
+        // Force-refresh the session each iteration so the next probe picks up
+        // profile keys DCM writes (credential_process, user_id, identity_store_id)
+        // as login completes. Without this, the cached SdkConfig retains stale
+        // credentials and the auth probe never resolves to AUTHENTICATED.
+        session::invalidate_session_cache_async().await;
         let status = check_authentication_status(config).await;
         if status == AwsAuthenticationStatus::Authenticated {
             return Ok(format!("Deadline Cloud monitor profile: {profile_name}"));
