@@ -1,6 +1,9 @@
 name: "Release: Bump"
 
 on:
+  schedule:
+    # Every Monday at 14:00 UTC (~6/7am Pacific, ~9/10am Eastern).
+    - cron: "0 14 * * 1"
   workflow_dispatch:
     inputs:
       force_version_bump:
