@@ -1,3 +1,18 @@
+## 0.57.0 (2026-05-08)
+
+### BREAKING CHANGES
+* The `deadline job download-output` command now supports storage profile path mapping, which may change download destination paths when a storage profile is configured. Users relying on the previous raw path behavior should review their download scripts. (#1029)
+
+### Features
+* Added `deadline job download-input` CLI command that downloads job input files (job attachments) with optional glob-style `--include` filtering, `--match-paths-by` (JOB/LOCAL) storage profile path mapping, JSON output, and conflict resolution options. (#1154)
+* Added `--include` / `-i` repeatable option to `deadline job download-output`, allowing you to download specific files using glob patterns or relative paths instead of all job outputs. Multiple patterns are OR'd. Without `--include`, all outputs download as before. (#1108)
+* Added storage profile path mapping support to `deadline job download-output`, enabling automatic path translation between job and local filesystem paths. (#1029)
+* Added two new workstation configuration settings: `settings.max_retries_per_task` (default: 5) and `settings.max_failed_tasks_count` (default: 20). These defaults are used when submitting jobs via CLI, API, or GUI when no explicit value is provided and the job bundle doesn't specify them. (#1150)
+* Removed the hard dependency on AWS STS. Authentication status checks now use `deadline:ListFarms` instead of `sts:GetCallerIdentity`, avoiding slow timeouts and hard failures on networks that block STS. (#1147)
+
+### Bug Fixes
+* Fixed `deadline auth login` failing for Deadline Cloud Monitor (IdC) profiles after the STS-to-ListFarms switch. The `principalId` is now correctly passed in the ListFarms authentication probe. (#1151)
+* Fixed dependency job attachment syncing using COPY mode (which created files with `(1)` suffixes) instead of OVERWRITE mode. Synced attachments now correctly overwrite existing files. (#1106)
 ## 0.56.0 (2026-04-20)
 
 ### Features
