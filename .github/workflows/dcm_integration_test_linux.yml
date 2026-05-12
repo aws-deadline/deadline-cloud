@@ -3,6 +3,12 @@ name: DCM Integration Test (Linux)
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      tag:
+        description: Git ref (tag/branch/SHA) to test. Defaults to the triggering ref.
+        required: false
+        type: string
+        default: ''
 
 jobs:
   test:
@@ -30,6 +36,8 @@ jobs:
       MOZ_ACCESSIBILITY_ATK2: '1'
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-python@v6
         with:
@@ -72,7 +80,7 @@ jobs:
           sleep 2
 
       - name: Install deadline CLI and xa11y
-        run: pip install . 'xa11y>=0.7.1'
+        run: pip install . 'xa11y>=0.8.1,<0.9'
 
       - name: Install DCM (.deb)
         # .deb auto-registers deadline-cloud-monitor:// scheme handler and installs
