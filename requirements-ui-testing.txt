@@ -1,5 +1,5 @@
 pytest == 9.*
-pytest-timeout >= 2.3
+pytest-timeout >= 2.4.0
 pytest-cov >= 7.1.0
 pytest-xdist >= 3
 xa11y >= 0.8.1, <0.9
