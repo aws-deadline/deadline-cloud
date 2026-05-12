@@ -105,13 +105,8 @@ def last_json_object(text: str) -> dict:
 
 
 def _dialog_selector(name: str) -> str:
-    """Return the xa11y selector for a Qt dialog with the given *name*.
-
-    Qt's top-level QDialog is exposed as ``dialog`` on macOS/Linux but
-    ``window`` on Windows UIA.
-    """
-    role = "window" if sys.platform.startswith("win") else "dialog"
-    return f'{role}[name="{name}"]'
+    """Return the xa11y selector for a Qt dialog with the given *name*."""
+    return f'dialog[name="{name}"]'
 
 
 # ---------------------------------------------------------------------------
