@@ -16,7 +16,7 @@ use chrono::{DateTime, Utc};
 use crate::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, decode_manifest,
 };
-use crate::models::{FileConflictResolution, JobAttachmentS3Settings};
+use crate::models::{Attachments, FileConflictResolution, JobAttachmentS3Settings};
 use crate::progress_tracker::{
     DownloadSummaryStatistics, ProgressReportMetadata, ProgressStatus, ProgressTracker,
 };
@@ -284,6 +284,30 @@ fn get_output_manifest_prefix(
 // =========================================================================
 // Include-path filtering
 // =========================================================================
+
+/// Recompute manifests from initial state by applying root mappings then filter groups.
+///
+/// Shared logic between `OutputDownloader` and `InputDownloader`.
+/// Root mappings are applied first (merging manifests if two roots map to the same target),
+/// then each filter group is applied sequentially (AND between groups, OR within each group).
+pub(crate) fn rebuild_manifests(
+    initial: &HashMap<String, Vec<AssetManifest>>,
+    root_mappings: &HashMap<String, String>,
+    filter_groups: &[Vec<String>],
+) -> HashMap<String, Vec<AssetManifest>> {
+    let mut rebuilt: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+    for (root, manifests) in initial {
+        let mapped_root = root_mappings.get(root).unwrap_or(root).clone();
+        rebuilt
+            .entry(mapped_root)
+            .or_default()
+            .extend(manifests.clone());
+    }
+    for filter_group in filter_groups {
+        rebuilt = filter_manifests(&rebuilt, filter_group);
+    }
+    rebuilt
+}
 
 /// Normalize path filter patterns: `\` → `/`, strip `./`, collapse `//`.
 pub fn normalize_filters(patterns: &[String]) -> Vec<String> {
@@ -1141,20 +1165,11 @@ impl OutputDownloader {
 
     /// Recompute `outputs_by_root` from initial state applying root mappings then filters.
     fn rebuild(&mut self) {
-        // Start from initial data with root mappings applied
-        let mut rebuilt: HashMap<String, Vec<AssetManifest>> = HashMap::new();
-        for (root, manifests) in &self.initial_outputs_by_root {
-            let mapped_root = self.root_mappings.get(root).unwrap_or(root).clone();
-            rebuilt
-                .entry(mapped_root)
-                .or_default()
-                .extend(manifests.clone());
-        }
-        // Apply each filter group sequentially
-        for filter_group in &self.include_filter_groups {
-            rebuilt = filter_manifests(&rebuilt, filter_group);
-        }
-        self.outputs_by_root = rebuilt;
+        self.outputs_by_root = rebuild_manifests(
+            &self.initial_outputs_by_root,
+            &self.root_mappings,
+            &self.include_filter_groups,
+        );
     }
 
     /// Get output file paths grouped by asset root.
@@ -1224,9 +1239,320 @@ impl OutputDownloader {
     }
 }
 
+// =========================================================================
+// InputDownloader — orchestrates job input download
+// =========================================================================
+
+/// Fetch input manifests from S3 based on the job's attachments metadata.
+/// Returns manifests grouped by asset root path.
+pub async fn get_input_manifests_by_asset_root(
+    s3_settings: &JobAttachmentS3Settings,
+    attachments: &Attachments,
+    s3_client: &S3Client,
+    account_id: &str,
+) -> Result<HashMap<String, Vec<AssetManifest>>, JobAttachmentsError> {
+    let mut inputs: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+
+    for manifest_props in &attachments.manifests {
+        if let Some(ref input_path) = manifest_props.input_manifest_path {
+            if input_path.is_empty() {
+                continue;
+            }
+            let key = s3_settings.add_root_and_manifest_folder_prefix(input_path)?;
+            let (_, _last_modified, manifest) =
+                download_manifest_from_s3(s3_client, &s3_settings.s3_bucket_name, &key, account_id)
+                    .await?;
+            inputs
+                .entry(manifest_props.root_path.clone())
+                .or_default()
+                .push(manifest);
+        }
+    }
+
+    Ok(inputs)
+}
+
+/// Handler for downloading input files from a job, with optional include filtering.
+/// Inputs are job-level only (no step/task scoping).
+pub struct InputDownloader {
+    s3_settings: JobAttachmentS3Settings,
+    initial_inputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    include_filter_groups: Vec<Vec<String>>,
+    root_mappings: HashMap<String, String>,
+    inputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    s3_client: S3Client,
+    account_id: String,
+}
+
+impl InputDownloader {
+    /// Create a new downloader by fetching input manifests from S3.
+    pub async fn new(
+        s3_settings: JobAttachmentS3Settings,
+        attachments: &Attachments,
+        s3_client: S3Client,
+        account_id: String,
+        include_filters: Option<&[String]>,
+    ) -> Result<Self, JobAttachmentsError> {
+        let initial_inputs_by_root =
+            get_input_manifests_by_asset_root(&s3_settings, attachments, &s3_client, &account_id)
+                .await?;
+        let mut include_filter_groups = Vec::new();
+        if let Some(filters) = include_filters
+            && !filters.is_empty()
+        {
+            include_filter_groups.push(filters.to_vec());
+        }
+        let mut dl = Self {
+            s3_settings,
+            initial_inputs_by_root,
+            include_filter_groups,
+            root_mappings: HashMap::new(),
+            inputs_by_root: HashMap::new(),
+            s3_client,
+            account_id,
+        };
+        dl.rebuild();
+        Ok(dl)
+    }
+
+    fn rebuild(&mut self) {
+        self.inputs_by_root = rebuild_manifests(
+            &self.initial_inputs_by_root,
+            &self.root_mappings,
+            &self.include_filter_groups,
+        );
+    }
+
+    /// Get input file paths grouped by asset root.
+    pub fn get_paths_by_root(&self) -> HashMap<String, Vec<String>> {
+        let mut result = HashMap::new();
+        for (root, manifests) in &self.inputs_by_root {
+            let paths: Vec<String> = manifests
+                .iter()
+                .flat_map(|m| m.paths.iter().map(|p| p.path.clone()))
+                .collect();
+            if !paths.is_empty() {
+                result.insert(root.clone(), paths);
+            }
+        }
+        result
+    }
+
+    /// Change the root path for a set of input files.
+    pub fn set_root_path(&mut self, original_root: &str, new_root: &str) {
+        if original_root == new_root {
+            return;
+        }
+        let initial_root = self
+            .initial_inputs_by_root
+            .keys()
+            .find(|k| self.root_mappings.get(*k).unwrap_or(k).as_str() == original_root)
+            .cloned();
+        if let Some(init_root) = initial_root {
+            self.root_mappings.insert(init_root, new_root.to_owned());
+            self.rebuild();
+        }
+    }
+
+    /// Apply glob-style include filters against the current paths.
+    pub fn apply_include_filters(&mut self, filters: &[String]) {
+        if !filters.is_empty() {
+            self.include_filter_groups.push(filters.to_vec());
+            self.rebuild();
+        }
+    }
+
+    /// Download all input files to their respective root directories.
+    pub async fn download(
+        &self,
+        file_conflict_resolution: FileConflictResolution,
+        on_downloading_files: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
+        let mut manifests_by_root = HashMap::new();
+        for (root, manifest_list) in &self.inputs_by_root {
+            if let Some(merged) = merge_asset_manifests(manifest_list)? {
+                manifests_by_root.insert(root.clone(), merged);
+            }
+        }
+
+        let cas_prefix = self.s3_settings.full_cas_prefix()?;
+        download_files_from_manifests(
+            &self.s3_settings.s3_bucket_name,
+            &manifests_by_root,
+            Some(&cas_prefix),
+            &self.s3_client,
+            &self.account_id,
+            on_downloading_files,
+            file_conflict_resolution,
+        )
+        .await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- Helper to build test manifests ---
+
+    fn make_manifest(paths: &[&str]) -> AssetManifest {
+        let manifest_paths: Vec<ManifestPath> = paths
+            .iter()
+            .map(|p| ManifestPath {
+                path: p.to_string(),
+                hash: "aaa111bbb222ccc333ddd444eee55566".into(),
+                size: 100,
+                mtime: 1_700_000_000,
+            })
+            .collect();
+        AssetManifest::new(
+            HashAlgorithm::Xxh128,
+            ManifestVersion::V2023_03_03,
+            manifest_paths.iter().map(|p| p.size).sum(),
+            manifest_paths,
+        )
+        .unwrap()
+    }
+
+    // --- rebuild_manifests L1 tests ---
+
+    #[test]
+    fn rebuild_manifests_no_mappings_no_filters_returns_initial() {
+        let mut initial = HashMap::new();
+        initial.insert(
+            "/root".to_string(),
+            vec![make_manifest(&["a.txt", "b.txt"])],
+        );
+
+        let result = rebuild_manifests(&initial, &HashMap::new(), &[]);
+
+        assert_eq!(result.len(), 1);
+        let paths: Vec<&str> = result["/root"]
+            .iter()
+            .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+            .collect();
+        assert!(paths.contains(&"a.txt"));
+        assert!(paths.contains(&"b.txt"));
+    }
+
+    #[test]
+    fn rebuild_manifests_applies_root_mapping() {
+        let mut initial = HashMap::new();
+        initial.insert("/old".to_string(), vec![make_manifest(&["file.txt"])]);
+
+        let mut mappings = HashMap::new();
+        mappings.insert("/old".to_string(), "/new".to_string());
+
+        let result = rebuild_manifests(&initial, &mappings, &[]);
+
+        assert!(!result.contains_key("/old"));
+        assert!(result.contains_key("/new"));
+        assert_eq!(result["/new"][0].paths[0].path, "file.txt");
+    }
+
+    #[test]
+    fn rebuild_manifests_root_collision_merges_manifests() {
+        let mut initial = HashMap::new();
+        initial.insert("/a".to_string(), vec![make_manifest(&["one.txt"])]);
+        initial.insert("/b".to_string(), vec![make_manifest(&["two.txt"])]);
+
+        // Map both to the same root
+        let mut mappings = HashMap::new();
+        mappings.insert("/a".to_string(), "/merged".to_string());
+        mappings.insert("/b".to_string(), "/merged".to_string());
+
+        let result = rebuild_manifests(&initial, &mappings, &[]);
+
+        assert_eq!(result.len(), 1);
+        let all_paths: Vec<&str> = result["/merged"]
+            .iter()
+            .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+            .collect();
+        assert!(all_paths.contains(&"one.txt"));
+        assert!(all_paths.contains(&"two.txt"));
+    }
+
+    #[test]
+    fn rebuild_manifests_applies_single_filter_group() {
+        let mut initial = HashMap::new();
+        initial.insert(
+            "/root".to_string(),
+            vec![make_manifest(&["render.exr", "log.txt"])],
+        );
+
+        let filters = vec![vec!["*.exr".to_string()]];
+
+        let result = rebuild_manifests(&initial, &HashMap::new(), &filters);
+
+        let paths: Vec<&str> = result["/root"]
+            .iter()
+            .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+            .collect();
+        assert_eq!(paths, vec!["render.exr"]);
+    }
+
+    #[test]
+    fn rebuild_manifests_multiple_filter_groups_applied_sequentially() {
+        let mut initial = HashMap::new();
+        initial.insert(
+            "/root".to_string(),
+            vec![make_manifest(&["a.exr", "b.exr", "c.txt"])],
+        );
+
+        // First filter: keep only .exr files (removes c.txt)
+        // Second filter: keep only files starting with "a" (removes b.exr)
+        let filters = vec![vec!["*.exr".to_string()], vec!["a*".to_string()]];
+
+        let result = rebuild_manifests(&initial, &HashMap::new(), &filters);
+
+        let paths: Vec<&str> = result
+            .get("/root")
+            .map(|ms| {
+                ms.iter()
+                    .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(paths, vec!["a.exr"]);
+    }
+
+    #[test]
+    fn rebuild_manifests_filter_removes_all_returns_empty() {
+        let mut initial = HashMap::new();
+        initial.insert("/root".to_string(), vec![make_manifest(&["file.txt"])]);
+
+        let filters = vec![vec!["*.nonexistent".to_string()]];
+
+        let result = rebuild_manifests(&initial, &HashMap::new(), &filters);
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn rebuild_manifests_mapping_then_filter_uses_new_root_in_path() {
+        let mut initial = HashMap::new();
+        initial.insert(
+            "/old".to_string(),
+            vec![make_manifest(&["sub/file.exr", "sub/file.txt"])],
+        );
+
+        let mut mappings = HashMap::new();
+        mappings.insert("/old".to_string(), "/new".to_string());
+
+        // Filter matches against full path: /new/sub/file.exr
+        let filters = vec![vec!["*.exr".to_string()]];
+
+        let result = rebuild_manifests(&initial, &mappings, &filters);
+
+        assert!(result.contains_key("/new"));
+        let paths: Vec<&str> = result["/new"]
+            .iter()
+            .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+            .collect();
+        assert_eq!(paths, vec!["sub/file.exr"]);
+    }
+
+    // --- Existing tests ---
 
     #[test]
     fn get_asset_root_from_metadata_prefers_json() {

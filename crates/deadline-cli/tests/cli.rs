@@ -34,6 +34,8 @@ mod job;
 mod job_actions;
 #[path = "cli/job_download.rs"]
 mod job_download;
+#[path = "cli/job_download_input.rs"]
+mod job_download_input;
 #[path = "cli/job_logs.rs"]
 mod job_logs;
 #[path = "cli/job_wait.rs"]

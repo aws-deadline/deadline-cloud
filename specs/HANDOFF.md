@@ -104,7 +104,7 @@ files matching glob patterns.
 - [x] Audit complete
 - [x] GAP-1 implemented (Steps 1-5 complete, pending manual retest with fresh SSO)
 - [x] GAP-3 implemented — Steps 1-7 complete
-- [ ] GAP-2 implemented
+- [x] GAP-2 implemented — Steps 1-7 complete
 
 ---
 
@@ -236,6 +236,144 @@ manifests from S3, and downloads the referenced files. Supports the same
 | InputDownloader unit tests | `input_downloader_*` | L1 |
 
 ---
+
+### GAP-2 Detailed Implementation Plan (Step 1 Study Complete)
+
+#### Python Source Files Studied
+
+- `src/deadline/client/cli/_groups/job_group.py` — `_download_job_input()` (L1135-1280), `_build_attachments()` (L1124-1134), `job_download_input` click command (L1282-1384)
+- `src/deadline/client/cli/_groups/_job_download_helpers.py` — `_normalize_filters()`, `_prompt_for_os_mismatch_roots()`, `_prompt_to_confirm_roots()`, `_execute_download_with_progress()`, `MatchPathsBy` enum
+- `deadline/job_attachments/download.py` — `InputDownloader` (L1560-1580), `_BaseFilterableDownloader` (L1353-1500), `get_job_input_paths_by_asset_root()` (L315-345)
+- `deadline/job_attachments/models.py` — `ManifestProperties`, `Attachments`
+- `test/cli_e2e/test_job_download_input.py` — 4 e2e tests
+
+#### Key Observations
+
+1. **`InputDownloader` is nearly identical to `OutputDownloader`** — both inherit from `_BaseFilterableDownloader`. The only difference is the data source: `InputDownloader` calls `get_job_input_paths_by_asset_root(s3_settings, attachments, session)` while `OutputDownloader` calls `get_job_output_paths_by_asset_root(...)`.
+
+2. **`get_job_input_paths_by_asset_root`** iterates `attachments.manifests`, downloads each manifest from S3 at key `{rootPrefix}/Manifests/{inputManifestPath}`, and groups results by `rootPath`.
+
+3. **The Rust `manifest_ops.rs` already has this logic** (L470-500) for the `manifest download` command — it downloads input manifests from S3 using the same key construction. We can extract this into a reusable function.
+
+4. **The CLI flow for `download-input` mirrors `download-output`** exactly:
+   - GetJob → parse attachments → build downloader
+   - OS mismatch prompt → root editing → filter application
+   - Conflict resolution → progress bar → summary
+
+5. **No `--step-id` or `--task-id`** — inputs are job-level only (simpler than download-output).
+
+6. **Messages differ slightly:**
+   - "No input attachments found for this job." (no `attachments` field)
+   - "No input files available for download." (manifests empty)
+   - "No input files match the provided filters." (filters eliminate all)
+   - "Downloading input for Job 'NAME'" (start message)
+   - "Downloading Inputs" (progress bar label)
+   - Telemetry metric: `download_job_input`
+
+#### Implementation Steps
+
+**Step 2a: `InputDownloader` in `deadline-job-attachments/src/download.rs`**
+
+Add `get_input_manifests_by_asset_root()` — extracted from `manifest_ops.rs` logic:
+```
+pub async fn get_input_manifests_by_asset_root(
+    s3_settings: &JobAttachmentS3Settings,
+    attachments: &Attachments,
+    s3_client: &S3Client,
+    account_id: &str,
+) -> Result<HashMap<String, Vec<AssetManifest>>, JobAttachmentsError>
+```
+
+Add `InputDownloader` struct — same fields as `OutputDownloader` minus step/task/session_action_id:
+```rust
+pub struct InputDownloader {
+    s3_settings: JobAttachmentS3Settings,
+    initial_inputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    include_filter_groups: Vec<Vec<String>>,
+    root_mappings: HashMap<String, String>,
+    inputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    s3_client: S3Client,
+    account_id: String,
+}
+```
+
+Methods: `new()`, `rebuild()`, `get_paths_by_root()`, `set_root_path()`, `apply_include_filters()`, `download()`.
+
+The `rebuild()`, `set_root_path()`, `apply_include_filters()` logic is identical to `OutputDownloader`. Extract a private helper function `rebuild_manifests(initial, root_mappings, filter_groups) -> HashMap<String, Vec<AssetManifest>>` to share between both downloaders (per patterns.md #5: shared helper, not a trait).
+
+**Step 2b: `DownloadInput` CLI variant in `deadline-cli/src/commands/job.rs`**
+
+Add `DownloadInput` variant to `JobAction` enum with options:
+- `--profile`, `--farm-id`, `--queue-id`, `--job-id`
+- `-i/--include` (Vec<String>)
+- `--match-paths-by` (default "LOCAL")
+- `--ignore-storage-profiles` (flag)
+- `--conflict-resolution`
+- `--yes`
+- `--output` (verbose|json)
+
+Add `run_download_input()` → `download_input_impl()` following the same pattern as `run_download_output()`.
+
+**Step 2c: `download_input_impl` function**
+
+Flow:
+1. GetJob → parse `job.attachments()` into `Attachments` struct
+2. If no attachments → print "No input attachments found" → return
+3. GetQueue → extract `jobAttachmentSettings`
+4. Build S3 client with queue-scoped credentials
+5. Create `InputDownloader::new(s3_settings, attachments, s3_client, account_id, job_filters)`
+6. Check `get_paths_by_root()` — if empty → "No input files available"
+7. OS mismatch prompt (same code as download-output)
+8. Root editing loop (same code as download-output)
+9. Apply LOCAL filters if applicable — if empty → "No input files match the provided filters"
+10. Path summary
+11. Conflict resolution
+12. Download with progress bar ("Downloading Inputs")
+13. Print summary
+14. Telemetry: `download_job_input`
+
+**Step 2d: Refactor shared code**
+
+The OS mismatch prompt, root editing loop, path summary, and conflict resolution logic is duplicated between `download_output_impl` and `download_input_impl`. Extract shared helpers:
+- `prompt_os_mismatch_roots(downloader, paths, format_mapping, is_json)` — trait-free, takes closures for `set_root_path` and `get_paths_by_root`
+- OR: just duplicate the code (it's ~60 lines) since the two functions have slightly different messages. Per patterns.md #5, don't over-abstract.
+
+Decision: **Duplicate with minor message changes.** The shared helpers in Python (`_prompt_for_os_mismatch_roots`, `_prompt_to_confirm_roots`) work because Python has duck typing. In Rust, making these generic over `OutputDownloader`/`InputDownloader` would require a trait, which patterns.md discourages unless it solves a real problem. The duplication is ~80 lines and the messages differ.
+
+#### Cross-Reference: Test Spec → Rust Test Names
+
+| Test Case (from Python e2e) | Rust Test Name | Level |
+|------------------------------|---------------|-------|
+| Basic download-input downloads all files | `job_download_input_downloads_all_input_files` | L2 |
+| --include glob filters input files | `job_download_input_include_glob_filters` | L2 |
+| --include no match → "no input files match" | `job_download_input_include_no_match` | L2 |
+| No attachments → "no input attachments" | `job_download_input_no_attachments_message` | L2 |
+| No input manifests (empty paths) → "no input files available" | `job_download_input_no_files_available` | L2 |
+| --match-paths-by JOB filters at construction | `job_download_input_match_paths_by_job` | L2 |
+| --output json error → JSON error line | `job_download_input_json_mode_error` | L2 |
+| --output json no attachments → JSON summary | `job_download_input_json_mode_no_attachments` | L2 |
+| Missing required args (farm/queue/job) | `job_download_input_missing_*_exits_with_error` | L2 |
+| Telemetry success event | `download_input_success_emits_telemetry_event` | L2 |
+| Telemetry failure event | `download_input_failure_emits_telemetry_event` | L2 |
+| `get_input_manifests_by_asset_root` unit | `get_input_manifests_by_asset_root_*` | L1 |
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `crates/deadline-job-attachments/src/download.rs` | Add `get_input_manifests_by_asset_root()`, `InputDownloader`, extract `rebuild_manifests()` helper |
+| `crates/deadline-cli/src/commands/job.rs` | Add `DownloadInput` variant, `run_download_input()`, `download_input_impl()` |
+| `crates/deadline-cli/tests/cli/job_download.rs` | Add ~11 L2 tests for download-input |
+| `crates/deadline-cli/tests/cli/telemetry_parity.rs` | Add 2 telemetry tests |
+
+#### Estimated Effort
+
+- Step 2a (InputDownloader): ~80 lines new code + ~20 lines refactored from OutputDownloader
+- Step 2b (CLI variant): ~30 lines
+- Step 2c (download_input_impl): ~180 lines (mostly mirroring download_output_impl with different messages)
+- Step 2d (shared refactor): ~20 lines (extract `rebuild_manifests` helper)
+- Tests: ~300 lines
+- Total: ~600 lines
 
 ### Batching Strategy
 

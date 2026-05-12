@@ -208,6 +208,7 @@ fn command_name(cmd: &Commands) -> String {
                 commands::job::JobAction::RequeueTasks { .. } => "requeue-tasks",
                 commands::job::JobAction::TraceSchedule { .. } => "trace-schedule",
                 commands::job::JobAction::DownloadOutput { .. } => "download-output",
+                commands::job::JobAction::DownloadInput { .. } => "download-input",
             },
         ),
         Commands::Worker { action } => (

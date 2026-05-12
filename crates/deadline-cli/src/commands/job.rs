@@ -235,6 +235,32 @@ pub(crate) enum JobAction {
         #[arg(long, default_value = "verbose")]
         output: String,
     },
+    /// Download the input files of a job saved as job attachments
+    DownloadInput {
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        farm_id: Option<String>,
+        #[arg(long)]
+        queue_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long, value_parser = parse_conflict_resolution)]
+        conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+        /// Glob pattern for files to include in download. Repeatable.
+        #[arg(short = 'i', long = "include")]
+        include: Vec<String>,
+        /// Match --include filters against JOB (submission) or LOCAL (workstation) paths.
+        #[arg(long, default_value = "LOCAL", value_parser = parse_match_paths_by)]
+        match_paths_by: String,
+        /// Ignore storage profile configuration. Downloads to unmapped paths.
+        #[arg(long)]
+        ignore_storage_profiles: bool,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long, default_value = "verbose")]
+        output: String,
+    },
 }
 
 pub(crate) fn run(action: JobAction) -> Result<(), CliError> {
@@ -377,6 +403,34 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             )
             .await;
             record_success_fail(&tc, "download_job_output", &result);
+            result
+        }
+        JobAction::DownloadInput {
+            profile,
+            farm_id,
+            queue_id,
+            job_id,
+            conflict_resolution,
+            include,
+            match_paths_by,
+            ignore_storage_profiles: _,
+            yes,
+            output,
+        } => {
+            let tc = create_telemetry(None);
+            let result = run_download_input(
+                profile,
+                farm_id,
+                queue_id,
+                job_id,
+                conflict_resolution,
+                include,
+                match_paths_by,
+                yes,
+                output,
+            )
+            .await;
+            record_success_fail(&tc, "download_job_input", &result);
             result
         }
     }
@@ -1464,6 +1518,508 @@ async fn run_download_output(
         }
         Err(e) => Err(e),
     }
+}
+
+async fn run_download_input(
+    profile: Option<String>,
+    farm_id: Option<String>,
+    queue_id: Option<String>,
+    job_id: Option<String>,
+    conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    include: Vec<String>,
+    match_paths_by: String,
+    yes: bool,
+    output: String,
+) -> Result<(), CliError> {
+    let is_json = output.eq_ignore_ascii_case("json");
+
+    let include_patterns = deadline_job_attachments::download::normalize_filters(&include);
+    let include_patterns = if include_patterns.is_empty() {
+        None
+    } else {
+        Some(include_patterns)
+    };
+
+    let config = setup_config(
+        profile,
+        farm_id,
+        queue_id,
+        job_id,
+        yes,
+        &["farm_id", "queue_id", "job_id"],
+    )?;
+    let farm = get(&config, "defaults.farm_id");
+    let queue_id_val = get(&config, "defaults.queue_id");
+    let job_id_val = get(&config, "defaults.job_id");
+
+    let result = download_input_impl(
+        &config,
+        &farm,
+        &queue_id_val,
+        &job_id_val,
+        conflict_resolution,
+        is_json,
+        is_auto_accept(&config),
+        include_patterns.as_deref(),
+        &match_paths_by,
+    )
+    .await;
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if is_json => {
+            let error_one_liner = e.to_string().replace('\n', ". ");
+            println!(
+                "{}",
+                serde_json::json!({"messageType": "error", "value": error_one_liner})
+            );
+            #[allow(
+                clippy::exit,
+                reason = "JSON error already printed; returning Err would double-print"
+            )]
+            std::process::exit(1);
+        }
+        Err(e) => Err(e),
+    }
+}
+
+#[allow(clippy::too_many_lines, reason = "mirrors download_output_impl structure")]
+async fn download_input_impl(
+    config: &IniConfig,
+    farm_id: &str,
+    queue_id: &str,
+    job_id: &str,
+    conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    is_json: bool,
+    auto_accept: bool,
+    include_patterns: Option<&[String]>,
+    match_paths_by: &str,
+) -> Result<(), CliError> {
+    use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
+    use deadline_job_attachments::download::InputDownloader;
+    use deadline_job_attachments::models::{
+        Attachments, FileConflictResolution, JobAttachmentS3Settings, ManifestProperties,
+        PathFormat,
+    };
+    use deadline_job_attachments::s3;
+
+    // Get job
+    let dl = session::deadline_client(Some(config)).await;
+    let job = dl
+        .get_job()
+        .farm_id(farm_id)
+        .queue_id(queue_id)
+        .job_id(job_id)
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to download input:\n{}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
+    let job_name = job.name().to_owned();
+
+    if is_json {
+        println!(
+            "{}",
+            serde_json::json!({"messageType": "title", "value": job_name})
+        );
+    } else {
+        println!("Downloading input for Job '{job_name}'");
+    }
+
+    // Parse attachments
+    let attachments = match job.attachments() {
+        Some(att) => {
+            let manifests: Vec<ManifestProperties> = att
+                .manifests()
+                .iter()
+                .map(|m| ManifestProperties {
+                    root_path: m.root_path().to_owned(),
+                    root_path_format: match m.root_path_format().as_str() {
+                        "windows" => PathFormat::Windows,
+                        _ => PathFormat::Posix,
+                    },
+                    file_system_location_name: m
+                        .file_system_location_name()
+                        .map(ToOwned::to_owned),
+                    input_manifest_path: m.input_manifest_path().map(ToOwned::to_owned),
+                    input_manifest_hash: m.input_manifest_hash().map(ToOwned::to_owned),
+                    output_relative_directories: if m.output_relative_directories().is_empty() {
+                        None
+                    } else {
+                        Some(
+                            m.output_relative_directories()
+                                .iter()
+                                .map(ToOwned::to_owned)
+                                .collect(),
+                        )
+                    },
+                })
+                .collect();
+            if manifests.is_empty() {
+                None
+            } else {
+                Some(Attachments {
+                    manifests,
+                    ..Default::default()
+                })
+            }
+        }
+        None => None,
+    };
+
+    let Some(attachments) = attachments else {
+        let msg = "No input attachments found for this job.";
+        if is_json {
+            println!(
+                "{}",
+                serde_json::json!({"messageType": "summary", "value": msg})
+            );
+        } else {
+            println!("{msg}");
+        }
+        return Ok(());
+    };
+
+    // Get queue for jobAttachmentSettings
+    let queue = session::deadline_client(Some(config))
+        .await
+        .get_queue()
+        .farm_id(farm_id)
+        .queue_id(queue_id)
+        .send()
+        .await
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to download input:\n{}",
+                client::format_sdk_error(&e)
+            ))
+        })?;
+
+    let attachment_settings = queue.job_attachment_settings().ok_or_else(|| {
+        CliError::Operation(format!(
+            "Queue '{}' does not have job attachments configured.",
+            queue.display_name()
+        ))
+    })?;
+
+    let s3_settings = JobAttachmentS3Settings {
+        s3_bucket_name: attachment_settings.s3_bucket_name().to_owned(),
+        root_prefix: attachment_settings.root_prefix().to_owned(),
+    };
+
+    // Build S3 client with queue-scoped credentials
+    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, Some(config))
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to download input:\n{e}")))?;
+
+    let s3_client = s3::build_s3_client(&sdk_config, Some(config));
+    let account_id = s3::get_account_id(&sdk_config)
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to download input:\n{e}")))?;
+
+    // Create InputDownloader — apply filters at construction when match_paths_by == JOB
+    let job_filters = if match_paths_by == "JOB" {
+        include_patterns
+    } else {
+        None
+    };
+    let mut downloader = InputDownloader::new(
+        s3_settings,
+        &attachments,
+        s3_client,
+        account_id,
+        job_filters,
+    )
+    .await
+    .map_err(|e| CliError::Operation(format!("Failed to download input:\n{e}")))?;
+
+    let mut input_paths = downloader.get_paths_by_root();
+
+    if input_paths.is_empty() {
+        let msg = "No input files available for download.";
+        if is_json {
+            println!(
+                "{}",
+                serde_json::json!({"messageType": "summary", "value": msg})
+            );
+        } else {
+            println!("{msg}");
+        }
+        return Ok(());
+    }
+
+    check_windows_long_paths(&input_paths);
+
+    // Build root_path_format_mapping for OS mismatch detection
+    let mut root_path_format_mapping: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for manifest in &attachments.manifests {
+        root_path_format_mapping.insert(
+            manifest.root_path.clone(),
+            manifest.root_path_format.as_str().to_owned(),
+        );
+    }
+
+    // Cross-OS mismatch prompt
+    let host_format = PathFormat::get_host_path_format_string();
+    let asset_roots: Vec<String> = input_paths.keys().cloned().collect();
+    for asset_root in &asset_roots {
+        let root_format = root_path_format_mapping
+            .get(asset_root)
+            .map_or("", String::as_str);
+        if !root_format.is_empty() && host_format != root_format {
+            if is_json {
+                println!(
+                    "{}",
+                    serde_json::json!({"messageType": "path", "value": [asset_root]})
+                );
+                let mut line = String::new();
+                std::io::stdin().read_line(&mut line).unwrap_or(0);
+                let line = line.trim();
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line)
+                    && let Some(vals) = parsed.get("value").and_then(|v| v.as_array())
+                    && let Some(new_root) = vals.first().and_then(|v| v.as_str())
+                {
+                    downloader.set_root_path(asset_root, new_root);
+                }
+            } else {
+                use std::io::Write;
+                let fmt_cap = format!("{}{}", &root_format[..1].to_uppercase(), &root_format[1..]);
+                println!(
+                    "This root path format does not match the operating system you're using. \
+                     Where would you like to save the files?\n\
+                     The location was {asset_root}, on {fmt_cap}."
+                );
+                print!("> Please enter a new root path: ");
+                std::io::stdout().flush().ok();
+                let mut new_root = String::new();
+                std::io::stdin().read_line(&mut new_root).unwrap_or(0);
+                let new_root = new_root.trim();
+                let new_root = crate::common::expand_tilde(new_root);
+                let new_root = new_root.to_string_lossy();
+                if !new_root.is_empty() {
+                    downloader.set_root_path(asset_root, &new_root);
+                }
+            }
+        }
+    }
+
+    input_paths = downloader.get_paths_by_root();
+
+    // Root editing loop — skipped when auto_accept
+    if !auto_accept && !input_paths.is_empty() {
+        if is_json {
+            let roots: Vec<String> = input_paths.keys().cloned().collect();
+            println!(
+                "{}",
+                serde_json::json!({"messageType": "path", "value": roots})
+            );
+            let mut line = String::new();
+            std::io::stdin().read_line(&mut line).unwrap_or(0);
+            let line = line.trim();
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line)
+                && let Some(vals) = parsed.get("value").and_then(|v| v.as_array())
+            {
+                for (i, val) in vals.iter().enumerate() {
+                    if let Some(new_root) = val.as_str()
+                        && i < roots.len()
+                    {
+                        downloader.set_root_path(&roots[i], new_root);
+                    }
+                }
+                input_paths = downloader.get_paths_by_root();
+            }
+        } else {
+            loop {
+                use std::io::Write;
+                let summary_lines: Vec<String> = input_paths
+                    .iter()
+                    .map(|(dir, paths)| {
+                        let count = paths.len();
+                        let s = if count > 1 { "s" } else { "" };
+                        format!("    {dir} ({count} file{s})")
+                    })
+                    .collect();
+                println!(
+                    "\nSummary of files to download:\n{}",
+                    summary_lines.join("\n")
+                );
+
+                let roots: Vec<String> = input_paths.keys().cloned().collect();
+                println!(
+                    "You are about to download files which may come from multiple root directories. Here are a list of the current root directories:"
+                );
+                for (i, root) in roots.iter().enumerate() {
+                    println!("[{i}] {root}");
+                }
+
+                print!(
+                    "> Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download: "
+                );
+                std::io::stdout().flush().ok();
+                let mut choice = String::new();
+                if std::io::stdin().read_line(&mut choice).unwrap_or(0) == 0 {
+                    break;
+                }
+                let choice = choice.trim();
+                if choice == "n" {
+                    println!("Input download canceled.");
+                    return Ok(());
+                } else if choice == "y" || choice.is_empty() {
+                    break;
+                } else if let Ok(idx) = choice.parse::<usize>()
+                    && idx < roots.len()
+                {
+                    print!(
+                        "> Please enter the new root directory path, or press Enter to keep it unchanged: "
+                    );
+                    std::io::stdout().flush().ok();
+                    let mut new_root = String::new();
+                    std::io::stdin().read_line(&mut new_root).unwrap_or(0);
+                    let new_root = new_root.trim();
+                    if !new_root.is_empty() && new_root != roots[idx] {
+                        downloader.set_root_path(&roots[idx], new_root);
+                        input_paths = downloader.get_paths_by_root();
+                    }
+                }
+            }
+        }
+    }
+
+    check_windows_long_paths(&input_paths);
+
+    // Apply include filters against workstation paths (LOCAL mode, the default)
+    if match_paths_by != "JOB"
+        && let Some(patterns) = include_patterns
+    {
+        downloader.apply_include_filters(patterns);
+        input_paths = downloader.get_paths_by_root();
+        if input_paths.is_empty() {
+            let msg = "No input files match the provided filters.";
+            if is_json {
+                println!(
+                    "{}",
+                    serde_json::json!({"messageType": "summary", "value": msg})
+                );
+            } else {
+                println!("{msg}");
+            }
+            return Ok(());
+        }
+    }
+
+    // Build path summary for verbose output
+    if !is_json {
+        let all_paths: Vec<String> = input_paths
+            .iter()
+            .flat_map(|(root, paths)| {
+                paths.iter().map(move |p| {
+                    let full = std::path::PathBuf::from(root).join(p);
+                    full.to_string_lossy().to_string()
+                })
+            })
+            .collect();
+        let path_refs: Vec<&str> = all_paths.iter().map(String::as_str).collect();
+        println!("\nSummary of file paths to download:");
+        let summary = summarize_path_list(&path_refs, 10, None);
+        for line in summary.lines() {
+            println!("  {line}");
+        }
+    }
+
+    // Resolve conflict resolution
+    let resolution = if let Some(r) = conflict_resolution {
+        r
+    } else {
+        let mut conflicting: Vec<String> = Vec::new();
+        for (root, paths) in &input_paths {
+            for p in paths {
+                let full = std::path::PathBuf::from(root).join(p);
+                if full.is_file() {
+                    conflicting.push(full.to_string_lossy().to_string());
+                }
+            }
+        }
+        if !conflicting.is_empty() && !is_json {
+            println!("\nThe following files already exist in your local directory:");
+            for f in conflicting.iter().take(10) {
+                println!("        {f}");
+            }
+            if conflicting.len() > 10 {
+                println!("        ... and {} more", conflicting.len() - 10);
+            }
+            println!("Defaulting to Create a copy (appending '(1)' to conflicting files).");
+        }
+        let setting =
+            config_file::get_setting("settings.conflict_resolution", config).unwrap_or_default();
+        match setting.to_uppercase().as_str() {
+            "SKIP" => FileConflictResolution::Skip,
+            "OVERWRITE" => FileConflictResolution::Overwrite,
+            _ => FileConflictResolution::CreateCopy,
+        }
+    };
+
+    // Download with progress
+    let progress_mgr = std::sync::Mutex::new(crate::common::ProgressBarManager::new(
+        100,
+        "Downloading Inputs",
+    ));
+
+    let download_summary = downloader
+        .download(
+            resolution,
+            Some(Box::new(move |meta| {
+                let new_progress = meta.progress as u64;
+                progress_mgr
+                    .lock()
+                    .expect("lock poisoned")
+                    .callback(new_progress);
+                crate::common::should_continue()
+            })),
+        )
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to download input:\n{e}")))?;
+
+    // Print summary
+    if is_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "messageType": "summary",
+                "value": format!("Downloaded {} files", download_summary.stats.processed_files),
+                "fileCount": download_summary.stats.processed_files,
+                "files": download_summary.downloaded_files,
+            })
+        );
+    } else {
+        let paths_joined: String = download_summary
+            .file_counts_by_root_directory
+            .iter()
+            .map(|(dir, count)| {
+                let file_word = if *count > 1 { "files" } else { "file" };
+                format!("{dir} ({count} {file_word})")
+            })
+            .collect::<Vec<_>>()
+            .join("\n        ");
+        println!(
+            "Download Summary:\n\
+             \x20   Downloaded {} files totaling {}.\n\
+             \x20   Total download time of {:.5} seconds at {}/s.\n\
+             \x20   Download locations (total file counts):\n\
+             \x20       {}",
+            download_summary.stats.processed_files,
+            human_readable_file_size(download_summary.stats.processed_bytes),
+            download_summary.stats.total_time,
+            human_readable_file_size(download_summary.stats.transfer_rate as u64),
+            paths_joined,
+        );
+    }
+    println!();
+
+    Ok(())
 }
 
 /// Read `auto_accept` from config (already set by `apply_cli_options_to_config` when --yes).

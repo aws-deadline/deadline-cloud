@@ -316,6 +316,99 @@ async fn download_output_failure_emits_telemetry_event() {
 }
 
 // =========================================================================
+// Batch 3b: download-input telemetry (GAP-2)
+// =========================================================================
+
+/// Successful job download-input (no input attachments) emits `download_job_input` event.
+#[tokio::test]
+async fn download_input_success_emits_telemetry_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    jobs::mock_get_job(
+        &harness.server,
+        FARM,
+        QUEUE,
+        json!({
+            "jobId": JOB,
+            "name": "Render Job",
+            "lifecycleStatus": "CREATE_COMPLETE",
+            "taskRunStatus": "SUCCEEDED",
+            "taskRunStatusCounts": { "SUCCEEDED": 1 },
+        }),
+    )
+    .await;
+    queues::mock_get_queue(
+        &harness.server,
+        FARM,
+        json!({
+            "queueId": QUEUE,
+            "displayName": "Test Queue",
+            "jobAttachmentSettings": {
+                "s3BucketName": "test-bucket",
+                "rootPrefix": "root-prefix"
+            }
+        }),
+    )
+    .await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    // Expect telemetry event for download_job_input
+    telemetry::mock_telemetry_event_type(
+        &harness.server,
+        "com.amazon.rum.deadline.download_job_input",
+    )
+    .await;
+
+    harness
+        .cli(&[
+            "job",
+            "download-input",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--yes",
+        ])
+        .assert()
+        .success();
+}
+
+/// Failed job download-input (job not found) emits `download_job_input` failure event.
+#[tokio::test]
+async fn download_input_failure_emits_telemetry_event() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+
+    // GetJob returns 404
+    errors::mock_get_job_not_found(&harness.server, FARM, QUEUE, JOB).await;
+
+    // Expect telemetry event for download_job_input with failure
+    telemetry::mock_telemetry_event_type(
+        &harness.server,
+        "com.amazon.rum.deadline.download_job_input",
+    )
+    .await;
+
+    harness
+        .cli(&[
+            "job",
+            "download-input",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--yes",
+        ])
+        .assert()
+        .failure();
+}
+
+// =========================================================================
 // Batch 4: submission event telemetry (#21h)
 // =========================================================================
 

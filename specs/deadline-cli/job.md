@@ -19,6 +19,7 @@ monitoring, log retrieval, cancellation, and task requeuing.
 | `job cancel` | ✅ | Cancel a running job |
 | `job requeue-tasks` | ✅ | Requeue failed/canceled/suspended tasks |
 | `job download-output` | ✅ | Download job output attachments from S3 |
+| `job download-input` | ✅ | Download job input attachments from S3 |
 | `job trace-schedule` | ✅ | Generate scheduling trace and statistics |
 
 All accept `--profile`, `--farm-id`, `--queue-id`. Most also accept `--job-id`.
@@ -372,6 +373,45 @@ Uses JSON line protocol with `messageType` field:
 Uses `get_queue_scoped_config` for the S3 client. DCM users get queue
 role credentials via `AssumeQueueRoleForUser`. Non-DCM users use their
 base AWS credentials. Same pattern as `attachment download`.
+
+## `job download-input`
+
+Options: `--conflict-resolution` (SKIP/OVERWRITE/CREATE_COPY),
+`-i/--include` (repeatable), `--match-paths-by` (JOB|LOCAL, default LOCAL),
+`--ignore-storage-profiles`, `--yes`, `--output verbose|json`.
+
+Requires: farm_id, queue_id, job_id. No `--step-id` or `--task-id` (inputs are job-level).
+
+### Behavioral Contract
+
+Same include filtering semantics as `download-output` (see above).
+Same interactive flow (OS mismatch prompt, root editing, conflict resolution).
+
+Key messages:
+- No `attachments` field on job → "No input attachments found for this job."
+- Attachments exist but no `inputManifestPath` → "No input files available for download."
+- Filters eliminate all files → "No input files match the provided filters."
+- Start message: `Downloading input for Job 'NAME'`
+- Telemetry metric: `download_job_input`
+
+### Execution Flow
+
+1. GetJob → parse `attachments.manifests[]` into `Attachments` struct
+2. If no attachments → print message and return
+3. GetQueue for `jobAttachmentSettings`
+4. Build S3 client with queue-scoped credentials
+5. Create `InputDownloader` (fetches input manifests from S3 via `inputManifestPath`)
+6. If no input paths → "No input files available"
+7. Cross-OS root mismatch prompt
+8. Root editing loop (unless `--yes`)
+9. If `--match-paths-by LOCAL`: apply filters, re-check for empty
+10. Path summary, conflict resolution, download with progress, print summary
+
+### Difference from `download-output`
+
+- No step/task scoping — inputs are always job-level
+- Data source: reads `inputManifestPath` from job attachments (not S3 listing)
+- Uses `InputDownloader` (shares `rebuild_manifests` with `OutputDownloader`)
 
 ## `job trace-schedule`
 
