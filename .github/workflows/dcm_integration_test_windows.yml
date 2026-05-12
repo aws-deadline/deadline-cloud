@@ -3,6 +3,12 @@ name: DCM Integration Test (Windows)
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      tag:
+        description: Git ref (tag/branch/SHA) to test. Defaults to the triggering ref.
+        required: false
+        type: string
+        default: ''
 
 jobs:
   test:
@@ -23,6 +29,8 @@ jobs:
       SCREENSHOT_DIR: ${{ github.workspace }}\screenshots
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-python@v6
         with:
