@@ -183,17 +183,20 @@ atexit.register(reap_all)
 def _find_app(pid: int, baseline_names: set, timeout: float) -> xa11y.App:
     """Wait for an ``xa11y.App`` to appear for *pid*.
 
-    Tries ``App.by_pid`` first (xa11y 0.8 polls internally). Falls back to
-    matching by name because AT-SPI on Linux sometimes reports the wrong PID
-    (typically 1) for child processes.
+    ``App.by_pid`` selects elements with role ``application``, which Windows
+    UIA never reports (apps are exposed as ``window``). Iterating
+    ``App.list()`` works on every platform because list collects both
+    ``application`` and ``window`` roles. The name fallback is for AT-SPI on
+    Linux, which sometimes reports the wrong PID (typically 1) for child
+    processes.
     """
-    try:
-        return xa11y.App.by_pid(pid, timeout=timeout)
-    except xa11y.TimeoutError:
-        pass
     end = time.monotonic() + timeout
     while time.monotonic() < end:
-        for a in xa11y.App.list():
+        apps = xa11y.App.list()
+        for a in apps:
+            if a.pid == pid:
+                return xa11y.App.by_name(a.name)
+        for a in apps:
             if a.name not in baseline_names:
                 return xa11y.App.by_name(a.name)
         time.sleep(0.25)
