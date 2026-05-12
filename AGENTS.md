@@ -85,6 +85,7 @@ Use [conventional commits](https://www.conventionalcommits.org/):
 After completing any code changes:
 1. Always run `hatch run fmt` and `hatch run lint` to verify the changes are clean.
 2. If also committing, run the full checklist: fmt → lint → test → build → `git commit -s`.
+3. **Do not** update the changelog (`CHANGELOG.md`). The changelog is updated during the release process.
 
 ```bash
 hatch run fmt            # Auto-format code
