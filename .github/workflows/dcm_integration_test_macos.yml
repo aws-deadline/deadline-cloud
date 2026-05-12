@@ -28,7 +28,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install deadline CLI and xa11y
-        run: pip install . 'xa11y>=0.8,<0.9'
+        run: pip install . 'xa11y>=0.8.1,<0.9'
 
       - name: Install DCM
         # The .dmg installer drops Deadline Cloud Monitor.app into /Applications
