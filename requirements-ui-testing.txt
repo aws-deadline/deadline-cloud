@@ -2,7 +2,7 @@ pytest == 9.*
 pytest-timeout >= 2.3
 pytest-cov >= 7.1.0
 pytest-xdist >= 3
-xa11y == 0.7.*
+xa11y >= 0.8.1, <0.9
 # MockDeadlineBackend._parse_template validates submitted templates using
 # openjd-model's decode_job_template so that CreateJob produces a
 # realistic step/task structure for the submitter to poll. Without it

@@ -1,7 +1,8 @@
 """E2E: deadline auth login → DCM opens browser → drive IdC sign-in via xa11y.
 
-Cross-platform. Relies on xa11y >= 0.7 for:
+Cross-platform. Relies on xa11y >= 0.8 for:
   - xa11y.screenshot().save_png(path)  — native screen capture on all platforms
+  - App.dump()                          — render the accessibility tree as text
   - Locator.type_text(str)              — splice text via a11y API (no keystrokes)
 """
 
@@ -47,29 +48,10 @@ def screenshot(name):
 def dump_all_trees():
     for app in xa11y.App.list():
         print(f"=== APP {app.name!r} pid={app.pid} ===", flush=True)
-
-        def walk(el, d=0, maxd=30):
-            if d > maxd:
-                return
-            try:
-                print(
-                    "  " * d
-                    + f"{el.role} name={(el.name or '')[:80]!r} value={(el.value or '')[:40]!r}",
-                    flush=True,
-                )
-            except Exception:
-                return
-            try:
-                for c in el.children():
-                    walk(c, d + 1, maxd)
-            except Exception:
-                pass
-
         try:
-            for c in app.children():
-                walk(c)
+            print(app.dump(max_depth=30), flush=True)
         except Exception as e:
-            print(f"  (children failed: {e})", flush=True)
+            print(f"  (dump failed: {e})", flush=True)
 
 
 def on_failure(exc_type, exc, tb):
