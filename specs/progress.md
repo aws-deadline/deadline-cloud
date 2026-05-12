@@ -69,7 +69,7 @@ pick and execute work items.
 | 16d2 | GUI CLI commands (`bundle gui-submit`, `config gui`) | ✅ Done | `cli.md` | 16d |
 | 16d3 | GUI widget rendering fixes (config shim types) | ✅ Done | — | 16d2 |
 | 16e | Python packaging (`gui/pyproject.toml`) | ✅ Done | — | 16d3 |
-| 16f | DCC submitter dependency switchover | In progress | — | 16e |
+| 16f | DCC submitter dependency switchover | Blocked on #24 | — | 16e |
 | 17 | MCP server | ✅ Done | `mcp.md` | 1-14 |
 | 18 | Submission hooks | ✅ Done | `submission_hooks.md` | 11 |
 | 19 | Update checker | ✅ Done | `new_features.md` | 0g |
@@ -93,20 +93,21 @@ pick and execute work items.
 | 28b | CLI feature parity: remove Rust-only features (AUDIT-108,109) | ✅ Done | — | — |
 | 28c | Strict clippy lint resolution (2064 → 0 warnings) | ✅ Done | — | — |
 | 29 | Investigate Python `--save-debug-snapshot` bug on no-attachment bundles | Not started | — | — |
-| 30 | Rust tooling and optimization setup | In progress | — | — |
+| 30 | Rust tooling and optimization setup | ✅ Done | — | — |
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |
+| 31 | openjd-rs dependency integration | Not started | `openjd-integration.md` | — |
 
-**Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Deferred
+**Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Deferred
 
 **Dependency status:** All core feature dependencies are resolved.
-No items remain as ⚠️ Gaps. #16 (GUI FFI) is in progress.
+No items remain as ⚠️ Gaps. #16f is blocked on #24.
 
-**Next action item:** #16f (DCC submitter dependency switchover).
+**Next action item:** #24 (Production distribution) — unblocks #16f Batch C and #25-26.
 
 **In-progress details:** See `HANDOFF.md` for current state of any
-"In progress" work items.
+active work items.
 
 **Audit status:** See `audit_reports/2026-04-17-behavioral-parity.md`
 (all findings resolved) and `audit_reports/2026-05-01-cli-feature-parity.md`
@@ -119,9 +120,10 @@ complete — see `audit_reports/2026-05-01-codebase-health.md`.
 The Python Qt GUI code must ship from this repo, backed by the Rust shared
 library. Remaining sub-items:
 
-- **#16f — DCC submitter switchover** (Not started): Update each DCC
-  submitter repo to depend on the new Python package from
-  `deadline-cloud-rs` instead of `deadline-cloud-python`.
+- **#16f — DCC submitter switchover** (Blocked on #24): Batches A1-A3
+  done (import shims, telemetry, API wrappers). Batch B deferred
+  (Houdini, separate repo). Batch C (dependency switch in 9 DCC repos)
+  blocked on #24 publishing the package.
 
 **Production distribution plan (#24-26):**
 
@@ -217,3 +219,16 @@ story. See `specs/HANDOFF.md` for detailed analysis.
   explicit sorting wherever maps are displayed.
 - **Python formatting/linting**: Add ruff (format + lint) for `gui/`
   Python code. Currently no Python formatter is configured.
+- **Reduce `serde_json::Value` usage** — 108 references in CLI code.
+  Address incrementally when touching those files.
+- **Audit `collect()` then iterate** — 18 sites. Quick fixes when
+  touching those files.
+- **JSON progress lines in `--output json` mode** — download-output and
+  download-input don't emit `{"messageType":"progress",...}` lines during
+  download (Python does via click progressbar callback). Low priority.
+
+**Dependency upgrades needed:**
+- **rusqlite** 0.32 → 0.39 (major, breaking changes likely)
+- **pyo3** 0.24 → 0.28 (major, breaking API changes)
+- **rustls-webpki** advisories pinned by transitive hyper-rustls 0.24
+  (awaiting AWS SDK upstream fix). See `deny.toml`.

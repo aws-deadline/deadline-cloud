@@ -4,9 +4,14 @@ Overview of the development loop for deadline-cloud-rs. Design philosophy
 lives in `specs/patterns.md`, cross-cutting audit methodology in
 `specs/audit.md`.
 
-Step-by-step prompts for each phase live in `.kiro/prompts/rust-step*.md`.
-Use them in sequence: `@rust-step1-study` → `@rust-step2-tests` →
-`@rust-step3-implement` → `@rust-step4-compare` → `@rust-step5-finish`.
+Step-by-step prompts for each phase live in `.kiro/prompts/rust-port/`.
+Use them in sequence: `step1-study` → `step2-tests` → `step3-implement`
+→ `step4-compare` → `step5-audit` → `step6-spec` → `step7-commit`.
+
+For the openjd-rs dependency integration workflow (or any future
+dependency swap / implementation replacement), use
+`.kiro/prompts/dependency-swap/` (step1 through step5).
+See `specs/openjd-integration.md` for the openjd-specific plan.
 
 ## Session Start
 
