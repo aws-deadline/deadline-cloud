@@ -111,7 +111,7 @@ pick the right one.
 
 - **Unit tests:** `test/unit/` - Run with `hatch run test`
 - **Integration tests:** `test/integ/` - Requires AWS resources
-- **Squish GUI tests:** `test/squish/` - Requires Squish license
+- **UI tests:** `test/ui/` - Run with `hatch run ui:test`
 - **Docker tests:** `scripts/run_sudo_tests.sh` - For permission tests
 
 Tests use pytest with unittest.mock. Coverage target: 80%.
