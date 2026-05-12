@@ -103,8 +103,154 @@ files matching glob patterns.
 
 - [x] Audit complete
 - [x] GAP-1 implemented (Steps 1-5 complete, pending manual retest with fresh SSO)
-- [ ] GAP-3 implemented
+- [x] GAP-3 implemented — Steps 1-7 complete
 - [ ] GAP-2 implemented
+
+---
+
+### GAP-3 Implementation Plan — `--include` and `--match-paths-by` on `download-output`
+
+#### Summary
+
+Add `-i/--include` (repeatable glob patterns) and `--match-paths-by JOB|LOCAL`
+options to `deadline job download-output`. Filters select which files to download
+using fnmatch-style glob matching against the full path (root + relative).
+
+#### Key Behavioral Contract (from Python)
+
+1. **`_normalize_filters(patterns)`** — normalizes `\` → `/`, strips `./`, collapses `//`
+2. **`_matches_any_filter(file_path, filters)`** — fnmatch matching with:
+   - `*` matches across `/` separators (fnmatch behavior)
+   - Filter ending with `/` → appends `*` (directory match)
+   - Relative filter (not starting with `/` or `*` or drive letter) → prepends `*/`
+3. **`--match-paths-by LOCAL` (default)** — filters applied AFTER root editing
+   (against workstation paths). Calls `apply_include_filters()` post-root-edit.
+4. **`--match-paths-by JOB`** — filters applied at construction time (against
+   original job submission paths). Passed as `include_filters` to `OutputDownloader::new()`.
+5. **Multiple `--include` values are OR'd** — file matches if ANY filter matches.
+6. **If filters result in empty paths** → print "no output files available" message.
+
+#### Crate Changes
+
+**`deadline-job-attachments` (`crates/deadline-job-attachments/src/download.rs`):**
+
+1. Add `apply_include_filters(&mut self, patterns: &[String])` to `OutputDownloader`
+   - Stores filter group, calls `_rebuild()` (same pattern as Python)
+   - Requires refactoring `OutputDownloader` to store `_initial_outputs_by_root`
+     and `_include_filter_groups` (currently it only stores `outputs_by_root`)
+2. Add `_rebuild(&mut self)` private method — recomputes `outputs_by_root` from
+   initial state by applying root mappings then filter groups sequentially
+3. Add `include_filters` parameter to `OutputDownloader::new()` — applies initial
+   filter group at construction (for `--match-paths-by JOB`)
+4. Add module-level functions:
+   - `pub fn normalize_filters(patterns: &[String]) -> Vec<String>`
+   - `pub fn matches_any_filter(file_path: &str, filters: &[String]) -> bool`
+   - `fn full_path(root: &str, relative: &str) -> String` (private)
+   - `pub fn filter_manifests(manifests_by_root: &HashMap<String, Vec<AssetManifest>>, filters: &[String]) -> HashMap<String, Vec<AssetManifest>>`
+
+**`deadline-cli` (`crates/deadline-cli/src/commands/job.rs`):**
+
+5. Add `--include` (`Vec<String>`, short `-i`) and `--match-paths-by` (enum `JOB|LOCAL`,
+   default `LOCAL`) to `DownloadOutput` variant
+6. Update `download_output_impl` signature to accept `include_patterns: Option<Vec<String>>`
+   and `match_paths_by: MatchPathsBy`
+7. Pass `include_filters` to `OutputDownloader::new()` when `match_paths_by == JOB`
+8. After root editing loop, if `match_paths_by == LOCAL` and patterns exist:
+   call `downloader.apply_include_filters(patterns)`, re-check for empty paths
+
+#### Test Plan
+
+| Test Case | Rust Test Name | Level |
+|-----------|---------------|-------|
+| Basic --include glob filters matching files | `download_output_include_glob_filters_matching_files` | L2 (CLI) |
+| --include with exact file path | `download_output_include_exact_file_path` | L2 |
+| Multiple --include values OR'd | `download_output_include_multiple_patterns_ored` | L2 |
+| --include with no matches → "no output" msg | `download_output_include_no_match_shows_no_output` | L2 |
+| --include matches full workstation path | `download_output_include_matches_full_local_path` | L2 |
+| --match-paths-by JOB filters at construction | `download_output_match_paths_by_job` | L2 |
+| Relative path filter auto-prepends `*/` | `download_output_include_relative_path_prepends_star` | L2 |
+| normalize_filters unit tests | `normalize_filters_*` | L1 (unit) |
+| matches_any_filter unit tests | `matches_any_filter_*` | L1 (unit) |
+
+---
+
+### GAP-2 Implementation Plan — `deadline job download-input` command
+
+#### Summary
+
+New CLI command to download a job's input attachments from S3. Reads the
+`attachments.manifests[].inputManifestPath` from the job, downloads those
+manifests from S3, and downloads the referenced files. Supports the same
+`--include` / `--match-paths-by` filtering as download-output.
+
+#### Key Behavioral Contract (from Python)
+
+1. **No `--step-id` or `--task-id`** — inputs are job-level only
+2. **Reads `job.attachments`** — parses `ManifestProperties` from the job's
+   `attachments.manifests[]` array (each has `rootPath`, `rootPathFormat`,
+   `inputManifestPath`, `inputManifestHash`)
+3. **Downloads input manifests from S3** — key is `{rootPrefix}/Manifests/{inputManifestPath}`
+4. **Same interactive flow** as download-output: OS mismatch prompt, root editing,
+   conflict resolution, progress bar
+5. **"No input attachments found"** if job has no `attachments` field
+6. **"No input files available"** if manifests are empty
+7. **"No input files match the provided filters"** if --include filters everything out
+
+#### Crate Changes
+
+**`deadline-job-attachments` (`crates/deadline-job-attachments/src/download.rs`):**
+
+1. Add `InputDownloader` struct — similar to `OutputDownloader` but:
+   - Constructor takes `Attachments` (parsed from job) instead of step/task IDs
+   - Downloads input manifests from S3 using `inputManifestPath` from each
+     `ManifestProperties` entry
+   - Same `get_paths_by_root()`, `set_root_path()`, `apply_include_filters()`,
+     `download()` interface
+2. Extract shared trait or base behavior between `OutputDownloader` and
+   `InputDownloader` (both need `_rebuild`, filter groups, root mappings).
+   Per patterns.md principle #5 ("don't over-abstract"), use a shared private
+   helper struct `FilterableManifests` rather than a trait.
+
+**`deadline-cli` (`crates/deadline-cli/src/commands/job.rs`):**
+
+3. Add `DownloadInput` variant to `JobAction` enum with options:
+   `--profile`, `--farm-id`, `--queue-id`, `--job-id`, `-i/--include`,
+   `--match-paths-by`, `--ignore-storage-profiles`, `--conflict-resolution`,
+   `--yes`, `--output`
+4. Add `download_input_impl` function — mirrors `download_output_impl` structure:
+   - GetJob → parse attachments → build InputDownloader
+   - Same OS mismatch prompt, root editing, filter application, conflict
+     resolution, progress bar, summary output
+5. Rename `get_output_paths_by_root()` → `get_paths_by_root()` on both
+   downloaders (Python renamed this for consistency)
+
+#### Test Plan
+
+| Test Case | Rust Test Name | Level |
+|-----------|---------------|-------|
+| Basic download-input downloads all files | `download_input_downloads_all_input_files` | L2 |
+| --include glob filters input files | `download_input_include_glob_filters` | L2 |
+| --include no match → "no input files match" | `download_input_include_no_match` | L2 |
+| No attachments → "no input attachments" | `download_input_no_attachments_message` | L2 |
+| --match-paths-by JOB on input | `download_input_match_paths_by_job` | L2 |
+| InputDownloader unit tests | `input_downloader_*` | L1 |
+
+---
+
+### Batching Strategy
+
+**Batch 1 (GAP-3):** Filtering infrastructure + download-output integration
+- `normalize_filters`, `matches_any_filter`, `filter_manifests` functions
+- Refactor `OutputDownloader` to support `_rebuild` pattern with filter groups
+- Add `--include` and `--match-paths-by` CLI args
+- All GAP-3 tests
+
+**Batch 2 (GAP-2):** InputDownloader + download-input command
+- `InputDownloader` struct (reuses filtering infrastructure from Batch 1)
+- `download_input_impl` CLI function
+- All GAP-2 tests
+
+This ordering ensures GAP-3 builds the shared infrastructure that GAP-2 reuses.
 
 ### GAP-1 Implementation Details
 

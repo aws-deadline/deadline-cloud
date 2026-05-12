@@ -282,6 +282,146 @@ fn get_output_manifest_prefix(
 }
 
 // =========================================================================
+// Include-path filtering
+// =========================================================================
+
+/// Normalize path filter patterns: `\` → `/`, strip `./`, collapse `//`.
+pub fn normalize_filters(patterns: &[String]) -> Vec<String> {
+    patterns
+        .iter()
+        .filter_map(|f| {
+            let mut f = f.replace('\\', "/");
+            if f.starts_with("./") {
+                f = f[2..].to_string();
+            }
+            while f.contains("//") {
+                f = f.replace("//", "/");
+            }
+            if f.is_empty() { None } else { Some(f) }
+        })
+        .collect()
+}
+
+/// Check if a file path matches any of the given filters using fnmatch-style matching.
+///
+/// - `*` matches everything including `/` (like Python's fnmatch)
+/// - A filter ending with `/` matches all files under that directory
+/// - A relative filter (not starting with `/`, `*`, or drive letter) is auto-prepended with `*/`
+pub fn matches_any_filter(file_path: &str, filters: &[String]) -> bool {
+    fn is_absolute(p: &str) -> bool {
+        p.starts_with('/') || p.starts_with('*') || (p.len() >= 2 && p.as_bytes()[1] == b':')
+    }
+
+    for f in filters {
+        let pattern = if f.ends_with('/') {
+            if is_absolute(f) {
+                format!("{f}*")
+            } else {
+                format!("*/{f}*")
+            }
+        } else if is_absolute(f) {
+            f.clone()
+        } else {
+            format!("*/{f}")
+        };
+        if fnmatch(&pattern, file_path) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Filter manifests by root, keeping only paths that match any filter.
+pub fn filter_manifests<S: std::hash::BuildHasher + Clone>(
+    manifests_by_root: &HashMap<String, Vec<AssetManifest>, S>,
+    filters: &[String],
+) -> HashMap<String, Vec<AssetManifest>, S> {
+    let mut filtered = HashMap::with_capacity_and_hasher(
+        manifests_by_root.len(),
+        manifests_by_root.hasher().clone(),
+    );
+    for (root, manifest_list) in manifests_by_root {
+        let mut filtered_manifests = Vec::new();
+        for manifest in manifest_list {
+            let matching: Vec<ManifestPath> = manifest
+                .paths
+                .iter()
+                .filter(|p| matches_any_filter(&full_path(root, &p.path), filters))
+                .cloned()
+                .collect();
+            if !matching.is_empty() {
+                let total_size = matching.iter().map(|p| p.size).sum();
+                if let Ok(m) = AssetManifest::new(
+                    manifest.hash_alg,
+                    manifest.manifest_version,
+                    total_size,
+                    matching,
+                ) {
+                    filtered_manifests.push(m);
+                }
+            }
+        }
+        if !filtered_manifests.is_empty() {
+            filtered.insert(root.clone(), filtered_manifests);
+        }
+    }
+    filtered
+}
+
+/// Join root and relative path with forward slashes for consistent matching.
+fn full_path(root: &str, relative: &str) -> String {
+    let root = root.replace('\\', "/");
+    if root.ends_with('/') {
+        format!("{root}{relative}")
+    } else {
+        format!("{root}/{relative}")
+    }
+}
+
+/// fnmatch-style matching where `*` matches everything including `/`.
+fn fnmatch(pattern: &str, text: &str) -> bool {
+    // Convert fnmatch pattern to regex
+    let mut regex = String::with_capacity(pattern.len() * 2 + 2);
+    regex.push('^');
+    let mut chars = pattern.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' => regex.push_str(".*"),
+            '?' => regex.push('.'),
+            '[' => {
+                regex.push('[');
+                // fnmatch: [!seq] means negation → regex [^seq]
+                if chars.peek() == Some(&'!') {
+                    chars.next();
+                    regex.push('^');
+                }
+                // Copy until closing ]
+                let mut found_close = false;
+                while let Some(&next) = chars.peek() {
+                    chars.next();
+                    if next == ']' {
+                        regex.push(']');
+                        found_close = true;
+                        break;
+                    }
+                    regex.push(next);
+                }
+                if !found_close {
+                    regex.push(']');
+                }
+            }
+            '.' | '+' | '^' | '$' | '(' | ')' | '{' | '}' | '|' | '\\' => {
+                regex.push('\\');
+                regex.push(c);
+            }
+            _ => regex.push(c),
+        }
+    }
+    regex.push('$');
+    regex::Regex::new(&regex).is_ok_and(|re| re.is_match(text))
+}
+
+// =========================================================================
 // Public API
 // =========================================================================
 
@@ -946,6 +1086,9 @@ async fn get_manifests_by_session_action_id(
 /// `download_files_from_manifests`.
 pub struct OutputDownloader {
     s3_settings: JobAttachmentS3Settings,
+    initial_outputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    include_filter_groups: Vec<Vec<String>>,
+    root_mappings: HashMap<String, String>,
     outputs_by_root: HashMap<String, Vec<AssetManifest>>,
     s3_client: S3Client,
     account_id: String,
@@ -963,8 +1106,9 @@ impl OutputDownloader {
         session_action_id: Option<&str>,
         s3_client: S3Client,
         account_id: String,
+        include_filters: Option<&[String]>,
     ) -> Result<Self, JobAttachmentsError> {
-        let outputs_by_root = get_output_manifests_by_asset_root(
+        let initial_outputs_by_root = get_output_manifests_by_asset_root(
             &s3_settings,
             farm_id,
             queue_id,
@@ -976,12 +1120,41 @@ impl OutputDownloader {
             &account_id,
         )
         .await?;
-        Ok(Self {
+        let mut include_filter_groups = Vec::new();
+        if let Some(filters) = include_filters
+            && !filters.is_empty()
+        {
+            include_filter_groups.push(filters.to_vec());
+        }
+        let mut dl = Self {
             s3_settings,
-            outputs_by_root,
+            initial_outputs_by_root,
+            include_filter_groups,
+            root_mappings: HashMap::new(),
+            outputs_by_root: HashMap::new(),
             s3_client,
             account_id,
-        })
+        };
+        dl.rebuild();
+        Ok(dl)
+    }
+
+    /// Recompute `outputs_by_root` from initial state applying root mappings then filters.
+    fn rebuild(&mut self) {
+        // Start from initial data with root mappings applied
+        let mut rebuilt: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+        for (root, manifests) in &self.initial_outputs_by_root {
+            let mapped_root = self.root_mappings.get(root).unwrap_or(root).clone();
+            rebuilt
+                .entry(mapped_root)
+                .or_default()
+                .extend(manifests.clone());
+        }
+        // Apply each filter group sequentially
+        for filter_group in &self.include_filter_groups {
+            rebuilt = filter_manifests(&rebuilt, filter_group);
+        }
+        self.outputs_by_root = rebuilt;
     }
 
     /// Get output file paths grouped by asset root.
@@ -1004,11 +1177,23 @@ impl OutputDownloader {
         if original_root == new_root {
             return;
         }
-        if let Some(manifests) = self.outputs_by_root.remove(original_root) {
-            self.outputs_by_root
-                .entry(new_root.to_owned())
-                .or_default()
-                .extend(manifests);
+        // Find the initial root that maps to original_root
+        let initial_root = self
+            .initial_outputs_by_root
+            .keys()
+            .find(|k| self.root_mappings.get(*k).unwrap_or(k).as_str() == original_root)
+            .cloned();
+        if let Some(init_root) = initial_root {
+            self.root_mappings.insert(init_root, new_root.to_owned());
+            self.rebuild();
+        }
+    }
+
+    /// Apply glob-style include filters against the current paths.
+    pub fn apply_include_filters(&mut self, filters: &[String]) {
+        if !filters.is_empty() {
+            self.include_filter_groups.push(filters.to_vec());
+            self.rebuild();
         }
     }
 
@@ -1018,7 +1203,6 @@ impl OutputDownloader {
         file_conflict_resolution: FileConflictResolution,
         on_downloading_files: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
-        // Flatten manifests: merge per-root into single manifest per root
         let mut manifests_by_root = HashMap::new();
         for (root, manifest_list) in &self.outputs_by_root {
             if let Some(merged) = merge_asset_manifests(manifest_list)? {

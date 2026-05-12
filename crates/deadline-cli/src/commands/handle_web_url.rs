@@ -138,7 +138,7 @@ async fn handle_download_output(query: &str) -> Result<(), CliError> {
         .map_err(|e| CliError::Operation(e.to_string()))?;
 
     download_output_impl(
-        &config, farm_id, queue_id, job_id, step_id, task_id, None, false, false,
+        &config, farm_id, queue_id, job_id, step_id, task_id, None, false, false, None, "LOCAL",
     )
     .await
 }

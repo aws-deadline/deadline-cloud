@@ -8,6 +8,8 @@ mod api;
 mod diff;
 #[path = "suite/download.rs"]
 mod download;
+#[path = "suite/download_filters.rs"]
+mod download_filters;
 #[path = "suite/manifest_ops.rs"]
 mod manifest_ops;
 #[path = "suite/manifest_s3.rs"]

@@ -44,8 +44,9 @@ Implemented: hashing, manifest encode/decode, hash cache, S3 check cache,
 progress tracking, path grouping, manifest creation, parallel S3
 upload/download, manifest merging, output manifest retrieval, attachment
 download/upload API, manifest snapshot/diff/merge/upload/download,
-OutputDownloader (job output download orchestration), path mapping from
-storage profiles, incremental download state and checkpoint persistence.
+OutputDownloader (job output download orchestration with include-path
+filtering and root path mapping), path mapping from storage profiles,
+incremental download state and checkpoint persistence.
 
 Gaps:
 - VFS (virtual filesystem) — deferred (worker-agent scope)

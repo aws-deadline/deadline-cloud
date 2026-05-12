@@ -40,6 +40,13 @@ fn parse_conflict_resolution(
     s.parse()
 }
 
+fn parse_match_paths_by(s: &str) -> Result<String, String> {
+    match s.to_uppercase().as_str() {
+        "JOB" | "LOCAL" => Ok(s.to_uppercase()),
+        _ => Err(format!("invalid value '{s}': expected JOB or LOCAL")),
+    }
+}
+
 /// Set up config from CLI options and extract required settings.
 /// Returns (config, `farm_id`, `queue_id`) or (config, `farm_id`, `queue_id`, `job_id`).
 fn setup_config(
@@ -214,6 +221,12 @@ pub(crate) enum JobAction {
         task_id: Option<String>,
         #[arg(long, value_parser = parse_conflict_resolution)]
         conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+        /// Glob pattern for files to include in download. Repeatable.
+        #[arg(short = 'i', long = "include")]
+        include: Vec<String>,
+        /// Match --include filters against JOB (submission) or LOCAL (workstation) paths.
+        #[arg(long, default_value = "LOCAL", value_parser = parse_match_paths_by)]
+        match_paths_by: String,
         /// Ignore storage profile configuration. Downloads to unmapped paths.
         #[arg(long)]
         ignore_storage_profiles: bool,
@@ -342,6 +355,8 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             step_id,
             task_id,
             conflict_resolution,
+            include,
+            match_paths_by,
             ignore_storage_profiles: _,
             yes,
             output,
@@ -355,6 +370,8 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
                 step_id,
                 task_id,
                 conflict_resolution,
+                include,
+                match_paths_by,
                 yes,
                 output,
             )
@@ -1370,6 +1387,7 @@ async fn run_requeue_tasks(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments, reason = "each param maps to a CLI flag")]
 async fn run_download_output(
     profile: Option<String>,
     farm_id: Option<String>,
@@ -1378,6 +1396,8 @@ async fn run_download_output(
     step_id: Option<String>,
     task_id: Option<String>,
     conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    include: Vec<String>,
+    match_paths_by: String,
     yes: bool,
     output: String,
 ) -> Result<(), CliError> {
@@ -1390,6 +1410,13 @@ async fn run_download_output(
             message: "Missing option '--step-id' required with '--task-id'".into(),
         });
     }
+
+    let include_patterns = deadline_job_attachments::download::normalize_filters(&include);
+    let include_patterns = if include_patterns.is_empty() {
+        None
+    } else {
+        Some(include_patterns)
+    };
 
     let config = setup_config(
         profile,
@@ -1413,6 +1440,8 @@ async fn run_download_output(
         conflict_resolution,
         is_json,
         is_auto_accept(&config),
+        include_patterns.as_deref(),
+        &match_paths_by,
     )
     .await;
 
@@ -1940,6 +1969,7 @@ fn check_windows_long_paths(
 /// Core implementation of `job download-output`.
 #[allow(
     clippy::too_many_lines,
+    clippy::too_many_arguments,
     reason = "interactive download pipeline with user prompts and path mapping"
 )]
 pub(crate) async fn download_output_impl(
@@ -1952,6 +1982,8 @@ pub(crate) async fn download_output_impl(
     conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
     is_json: bool,
     auto_accept: bool,
+    include_patterns: Option<&[String]>,
+    match_paths_by: &str,
 ) -> Result<(), CliError> {
     use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
     use deadline_job_attachments::download::OutputDownloader;
@@ -2090,7 +2122,12 @@ pub(crate) async fn download_output_impl(
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
-    // Create OutputDownloader
+    // Create OutputDownloader — apply filters at construction when match_paths_by == JOB
+    let job_filters = if match_paths_by == "JOB" {
+        include_patterns
+    } else {
+        None
+    };
     let mut downloader = OutputDownloader::new(
         s3_settings,
         farm_id,
@@ -2101,6 +2138,7 @@ pub(crate) async fn download_output_impl(
         session_action_id.as_deref(),
         s3_client,
         account_id,
+        job_filters,
     )
     .await
     .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
@@ -2256,6 +2294,18 @@ pub(crate) async fn download_output_impl(
     }
 
     check_windows_long_paths(&output_paths);
+
+    // Apply include filters against workstation paths (LOCAL mode, the default)
+    if match_paths_by != "JOB"
+        && let Some(patterns) = include_patterns
+    {
+        downloader.apply_include_filters(patterns);
+        output_paths = downloader.get_output_paths_by_root();
+        if output_paths.is_empty() {
+            println!("{}", no_output_message(is_json));
+            return Ok(());
+        }
+    }
 
     // Build path summary for verbose output
     if !is_json {

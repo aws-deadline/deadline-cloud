@@ -293,26 +293,47 @@ On error, `suggest_resources_on_client_error` lists available jobs/queues.
 ## `job download-output`
 
 Options: `--step-id`, `--task-id`, `--conflict-resolution` (SKIP/OVERWRITE/CREATE_COPY),
-`--yes`, `--output verbose|json`.
+`-i/--include` (repeatable), `--match-paths-by` (JOB|LOCAL, default LOCAL),
+`--ignore-storage-profiles`, `--yes`, `--output verbose|json`.
 
 Requires: farm_id, queue_id, job_id. `--task-id` requires `--step-id`.
+
+### Include Filtering
+
+`-i/--include` accepts glob patterns matched against the full path (root + relative).
+Multiple values are OR'd — a file is included if it matches ANY pattern.
+
+Pattern semantics (fnmatch-style):
+- `*` matches everything including `/`
+- `?` matches any single character
+- `[seq]` matches any character in seq; `[!seq]` matches any character NOT in seq
+- Trailing `/` matches all files under that directory (appends `*`)
+- Relative patterns (not starting with `/`, `*`, or drive letter) auto-prepend `*/`
+
+`--match-paths-by` controls when filters are applied:
+- `LOCAL` (default): filters applied after root path editing (against workstation paths)
+- `JOB`: filters applied at construction (against original submission paths)
 
 ### Execution Flow
 
 1. Validate `--task-id` requires `--step-id` (exit 2 if missing)
-2. GetJob to retrieve job name and attachments
-3. If `--step-id`: GetStep to retrieve step name
-4. If `--task-id`: GetTask to retrieve task parameters and `latestSessionActionId`
-5. Print start message
-6. GetQueue for `jobAttachmentSettings` (S3 bucket + root prefix)
-7. Build S3 client with queue-scoped credentials (`get_queue_scoped_config`:
+2. Normalize include patterns (`\` → `/`, strip `./`, collapse `//`)
+3. GetJob to retrieve job name and attachments
+4. If `--step-id`: GetStep to retrieve step name
+5. If `--task-id`: GetTask to retrieve task parameters and `latestSessionActionId`
+6. Print start message
+7. GetQueue for `jobAttachmentSettings` (S3 bucket + root prefix)
+8. Build S3 client with queue-scoped credentials (`get_queue_scoped_config`:
    DCM users get queue role, non-DCM users use base credentials)
-8. Create `OutputDownloader` → fetches output manifests from S3
-9. If no output paths → print "no output" message and return
-10. On Windows: check `LongPathsEnabled` registry key, warn if paths exceed 260 chars
-11. Print path summary (files grouped by directory with sequence detection)
-12. Resolve conflict resolution: CLI flag > config setting > default (CREATE_COPY)
-13. Download with progress bar, print summary
+9. Create `OutputDownloader` (if `--match-paths-by JOB`, pass filters at construction)
+10. If no output paths → print "no output" message and return
+11. On Windows: check `LongPathsEnabled` registry key, warn if paths exceed 260 chars
+12. Cross-OS root mismatch prompt (if root format ≠ host OS)
+13. Root editing loop (unless `--yes`)
+14. If `--match-paths-by LOCAL` and patterns exist: apply filters, re-check for empty
+15. Print path summary (files grouped by directory with sequence detection)
+16. Resolve conflict resolution: CLI flag > config setting > default (CREATE_COPY)
+17. Download with progress bar, print summary
 
 ### Start Message
 

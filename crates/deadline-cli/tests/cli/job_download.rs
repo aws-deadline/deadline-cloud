@@ -969,3 +969,332 @@ async fn job_download_output_ignore_storage_profiles_accepted() {
         "--yes",
     ]));
 }
+
+// ===========================================================================
+// --include and --match-paths-by on download-output
+// ===========================================================================
+
+/// `--include` with a glob pattern downloads only matching files.
+/// When no files match, the "no output" message is shown.
+#[tokio::test]
+async fn job_download_output_include_no_match_shows_no_output() {
+    let harness = TestHarness::new().await;
+
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+    setup_manifest_mocks(&harness, job_with_attachments(), output_root).await;
+
+    // The manifest has "render.exr" but we filter for "*.png" → no match
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job",
+        "download-output",
+        "--farm-id",
+        FARM,
+        "--queue-id",
+        QUEUE,
+        "--job-id",
+        JOB,
+        "--include",
+        "*.png",
+        "--yes",
+    ]));
+}
+
+/// `--include` with a matching glob downloads the file.
+#[tokio::test]
+async fn job_download_output_include_glob_filters_matching_files() {
+    let harness = TestHarness::new().await;
+
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+
+    // Set up manifest with multiple files
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let manifest_key = format!(
+        "root-prefix/Manifests/{FARM}/{QUEUE}/{JOB}/step-01/task-01/2024-01-01T00:00:00Z_sa-1/output.manifest"
+    );
+    let manifest_json = json!({
+        "manifestVersion": "2023-03-03",
+        "hashAlg": "xxh128",
+        "totalSize": 200,
+        "paths": [
+            {"path": "renders/frame_001.exr", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
+            {"path": "logs/render.log", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000}
+        ]
+    })
+    .to_string();
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("test-bucket/{manifest_key}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", output_root)],
+    )
+    .await;
+    s3::mock_s3_list_objects(&harness.server, &[&manifest_key]).await;
+
+    // Mock S3 GetObject for the actual file download (CAS path)
+    s3::mock_s3_get_object_catchall(&harness.server, b"exr-content", &[]).await;
+
+    let output = harness
+        .cli(&[
+            "job",
+            "download-output",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--include",
+            "*.exr",
+            "--conflict-resolution",
+            "OVERWRITE",
+            "--yes",
+        ])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Should download only the .exr file, not the .log file
+    assert!(
+        stdout.contains("Downloaded 1 file"),
+        "Expected 1 file downloaded (only .exr), got: {stdout}"
+    );
+    // The .exr file should exist
+    assert!(
+        output_dir.path().join("renders/frame_001.exr").exists(),
+        "Expected renders/frame_001.exr to be downloaded"
+    );
+    // The .log file should NOT exist
+    assert!(
+        !output_dir.path().join("logs/render.log").exists(),
+        "Expected logs/render.log to NOT be downloaded"
+    );
+}
+
+/// Multiple `--include` values are OR'd: files matching any filter are downloaded.
+#[tokio::test]
+async fn job_download_output_include_multiple_patterns_ored() {
+    let harness = TestHarness::new().await;
+
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let manifest_key = format!(
+        "root-prefix/Manifests/{FARM}/{QUEUE}/{JOB}/step-01/task-01/2024-01-01T00:00:00Z_sa-1/output.manifest"
+    );
+    let manifest_json = json!({
+        "manifestVersion": "2023-03-03",
+        "hashAlg": "xxh128",
+        "totalSize": 300,
+        "paths": [
+            {"path": "renders/frame_001.exr", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
+            {"path": "logs/render.log", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000},
+            {"path": "scripts/setup.mel", "hash": "111222333444555666777888999aaabbb", "size": 100, "mtime": 1_700_000_000}
+        ]
+    })
+    .to_string();
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("test-bucket/{manifest_key}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", output_root)],
+    )
+    .await;
+    s3::mock_s3_list_objects(&harness.server, &[&manifest_key]).await;
+    s3::mock_s3_get_object_catchall(&harness.server, b"content", &[]).await;
+
+    let output = harness
+        .cli(&[
+            "job",
+            "download-output",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--include",
+            "*.exr",
+            "--include",
+            "scripts/",
+            "--conflict-resolution",
+            "OVERWRITE",
+            "--yes",
+        ])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Should download 2 files: the .exr and the .mel (under scripts/)
+    assert!(
+        stdout.contains("Downloaded 2 file"),
+        "Expected 2 files downloaded, got: {stdout}"
+    );
+    assert!(output_dir.path().join("renders/frame_001.exr").exists());
+    assert!(output_dir.path().join("scripts/setup.mel").exists());
+    assert!(!output_dir.path().join("logs/render.log").exists());
+}
+
+/// `--match-paths-by JOB` filters against the original job submission paths
+/// (applied at construction time, before any root editing).
+#[tokio::test]
+async fn job_download_output_match_paths_by_job() {
+    let harness = TestHarness::new().await;
+
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let manifest_key = format!(
+        "root-prefix/Manifests/{FARM}/{QUEUE}/{JOB}/step-01/task-01/2024-01-01T00:00:00Z_sa-1/output.manifest"
+    );
+    let manifest_json = json!({
+        "manifestVersion": "2023-03-03",
+        "hashAlg": "xxh128",
+        "totalSize": 200,
+        "paths": [
+            {"path": "renders/frame_001.exr", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
+            {"path": "logs/render.log", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000}
+        ]
+    })
+    .to_string();
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("test-bucket/{manifest_key}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", output_root)],
+    )
+    .await;
+    s3::mock_s3_list_objects(&harness.server, &[&manifest_key]).await;
+    s3::mock_s3_get_object_catchall(&harness.server, b"exr-data", &[]).await;
+
+    let output = harness
+        .cli(&[
+            "job",
+            "download-output",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--include",
+            "*.exr",
+            "--match-paths-by",
+            "JOB",
+            "--conflict-resolution",
+            "OVERWRITE",
+            "--yes",
+        ])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // With --match-paths-by JOB, filtering happens at construction.
+    // Only the .exr file should be downloaded.
+    assert!(
+        stdout.contains("Downloaded 1 file"),
+        "Expected 1 file downloaded with --match-paths-by JOB, got: {stdout}"
+    );
+    assert!(output_dir.path().join("renders/frame_001.exr").exists());
+    assert!(!output_dir.path().join("logs/render.log").exists());
+}
+
+/// `--include` with a relative path (no leading / or *) auto-prepends `*/`
+/// so it matches anywhere under the root.
+#[tokio::test]
+async fn job_download_output_include_relative_path_prepends_star() {
+    let harness = TestHarness::new().await;
+
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let output_root = output_dir.path().to_str().unwrap();
+
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job_with_attachments()).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let manifest_key = format!(
+        "root-prefix/Manifests/{FARM}/{QUEUE}/{JOB}/step-01/task-01/2024-01-01T00:00:00Z_sa-1/output.manifest"
+    );
+    let manifest_json = json!({
+        "manifestVersion": "2023-03-03",
+        "hashAlg": "xxh128",
+        "totalSize": 200,
+        "paths": [
+            {"path": "renders/frame_001.exr", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
+            {"path": "renders/frame_002.exr", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000}
+        ]
+    })
+    .to_string();
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("test-bucket/{manifest_key}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", output_root)],
+    )
+    .await;
+    s3::mock_s3_list_objects(&harness.server, &[&manifest_key]).await;
+    s3::mock_s3_get_object_catchall(&harness.server, b"exr-data", &[]).await;
+
+    let output = harness
+        .cli(&[
+            "job",
+            "download-output",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--include",
+            "renders/frame_001.exr",
+            "--conflict-resolution",
+            "OVERWRITE",
+            "--yes",
+        ])
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Relative path "renders/frame_001.exr" should match via */renders/frame_001.exr
+    assert!(
+        stdout.contains("Downloaded 1 file"),
+        "Expected 1 file downloaded with relative path filter, got: {stdout}"
+    );
+    assert!(output_dir.path().join("renders/frame_001.exr").exists());
+    assert!(!output_dir.path().join("renders/frame_002.exr").exists());
+}
+
+/// `--match-paths-by` rejects invalid values.
+#[tokio::test]
+async fn job_download_output_match_paths_by_invalid_value_errors() {
+    let harness = TestHarness::new().await;
+    assert_cmd_snapshot!(harness.cmd(&[
+        "job",
+        "download-output",
+        "--farm-id",
+        FARM,
+        "--queue-id",
+        QUEUE,
+        "--job-id",
+        JOB,
+        "--match-paths-by",
+        "INVALID",
+        "--yes",
+    ]));
+}
