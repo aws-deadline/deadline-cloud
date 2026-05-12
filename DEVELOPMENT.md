@@ -463,20 +463,3 @@ class MyCustomWidget(QWidget):
 Instead of runnning a deadline command as `deadline ...` run `pyinstrument -r html -m deadline ...`.
 
 This will profile the current `deadline` command and open the results in an interactive window.
-
-# Manual Test Cases
-
-These are the manual test cases for the client software release cycle, covering Deadline CLI and job attachments across Linux, Windows, and macOS.
-
-## Deadline CLI Tests
-
-| Test Case | Test Steps | Notes |
-|---|---|---|
-| Pre-requisite: Uninstall any previous versions of the Deadline Cloud Submitter Installer | Update PATH if necessary. | |
-| Verify Deadline CLI can be successfully installed using the staged individual installer | Run the staged individual installer and verify that it can install. | |
-| Verify correct version of Deadline CLI is being tested | Verify correct version using `deadline --version` command. | |
-| Verify user can authenticate/login using DCM Profile: `deadline auth login` | In deadline config gui, you should see the profile name with a green checkmark beside it in the bottom left. | Would need to set using DCM profile first. |
-| Verify user can logout of DCM Profile: `deadline auth logout` | In deadline config gui, you should see the profile name with a red 'X' beside it in the bottom left. There should be a button to log in on the right. | |
-| Verify 'Load a different job bundle' button in GUI Submitter | Launch GUI Submitter using `deadline bundle gui-submit --browse`, select a job bundle. Verify correct defaults/details. Hit 'Load a different job bundle' button and select a second job bundle. Verify correct defaults/details for the second bundle. | Requires the native file browser, which cannot be driven from xa11y. |
-| Test Deadline Cloud release candidate against currently released DCC Submitter | A Blender manual install might be easiest. Build deadline-cloud from the release candidate branch and pip install it into the submitter dependencies instead of the latest in PyPi. | |
-
