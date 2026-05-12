@@ -239,34 +239,19 @@ def blender_env(tmp_path, mock_backend, moto_server, s3_client):
 # ---------------------------------------------------------------------------
 
 
+# Depth bound for tree-text searches. Caps `app.dump()` traversal so heavy
+# trees (Blender's main window) don't blow the test timeout. Submitter dialog
+# labels we look for ("Submit", "Deadline", "TestFarm") sit within ~10 levels
+# of the root.
+_TREE_SEARCH_MAX_DEPTH = 12
+
+
 def _tree_contains_text(app, needle: str) -> bool:
-    """True if any element under *app* has *needle* in its name or value.
-
-    Uses a depth-first walker with early termination so the search bails out
-    on the first match. ``app.dump()`` would always traverse the full tree,
-    which is too slow on heavy trees like Blender's main window.
-    """
-
-    def walk(el):
-        try:
-            for field in ("name", "value"):
-                text = getattr(el, field, None) or ""
-                if needle in text:
-                    return True
-            for child in el.children():
-                if walk(child):
-                    return True
-        except Exception:
-            pass
-        return False
-
+    """True if any element under *app* has *needle* in its name or value."""
     try:
-        for root in app.children():
-            if walk(root):
-                return True
+        return needle in app.dump(max_depth=_TREE_SEARCH_MAX_DEPTH)
     except Exception:
-        pass
-    return False
+        return False
 
 
 def _dump_tree(app):
