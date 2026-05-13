@@ -258,9 +258,9 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         QueueAction::List { profile, farm_id } => {
             let config = setup(profile, farm_id, None, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(Some(&config)).await;
+            let dl = session::deadline_client(&config).await;
             let builder =
-                client::apply_dcm_principal(dl.list_queues().farm_id(&farm), Some(&config));
+                client::apply_dcm_principal(dl.list_queues().farm_id(&farm), &config);
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
@@ -281,7 +281,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                         Some(&farm),
                         None,
                         None,
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     Err(CliError::Operation(format!(
@@ -298,7 +298,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(Some(&config)).await;
+            let dl = session::deadline_client(&config).await;
             match dl.get_queue().farm_id(&farm).queue_id(&queue).send().await {
                 Ok(output) => {
                     let resp = deadline_api::responses::QueueResponse::from(output);
@@ -315,7 +315,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                         Some(&farm),
                         Some(&queue),
                         None,
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     Err(CliError::Operation(format!(
@@ -336,10 +336,10 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
 
-            let telemetry = create_telemetry(Some(&config));
+            let telemetry = create_telemetry(&config);
 
             // Both typed outputs have identical .credentials() shape
-            let dl = session::deadline_client(Some(&config)).await;
+            let dl = session::deadline_client(&config).await;
             let creds_result = match mode.to_uppercase().as_str() {
                 "READ" => dl
                     .assume_queue_role_for_read()
@@ -430,7 +430,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             match deadline_api::queue_parameters::get_queue_parameter_definitions(
                 &farm,
                 &queue,
-                Some(&config),
+                &config,
             )
             .await
             {
@@ -448,7 +448,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
                         Some(&farm),
                         Some(&queue),
                         None,
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     Err(CliError::Operation(format!(
@@ -470,7 +470,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             conflict_resolution,
             dry_run,
         } => {
-            let tc = create_telemetry(None);
+            let tc = create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
             let result = run_sync_output(
                 profile,
                 farm_id,
@@ -581,7 +581,7 @@ async fn run_sync_output(
             ));
         }
         // Validate the storage profile exists
-        session::deadline_client(Some(&config))
+        session::deadline_client(&config)
             .await
             .get_storage_profile_for_queue()
             .farm_id(&farm)
@@ -606,7 +606,7 @@ async fn run_sync_output(
     let checkpoint_file_path = checkpoint_dir.join(&checkpoint_file_name);
 
     // Get queue and validate job attachment settings
-    let queue = session::deadline_client(Some(&config))
+    let queue = session::deadline_client(&config)
         .await
         .get_queue()
         .farm_id(&farm)
@@ -702,7 +702,7 @@ async fn run_sync_output(
         .map_err(|e: String| CliError::Operation(e))?;
 
     // Run the incremental output download orchestration
-    let tc = create_telemetry(None);
+    let tc = create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
     let updated_checkpoint = incremental_output_download(
         &farm,
         &queue_id_str,
@@ -797,7 +797,7 @@ async fn incremental_output_download(
         "operator": "OR"
     });
     let active_jobs =
-        api::list_jobs_by_filter_expression(farm_id, queue_id, &active_filter, Some(config))
+        api::list_jobs_by_filter_expression(farm_id, queue_id, &active_filter, config)
             .await
             .map_err(|e| CliError::Operation(format!("Failed to search active jobs: {e}")))?;
 
@@ -828,7 +828,7 @@ async fn incremental_output_download(
         "operator": "AND"
     });
     let ended_jobs =
-        api::list_jobs_by_filter_expression(farm_id, queue_id, &ended_filter, Some(config))
+        api::list_jobs_by_filter_expression(farm_id, queue_id, &ended_filter, config)
             .await
             .map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
 
@@ -1021,7 +1021,7 @@ async fn incremental_output_download(
     }
 
     // For new jobs, call GetJob to get attachments
-    let dl = session::deadline_client(Some(config)).await;
+    let dl = session::deadline_client(config).await;
     for job_id in &new_job_ids {
         let job_detail = dl
             .get_job()
@@ -1373,7 +1373,7 @@ async fn incremental_output_download(
         eprintln!("Summary of paths to download:");
         eprintln!("  (no files to download)");
     } else {
-        let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, Some(config))
+        let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, config)
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get S3 credentials:\n{e}")))?;
 

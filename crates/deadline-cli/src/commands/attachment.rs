@@ -81,7 +81,7 @@ async fn resolve_s3_context(
         let uri = s3_root_uri
             .filter(|u| !u.is_empty())
             .ok_or_else(|| CliError::Operation("No valid s3 root path available".into()))?;
-        let sdk_config = deadline_api::session::get_sdk_config(Some(config)).await;
+        let sdk_config = deadline_api::session::get_sdk_config(config).await;
         Ok(S3Context {
             sdk_config,
             s3_root_uri: uri,
@@ -97,7 +97,7 @@ async fn resolve_s3_context(
         let uri = if let Some(u) = s3_root_uri.filter(|u| !u.is_empty()) {
             u
         } else {
-            let queue = deadline_api::session::deadline_client(Some(config))
+            let queue = deadline_api::session::deadline_client(config)
                 .await
                 .get_queue()
                 .farm_id(&farm_id)
@@ -125,7 +125,7 @@ async fn resolve_s3_context(
             Some(&queue_id),
             None,
             false,
-            Some(config),
+            config,
         )
         .await
         .map_err(|e| CliError::Operation(e.to_string()))?;

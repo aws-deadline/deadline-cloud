@@ -93,7 +93,7 @@ impl WithPrincipalId
 /// Apply the DCM user's `principal_id` to a list builder if the user is DCM.
 pub fn apply_dcm_principal<B: WithPrincipalId>(
     builder: B,
-    config: Option<&deadline_config::ini::IniConfig>,
+    config: &deadline_config::ini::IniConfig,
 ) -> B {
     let (user_id, _) = crate::auth::get_user_and_identity_store_id(config);
     match user_id {
@@ -121,6 +121,7 @@ pub fn pascal_to_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use deadline_config::ini::IniConfig;
     use serde_json::json;
     use serial_test::serial;
     use wiremock::matchers::{method, path_regex};
@@ -273,7 +274,7 @@ mod tests {
                 self
             }
         }
-        let result = apply_dcm_principal(Fake { id: None }, None);
+        let result = apply_dcm_principal(Fake { id: None }, &IniConfig::new());
         assert!(result.id.is_none());
     }
 
@@ -293,7 +294,7 @@ mod tests {
             }
         }
         let config = deadline_config::ini::IniConfig::new();
-        let result = apply_dcm_principal(Fake { id: None }, Some(&config));
+        let result = apply_dcm_principal(Fake { id: None }, &config);
         assert!(result.id.is_none());
     }
 

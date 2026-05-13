@@ -12,7 +12,7 @@ pub(crate) async fn suggest_resources_on_client_error(
     farm_id: Option<&str>,
     queue_id: Option<&str>,
     fleet_id: Option<&str>,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> String {
     // Only handle access/not-found/validation errors
     let is_suggestable = error_msg.contains("AccessDeniedException")
@@ -93,7 +93,7 @@ pub(crate) async fn suggest_resources_on_client_error(
     }
 }
 
-async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
+async fn try_list_farms(config: &IniConfig, out: &mut Vec<String>) -> bool {
     let dl = session::deadline_client(config).await;
     let builder = client::apply_dcm_principal(dl.list_farms(), config);
     let resp = client::collect_paginated(builder.into_paginator().send()).await;
@@ -118,7 +118,7 @@ async fn try_list_farms(config: Option<&IniConfig>, out: &mut Vec<String>) -> bo
     }
 }
 
-async fn try_list_queues(farm_id: &str, config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
+async fn try_list_queues(farm_id: &str, config: &IniConfig, out: &mut Vec<String>) -> bool {
     let dl = session::deadline_client(config).await;
     let builder = client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), config);
     let resp = client::collect_paginated(builder.into_paginator().send()).await;
@@ -141,7 +141,7 @@ async fn try_list_queues(farm_id: &str, config: Option<&IniConfig>, out: &mut Ve
     }
 }
 
-async fn try_list_fleets(farm_id: &str, config: Option<&IniConfig>, out: &mut Vec<String>) -> bool {
+async fn try_list_fleets(farm_id: &str, config: &IniConfig, out: &mut Vec<String>) -> bool {
     let dl = session::deadline_client(config).await;
     let builder = client::apply_dcm_principal(dl.list_fleets().farm_id(farm_id), config);
     let resp = client::collect_paginated(builder.into_paginator().send()).await;
@@ -167,7 +167,7 @@ async fn try_list_fleets(farm_id: &str, config: Option<&IniConfig>, out: &mut Ve
 async fn try_list_jobs(
     farm_id: &str,
     queue_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
     out: &mut Vec<String>,
 ) -> bool {
     let dl = session::deadline_client(config).await;
@@ -195,7 +195,7 @@ async fn try_list_jobs(
 async fn try_list_workers(
     farm_id: &str,
     fleet_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
     out: &mut Vec<String>,
 ) -> bool {
     let dl = session::deadline_client(config).await;
@@ -234,7 +234,7 @@ async fn try_list_workers(
 async fn try_list_storage_profiles(
     farm_id: &str,
     queue_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
     out: &mut Vec<String>,
 ) -> bool {
     let client = session::deadline_client(config).await;

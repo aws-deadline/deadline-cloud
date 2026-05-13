@@ -102,7 +102,7 @@ impl SessionCache {
     }
 
     /// Get or load the SDK config for the current profile.
-    async fn get_config(&mut self, config: Option<&IniConfig>) -> &SdkConfig {
+    async fn get_config(&mut self, config: &IniConfig) -> &SdkConfig {
         let profile = resolve_profile(config);
         if self.cached_profile.as_ref() != Some(&profile) {
             self.cached_config = None;
@@ -118,7 +118,7 @@ impl SessionCache {
         self.cached_config.as_ref().expect("value set above")
     }
 
-    async fn build_deadline_client(&mut self, config: Option<&IniConfig>) -> DeadlineClient {
+    async fn build_deadline_client(&mut self, config: &IniConfig) -> DeadlineClient {
         let sdk_config = self.get_config(config).await.clone();
         let mut builder = aws_sdk_deadline::config::Builder::from(&sdk_config);
         if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
@@ -140,7 +140,7 @@ impl SessionCache {
         DeadlineClient::from_conf(builder.build())
     }
 
-    async fn build_sts_client(&mut self, config: Option<&IniConfig>) -> StsClient {
+    async fn build_sts_client(&mut self, config: &IniConfig) -> StsClient {
         let sdk_config = self.get_config(config).await;
         let mut builder = aws_sdk_sts::config::Builder::from(sdk_config);
         if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_STS") {
@@ -161,7 +161,7 @@ impl SessionCache {
         farm_id: &str,
         queue_id: &str,
         queue_display_name: Option<String>,
-        config: Option<&IniConfig>,
+        config: &IniConfig,
     ) -> Result<SdkConfig, crate::errors::DeadlineError> {
         let key = (farm_id.to_owned(), queue_id.to_owned());
         if let Some(cached) = self.cached_queue_configs.get(&key) {
@@ -374,17 +374,17 @@ pub async fn invalidate_session_cache_async() {
 }
 
 /// Build a Deadline Cloud client using the cached SDK config.
-pub async fn deadline_client(config: Option<&IniConfig>) -> DeadlineClient {
+pub async fn deadline_client(config: &IniConfig) -> DeadlineClient {
     SESSION.lock().await.build_deadline_client(config).await
 }
 
 /// Get the cached `SdkConfig` (for building non-Deadline AWS clients like `CloudWatch` Logs).
-pub async fn get_sdk_config(config: Option<&IniConfig>) -> SdkConfig {
+pub async fn get_sdk_config(config: &IniConfig) -> SdkConfig {
     SESSION.lock().await.get_config(config).await.clone()
 }
 
 /// Build an STS client using the cached SDK config.
-pub async fn sts_client(config: Option<&IniConfig>) -> StsClient {
+pub async fn sts_client(config: &IniConfig) -> StsClient {
     SESSION.lock().await.build_sts_client(config).await
 }
 
@@ -396,7 +396,7 @@ pub async fn get_queue_user_config(
     queue_id: Option<&str>,
     queue_display_name: Option<String>,
     force_refresh: bool,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<SdkConfig, crate::errors::DeadlineError> {
     if force_refresh {
         invalidate_session_cache_async().await;
@@ -421,7 +421,7 @@ pub async fn get_queue_user_config(
 pub async fn get_queue_scoped_config(
     farm_id: &str,
     queue_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<SdkConfig, crate::errors::DeadlineError> {
     let (user_id, identity_store_id) = crate::auth::get_user_and_identity_store_id(config);
     if user_id.is_some() && identity_store_id.is_some() {
@@ -437,14 +437,11 @@ pub async fn get_queue_scoped_config(
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn get_setting(name: &str, config: Option<&IniConfig>) -> String {
-    match config {
-        Some(c) => config_file::get_setting(name, c).unwrap_or_default(),
-        None => config_file::get_setting_from_disk(name).unwrap_or_default(),
-    }
+fn get_setting(name: &str, config: &IniConfig) -> String {
+    config_file::get_setting(name, config).unwrap_or_default()
 }
 
-fn resolve_profile(config: Option<&IniConfig>) -> Option<String> {
+fn resolve_profile(config: &IniConfig) -> Option<String> {
     let name = get_setting("defaults.aws_profile_name", config);
     match name.as_str() {
         "(default)" | "default" | "" => None,
@@ -454,11 +451,11 @@ fn resolve_profile(config: Option<&IniConfig>) -> Option<String> {
 
 /// Returns the resolved profile name, or None for the default credential chain.
 /// Public so auth.rs can use it for DCM detection.
-pub fn resolve_profile_name(config: Option<&IniConfig>) -> Option<String> {
+pub fn resolve_profile_name(config: &IniConfig) -> Option<String> {
     resolve_profile(config)
 }
 
-pub fn display_profile_name(config: Option<&IniConfig>) -> String {
+pub fn display_profile_name(config: &IniConfig) -> String {
     let name = get_setting("defaults.aws_profile_name", config);
     if name.is_empty() {
         "(default)".to_owned()
@@ -558,9 +555,9 @@ mod tests {
     #[tokio::test]
     async fn get_config_twice_returns_cached() {
         let mut cache = SessionCache::new();
-        cache.get_config(None).await;
+        cache.get_config(&IniConfig::new()).await;
         let ptr1 = std::ptr::from_ref::<SdkConfig>(cache.cached_config.as_ref().unwrap());
-        cache.get_config(None).await;
+        cache.get_config(&IniConfig::new()).await;
         let ptr2 = std::ptr::from_ref::<SdkConfig>(cache.cached_config.as_ref().unwrap());
         assert_eq!(ptr1, ptr2, "second call should return cached config");
     }
@@ -569,7 +566,7 @@ mod tests {
     #[tokio::test]
     async fn invalidate_clears_cached_config() {
         let mut cache = SessionCache::new();
-        cache.get_config(None).await;
+        cache.get_config(&IniConfig::new()).await;
         assert!(cache.cached_config.is_some());
         cache.invalidate();
         assert!(cache.cached_config.is_none());
@@ -579,7 +576,7 @@ mod tests {
     #[tokio::test]
     async fn invalidate_after_caching_clears_all() {
         let mut cache = SessionCache::new();
-        cache.get_config(None).await;
+        cache.get_config(&IniConfig::new()).await;
         cache.invalidate();
         assert!(cache.cached_config.is_none());
         assert!(cache.cached_profile.is_none());
@@ -597,7 +594,7 @@ mod tests {
 
     #[tokio::test]
     async fn global_deadline_client_returns_client() {
-        let _client = deadline_client(None).await;
+        let _client = deadline_client(&IniConfig::new()).await;
     }
 
     #[test]
@@ -871,7 +868,7 @@ mod tests {
         let mut cache = SessionCache::new();
         // First call creates a config
         let cfg1 = cache
-            .get_queue_user_config("farm-abc", "queue-123", None, None)
+            .get_queue_user_config("farm-abc", "queue-123", None, &IniConfig::new())
             .await;
         assert!(cfg1.is_ok());
         // Second call should return cached (same key)
@@ -887,7 +884,7 @@ mod tests {
     async fn invalidate_clears_queue_config_cache() {
         let mut cache = SessionCache::new();
         let _ = cache
-            .get_queue_user_config("farm-abc", "queue-123", None, None)
+            .get_queue_user_config("farm-abc", "queue-123", None, &IniConfig::new())
             .await;
         assert!(!cache.cached_queue_configs.is_empty());
         cache.invalidate();

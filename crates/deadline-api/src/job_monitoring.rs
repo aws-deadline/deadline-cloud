@@ -43,7 +43,7 @@ async fn collect_failed_tasks(
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<Vec<FailedTask>, DeadlineError> {
     let mut failed_tasks = Vec::new();
     let client = crate::session::deadline_client(config).await;
@@ -147,7 +147,7 @@ pub async fn wait_for_job_completion(
     job_id: &str,
     max_poll_interval: u64,
     timeout: u64,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
     status_callback: Option<StatusFn<'_>>,
     job_callback: Option<JobProgressFn<'_>>,
 ) -> Result<JobCompletionResult, DeadlineError> {

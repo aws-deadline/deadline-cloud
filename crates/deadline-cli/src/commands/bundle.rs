@@ -222,7 +222,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 "Uploading Attachments",
             ));
 
-            let telemetry = deadline_api::telemetry::create_telemetry(Some(&config));
+            let telemetry = deadline_api::telemetry::create_telemetry(&config);
 
             // F8: If snapshot path ends in .zip, use a temp dir then zip after
             let snapshot_tmpdir: Option<std::path::PathBuf> = if save_debug_snapshot
@@ -321,7 +321,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                         Some(&farm),
                         Some(&queue),
                         None,
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     return Err(CliError::Operation(format!("{e}{suggestion}")));

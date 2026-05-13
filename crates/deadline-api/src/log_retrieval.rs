@@ -64,7 +64,7 @@ fn logs_client(sdk_config: &aws_config::SdkConfig) -> aws_sdk_cloudwatchlogs::Cl
 async fn get_fleet_scoped_config(
     farm_id: &str,
     fleet_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<aws_config::SdkConfig, DeadlineError> {
     let (user_id, identity_store_id) = auth::get_user_and_identity_store_id(config);
     if user_id.is_some() && identity_store_id.is_some() {
@@ -175,7 +175,7 @@ pub async fn get_session_logs(
     start_time: Option<DateTime<Utc>>,
     end_time: Option<DateTime<Utc>>,
     next_token: Option<&str>,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<(SessionLogResult, SessionAutoSelect), DeadlineError> {
     // Resolve session_id
     let (resolved_session_id, auto_select) = if let Some(id) = session_id {
@@ -255,7 +255,7 @@ pub async fn get_worker_logs(
     start_time: Option<DateTime<Utc>>,
     end_time: Option<DateTime<Utc>>,
     next_token: Option<&str>,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<WorkerLogResult, DeadlineError> {
     let log_group = format!("/aws/deadline/{farm_id}/{fleet_id}");
     // Use fleet-scoped credentials for DCM users (matching Python behavior)
@@ -320,7 +320,7 @@ async fn auto_select_session(
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<(String, SessionAutoSelect), DeadlineError> {
     let client = session::deadline_client(config).await;
     let resp = crate::client::collect_paginated(
@@ -424,7 +424,7 @@ mod tests {
             None,
             None,
             None,
-            None,
+            &IniConfig::new(),
         )
         .await
         .unwrap();
@@ -461,7 +461,7 @@ mod tests {
             None,
             None,
             None,
-            None,
+            &IniConfig::new(),
         )
         .await
         .unwrap();

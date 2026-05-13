@@ -387,7 +387,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            let tc = create_telemetry(None);
+            let tc = create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
             let result = run_download_output(
                 profile,
                 farm_id,
@@ -417,7 +417,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            let tc = create_telemetry(None);
+            let tc = create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
             let result = run_download_input(
                 profile,
                 farm_id,
@@ -460,7 +460,7 @@ async fn run_list(
         page_size,
         None,
         None,
-        Some(&config),
+        &config,
     )
     .await
     {
@@ -472,7 +472,7 @@ async fn run_list(
                 Some(&farm),
                 Some(&queue),
                 None,
-                Some(&config),
+                &config,
             )
             .await;
             return Err(CliError::Operation(format!(
@@ -562,7 +562,7 @@ async fn run_wait(
     let job = get(&config, "defaults.job_id");
     let is_json = output.eq_ignore_ascii_case("json");
 
-    let job_resp = session::deadline_client(Some(&config))
+    let job_resp = session::deadline_client(&config)
         .await
         .get_job()
         .farm_id(&farm)
@@ -618,7 +618,7 @@ async fn run_wait(
         &job,
         max_poll_interval,
         timeout,
-        Some(&config),
+        &config,
         None,
         Some(&*job_cb),
     )
@@ -770,7 +770,7 @@ async fn run_logs(
         resolved_session_id_owned = Some(derived);
     }
 
-    let dl = session::deadline_client(Some(&config)).await;
+    let dl = session::deadline_client(&config).await;
 
     let job_resp = dl
         .get_job()
@@ -851,7 +851,7 @@ async fn run_logs(
         start,
         end,
         next_token.as_deref(),
-        Some(&config),
+        &config,
     )
     .await
     .map_err(|e| CliError::Operation(format!("{e}")))?;
@@ -1037,7 +1037,7 @@ async fn run_cancel(
     }
     let auto_accept = is_auto_accept(&config);
 
-    let job = match session::deadline_client(Some(&config))
+    let job = match session::deadline_client(&config)
         .await
         .get_job()
         .farm_id(&farm)
@@ -1055,7 +1055,7 @@ async fn run_cancel(
                 Some(&farm),
                 Some(&queue),
                 None,
-                Some(&config),
+                &config,
             )
             .await;
             return Err(CliError::Operation(format!(
@@ -1152,7 +1152,7 @@ async fn run_cancel(
     } else {
         println!("Canceling job and marking as {mark_as}...");
     }
-    let dl = session::deadline_client(Some(&config)).await;
+    let dl = session::deadline_client(&config).await;
     let status: aws_sdk_deadline::types::JobTargetTaskRunStatus = mark_as.as_str().into();
     dl.update_job()
         .farm_id(&farm)
@@ -1222,7 +1222,7 @@ async fn run_requeue_tasks(
         }
     }
 
-    let job = match session::deadline_client(Some(&config))
+    let job = match session::deadline_client(&config)
         .await
         .get_job()
         .farm_id(&farm)
@@ -1240,7 +1240,7 @@ async fn run_requeue_tasks(
                 Some(&farm),
                 Some(&queue),
                 None,
-                Some(&config),
+                &config,
             )
             .await;
             return Err(CliError::Operation(format!(
@@ -1324,7 +1324,7 @@ async fn run_requeue_tasks(
 
     let mut total_requeued: i64 = 0;
 
-    let dl = session::deadline_client(Some(&config)).await;
+    let dl = session::deadline_client(&config).await;
     let steps_pages = client::collect_paginated(
         dl.list_steps()
             .farm_id(&farm)
@@ -1410,7 +1410,7 @@ async fn run_requeue_tasks(
                     };
                     println!("    {status} {task_summary}");
 
-                    session::deadline_client(Some(&config))
+                    session::deadline_client(&config)
                         .await
                         .update_task()
                         .farm_id(&farm)
@@ -1604,7 +1604,7 @@ async fn download_input_impl(
     use deadline_job_attachments::s3;
 
     // Get job
-    let dl = session::deadline_client(Some(config)).await;
+    let dl = session::deadline_client(config).await;
     let job = dl
         .get_job()
         .farm_id(farm_id)
@@ -1684,7 +1684,7 @@ async fn download_input_impl(
     };
 
     // Get queue for jobAttachmentSettings
-    let queue = session::deadline_client(Some(config))
+    let queue = session::deadline_client(config)
         .await
         .get_queue()
         .farm_id(farm_id)
@@ -1711,7 +1711,7 @@ async fn download_input_impl(
     };
 
     // Build S3 client with queue-scoped credentials
-    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, Some(config))
+    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, config)
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download input:\n{e}")))?;
 
@@ -2122,7 +2122,7 @@ async fn print_job_details(
     job_id: &str,
     config: &IniConfig,
 ) -> Result<(), CliError> {
-    match session::deadline_client(Some(config))
+    match session::deadline_client(config)
         .await
         .get_job()
         .farm_id(farm)
@@ -2151,7 +2151,7 @@ async fn print_job_details(
                 Some(farm),
                 Some(queue),
                 None,
-                Some(config),
+                config,
             )
             .await;
             Err(CliError::Operation(format!(
@@ -2177,7 +2177,7 @@ async fn resolve_job_search(
         }],
         "operator": "AND"
     });
-    let resp = match search_jobs_call(farm, &[queue], 0, 5, Some(&filter), None, Some(config)).await
+    let resp = match search_jobs_call(farm, &[queue], 0, 5, Some(&filter), None, config).await
     {
         Ok(r) => r,
         Err(e) => {
@@ -2336,7 +2336,7 @@ async fn search_jobs_call(
     page_size: i32,
     filter_expressions: Option<&serde_json::Value>,
     sort_expressions: Option<&serde_json::Value>,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<
     aws_sdk_deadline::operation::search_jobs::SearchJobsOutput,
     deadline_api::errors::DeadlineError,
@@ -2549,7 +2549,7 @@ pub(crate) async fn download_output_impl(
     use deadline_job_attachments::s3;
 
     // Get job
-    let dl = session::deadline_client(Some(config)).await;
+    let dl = session::deadline_client(config).await;
     let job = dl
         .get_job()
         .farm_id(farm_id)
@@ -2640,7 +2640,7 @@ pub(crate) async fn download_output_impl(
     );
 
     // Get queue for jobAttachmentSettings
-    let queue = session::deadline_client(Some(config))
+    let queue = session::deadline_client(config)
         .await
         .get_queue()
         .farm_id(farm_id)
@@ -2669,7 +2669,7 @@ pub(crate) async fn download_output_impl(
     };
 
     // Build S3 client with queue-scoped credentials
-    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, Some(config))
+    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, config)
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
@@ -3139,7 +3139,7 @@ async fn run_trace_schedule(
     }
 
     println!("Getting the job...");
-    let dl = session::deadline_client(Some(&config)).await;
+    let dl = session::deadline_client(&config).await;
     let job_data = dl
         .get_job()
         .farm_id(&farm)
@@ -3244,7 +3244,7 @@ async fn run_trace_schedule(
         .collect();
     let config_ref = &config;
     let (steps, step_errors) = batch_get(
-        |chunk| async move { api::batch_get_steps_page(&chunk, Some(config_ref)).await },
+        |chunk| async move { api::batch_get_steps_page(&chunk, config_ref).await },
         step_identifiers,
         |item| {
             item.get("stepId")
@@ -3264,7 +3264,7 @@ async fn run_trace_schedule(
         json!({"farmId": farm, "queueId": queue, "jobId": job, "stepId": sid, "taskId": tid})
     }).collect();
     let (tasks, task_errors) = batch_get(
-        |chunk| async move { api::batch_get_tasks_page(&chunk, Some(config_ref)).await },
+        |chunk| async move { api::batch_get_tasks_page(&chunk, config_ref).await },
         task_identifiers,
         |item| {
             item.get("taskId")

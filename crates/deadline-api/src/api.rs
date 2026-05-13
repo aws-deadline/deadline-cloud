@@ -20,7 +20,7 @@ pub async fn list_jobs_by_filter_expression(
     farm_id: &str,
     queue_id: &str,
     filter_expression: &Value,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<Vec<Value>, DeadlineError> {
     use aws_sdk_deadline::types::{
         ComparisonOperator, DateTimeFilterExpression, FieldSortExpression, LogicalOperator,
@@ -288,7 +288,7 @@ pub fn build_sort_expressions(
 /// Returns raw JSON with `steps` and `errors` arrays.
 pub async fn batch_get_steps_page(
     identifiers: &[Value],
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
     let mut ids = Vec::new();
@@ -377,7 +377,7 @@ pub async fn batch_get_steps_page(
 /// Returns raw JSON with `tasks` and `errors` arrays.
 pub async fn batch_get_tasks_page(
     identifiers: &[Value],
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<Value, DeadlineError> {
     let client = session::deadline_client(config).await;
     let mut ids = Vec::new();
@@ -537,7 +537,7 @@ fn build_sdk_attachments(
 /// targetTaskRunStatus.
 pub async fn create_job(
     args: &serde_json::Map<String, Value>,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<CreateJobOutput, DeadlineError> {
     let client = session::deadline_client(config).await;
 
@@ -605,7 +605,7 @@ pub async fn wait_for_create_job_to_complete(
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
     continue_callback: impl Fn() -> bool,
 ) -> Result<(bool, String), DeadlineError> {
     let initial_delay = std::time::Duration::from_millis(300);
@@ -695,7 +695,7 @@ mod tests {
 
         // Pass a callback that always returns false (simulates SIGINT)
         let result =
-            wait_for_create_job_to_complete("farm-abc", "queue-abc", "job-abc", None, || false)
+            wait_for_create_job_to_complete("farm-abc", "queue-abc", "job-abc", &IniConfig::new(), || false)
                 .await;
 
         assert!(result.is_err());

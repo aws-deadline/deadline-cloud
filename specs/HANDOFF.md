@@ -10,7 +10,7 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## Current Status
 
-**Step 9.3 Phase A+B (Config Resolution):** ✅ Complete (commit `7b70fce`).
+**Step 9.3 Complete (Config Resolution):** ✅ All phases done.
 
 **Baseline (2026-05-13):**
 
@@ -18,11 +18,17 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 |-------|-------|--------|
 | `deadline-job-attachments` | 294 | ✅ All pass |
 | `deadline-job-bundle` | 249 | ✅ All pass |
+| `deadline-api` | 168 | ✅ All pass |
 | `deadline-cli` | 492 | ✅ All pass |
 
 ---
 
 ## What's Done (this session, 2026-05-13)
+
+**Step 9.3 Phase C — Config resolution for deadline-api (commit `a66e417`):**
+Removed `Option<&IniConfig>` from all 39 deadline-api function signatures.
+Deleted 5 `get_setting_from_disk` fallback calls. All library crates now
+require callers to provide config — no library crate reads config from disk.
 
 **Step 9.3 Phase A+B — Config resolution (commit `7b70fce`):**
 Removed `Option<&IniConfig>` from `deadline-job-attachments` and
@@ -63,15 +69,16 @@ Deleted ~600 lines. Tests: 314→305.
 
 ---
 
-## Next: Step 9.3 Phase C (deadline-api config resolution)
+## Next: Step 9.1 (Progress Reporting) or 9.2 (User Interaction)
 
-Remove `Option<&IniConfig>` from `deadline-api` (~35 signatures, 4
-`get_setting_from_disk` calls). Same mechanical change as Phase A+B.
-Special case: `telemetry.rs` `get_or_create_identifier` which writes
-to config — split into read (library) + persist (caller).
+Step 9.3 (config resolution) is complete across all library crates.
+No library crate reads config from disk anymore.
 
-After Phase C, Step 9.3 is complete. Then proceed to 9.1 (progress),
-9.2 (user interaction), 9.4 (path types), 9.5 (presentation utilities).
+Remaining Step 9 sub-steps:
+- **9.1** — Progress reporting: library returns raw stats, CLI owns progress bars
+- **9.2** — User interaction: remove callbacks from library, return decision points
+- **9.4** — Path types: `&str` → `&Path`/`PathBuf`
+- **9.5** — Presentation utilities: move `human_readable_file_size()` etc. to CLI
 
 ---
 

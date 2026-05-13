@@ -11,7 +11,7 @@ use serde_json::Value;
 pub async fn get_queue_parameter_definitions(
     farm_id: &str,
     queue_id: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<Vec<Value>, DeadlineError> {
     let client = crate::session::deadline_client(config).await;
 

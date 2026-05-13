@@ -266,7 +266,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             };
 
             // Get queue attachment settings
-            let queue_resp = deadline_api::session::deadline_client(Some(&config))
+            let queue_resp = deadline_api::session::deadline_client(&config)
                 .await
                 .get_queue()
                 .farm_id(&farm)
@@ -288,7 +288,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             let prefix = ja_settings.root_prefix();
 
             // Get job to check for attachments
-            let job_output = deadline_api::session::deadline_client(Some(&config))
+            let job_output = deadline_api::session::deadline_client(&config)
                 .await
                 .get_job()
                 .farm_id(&farm)
@@ -315,7 +315,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
 
             // Get queue-scoped credentials
             let sdk_config =
-                deadline_api::session::get_queue_scoped_config(&farm, &queue, Some(&config))
+                deadline_api::session::get_queue_scoped_config(&farm, &queue, &config)
                     .await
                     .map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
 
@@ -419,7 +419,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 let queue = deadline_config::config_file::get_setting("defaults.queue_id", &config)
                     .unwrap_or_default();
 
-                let queue_resp = deadline_api::session::deadline_client(Some(&config))
+                let queue_resp = deadline_api::session::deadline_client(&config)
                     .await
                     .get_queue()
                     .farm_id(&farm)
@@ -441,7 +441,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 let p = ja_settings.root_prefix().to_owned();
 
                 let cfg =
-                    deadline_api::session::get_queue_scoped_config(&farm, &queue, Some(&config))
+                    deadline_api::session::get_queue_scoped_config(&farm, &queue, &config)
                         .await
                         .map_err(|e| {
                             CliError::Operation(format!("Failed to get credentials: {e}"))

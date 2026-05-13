@@ -70,7 +70,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(Some(&config)).await;
+            let dl = session::deadline_client(&config).await;
             let resp = match dl
                 .search_workers()
                 .farm_id(&farm)
@@ -89,7 +89,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
                         Some(&farm),
                         None,
                         Some(&fleet_id),
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     return Err(CliError::Operation(format!(
@@ -126,7 +126,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let resp = match session::deadline_client(Some(&config))
+            let resp = match session::deadline_client(&config)
                 .await
                 .get_worker()
                 .farm_id(&farm)
@@ -144,7 +144,7 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
                         Some(&farm),
                         None,
                         Some(&fleet_id),
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     return Err(CliError::Operation(format!(

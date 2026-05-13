@@ -52,8 +52,8 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
     match action {
         FarmAction::List { profile } => {
             let config = setup(profile, None, &[])?;
-            let dl = session::deadline_client(Some(&config)).await;
-            let builder = client::apply_dcm_principal(dl.list_farms(), Some(&config));
+            let dl = session::deadline_client(&config).await;
+            let builder = client::apply_dcm_principal(dl.list_farms(), &config);
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
@@ -74,7 +74,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
                         None,
                         None,
                         None,
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     Err(CliError::Operation(format!(
@@ -86,7 +86,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
         FarmAction::Get { profile, farm_id } => {
             let config = setup(profile, farm_id, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(Some(&config)).await;
+            let dl = session::deadline_client(&config).await;
             match dl.get_farm().farm_id(&farm).send().await {
                 Ok(output) => {
                     let resp = FarmResponse::from(output);
@@ -103,7 +103,7 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
                         Some(&farm),
                         None,
                         None,
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     Err(CliError::Operation(format!(

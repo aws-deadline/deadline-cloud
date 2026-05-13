@@ -21,10 +21,12 @@ impl TelemetryClient {
     )]
     fn new(config_path: Option<&str>) -> PyResult<Self> {
         let config = match config_path {
-            Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p)).ok(),
-            None => deadline_config::config_file::read_config().ok(),
+            Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p))
+                .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
+            None => deadline_config::config_file::read_config()
+                .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
         };
-        let client = deadline_api::telemetry::create_telemetry(config.as_ref());
+        let client = deadline_api::telemetry::create_telemetry(&config);
         Ok(Self {
             inner: Some(client),
         })

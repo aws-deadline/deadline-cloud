@@ -80,7 +80,7 @@ fn error_json(error_type: &str, message: &str) -> String {
 
 /// Record MCP per-tool telemetry: latency and usage events.
 fn record_mcp_tool_telemetry(tool_name: &str, start: std::time::Instant, result: &str) {
-    let tc = deadline_api::telemetry::create_telemetry(None);
+    let tc = deadline_api::telemetry::create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
     let latency = start.elapsed().as_nanos() as u64;
     let parsed = serde_json::from_str::<Value>(result).ok();
     let is_success = parsed.as_ref().is_none_or(|v| v.get("error").is_none());
@@ -273,8 +273,8 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_farms")]
     async fn list_farms(&self, Parameters(_p): Parameters<ListFarmsParams>) -> String {
         with_mcp_telemetry!("deadline_list_farms", {
-            let dl = deadline_api::session::deadline_client(None).await;
-            let builder = deadline_api::client::apply_dcm_principal(dl.list_farms(), None);
+            let dl = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
+            let builder = deadline_api::client::apply_dcm_principal(dl.list_farms(), &deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
             let resp =
                 deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
             match resp {
@@ -297,10 +297,10 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_queues")]
     async fn list_queues(&self, Parameters(p): Parameters<ListQueuesParams>) -> String {
         with_mcp_telemetry!("deadline_list_queues", {
-            let dl = deadline_api::session::deadline_client(None).await;
+            let dl = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             let builder = deadline_api::client::apply_dcm_principal(
                 dl.list_queues().farm_id(&p.farm_id),
-                None,
+                &deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
             );
             let resp =
                 deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
@@ -324,10 +324,10 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_jobs")]
     async fn list_jobs(&self, Parameters(p): Parameters<ListJobsParams>) -> String {
         with_mcp_telemetry!("deadline_list_jobs", {
-            let dl = deadline_api::session::deadline_client(None).await;
+            let dl = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             let builder = deadline_api::client::apply_dcm_principal(
                 dl.list_jobs().farm_id(&p.farm_id).queue_id(&p.queue_id),
-                None,
+                &deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
             );
             match deadline_api::client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
@@ -346,10 +346,10 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_fleets")]
     async fn list_fleets(&self, Parameters(p): Parameters<ListFleetsParams>) -> String {
         with_mcp_telemetry!("deadline_list_fleets", {
-            let dl = deadline_api::session::deadline_client(None).await;
+            let dl = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             let builder = deadline_api::client::apply_dcm_principal(
                 dl.list_fleets().farm_id(&p.farm_id),
-                None,
+                &deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
             );
             let resp =
                 deadline_api::client::collect_paginated(builder.into_paginator().send()).await;
@@ -376,7 +376,7 @@ impl DeadlineServer {
         Parameters(p): Parameters<ListStorageProfilesParams>,
     ) -> String {
         with_mcp_telemetry!("deadline_list_storage_profiles_for_queue", {
-            let client = deadline_api::session::deadline_client(None).await;
+            let client = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             match deadline_api::client::collect_paginated(
                 client
                     .list_storage_profiles_for_queue()
@@ -407,8 +407,8 @@ impl DeadlineServer {
     #[tool(name = "deadline_check_authentication_status")]
     async fn check_authentication_status(&self) -> String {
         with_mcp_telemetry!("deadline_check_authentication_status", {
-            let source = deadline_api::auth::get_credentials_source(None);
-            let status = deadline_api::auth::check_authentication_status(None).await;
+            let source = deadline_api::auth::get_credentials_source(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
+            let status = deadline_api::auth::check_authentication_status(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             let api_available =
                 status == deadline_api::auth::AwsAuthenticationStatus::Authenticated;
             ok_result(json!({
@@ -432,7 +432,7 @@ impl DeadlineServer {
                 None,
                 None,
                 p.next_token.as_deref(),
-                None,
+                &deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
             )
             .await
             {
@@ -452,7 +452,7 @@ impl DeadlineServer {
     #[tool(name = "deadline_get_job")]
     async fn get_job(&self, Parameters(p): Parameters<GetJobParams>) -> String {
         with_mcp_telemetry!("deadline_get_job", {
-            match deadline_api::session::deadline_client(None)
+            match deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()))
                 .await
                 .get_job()
                 .farm_id(&p.farm_id)
@@ -474,7 +474,7 @@ impl DeadlineServer {
     #[tool(name = "deadline_get_session")]
     async fn get_session(&self, Parameters(p): Parameters<GetSessionParams>) -> String {
         with_mcp_telemetry!("deadline_get_session", {
-            match deadline_api::session::deadline_client(None)
+            match deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()))
                 .await
                 .get_session()
                 .farm_id(&p.farm_id)
@@ -497,7 +497,7 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_sessions")]
     async fn list_sessions(&self, Parameters(p): Parameters<ListSessionsParams>) -> String {
         with_mcp_telemetry!("deadline_list_sessions", {
-            let client = deadline_api::session::deadline_client(None).await;
+            let client = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             match deadline_api::client::collect_paginated(
                 client
                     .list_sessions()
@@ -525,7 +525,7 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_steps")]
     async fn list_steps(&self, Parameters(p): Parameters<ListStepsParams>) -> String {
         with_mcp_telemetry!("deadline_list_steps", {
-            let client = deadline_api::session::deadline_client(None).await;
+            let client = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             match deadline_api::client::collect_paginated(
                 client
                     .list_steps()
@@ -553,7 +553,7 @@ impl DeadlineServer {
     #[tool(name = "deadline_list_tasks")]
     async fn list_tasks(&self, Parameters(p): Parameters<ListTasksParams>) -> String {
         with_mcp_telemetry!("deadline_list_tasks", {
-            let client = deadline_api::session::deadline_client(None).await;
+            let client = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             match deadline_api::client::collect_paginated(
                 client
                     .list_tasks()
@@ -607,7 +607,7 @@ impl DeadlineServer {
                 None => None,
             };
 
-            let dl = deadline_api::session::deadline_client(None).await;
+            let dl = deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new())).await;
             let mut req = dl
                 .search_jobs()
                 .farm_id(&p.farm_id)
@@ -917,7 +917,7 @@ impl DeadlineServer {
             let limit = p.limit.unwrap_or(100);
 
             // Get session details
-            let session = match deadline_api::session::deadline_client(None)
+            let session = match deadline_api::session::deadline_client(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()))
                 .await
                 .get_session()
                 .farm_id(&p.farm_id)
@@ -975,7 +975,7 @@ impl DeadlineServer {
                 None,
                 None,
                 None,
-                None,
+                &deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
             )
             .await
             {
@@ -998,7 +998,7 @@ impl DeadlineServer {
             // Get worker logs if worker_id and fleet_id are present
             if let (Some(wid), Some(fid)) = (&worker_id, &fleet_id) {
                 match deadline_api::log_retrieval::get_worker_logs(
-                    &p.farm_id, fid, wid, limit, None, None, None, None,
+                    &p.farm_id, fid, wid, limit, None, None, None, &deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
                 )
                 .await
                 {
@@ -1041,7 +1041,7 @@ pub(crate) fn run() -> Result<(), CliError> {
         .map_err(|e| CliError::Operation(format!("Failed to start async runtime: {e}")))?
         .block_on(async {
             // Emit server startup telemetry
-            let tc = deadline_api::telemetry::create_telemetry(None);
+            let tc = deadline_api::telemetry::create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
             let mut details = std::collections::HashMap::new();
             details.insert("usage_mode".into(), json!("MCP"));
             details.insert("startup_method".into(), json!("cli"));

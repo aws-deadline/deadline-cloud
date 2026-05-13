@@ -113,7 +113,7 @@ fn build_download_url(platform_data: &Value) -> Option<String> {
 pub fn safe_check_for_updates(
     integration_name: &str,
     current_version: &str,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
     manifest_url: Option<&str>,
 ) -> UpdateCheckResult {
     let base = || UpdateCheckResult {
@@ -126,10 +126,8 @@ pub fn safe_check_for_updates(
     };
 
     // Check config opt-out
-    let notification_setting = match config {
-        Some(c) => config_file::get_setting("settings.submitter_update_notification", c),
-        None => config_file::get_setting_from_disk("settings.submitter_update_notification"),
-    };
+    let notification_setting =
+        config_file::get_setting("settings.submitter_update_notification", config);
     let notification_enabled = notification_setting
         .and_then(|v| config_file::str2bool(&v))
         .unwrap_or(true);
@@ -323,7 +321,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::Success);
         assert!(result.update_available);
@@ -341,7 +339,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.10.0", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.10.0", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::Success);
         assert!(!result.update_available);
@@ -356,7 +354,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "1.0.0", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "1.0.0", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::Success);
         assert!(!result.update_available);
@@ -380,7 +378,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::TimeoutError);
         assert!(!result.update_available);
@@ -395,7 +393,7 @@ mod tests {
         let result = safe_check_for_updates(
             "deadline-cloud-for-cinema-4d",
             "0.9.1",
-            None,
+            &IniConfig::new(),
             Some("http://localhost:1/submitters/manifest.json"),
         );
 
@@ -417,7 +415,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::ParseError);
         assert!(!result.update_available);
@@ -432,7 +430,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-houdini", "1.0.0", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-houdini", "1.0.0", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::IntegrationNotFound);
         assert!(!result.update_available);
@@ -450,7 +448,7 @@ mod tests {
         let result = safe_check_for_updates(
             "deadline-cloud-for-cinema-4d",
             "bad-version",
-            None,
+            &IniConfig::new(),
             Some(&url),
         );
 
@@ -470,7 +468,7 @@ mod tests {
         // The sample manifest has blender on linux but not macos/windows.
         // On the current platform, cinema-4d is available on all platforms.
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.0", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.0", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::Success);
         assert!(result.update_available);
@@ -497,7 +495,7 @@ mod tests {
         let result = safe_check_for_updates(
             "deadline-cloud-for-cinema-4d",
             "0.9.1",
-            Some(&config),
+            &config,
             Some(&url),
         );
 
@@ -539,7 +537,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", &IniConfig::new(), Some(&url));
 
         // Python behavior: update_available forced to false when no installer URL
         assert_eq!(result.status, UpdateCheckStatus::Success);
@@ -570,7 +568,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::ParseError);
         assert!(!result.update_available);
@@ -614,7 +612,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::InvalidVersion);
         assert!(!result.update_available);
@@ -633,7 +631,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.1", &IniConfig::new(), Some(&url));
 
         // Server errors are network-level failures
         assert!(
@@ -653,7 +651,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.0", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "0.9.0", &IniConfig::new(), Some(&url));
 
         assert!(result.update_available);
         let download_url = result.download_url.unwrap();
@@ -688,7 +686,7 @@ mod tests {
         let result = safe_check_for_updates(
             "deadline-cloud-for-cinema-4d",
             "0.10.0-alpha.1",
-            None,
+            &IniConfig::new(),
             Some(&url),
         );
 
@@ -709,7 +707,7 @@ mod tests {
         let result = safe_check_for_updates(
             "deadline-cloud-for-cinema-4d",
             "0.10.0+patch1",
-            None,
+            &IniConfig::new(),
             Some(&url),
         );
 
@@ -724,7 +722,7 @@ mod tests {
         let url = manifest_url(&server);
 
         let result =
-            safe_check_for_updates("deadline-cloud-for-cinema-4d", "v0.9.0", None, Some(&url));
+            safe_check_for_updates("deadline-cloud-for-cinema-4d", "v0.9.0", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::Success);
         assert!(result.update_available);
@@ -737,7 +735,7 @@ mod tests {
         let server = start_manifest_server(&sample_manifest()).await;
         let url = manifest_url(&server);
 
-        let result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "", None, Some(&url));
+        let result = safe_check_for_updates("deadline-cloud-for-cinema-4d", "", &IniConfig::new(), Some(&url));
 
         assert_eq!(result.status, UpdateCheckStatus::InvalidVersion);
         assert!(!result.update_available);
@@ -751,7 +749,7 @@ mod tests {
         let result = safe_check_for_updates(
             "deadline-cloud-for-cinema-4d",
             "abc.def.ghi",
-            None,
+            &IniConfig::new(),
             Some(&url),
         );
 

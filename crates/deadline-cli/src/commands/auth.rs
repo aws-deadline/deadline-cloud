@@ -1,6 +1,7 @@
 use clap::Subcommand;
 use deadline_api::{auth, session};
 use deadline_config::config_file;
+use deadline_config::ini::IniConfig;
 
 use super::config::CliError;
 
@@ -30,19 +31,21 @@ pub(crate) fn run(action: AuthAction) -> Result<(), CliError> {
 async fn run_async(action: AuthAction) -> Result<(), CliError> {
     match action {
         AuthAction::Login => {
-            let profile_name = session::display_profile_name(None);
+            let config = config_file::read_config().unwrap_or_else(|_| IniConfig::new());
+            let profile_name = session::display_profile_name(&config);
             println!("Logging into AWS Profile '{profile_name}' for AWS Deadline Cloud");
             let on_pending = |_source: auth::AwsCredentialsSource| {
                 println!("Opening Deadline Cloud monitor. Please log in and then return here.");
             };
-            let message = auth::login(Some(&on_pending), None, None, None)
+            let message = auth::login(Some(&on_pending), None, &config, None)
                 .await
                 .map_err(CliError::Operation)?;
             println!("\nSuccessfully logged in: {message}\n");
             Ok(())
         }
         AuthAction::Logout => {
-            auth::logout(None, None).map_err(CliError::Operation)?;
+            let config = config_file::read_config().unwrap_or_else(|_| IniConfig::new());
+            auth::logout(&config, None).map_err(CliError::Operation)?;
             println!("Successfully logged out of all Deadline Cloud monitor AWS profiles");
             Ok(())
         }
@@ -51,19 +54,16 @@ async fn run_async(action: AuthAction) -> Result<(), CliError> {
 }
 
 async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
-    let config = if let Some(p) = profile {
-        let mut c = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
-        config_file::set_setting("defaults.aws_profile_name", &p, &mut c)
+    let mut config =
+        config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
+    if let Some(p) = profile {
+        config_file::set_setting("defaults.aws_profile_name", &p, &mut config)
             .map_err(|e| CliError::Operation(e.to_string()))?;
-        Some(c)
-    } else {
-        None
-    };
-    let config_ref = config.as_ref();
+    }
 
-    let profile_name = session::display_profile_name(config_ref);
-    let creds_source = auth::get_credentials_source(config_ref);
-    let auth_status = auth::check_authentication_status(config_ref).await;
+    let profile_name = session::display_profile_name(&config);
+    let creds_source = auth::get_credentials_source(&config);
+    let auth_status = auth::check_authentication_status(&config).await;
     // Auth check uses ListFarms, so AUTHENTICATED implies API available.
     let api_available = auth_status == auth::AwsAuthenticationStatus::Authenticated;
 

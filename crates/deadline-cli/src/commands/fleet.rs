@@ -59,9 +59,9 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
         FleetAction::List { profile, farm_id } => {
             let config = setup(profile, farm_id, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(Some(&config)).await;
+            let dl = session::deadline_client(&config).await;
             let builder =
-                client::apply_dcm_principal(dl.list_fleets().farm_id(&farm), Some(&config));
+                client::apply_dcm_principal(dl.list_fleets().farm_id(&farm), &config);
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
@@ -82,7 +82,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                         Some(&farm),
                         None,
                         None,
-                        Some(&config),
+                        &config,
                     )
                     .await;
                     Err(CliError::Operation(format!(
@@ -121,7 +121,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
 
             if let Some(fleet) = fleet_id {
                 // --fleet-id mode: typed get
-                let dl = session::deadline_client(Some(&config)).await;
+                let dl = session::deadline_client(&config).await;
                 match dl.get_fleet().farm_id(&farm).fleet_id(&fleet).send().await {
                     Ok(output) => {
                         let resp = FleetResponse::from(output);
@@ -138,7 +138,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                             Some(&farm),
                             None,
                             Some(&fleet),
-                            Some(&config),
+                            &config,
                         )
                         .await;
                         Err(CliError::Operation(format!(
@@ -162,7 +162,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                     })?;
 
                 // Get queue display name
-                let dl = session::deadline_client(Some(&config)).await;
+                let dl = session::deadline_client(&config).await;
                 let queue_output = match dl.get_queue().farm_id(&farm).queue_id(&queue).send().await
                 {
                     Ok(output) => output,
@@ -174,7 +174,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                             Some(&farm),
                             Some(&queue),
                             None,
-                            Some(&config),
+                            &config,
                         )
                         .await;
                         return Err(CliError::Operation(format!(

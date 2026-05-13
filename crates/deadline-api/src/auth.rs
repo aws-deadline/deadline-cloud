@@ -89,7 +89,7 @@ fn read_aws_config_section(content: &str, section_header: &str, key: &str) -> Op
 /// DCM profiles have `monitor_id` in the AWS profile's scoped config.
 /// Returns `NotValid` if the specified profile does not exist.
 pub fn get_credentials_source(
-    config: Option<&deadline_config::ini::IniConfig>,
+    config: &deadline_config::ini::IniConfig,
 ) -> AwsCredentialsSource {
     let profile_name = session::resolve_profile_name(config);
     match &profile_name {
@@ -126,7 +126,7 @@ fn aws_profile_exists(profile_name: &str) -> bool {
 /// If logged in with DCM, returns (`user_id`, `identity_store_id`).
 /// Otherwise returns (None, None).
 pub fn get_user_and_identity_store_id(
-    config: Option<&deadline_config::ini::IniConfig>,
+    config: &deadline_config::ini::IniConfig,
 ) -> (Option<String>, Option<String>) {
     let profile_name = session::resolve_profile_name(config);
 
@@ -147,7 +147,7 @@ pub fn get_user_and_identity_store_id(
 }
 
 /// Returns the `monitor_id` from the AWS profile if it's a DCM profile.
-pub fn get_monitor_id(config: Option<&deadline_config::ini::IniConfig>) -> Option<String> {
+pub fn get_monitor_id(config: &deadline_config::ini::IniConfig) -> Option<String> {
     match session::resolve_profile_name(config) {
         Some(name) => read_aws_profile_key(&name, "monitor_id"),
         None => read_aws_default_profile_key("monitor_id"),
@@ -158,7 +158,7 @@ pub fn get_monitor_id(config: Option<&deadline_config::ini::IniConfig>) -> Optio
 /// This validates both credential validity AND Deadline API reachability
 /// in one call, matching Python's behavior. No STS dependency.
 pub async fn check_authentication_status(
-    config: Option<&deadline_config::ini::IniConfig>,
+    config: &deadline_config::ini::IniConfig,
 ) -> AwsAuthenticationStatus {
     let client = session::deadline_client(config).await;
     let mut req = client.list_farms().max_results(1);
@@ -182,7 +182,7 @@ pub async fn check_authentication_status(
 pub async fn login(
     on_pending_authorization: Option<&dyn Fn(AwsCredentialsSource)>,
     on_cancellation_check: Option<&dyn Fn() -> bool>,
-    config: Option<&deadline_config::ini::IniConfig>,
+    config: &deadline_config::ini::IniConfig,
     telemetry: Option<&TelemetryClient>,
 ) -> Result<String, String> {
     let ephemeral;
@@ -201,7 +201,7 @@ pub async fn login(
 async fn login_inner(
     on_pending_authorization: Option<&dyn Fn(AwsCredentialsSource)>,
     on_cancellation_check: Option<&dyn Fn() -> bool>,
-    config: Option<&deadline_config::ini::IniConfig>,
+    config: &deadline_config::ini::IniConfig,
 ) -> Result<String, String> {
     let source = get_credentials_source(config);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
@@ -276,13 +276,13 @@ async fn login_inner(
 /// Log out via Deadline Cloud Monitor.
 /// Only supported for DCM-created profiles (those with `monitor_id`).
 pub fn logout(
-    config: Option<&deadline_config::ini::IniConfig>,
+    config: &deadline_config::ini::IniConfig,
     telemetry: Option<&TelemetryClient>,
 ) -> Result<String, String> {
     with_telemetry_latency("logout", config, telemetry, || logout_inner(config))
 }
 
-fn logout_inner(config: Option<&deadline_config::ini::IniConfig>) -> Result<String, String> {
+fn logout_inner(config: &deadline_config::ini::IniConfig) -> Result<String, String> {
     let source = get_credentials_source(config);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
         return Err(
@@ -318,13 +318,9 @@ fn logout_inner(config: Option<&deadline_config::ini::IniConfig>) -> Result<Stri
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-fn get_monitor_path(config: Option<&deadline_config::ini::IniConfig>) -> String {
-    match config {
-        Some(c) => deadline_config::config_file::get_setting("deadline-cloud-monitor.path", c)
-            .unwrap_or_default(),
-        None => deadline_config::config_file::get_setting_from_disk("deadline-cloud-monitor.path")
-            .unwrap_or_default(),
-    }
+fn get_monitor_path(config: &deadline_config::ini::IniConfig) -> String {
+    deadline_config::config_file::get_setting("deadline-cloud-monitor.path", config)
+        .unwrap_or_default()
 }
 
 // login/logout are tested at Level 2 in cli_auth.rs (require subprocess isolation).
@@ -459,7 +455,7 @@ mod tests {
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "dcm");
         assert_eq!(
-            get_credentials_source(Some(&ini)),
+            get_credentials_source(&ini),
             AwsCredentialsSource::DeadlineCloudMonitorLogin
         );
     }
@@ -471,7 +467,7 @@ mod tests {
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "regular");
         assert_eq!(
-            get_credentials_source(Some(&ini)),
+            get_credentials_source(&ini),
             AwsCredentialsSource::HostProvided
         );
     }
@@ -483,7 +479,7 @@ mod tests {
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "nonexistent");
         assert_eq!(
-            get_credentials_source(Some(&ini)),
+            get_credentials_source(&ini),
             AwsCredentialsSource::NotValid
         );
     }
@@ -495,7 +491,7 @@ mod tests {
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "(default)");
         assert_eq!(
-            get_credentials_source(Some(&ini)),
+            get_credentials_source(&ini),
             AwsCredentialsSource::HostProvided
         );
     }
@@ -510,7 +506,7 @@ mod tests {
         );
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "dcm");
-        let (uid, isid) = get_user_and_identity_store_id(Some(&ini));
+        let (uid, isid) = get_user_and_identity_store_id(&ini);
         assert_eq!(uid.as_deref(), Some("user-123"));
         assert_eq!(isid.as_deref(), Some("d-456"));
     }
@@ -521,7 +517,7 @@ mod tests {
         let _f = with_aws_config("[profile regular]\nregion = us-west-2\n");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "regular");
-        let (uid, isid) = get_user_and_identity_store_id(Some(&ini));
+        let (uid, isid) = get_user_and_identity_store_id(&ini);
         assert!(uid.is_none());
         assert!(isid.is_none());
     }
@@ -533,7 +529,7 @@ mod tests {
             with_aws_config("[profile dcm]\nmonitor_id = mon-abc\nidentity_store_id = d-456\n");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "dcm");
-        let (uid, isid) = get_user_and_identity_store_id(Some(&ini));
+        let (uid, isid) = get_user_and_identity_store_id(&ini);
         assert!(uid.is_none());
         assert_eq!(isid.as_deref(), Some("d-456"));
     }
@@ -544,7 +540,7 @@ mod tests {
         let _f = with_aws_config("");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "(default)");
-        assert_eq!(get_user_and_identity_store_id(Some(&ini)), (None, None));
+        assert_eq!(get_user_and_identity_store_id(&ini), (None, None));
     }
 
     // ── get_monitor_id ────────────────────────────────────────
@@ -555,7 +551,7 @@ mod tests {
         let _f = with_aws_config("[profile dcm]\nmonitor_id = mon-xyz\n");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "dcm");
-        assert_eq!(get_monitor_id(Some(&ini)), Some("mon-xyz".into()));
+        assert_eq!(get_monitor_id(&ini), Some("mon-xyz".into()));
     }
 
     #[test]
@@ -564,6 +560,6 @@ mod tests {
         let _f = with_aws_config("[profile regular]\nregion = us-west-2\n");
         let mut ini = deadline_config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "regular");
-        assert_eq!(get_monitor_id(Some(&ini)), None);
+        assert_eq!(get_monitor_id(&ini), None);
     }
 }
