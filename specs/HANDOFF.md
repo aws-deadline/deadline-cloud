@@ -7,7 +7,18 @@ Active work item: **#31 — Crate Restructure (openjd-rs + CLI/library separatio
 See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 (Previous plan in `specs/openjd-integration.md` is superseded — absorbed as Phase 1.)
 
-**Status:** Phase 1c (S3CheckCache) complete. Phase 2 (Diff) — deferred (see below).
+**Status:** Phase 1d (HashCache) and Phase 3 (Path Mapping) complete.
+Phase 2 (Diff) — deferred (see below).
+
+**Phase 3 result:** Replaced trie-based `PathMappingRuleApplier` (~300 lines)
+with thin wrapper around `openjd_expr::path_mapping::apply_rules_with_format()`.
+Added `openjd-expr 0.1` dependency. Tests: 347→343 (pruned 4 trie-internal tests).
+CLI: 492/492 unchanged.
+
+**Phase 1d result:** Replaced `HashCache` + `HashCacheEntry` + `format_mtime_for_cache()`
+with `openjd_snapshots::HashCache` (re-export). Accepted u64 mtime format (nanoseconds
+since epoch). Removed `rusqlite` direct dependency. Tests: 358→347 (pruned 11 that
+tested openjd internals). CLI: 492/492 unchanged.
 
 **Phase 1c result:** Replaced `S3CheckCache` + `S3CheckCacheEntry` with
 `openjd_snapshots::S3CheckCache` (re-export). Deleted ~80 lines of impl,
@@ -42,14 +53,15 @@ CLI: 492/492 unchanged.
 - Manifest codec: ✅ openjd-rs `encode_snapshot_v2023` matches Python's
   `json.dumps(sorted_keys=True, ensure_ascii=True)` behavior
 - S3CheckCache: ✅ Same float-timestamp format as Python
-- HashCache: ⚠️ openjd-rs stores mtime as u64, Python uses
-  `str(datetime.fromtimestamp(st_mtime))` — **NOT compatible**
-  → Phase 1d (HashCache swap) deferred until format reconciled
+- HashCache: ✅ Swapped to openjd-rs u64 mtime (one-time cache invalidation accepted)
 
 **Phase checklist:**
-- [ ] Phase 1: Hashing + Caches + Manifest Codec
-- [ ] Phase 2: Diff
-- [ ] Phase 3: Path Mapping
+- [x] Phase 1a: Hashing ✅
+- [x] Phase 1b: Manifest Codec ✅
+- [x] Phase 1c: S3CheckCache ✅
+- [x] Phase 1d: HashCache ✅
+- [ ] Phase 2: Diff (deferred to Phase 4)
+- [x] Phase 3: Path Mapping ✅
 - [ ] Phase 4: Upload/Download Engine
 - [ ] Phase 5: Template Validation (deferred)
 
