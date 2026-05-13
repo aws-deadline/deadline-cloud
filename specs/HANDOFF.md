@@ -10,7 +10,7 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## Current Status
 
-**Step 9.3 Complete (Config Resolution):** ✅ All phases done.
+**Step 9a (Config Resolution):** ✅ Complete. No library crate reads config from disk.
 
 **Baseline (2026-05-13):**
 
@@ -25,12 +25,12 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## What's Done (this session, 2026-05-13)
 
-**Step 9.3 Phase C — Config resolution for deadline-api (commit `a66e417`):**
+**Step 9a Phase C — Config resolution for deadline-api (commit `7ba0287`):**
 Removed `Option<&IniConfig>` from all 39 deadline-api function signatures.
 Deleted 5 `get_setting_from_disk` fallback calls. All library crates now
 require callers to provide config — no library crate reads config from disk.
 
-**Step 9.3 Phase A+B — Config resolution (commit `7b70fce`):**
+**Step 9a Phase A+B — Config resolution (commit `7e0ca66`):**
 Removed `Option<&IniConfig>` from `deadline-job-attachments` and
 `deadline-job-bundle` library APIs. Functions now require `&IniConfig`
 (caller must provide). Deleted `get_setting_from_disk` fallback from
@@ -69,16 +69,21 @@ Deleted ~600 lines. Tests: 314→305.
 
 ---
 
-## Next: Step 9.1 (Progress Reporting) or 9.2 (User Interaction)
+## Next: Step 9 continued — Progress & Interaction
 
-Step 9.3 (config resolution) is complete across all library crates.
-No library crate reads config from disk anymore.
+Step 9 (CLI/Library Boundary) sub-step order and status:
 
-Remaining Step 9 sub-steps:
-- **9.1** — Progress reporting: library returns raw stats, CLI owns progress bars
-- **9.2** — User interaction: remove callbacks from library, return decision points
-- **9.4** — Path types: `&str` → `&Path`/`PathBuf`
-- **9.5** — Presentation utilities: move `human_readable_file_size()` etc. to CLI
+| Sub-step | What | Status |
+|----------|------|--------|
+| 9a | Config resolution (no disk reads in library) | ✅ Done |
+| 9b | Progress reporting (library returns raw stats) | **Next** |
+| 9c | User interaction (remove callbacks, return decision points) | Not started |
+| 9d | Path types (`&str` → `&Path`/`PathBuf`) | Not started |
+| 9e | Presentation utilities (move formatting to CLI) | Not started |
+
+**9b** is next: library functions currently accept `Fn(ProgressReportMetadata) -> bool`
+callbacks with pre-formatted strings. Change to return raw `u64` stats; CLI owns
+progress bar rendering. See `specs/crate-restructure.md` Step 9.1 for details.
 
 ---
 
@@ -94,8 +99,9 @@ Remaining Step 9 sub-steps:
 | 6 | Path Mapping → openjd | (earlier session) |
 | 7a | Upload engine → openjd | `8b0381e` |
 | 7b | Download engine → openjd | `0998fd1` |
-| 7c | Cleanup (dead S3 helpers) | `778b35f` |
+| 7c | Cleanup (dead S3 helpers) | `29424d2` |
 | 8 | Cleanup (HashAlgorithm param) | `751dfc4` |
+| 9a | Config resolution (all library crates) | `7e0ca66`, `7ba0287` |
 
 ---
 
