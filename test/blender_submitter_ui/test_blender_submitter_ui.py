@@ -239,61 +239,27 @@ def blender_env(tmp_path, mock_backend, moto_server, s3_client):
 # ---------------------------------------------------------------------------
 
 
-def _iter_by_role(root, role: str):
-    try:
-        if getattr(root, "role", None) == role:
-            yield root
-        for child in root.children():
-            yield from _iter_by_role(child, role)
-    except Exception:
-        return
+# Depth bound for tree-text searches. Caps `app.dump()` traversal so heavy
+# trees (Blender's main window) don't blow the test timeout. Submitter dialog
+# labels we look for ("Submit", "Deadline", "TestFarm") sit within ~10 levels
+# of the root.
+_TREE_SEARCH_MAX_DEPTH = 12
 
 
 def _tree_contains_text(app, needle: str) -> bool:
-    def walk(el):
-        try:
-            for field in ("name", "value"):
-                text = getattr(el, field, None) or ""
-                if needle in text:
-                    return True
-            for child in el.children():
-                if walk(child):
-                    return True
-        except Exception:
-            pass
-        return False
-
+    """True if any element under *app* has *needle* in its name or value."""
     try:
-        for root in app.children():
-            if walk(root):
-                return True
+        return needle in app.dump(max_depth=_TREE_SEARCH_MAX_DEPTH)
     except Exception:
-        pass
-    return False
+        return False
 
 
 def _dump_tree(app):
     """Print the accessibility tree for diagnostics."""
-
-    def walk(el, depth=0):
-        try:
-            role = el.role
-            name = (el.name or "")[:80]
-            value = (getattr(el, "value", None) or "")[:40]
-        except Exception as e:
-            sys.stderr.write(f"{'  ' * depth}<err: {e}>\n")
-            return
-        sys.stderr.write(f"{'  ' * depth}{role} name={name!r} value={value!r}\n")
-        try:
-            for child in el.children():
-                walk(child, depth + 1)
-        except Exception:
-            pass
-
     sys.stderr.write("\n--- accessibility tree ---\n")
     try:
-        for root in app.children():
-            walk(root)
+        sys.stderr.write(app.dump())
+        sys.stderr.write("\n")
     except Exception as e:
         sys.stderr.write(f"<tree error: {e}>\n")
     sys.stderr.write("--- end tree ---\n")
@@ -433,13 +399,12 @@ class TestBlenderSubmitterUI:
             stderr = stderr_b.decode(errors="replace") if stderr_b else ""
         except Exception:
             stdout = stderr = ""
-        # Also dump all app trees
+        # Also dump all app trees (one level deep) for diagnostics
         all_trees = ""
         for app in xa11y.App.list():
             all_trees += f"\n=== APP: {app.name} ===\n"
             try:
-                for root in app.children():
-                    all_trees += f"  {root.role} name={getattr(root, 'name', '')!r}\n"
+                all_trees += app.dump(max_depth=1)
             except Exception:
                 pass
         pytest.fail(
@@ -470,8 +435,8 @@ class TestBlenderSubmitterUI:
                     if btn.exists():
                         btn.press()
                         break
-            for elt in _iter_by_role(app, "static_text"):
-                name = (getattr(elt, "name", "") or "").strip()
+            for elt in app.locator("static_text").elements():
+                name = (elt.name or "").strip()
                 if name == "Submission complete":
                     return
                 if name in ("Submission error", "Submission canceled"):

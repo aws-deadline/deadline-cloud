@@ -105,13 +105,8 @@ def last_json_object(text: str) -> dict:
 
 
 def _dialog_selector(name: str) -> str:
-    """Return the xa11y selector for a Qt dialog with the given *name*.
-
-    Qt's top-level QDialog is exposed as ``dialog`` on macOS/Linux but
-    ``window`` on Windows UIA.
-    """
-    role = "window" if sys.platform.startswith("win") else "dialog"
-    return f'{role}[name="{name}"]'
+    """Return the xa11y selector for a Qt dialog with the given *name*."""
+    return f'dialog[name="{name}"]'
 
 
 # ---------------------------------------------------------------------------
@@ -188,8 +183,12 @@ atexit.register(reap_all)
 def _find_app(pid: int, baseline_names: set, timeout: float) -> xa11y.App:
     """Wait for an ``xa11y.App`` to appear for *pid*.
 
-    Falls back to matching by name because AT-SPI on Linux sometimes reports
-    the wrong PID (typically 1) for child processes.
+    ``App.by_pid`` selects elements with role ``application``, which Windows
+    UIA never reports (apps are exposed as ``window``). Iterating
+    ``App.list()`` works on every platform because list collects both
+    ``application`` and ``window`` roles. The name fallback is for AT-SPI on
+    Linux, which sometimes reports the wrong PID (typically 1) for child
+    processes.
     """
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -262,46 +261,27 @@ class DeadlineApp:
 
     def elements_by_role(self, role: str) -> list:
         """Return every element with the given *role*, depth-first."""
-        return list(_iter_by_role(self._app, role))
+        return self._app.locator(role).elements()
 
     def tree_contains_text(self, needle: str) -> bool:
         """True if any element in the tree has *needle* in its name or value."""
-        return any(_walk_contains_text(root, needle) for root in self._app.children())
+        return needle in self._app.dump()
+
+    def _tab_locator(self, tab_name: str) -> xa11y.Locator:
+        # Qt exposes tabs as ``radio_button`` on macOS and ``page_tab`` or
+        # ``tab`` on Linux/Windows. Comma alternation matches all variants.
+        return self.locator(
+            f'radio_button[name="{tab_name}"], page_tab[name="{tab_name}"], tab[name="{tab_name}"]'
+        )
 
     def tab_exists(self, tab_name: str) -> bool:
-        """True if a tab with *tab_name* exists under any platform role.
-
-        Qt exposes tabs as ``radio_button`` on macOS, ``page_tab`` or
-        ``tab`` on Linux/Windows. xa11y on Windows occasionally raises
-        ``PlatformError 0x80040201``; treat those as "not found".
-        """
-        for role in ("radio_button", "page_tab", "tab"):
-            try:
-                if self.locator(f'{role}[name="{tab_name}"]').exists():
-                    return True
-            except xa11y.PlatformError:
-                continue
-        return False
+        return self._tab_locator(tab_name).exists()
 
     def activate_tab(self, tab_name: str) -> None:
-        """Click the named tab, trying each platform role variant.
-
-        xa11y on Windows occasionally raises ``PlatformError 0x80040201``
-        when pressing a tab; swallow it and fall through to the next role.
-        """
-        last_err: Exception | None = None
-        for role in ("radio_button", "page_tab", "tab"):
-            loc = self.locator(f'{role}[name="{tab_name}"]')
-            if loc.exists():
-                try:
-                    loc.press()
-                    return
-                except xa11y.PlatformError as exc:
-                    last_err = exc
-                    continue
-        if last_err is not None:
-            raise AssertionError(f"Tab {tab_name!r} matched but press failed: {last_err!r}")
-        raise AssertionError(f"Tab {tab_name!r} not found via any role")
+        loc = self._tab_locator(tab_name)
+        if not loc.exists():
+            raise AssertionError(f"Tab {tab_name!r} not found via any role")
+        loc.press()
 
     @property
     def dialog_name(self) -> str:
@@ -315,26 +295,10 @@ class DeadlineApp:
 
     def dump_tree(self) -> None:
         """Print the accessibility tree to stderr for diagnostics."""
-
-        def walk(elt, depth=0):
-            try:
-                role = elt.role
-                name = elt.name or ""
-                value = getattr(elt, "value", None) or ""
-            except Exception as e:
-                sys.stderr.write(f"{'  ' * depth}<err: {e}>\n")
-                return
-            sys.stderr.write(f"{'  ' * depth}{role} name={name!r} value={value!r}\n")
-            try:
-                for child in elt.children():
-                    walk(child, depth + 1)
-            except Exception:
-                pass
-
         sys.stderr.write("\n--- accessibility tree ---\n")
         try:
-            for root in self._app.children():
-                walk(root)
+            sys.stderr.write(self._app.dump())
+            sys.stderr.write("\n")
         except Exception as e:
             sys.stderr.write(f"<tree error: {e}>\n")
         sys.stderr.write("--- end tree ---\n")
@@ -394,13 +358,8 @@ class ConfigDialog(DeadlineApp):
 
     def _combo_text(self, *, group: str, index: int) -> str:
         """Return the visible text of the Nth combo box in a group."""
-        root = self.locator(f'group[name="{group}"]').element()
-        combos = list(_iter_by_role(root, "combo_box"))
-        combo = combos[index]
-        value = getattr(combo, "value", None)
-        if value:
-            return value
-        return combo.name or ""
+        combo = self.locator(f'group[name="{group}"] combo_box').elements()[index]
+        return combo.value or combo.name or ""
 
 
 class SubmitterDialog(DeadlineApp):
@@ -492,8 +451,8 @@ class SubmitterDialog(DeadlineApp):
             "Submission error",
             "Submission canceled",
         }
-        for elt in _iter_by_role(self._app, "static_text"):
-            name = (getattr(elt, "name", "") or "").strip()
+        for elt in self._app.locator("static_text").elements():
+            name = (elt.name or "").strip()
             if name == "Preparing files...":
                 return name
             if name in terminal_labels:
@@ -527,34 +486,3 @@ class SubmitterDialog(DeadlineApp):
     def _progress_button(self, name: str) -> xa11y.Locator:
         """Locate a button inside the submission progress dialog."""
         return self.locator(f'{self._progress_selector} button[name="{name}"]')
-
-
-# ---------------------------------------------------------------------------
-# Tree-walking utilities
-# ---------------------------------------------------------------------------
-
-
-def _iter_by_role(root, role: str):
-    """Depth-first traversal yielding elements whose role matches *role*."""
-    try:
-        if getattr(root, "role", None) == role:
-            yield root
-        for child in root.children():
-            yield from _iter_by_role(child, role)
-    except Exception:
-        return
-
-
-def _walk_contains_text(root, needle: str) -> bool:
-    """True iff some element under *root* has *needle* in its name/value."""
-    try:
-        for field in ("name", "value"):
-            text = getattr(root, field, None) or ""
-            if needle in text:
-                return True
-        for child in root.children():
-            if _walk_contains_text(child, needle):
-                return True
-    except Exception:
-        return False
-    return False

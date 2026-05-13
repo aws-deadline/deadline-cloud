@@ -27,7 +27,7 @@ jobs:
           cache: pip
 
       - name: Cache apt packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-apt
         with:
           path: ~/apt-cache
@@ -52,7 +52,7 @@ jobs:
           cp /var/cache/apt/archives/*.deb ~/apt-cache/ 2>/dev/null || true
 
       - name: Cache Blender
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-blender
         with:
           path: /opt/blender-${{ env.BLENDER_VERSION }}-linux-x64
@@ -95,7 +95,7 @@ jobs:
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots-linux
           path: /tmp/*.png
@@ -114,7 +114,7 @@ jobs:
           cache: pip
 
       - name: Cache Blender
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-blender
         with:
           path: /Applications/Blender.app
@@ -158,7 +158,7 @@ jobs:
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots-macos
           path: /tmp/*.png
@@ -178,7 +178,7 @@ jobs:
           cache: pip
 
       - name: Cache Blender
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-blender
         with:
           path: C:\Tools\blender-${{ env.BLENDER_VERSION }}-windows-x64
@@ -226,7 +226,7 @@ jobs:
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots-windows
           path: C:\Users\runneradmin\AppData\Local\Temp\*.png
