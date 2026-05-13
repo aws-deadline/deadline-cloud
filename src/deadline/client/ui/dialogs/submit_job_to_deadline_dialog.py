@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QLabel,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -47,6 +48,7 @@ from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ._types import JobBundlePurpose
 from ._help_dialog import _HelpDialog
+from ..dataclasses._environment_info import _EnvironmentInfo
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +234,8 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         # Refresh the submit button enable state once queue parameter status changes
         self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
+
+        self._build_version_info_label()
 
         self.button_box = QDialogButtonBox(Qt.Horizontal)
         self.settings_button = QPushButton(tr("Settings..."))
@@ -423,6 +427,59 @@ class SubmitJobToDeadlineDialog(QDialog):
                 "Error",
                 f"Failed to display Help dialog: {str(e)}",
             )
+
+    def _build_version_info_label(self):
+        """Build a compact version info label shown at the bottom of the submit dialog."""
+
+        def truncate(version):
+            return version[:10] + "..." if len(version) > 10 else version
+
+        display_parts = []
+        full_parts = []
+
+        # Get the deadline library version
+        try:
+            env_info = _EnvironmentInfo.collect()
+            deadline_version = env_info.deadline_dep_versions.get("deadline")
+            if deadline_version:
+                display_parts.append(f"deadline {truncate(deadline_version)}")
+                full_parts.append(f"deadline {deadline_version}")
+        except Exception as e:
+            logger.debug(f"Failed to collect environment info for version label: {e}")
+
+        # Add submitter package info
+        if (
+            self.submitter_info.submitter_package_name
+            and self.submitter_info.submitter_package_version
+        ):
+            pkg = self.submitter_info.submitter_package_name
+            ver = self.submitter_info.submitter_package_version
+            display_parts.append(f"{pkg} {truncate(ver)}")
+            full_parts.append(f"{pkg} {ver}")
+        elif self.submitter_info.submitter_package_version:
+            name = self.submitter_info.submitter_name
+            ver = self.submitter_info.submitter_package_version
+            display_parts.append(f"{name} {truncate(ver)}")
+            full_parts.append(f"{name} {ver}")
+
+        # Add host application info
+        if (
+            self.submitter_info.host_application_name
+            and self.submitter_info.host_application_version
+        ):
+            app = self.submitter_info.host_application_name
+            ver = self.submitter_info.host_application_version
+            display_parts.append(f"{app} {truncate(ver)}")
+            full_parts.append(f"{app} {ver}")
+
+        if display_parts:
+            display_text = "  |  ".join(display_parts)
+            full_text = "  |  ".join(full_parts)
+            self.version_info_label = QLabel(display_text)
+            self.version_info_label.setToolTip(full_text)
+            self.version_info_label.setStyleSheet("QLabel { color: gray; font-size: 11px; }")
+            self.version_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.lyt.addWidget(self.version_info_label)
 
     def _on_load_bundle(self):
         """Delegates to the job_settings widget's on_load_bundle method."""
