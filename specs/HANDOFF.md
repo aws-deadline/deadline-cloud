@@ -3,106 +3,75 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **#31 — Crate Restructure (openjd-rs + CLI/library separation)**
+Active work item: **#31 — Crate Restructure**
 See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
-(Previous plan in `specs/openjd-integration.md` is superseded — absorbed as Phase 1.)
 
-**Status:** Phase 1d (HashCache) and Phase 3 (Path Mapping) complete.
-Phase 2 (Diff) — deferred to Phase 4a.
-Phase 4 — PLANNING COMPLETE, awaiting go/no-go.
+---
 
-**Phase 3 result:** Replaced trie-based `PathMappingRuleApplier` (~300 lines)
-with thin wrapper around `openjd_expr::path_mapping::apply_rules_with_format()`.
-Added `openjd-expr 0.1` dependency. Tests: 347→343 (pruned 4 trie-internal tests).
-CLI: 492/492 unchanged.
+## Current Status
 
-**Phase 1d result:** Replaced `HashCache` + `HashCacheEntry` + `format_mtime_for_cache()`
-with `openjd_snapshots::HashCache` (re-export). Accepted u64 mtime format (nanoseconds
-since epoch). Removed `rusqlite` direct dependency. Tests: 358→347 (pruned 11 that
-tested openjd internals). CLI: 492/492 unchanged.
+**Step 7 (Upload/Download Engine):** Steps 7a and 7b complete. Step 7c (cleanup) next.
 
-**Phase 1c result:** Replaced `S3CheckCache` + `S3CheckCacheEntry` with
-`openjd_snapshots::S3CheckCache` (re-export). Deleted ~80 lines of impl,
-`S3CheckCacheEntry` struct, `current_timestamp()` helper. Tests: 364→358
-(pruned 6 that tested openjd internals). CLI: 492/492 unchanged.
+**Baseline (2026-05-13):**
 
-**Phase 2 (Diff) decision:** `fast_diff` has no openjd equivalent (filesystem-based).
-`hash_diff` is only ~30 lines and replacing it would require an equally-sized adapter
-to convert `AssetManifest ↔ Snapshot`. Deferred to Phase 4 when `AssetManifest` is
-eliminated and the conversion is free.
+| Crate | Tests | Status |
+|-------|-------|--------|
+| `deadline-job-attachments` | 305 | ✅ All pass |
+| `deadline-cli` | 492 | ✅ All pass |
 
-**Phase 1b result:** Replaced `AssetManifest::encode()` and `decode_manifest()`
-with `openjd_snapshots::encode_snapshot_v2023` / `decode_v2023`. Tests: 370→364
-(pruned 6 that tested openjd internals). CLI: 492/492 unchanged.
+---
 
-**Phase 1a result:** Replaced `hash_data`/`hash_file` with `openjd-snapshots 0.1`
-from crates.io. Upgraded rusqlite 0.32→0.39. Tests: 375→370 (pruned 5 redundant).
-CLI: 492/492 unchanged.
+## What's Done (this session, 2026-05-13)
 
-### Phase 1 Baseline (2026-05-12)
+**Step 7a — Upload engine swap (commit `8b0381e`):**
+Replaced `hash_assets_and_create_manifest` + `S3UploadContext::upload_input_files`
+with `collect_abs_snapshot` → `hash_upload_abs_manifest` via `S3DataCache`.
+`upload_assets` now takes `&[AssetRootGroup]` (unhashed) instead of
+`&[AssetRootManifest]` (pre-hashed). Pipelined hash+upload.
+Deleted ~1,600 lines. Tests: 343→314.
 
-| Metric | Count |
-|--------|-------|
-| `deadline-job-attachments` tests | 375 (240 unit + 135 integration) |
-| `deadline-cli` tests | 492 (51 unit + 441 integration) |
-| Phase 1 scope: `asset_manifests` tests | 31 |
-| Phase 1 scope: `caches` tests | 18 |
-| **All tests passing** | ✅ |
+**Step 7b — Download engine swap (commit `0998fd1`):**
+Replaced `download_file` + `download_files_from_manifests` internals with
+`download_abs_manifest` via `S3DataCache`. Dropped fallback key retry (pre-GA).
+Downloads now verify content hashes (integrity improvement).
+Deleted ~600 lines. Tests: 314→305.
 
-**Python parity check (2026-05-12):**
-- Hashing: ✅ openjd-rs produces identical xxh128 output to Python
-- Manifest codec: ✅ openjd-rs `encode_snapshot_v2023` matches Python's
-  `json.dumps(sorted_keys=True, ensure_ascii=True)` behavior
-- S3CheckCache: ✅ Same float-timestamp format as Python
-- HashCache: ✅ Swapped to openjd-rs u64 mtime (one-time cache invalidation accepted)
+**Earlier this session:**
+- Step 5 (Diff): commit `642e53a` — type bridge + hash_diff delegate
+- Step 8 (Cleanup): commit `751dfc4` — removed dead HashAlgorithm parameter
+- Rewrote `specs/crate-restructure.md` with flat step numbering
 
-**Phase 4a result:** Added `AssetManifest ↔ Snapshot` type bridge
-(`asset_manifest_to_snapshot`, `snapshot_to_asset_manifest`) in `diff.rs`.
-Replaced `hash_diff` internals with `openjd_snapshots::diff_snapshots` delegate.
-`fast_diff` stays (filesystem-based, no openjd equivalent).
-Tests: 343→343 (no pruning — all tests validate integration contract).
-CLI: 492/492 unchanged.
+---
 
-**Phase 4 plan (2026-05-12):** HIGH complexity — strangler fig approach.
-- Sub-phase 4a: Type bridge (`AssetManifest ↔ AbsSnapshot`) + diff replacement
-- Sub-phase 4b: Upload engine swap (hash_upload_abs_manifest via DeadlineS3Cache)
-- Sub-phase 4c: Download engine swap (download_abs_manifest via DeadlineS3Cache)
-- Sub-phase 4d: Dead code cleanup
+## Next: Step 7c (Cleanup)
 
-**Phase 4b decision (2026-05-12):** DEFERRED — requires caller restructuring.
-`hash_upload_abs_manifest` rejects pre-hashed files (it combines hash+upload).
-Our API separates hashing (`hash_assets_and_create_manifest`) from uploading
-(`upload_assets`) with a user confirmation step between them. Replacing the
-upload engine requires merging these into a single call, which changes the
-public API contract and touches `submission.rs`. Deferring to Phase 2
-(CLI/library boundary) when the confirmation flow is redesigned.
+Delete remaining dead code from the upload/download swap:
+- `s3.rs`: `compute_upload_config`, `compute_download_workers`,
+  `get_small_file_threshold_multiplier` — no longer called
+- `s3.rs` constants: `S3_UPLOAD_MAX_CONCURRENCY`, `S3_DOWNLOAD_MAX_CONCURRENCY`,
+  `S3_MULTIPART_UPLOAD_CHUNK_SIZE` — no longer referenced
+- Prune tests for deleted `s3.rs` helpers
+- Remove any unused imports/types
 
-`S3DataCache::put_object` also requires data in memory (no streaming), while
-our current code uses `ByteStream::from_path` for streaming uploads. The
-upload code works correctly and is well-tested — no urgency to replace.
+After 7c, Step 7 is complete and the next actionable work is:
+- **Step 9** (CLI/Library Boundary) — separate presentation from logic
+- Or move to a different work item
 
-Next: Phase 4c (download engine) — `download_abs_manifest` IS a direct
-replacement for `download_files_from_manifests` (both take manifest + download).
+---
 
-**Phase checklist:**
-- [x] Phase 1a: Hashing ✅
-- [x] Phase 1b: Manifest Codec ✅
-- [x] Phase 1c: S3CheckCache ✅
-- [x] Phase 1d: HashCache ✅
-- [x] Phase 4a: Type bridge + diff replacement ✅
-- [x] Phase 3: Path Mapping ✅
-- [ ] Phase 4b: Upload engine swap (DEFERRED — requires caller restructuring)
-- [ ] Phase 4c: Download engine swap (DEFERRED — backward compat blocker)
-- [ ] Phase 4d: Cleanup
-- [ ] Phase 5: Template Validation (deferred)
+## Completed Steps (all of #31)
 
-**Phase 4c decision (2026-05-12):** DEFERRED — backward compatibility blocker.
-Our `download_file` retries with key `{hash}` (no algorithm suffix) on 404,
-for backward compatibility with old uploads. `S3DataCache` uses fixed key
-format `{hash}.{algorithm}` with no fallback. Replacing the download engine
-would break downloads of content uploaded before the algorithm suffix was added.
-Options: (a) add fallback to openjd-snapshots, (b) wrap S3DataCache with
-fallback logic, (c) accept breakage (not viable for production).
+| Step | What | Commit |
+|------|------|--------|
+| 1 | Hashing → openjd | (earlier session) |
+| 2 | Manifest Codec → openjd | (earlier session) |
+| 3 | S3CheckCache → openjd | (earlier session) |
+| 4 | HashCache → openjd | (earlier session) |
+| 5 | Diff → openjd (type bridge) | `642e53a` |
+| 6 | Path Mapping → openjd | (earlier session) |
+| 7a | Upload engine → openjd | `8b0381e` |
+| 7b | Download engine → openjd | `0998fd1` |
+| 8 | Cleanup (HashAlgorithm param) | `751dfc4` |
 
 ---
 
@@ -117,26 +86,12 @@ binary. On 2026-05-12 login succeeded, but need one more clean test to confirm.
 
 ## #16f — DCC Submitter Dependency Switchover
 
-**Goal:** All DCC submitters (except Houdini) work with zero code changes
-when switching from `deadline-cloud-python` to `deadline-cloud-rs`.
-
 **Status:** Batches A1-A3 ✅ Done. Batch B deferred (Houdini, separate repo).
 Batch C blocked on #24 (production distribution).
 
-### Batch B — Houdini submitter rewrite (separate repo, deferred)
-
-Houdini is pinned to `deadline == 0.49.*` and uses APIs that cannot
-exist in Rust (boto3 sessions, `S3AssetManager`, deprecated dialog method).
-Requires changes in the Houdini submitter repo, not this one.
-
-### Batch C — Dependency switch (blocked on #24)
-
-Update `pyproject.toml` in all 9 DCC repos to depend on the new package.
-Cannot happen until #24 (production distribution) publishes the package.
-
 ---
 
-## Completed items
+## Completed items (older)
 
 - **Python parity audit (2026-05-11)** — GAP-1 (login session refresh),
   GAP-3 (--include/--match-paths-by on download-output), GAP-2
