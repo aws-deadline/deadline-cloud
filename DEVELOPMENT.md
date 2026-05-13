@@ -68,7 +68,7 @@ process along the lines of the following as a starting point:
    Iteratively improve your implementation until all unit tests pass. (See [Unit tests](#unit-tests))
 3. Add integration tests for your changes if applicable. Ensure that all integration tests pass.
    Iteratively improve your implementation until all integration and unit tests pass. (See [Integration tests](#integration-tests))
-4. Add Squish GUI tests for your changes if applicable. Ensure that all Squish GUI tests pass. (See [Squish GUI tests](#squish-tests))
+4. Add pytest-qt GUI unit tests for widget/dialog behavior, or Squish end-to-end GUI tests for full workflow verification. (See [GUI tests](#gui-tests-pytest-qt) and [Squish GUI tests](#squish-tests))
 
 Once you are satisfied with your code, and all relevant tests pass, then run `hatch run fmt` to fix up the formatting of
 your code and post your pull request.
@@ -103,7 +103,9 @@ The tests for this package have three forms:
    without requiring an AWS account.
 2. Integration tests - Tests that ensure that the implementation behaves as expected when run in a real environment.
    Ensuring that code properly interacts as expected with a real Amazon S3 bucket, for instance.
-3. Squish GUI Submitter tests - Tests that verify the Deadline GUI using Squish automated framework. Squish tests require a license.
+3. GUI unit tests - Tests that verify individual Deadline GUI widgets and dialogs using [pytest-qt](https://pytest-qt.readthedocs.io/).
+   These run as part of the unit test suite, use MockDeadlineBackend for API responses, and require no AWS account or Squish license.
+4. Squish GUI end-to-end tests - Tests that verify full GUI workflows using the Squish automated framework. Squish tests require a license.
 
 ### Writing Tests
 
@@ -187,6 +189,18 @@ Notes:
 * AWS Developers note: If testing with a non-production deployment of AWS Deadline Cloud then you will have to
 define the `AWS_ENDPOINT_URL_DEADLINE` environment variable to the non-production endpoint URL. For example,
 production endpoints look like: `export AWS_ENDPOINT_URL_DEADLINE="https://deadline.$AWS_DEFAULT_REGION.amazonaws.com"`
+
+### GUI Tests (pytest-qt)
+
+GUI tests are located under `test/unit/deadline_client/ui/gui/`. They use [pytest-qt](https://pytest-qt.readthedocs.io/) to test Qt widgets and dialogs in-process, with `MockDeadlineBackend` providing fake API responses. No AWS credentials required.
+
+#### Running GUI Tests
+
+```sh
+hatch run test test/unit/deadline_client/ui/gui/
+```
+
+These tests run automatically in CI as part of the standard unit test suite.
 
 ### Squish GUI Submitter Tests
 
@@ -463,20 +477,3 @@ class MyCustomWidget(QWidget):
 Instead of runnning a deadline command as `deadline ...` run `pyinstrument -r html -m deadline ...`.
 
 This will profile the current `deadline` command and open the results in an interactive window.
-
-# Manual Test Cases
-
-These are the manual test cases for the client software release cycle, covering Deadline CLI and job attachments across Linux, Windows, and macOS.
-
-## Deadline CLI Tests
-
-| Test Case | Test Steps | Notes |
-|---|---|---|
-| Pre-requisite: Uninstall any previous versions of the Deadline Cloud Submitter Installer | Update PATH if necessary. | |
-| Verify Deadline CLI can be successfully installed using the staged individual installer | Run the staged individual installer and verify that it can install. | |
-| Verify correct version of Deadline CLI is being tested | Verify correct version using `deadline --version` command. | |
-| Verify user can authenticate/login using DCM Profile: `deadline auth login` | In deadline config gui, you should see the profile name with a green checkmark beside it in the bottom left. | Would need to set using DCM profile first. |
-| Verify user can logout of DCM Profile: `deadline auth logout` | In deadline config gui, you should see the profile name with a red 'X' beside it in the bottom left. There should be a button to log in on the right. | |
-| Verify 'Load a different job bundle' button in GUI Submitter | Launch GUI Submitter using `deadline bundle gui-submit --browse`, select a job bundle. Verify correct defaults/details. Hit 'Load a different job bundle' button and select a second job bundle. Verify correct defaults/details for the second bundle. | Requires the native file browser, which cannot be driven from xa11y. |
-| Test Deadline Cloud release candidate against currently released DCC Submitter | A Blender manual install might be easiest. Build deadline-cloud from the release candidate branch and pip install it into the submitter dependencies instead of the latest in PyPi. | |
-
