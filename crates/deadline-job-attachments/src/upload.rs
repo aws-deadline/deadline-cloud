@@ -11,7 +11,7 @@ use crate::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, hash_data, hash_file,
 };
 use crate::caches::{
-    HashCache, HashCacheEntry, S3CheckCache, S3CheckCacheEntry, format_mtime_for_cache,
+    HashCache, HashCacheEntry, S3CheckCache, format_mtime_for_cache,
 };
 use crate::models::{
     AssetRootGroup, AssetRootManifest, AssetUploadGroup, Attachments, FileSystemLocationType,
@@ -976,7 +976,8 @@ impl S3UploadContext {
         let cache_dir = s3_check_cache_dir
             .map(ToOwned::to_owned)
             .or_else(crate::caches::default_cache_dir);
-        let cache = cache_dir.as_deref().map(S3CheckCache::new).transpose()?;
+        let cache = cache_dir.as_deref().map(S3CheckCache::new).transpose()
+            .map_err(|e| JobAttachmentsError::AssetSync(format!("S3 check cache: {e}")))?;
 
         let force = force_s3_check.unwrap_or(false);
 
@@ -1075,10 +1076,7 @@ impl S3UploadContext {
         // HeadObject check
         if self.file_already_uploaded(s3_bucket, &s3_key).await? {
             if let Some(c) = cache {
-                c.put_entry(&S3CheckCacheEntry {
-                    s3_key: cache_key,
-                    last_seen_time: current_timestamp(),
-                });
+                let _ = c.put_entry(&cache_key);
             }
             if let Some(tracker) = progress_tracker {
                 tracker.increase_skipped(1, file.size);
@@ -1092,24 +1090,11 @@ impl S3UploadContext {
 
         // Update cache
         if let Some(c) = cache {
-            c.put_entry(&S3CheckCacheEntry {
-                s3_key: cache_key,
-                last_seen_time: current_timestamp(),
-            });
+            let _ = c.put_entry(&cache_key);
         }
 
         Ok(())
     }
-}
-
-fn current_timestamp() -> String {
-    format!(
-        "{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs_f64()
-    )
 }
 
 /// Orchestrate uploading all manifests to S3. Builds `ManifestProperties`

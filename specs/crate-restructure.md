@@ -73,15 +73,16 @@ Uses the strangler-fig methodology (see `.kiro/prompts/dependency-swap-step*.md`
 
 ### Methodology
 
+**Default: Direct swap** (`.kiro/prompts/dependency-swap-{plan,execute}.md`)
 ```
-1. BASELINE  — cargo test, record pass count
-2. PYTHON    — verify openjd-rs matches production Python behavior
-3. SHIM      — add dep, create thin adapter mapping openjd types → existing API
-4. VERIFY    — all tests pass (fix adapter, NOT tests)
-5. DELETE    — remove old implementation
-6. PRUNE     — delete tests that now test openjd-rs internals
-7. VERIFY    — cargo test -p <crate> + cargo test -p deadline-cli
+1. PLAN     — read code, read replacement API, record baseline, assess complexity
+2. EXECUTE  — swap, update callers, delete old code, prune tests, verify, commit
 ```
+
+**Fallback for high-complexity swaps: Strangler fig**
+Use when >10 callers across multiple crates, complex type conversions, or
+behavioral differences. Add shim alongside old code → verify equivalence →
+swap callers incrementally → delete old code.
 
 ### Phase 1a: Hashing (zero risk)
 
@@ -412,8 +413,8 @@ Phase 3 (crate merge)  ← after API surface is stable
 Phase 4 (idiomatic patterns)  ← ongoing, interleaved
 ```
 
-**Dependency-swap prompts** (`.kiro/prompts/dependency-swap-step*.md`) are used
-for each Phase 1 sub-phase. They encode the strangler-fig methodology.
+**Dependency-swap prompts** (`.kiro/prompts/dependency-swap-{plan,execute}.md`) are used
+for each Phase 1 sub-phase. Direct swap by default; strangler fig for complex cases.
 
 ---
 

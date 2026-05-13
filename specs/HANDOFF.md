@@ -7,7 +7,17 @@ Active work item: **#31 — Crate Restructure (openjd-rs + CLI/library separatio
 See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 (Previous plan in `specs/openjd-integration.md` is superseded — absorbed as Phase 1.)
 
-**Status:** Phase 1b (manifest codec) complete. Ready to begin Phase 1c (S3CheckCache).
+**Status:** Phase 1c (S3CheckCache) complete. Phase 2 (Diff) — deferred (see below).
+
+**Phase 1c result:** Replaced `S3CheckCache` + `S3CheckCacheEntry` with
+`openjd_snapshots::S3CheckCache` (re-export). Deleted ~80 lines of impl,
+`S3CheckCacheEntry` struct, `current_timestamp()` helper. Tests: 364→358
+(pruned 6 that tested openjd internals). CLI: 492/492 unchanged.
+
+**Phase 2 (Diff) decision:** `fast_diff` has no openjd equivalent (filesystem-based).
+`hash_diff` is only ~30 lines and replacing it would require an equally-sized adapter
+to convert `AssetManifest ↔ Snapshot`. Deferred to Phase 4 when `AssetManifest` is
+eliminated and the conversion is free.
 
 **Phase 1b result:** Replaced `AssetManifest::encode()` and `decode_manifest()`
 with `openjd_snapshots::encode_snapshot_v2023` / `decode_v2023`. Tests: 370→364

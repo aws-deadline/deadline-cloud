@@ -621,19 +621,10 @@ async fn upload_input_files_cached_file_skipped_without_s3_call() {
 
     // Pre-populate the S3 check cache
     {
-        let cache = S3CheckCache::new(cache_dir.path().to_str().unwrap()).unwrap();
+        let cache = S3CheckCache::new(cache_dir.path()).unwrap();
         let hash = &manifest.paths[0].hash;
         let cache_key = format!("test-bucket/root-prefix/Data/{hash}.xxh128");
-        cache.put_entry(&deadline_job_attachments::caches::S3CheckCacheEntry {
-            s3_key: cache_key,
-            last_seen_time: format!(
-                "{}",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs_f64()
-            ),
-        });
+        cache.put_entry(&cache_key).unwrap();
     }
 
     let tracker = ProgressTracker::new(ProgressStatus::UploadInProgress, 1, 4, None);
