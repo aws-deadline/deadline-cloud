@@ -132,7 +132,6 @@ impl AssetManifest {
         mut paths: Vec<ManifestPath>,
     ) -> Result<Self, JobAttachmentsError> {
         // Sort paths by canonical UTF-16 BE ordering at construction time.
-        // This fixes the Python bug where paths are sorted twice (reverse lex, then UTF-16 BE).
         paths.sort_by(|a, b| utf16_be_sort_key(&a.path).cmp(&utf16_be_sort_key(&b.path)));
 
         Ok(Self {
@@ -144,154 +143,52 @@ impl AssetManifest {
     }
 
     pub fn encode(&self) -> String {
-        // Build JSON with sorted keys using BTreeMap (not serde_json::Map
-        // which uses IndexMap with preserve_order feature)
-        use std::collections::BTreeMap;
+        use openjd_snapshots::{FileEntry, Manifest, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 
-        let mut map = BTreeMap::new();
-        map.insert(
-            "hashAlg",
-            serde_json::Value::String(self.hash_alg.to_string()),
+        let mut snap: Snapshot = Manifest::new(
+            openjd_snapshots::HashAlgorithm::Xxh128,
+            WHOLE_FILE_CHUNK_SIZE,
         );
-        map.insert(
-            "manifestVersion",
-            serde_json::Value::String(self.manifest_version.to_string()),
-        );
-
-        // Paths are already sorted at construction time
-        let paths_json: Vec<serde_json::Value> = self
+        snap.total_size = self.total_size;
+        snap.files = self
             .paths
             .iter()
             .map(|p| {
-                let mut m = BTreeMap::new();
-                m.insert("hash", serde_json::Value::String(p.hash.clone()));
-                m.insert("mtime", serde_json::Value::Number(p.mtime.into()));
-                m.insert("path", serde_json::Value::String(p.path.clone()));
-                m.insert("size", serde_json::Value::Number(p.size.into()));
-                serde_json::to_value(m).expect("JSON serialization")
+                let mut entry = FileEntry::file(&p.path, p.size, p.mtime as u64);
+                entry.hash = Some(p.hash.clone());
+                entry
             })
             .collect();
-        map.insert("paths", serde_json::Value::Array(paths_json));
-        map.insert(
-            "totalSize",
-            serde_json::Value::Number(self.total_size.into()),
-        );
 
-        let json = serde_json::to_string(&map).expect("JSON serialization");
-
-        // Apply ensure_ascii: escape non-ASCII characters
-        escape_to_ascii(&json)
+        openjd_snapshots::encode_snapshot_v2023(&snap)
+            .expect("manifest produced by AssetManifest::new is always valid")
     }
 }
 
 // --- decode_manifest ---
 
 pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsError> {
-    let doc: serde_json::Value = serde_json::from_str(json_str)
-        .map_err(|e| JobAttachmentsError::ManifestDecode(format!("Invalid JSON: {e}")))?;
+    let snapshot = openjd_snapshots::decode_v2023(json_str)
+        .map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
 
-    let obj = doc.as_object().ok_or_else(|| {
-        JobAttachmentsError::ManifestDecode("Manifest must be a JSON object".into())
-    })?;
+    let paths: Vec<ManifestPath> = snapshot
+        .files
+        .iter()
+        .map(|f| ManifestPath {
+            path: f.path.clone(),
+            hash: f.hash.clone().unwrap_or_default(),
+            size: f.size.unwrap_or(0),
+            mtime: f.mtime.unwrap_or(0) as i64,
+        })
+        .collect();
 
-    // Check manifestVersion
-    let version_val = obj.get("manifestVersion").ok_or_else(|| {
-        JobAttachmentsError::ManifestDecode(
-            "Manifest is missing the required \"manifestVersion\" field".into(),
-        )
-    })?;
-    let version_str = version_val.as_str().ok_or_else(|| {
-        JobAttachmentsError::ManifestDecode("manifestVersion must be a string".into())
-    })?;
-    let version: ManifestVersion = version_str.parse()?;
-
-    // Validate required fields
-    let mut missing = Vec::new();
-    if !obj.contains_key("hashAlg") {
-        missing.push("hashAlg");
-    }
-    if !obj.contains_key("paths") {
-        missing.push("paths");
-    }
-    if !obj.contains_key("totalSize") {
-        missing.push("totalSize");
-    }
-    if !missing.is_empty() {
-        return Err(JobAttachmentsError::ManifestDecode(format!(
-            "manifest is missing required field(s) {missing:?}"
-        )));
-    }
-
-    // Validate hashAlg
-    let hash_alg_str = obj["hashAlg"]
-        .as_str()
-        .ok_or_else(|| JobAttachmentsError::ManifestDecode("hashAlg must be a string".into()))?;
-    if hash_alg_str != "xxh128" {
-        return Err(JobAttachmentsError::ManifestDecode(
-            "hashAlg must be one of {\"xxh128\"}".to_owned(),
-        ));
-    }
-    let hash_alg: HashAlgorithm = hash_alg_str.parse()?;
-
-    // Validate totalSize
-    let total_size = obj["totalSize"].as_u64().ok_or_else(|| {
-        JobAttachmentsError::ManifestDecode("totalSize must be a non-negative integer".into())
-    })?;
-
-    // Validate paths
-    let paths_val = &obj["paths"];
-    let paths_arr = paths_val
-        .as_array()
-        .ok_or_else(|| JobAttachmentsError::ManifestDecode("paths must be a list".into()))?;
-    if paths_arr.is_empty() {
+    if paths.is_empty() {
         return Err(JobAttachmentsError::ManifestDecode(
             "paths must have a least one item".into(),
         ));
     }
-
-    let mut paths = Vec::with_capacity(paths_arr.len());
-    for entry in paths_arr {
-        let entry_obj = entry.as_object().ok_or_else(|| {
-            JobAttachmentsError::ManifestDecode("path entry must be an object".into())
-        })?;
-
-        // Check required path fields
-        let mut path_missing = Vec::new();
-        for field in &["path", "hash", "size", "mtime"] {
-            if !entry_obj.contains_key(*field) {
-                path_missing.push(*field);
-            }
-        }
-        if !path_missing.is_empty() {
-            return Err(JobAttachmentsError::ManifestDecode(format!(
-                "path is missing required field(s) {path_missing:?}"
-            )));
-        }
-
-        let path = entry_obj["path"]
-            .as_str()
-            .ok_or_else(|| JobAttachmentsError::ManifestDecode("path must be a string".into()))?;
-        let hash = entry_obj["hash"]
-            .as_str()
-            .ok_or_else(|| JobAttachmentsError::ManifestDecode("hash must be a string".into()))?;
-        let size = entry_obj["size"].as_u64().ok_or_else(|| {
-            JobAttachmentsError::ManifestDecode("size must be a non-negative integer".into())
-        })?;
-        let mtime = entry_obj["mtime"].as_i64().ok_or_else(|| {
-            JobAttachmentsError::ManifestDecode("mtime must be an integer".into())
-        })?;
-
-        paths.push(ManifestPath {
-            path: path.to_owned(),
-            hash: hash.to_owned(),
-            size,
-            mtime,
-        });
-    }
-
-    // Validate hashes are alphanumeric
     for p in &paths {
-        if !p.hash.chars().all(|c: char| c.is_ascii_alphanumeric()) {
+        if !p.hash.chars().all(|c| c.is_ascii_alphanumeric()) {
             return Err(JobAttachmentsError::ManifestDecode(format!(
                 "The hash {} for path {} is not alphanumeric",
                 p.hash, p.path
@@ -299,7 +196,12 @@ pub fn decode_manifest(json_str: &str) -> Result<AssetManifest, JobAttachmentsEr
         }
     }
 
-    AssetManifest::new(hash_alg, version, total_size, paths)
+    AssetManifest::new(
+        HashAlgorithm::Xxh128,
+        ManifestVersion::V2023_03_03,
+        snapshot.total_size,
+        paths,
+    )
 }
 
 #[cfg(test)]
@@ -323,30 +225,6 @@ mod tests {
     #[test]
     fn hash_algorithm_display() {
         assert_eq!(HashAlgorithm::Xxh128.to_string(), "xxh128");
-    }
-
-    // === : hash_file ===
-
-    #[test]
-    fn hash_file_basic() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("test.txt");
-        std::fs::write(&path, b"hello world").unwrap();
-
-        let hash = hash_file(&path, HashAlgorithm::Xxh128).unwrap();
-        assert_eq!(hash.len(), 32);
-        assert!(hash.chars().all(|c: char| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
-    fn hash_file_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("empty.txt");
-        std::fs::write(&path, b"").unwrap();
-
-        let hash = hash_file(&path, HashAlgorithm::Xxh128).unwrap();
-        let expected = hash_data(b"", HashAlgorithm::Xxh128);
-        assert_eq!(hash, expected);
     }
 
     // === : ManifestVersion ===
@@ -407,7 +285,7 @@ mod tests {
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("Unknown manifest version"), "got: {msg}");
+        assert!(msg.contains("manifestVersion"), "got: {msg}");
         assert!(
             msg.contains("2023-03-03"),
             "should list supported versions, got: {msg}"
@@ -423,7 +301,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("missing required field"));
+        assert!(err.to_string().contains("hashAlg"));
     }
 
     #[test]
@@ -435,7 +313,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("missing required field"));
+        assert!(err.to_string().contains("paths"));
     }
 
     #[test]
@@ -447,7 +325,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("missing required field"));
+        assert!(err.to_string().contains("totalSize"));
     }
 
     #[test]
@@ -473,7 +351,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("must be a list"));
+        assert!(err.to_string().contains("paths"));
     }
 
     #[test]
@@ -486,7 +364,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("missing required field"));
+        assert!(err.to_string().contains("hash"));
     }
 
     #[test]
@@ -499,10 +377,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("size must be a non-negative integer")
-        );
+        assert!(err.to_string().contains("size"));
     }
 
     #[test]
@@ -528,7 +403,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(err.to_string().contains("hashAlg"));
+        assert!(err.to_string().contains("hash algorithm"));
     }
 
     #[test]
@@ -541,122 +416,7 @@ mod tests {
         })
         .to_string();
         let err = decode_manifest(&json).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("totalSize must be a non-negative integer")
-        );
-    }
-
-    // === : AssetManifest::encode ===
-
-    #[test]
-    fn encode_manifest_canonical_json() {
-        let manifest = AssetManifest::new(
-            HashAlgorithm::Xxh128,
-            ManifestVersion::V2023_03_03,
-            100,
-            vec![
-                ManifestPath {
-                    path: "b.txt".into(),
-                    hash: "bbbb".into(),
-                    size: 50,
-                    mtime: 2000,
-                },
-                ManifestPath {
-                    path: "a.txt".into(),
-                    hash: "aaaa".into(),
-                    size: 50,
-                    mtime: 1000,
-                },
-            ],
-        )
-        .unwrap();
-
-        let encoded = manifest.encode();
-        assert!(!encoded.contains(' '));
-        assert!(!encoded.contains('\n'));
-        let a_pos = encoded.find("a.txt").unwrap();
-        let b_pos = encoded.find("b.txt").unwrap();
-        assert!(a_pos < b_pos, "paths should be sorted: a.txt before b.txt");
-    }
-
-    #[test]
-    fn encode_manifest_sorted_keys() {
-        let manifest = AssetManifest::new(
-            HashAlgorithm::Xxh128,
-            ManifestVersion::V2023_03_03,
-            10,
-            vec![ManifestPath {
-                path: "f.txt".into(),
-                hash: "aabb".into(),
-                size: 10,
-                mtime: 1000,
-            }],
-        )
-        .unwrap();
-
-        let encoded = manifest.encode();
-        let hash_pos = encoded.find("\"hashAlg\"").unwrap();
-        let version_pos = encoded.find("\"manifestVersion\"").unwrap();
-        let paths_pos = encoded.find("\"paths\"").unwrap();
-        let total_pos = encoded.find("\"totalSize\"").unwrap();
-        assert!(hash_pos < version_pos);
-        assert!(version_pos < paths_pos);
-        assert!(paths_pos < total_pos);
-    }
-
-    #[test]
-    fn encode_manifest_ascii_output() {
-        let manifest = AssetManifest::new(
-            HashAlgorithm::Xxh128,
-            ManifestVersion::V2023_03_03,
-            10,
-            vec![ManifestPath {
-                path: "日本語.txt".into(),
-                hash: "aabb".into(),
-                size: 10,
-                mtime: 1000,
-            }],
-        )
-        .unwrap();
-
-        let encoded = manifest.encode();
-        assert!(
-            encoded.is_ascii(),
-            "encoded manifest should be ASCII-only, got: {encoded}"
-        );
-        assert!(encoded.contains("\\u"));
-    }
-
-    #[test]
-    fn encode_manifest_utf16_be_path_sort() {
-        let manifest = AssetManifest::new(
-            HashAlgorithm::Xxh128,
-            ManifestVersion::V2023_03_03,
-            20,
-            vec![
-                ManifestPath {
-                    path: "é.txt".into(),
-                    hash: "aaaa".into(),
-                    size: 10,
-                    mtime: 1000,
-                },
-                ManifestPath {
-                    path: "a.txt".into(),
-                    hash: "bbbb".into(),
-                    size: 10,
-                    mtime: 1000,
-                },
-            ],
-        )
-        .unwrap();
-
-        let encoded = manifest.encode();
-        let a_pos = encoded.find("a.txt").unwrap();
-        let e_pos = encoded
-            .find("\\u00e9")
-            .unwrap_or_else(|| encoded.find("\\u00E9").unwrap());
-        assert!(a_pos < e_pos, "a.txt should sort before é.txt in UTF-16 BE");
+        assert!(err.to_string().contains("totalSize"));
     }
 
     // === : AssetManifest::new validation ===

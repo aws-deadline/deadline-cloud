@@ -431,10 +431,11 @@ After restructure, `deadline-python-bindings`:
 
 | Crate | Tests | Status |
 |-------|-------|--------|
-| `deadline-job-attachments` | 375 | ✅ All pass |
+| `deadline-job-attachments` | 364 | ✅ All pass |
 | `deadline-cli` | 492 | ✅ All pass |
 
-Phase 1 scope: 31 (asset_manifests) + 18 (caches) + 8 (diff) + 37 (path_mapping) = 94 tests directly affected.
+Phase 1a (hashing): complete. Phase 1b (manifest codec): complete.
+Phase 1 scope: 18 (caches) + 8 (diff) + 37 (path_mapping) = 63 tests remaining.
 
 ---
 
@@ -443,3 +444,4 @@ Phase 1 scope: 31 (asset_manifests) + 18 (caches) + 8 (diff) + 37 (path_mapping)
 1. **HashCache mtime format:** Fix openjd-rs or accept cache invalidation? Deferred to Phase 4.
 2. **Worker agent crate boundary:** Keep `deadline-cloud::attachments` as separate sub-crate or feature-gate? Decide after Phase 4.
 3. **openjd-model for parameter validation:** Use it or keep deferring to server-side validation? Low priority.
+4. **Vestigial wrapper sweep (Phase 4):** As openjd-rs replaces internals, many functions collapse into trivial one-liner delegates (e.g., `hash_data`, `hash_file`, and soon `encode`/`decode_manifest`). During Phase 4 (idiomatic patterns), audit all remaining thin wrappers and either inline them at call sites or re-export the openjd function directly. Don't carry dead indirection into the merged crate.

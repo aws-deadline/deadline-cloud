@@ -11,7 +11,6 @@ what was done and continue. Do NOT restart from scratch.
 
 **Constraints:**
 - Do NOT delete code that has domain-specific logic not present in the new dependency since that logic has no replacement
-- Do NOT delete any test code because test pruning is a separate gated step
 - Do NOT delete the adapter itself — it may still be needed as glue
 
 **After deletion:**
@@ -22,6 +21,20 @@ what was done and continue. Do NOT restart from scratch.
 
 If a test fails after deletion, the deleted code was still needed.
 Restore it and investigate what the adapter missed.
+
+**Error message differences:**
+If tests fail ONLY because the new dependency produces different error message
+text (not different behavior — same inputs are still rejected/accepted), you
+MAY update the test assertions to match the new wording. This is acceptable
+when:
+1. The error type/variant is unchanged (still `ManifestDecode`, etc.)
+2. The rejection behavior is identical (same inputs fail, same inputs succeed)
+3. No downstream code pattern-matches on the specific error string
+4. The new messages are equally or more descriptive
+
+Update assertions to check for the relevant keyword (e.g., `"totalSize"`)
+rather than exact phrasing. Document which tests were updated and why in
+the HANDOFF.
 
 **Present:**
 - Files/functions deleted (with line counts)

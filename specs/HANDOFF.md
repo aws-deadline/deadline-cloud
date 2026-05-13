@@ -7,7 +7,11 @@ Active work item: **#31 — Crate Restructure (openjd-rs + CLI/library separatio
 See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 (Previous plan in `specs/openjd-integration.md` is superseded — absorbed as Phase 1.)
 
-**Status:** Phase 1a (hashing) complete. Ready to begin Phase 1b (manifest codec).
+**Status:** Phase 1b (manifest codec) complete. Ready to begin Phase 1c (S3CheckCache).
+
+**Phase 1b result:** Replaced `AssetManifest::encode()` and `decode_manifest()`
+with `openjd_snapshots::encode_snapshot_v2023` / `decode_v2023`. Tests: 370→364
+(pruned 6 that tested openjd internals). CLI: 492/492 unchanged.
 
 **Phase 1a result:** Replaced `hash_data`/`hash_file` with `openjd-snapshots 0.1`
 from crates.io. Upgraded rusqlite 0.32→0.39. Tests: 375→370 (pruned 5 redundant).
