@@ -1285,7 +1285,7 @@ async fn sync_output_downloads_files_to_disk() {
     s3::mock_s3_list_objects(&harness.server, &[manifest_key]).await;
 
     // Build a manifest JSON with one file
-    let file_hash = "aabbccdd11223344aabbccdd11223344";
+    let file_hash = "b5e9c1ad071b3e7fc779cfaa5e523818";
     let manifest_json = serde_json::to_string(&json!({
         "hashAlg": "xxh128",
         "manifestVersion": "2023-03-03",
@@ -1531,7 +1531,7 @@ async fn sync_output_session_action_count_excludes_no_output_actions() {
     let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-mix/step-002/task-002/2024-06-15T10:04:00Z_sessionaction-mix1-1/abc.manifest";
     s3::mock_s3_list_objects(&harness.server, &[manifest_key]).await;
 
-    let file_hash = "aabbccdd11223344aabbccdd11223344";
+    let file_hash = "b5e9c1ad071b3e7fc779cfaa5e523818";
     let manifest_json = serde_json::to_string(&json!({
         "hashAlg": "xxh128",
         "manifestVersion": "2023-03-03",
@@ -1708,7 +1708,7 @@ async fn sync_output_warning_for_session_actions_without_manifests() {
     let manifest_key = "DeadlineCloud/Manifests/farm-abc/queue-aaa/job-warn/step-002/task-002/2024-06-15T10:04:00Z_sessionaction-w1-1/abc.manifest";
     s3::mock_s3_list_objects(&harness.server, &[manifest_key]).await;
 
-    let file_hash = "aabbccdd11223344aabbccdd11223344";
+    let file_hash = "b5e9c1ad071b3e7fc779cfaa5e523818";
     let manifest_json = serde_json::to_string(&json!({
         "hashAlg": "xxh128",
         "manifestVersion": "2023-03-03",

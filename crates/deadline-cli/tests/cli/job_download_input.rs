@@ -60,8 +60,8 @@ fn input_manifest_json() -> String {
         "hashAlg": "xxh128",
         "totalSize": 200,
         "paths": [
-            {"path": "scene.ma", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
-            {"path": "textures/brick.png", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000}
+            {"path": "scene.ma", "hash": "dbdf7a9ac9c917d6a40c2c4c915a5f47", "size": 100, "mtime": 1_700_000_000},
+            {"path": "textures/brick.png", "hash": "dbdf7a9ac9c917d6a40c2c4c915a5f47", "size": 100, "mtime": 1_700_000_000}
         ]
     })
     .to_string()
@@ -448,9 +448,9 @@ async fn job_download_input_multiple_include_patterns_ored() {
         "hashAlg": "xxh128",
         "totalSize": 300,
         "paths": [
-            {"path": "scene.ma", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
-            {"path": "textures/brick.png", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000},
-            {"path": "data/cache.bin", "hash": "111222333444555666777888999aaabbb", "size": 100, "mtime": 1_700_000_000}
+            {"path": "scene.ma", "hash": "917e1274274fc195b27a2d2388d9568c", "size": 100, "mtime": 1_700_000_000},
+            {"path": "textures/brick.png", "hash": "917e1274274fc195b27a2d2388d9568c", "size": 100, "mtime": 1_700_000_000},
+            {"path": "data/cache.bin", "hash": "917e1274274fc195b27a2d2388d9568c", "size": 100, "mtime": 1_700_000_000}
         ]
     })
     .to_string();
@@ -514,7 +514,7 @@ async fn job_download_input_downloads_all_input_files() {
     setup_input_manifest_mocks(&harness, output_root).await;
 
     // Mock S3 GetObject for the actual file downloads (CAS path)
-    s3::mock_s3_get_object_catchall(&harness.server, b"file-content", &[]).await;
+    s3::mock_s3_get_object_catchall(&harness.server, b"png-content", &[]).await;
 
     let output = harness
         .cli(&[

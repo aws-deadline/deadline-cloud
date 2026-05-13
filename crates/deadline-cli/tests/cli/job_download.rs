@@ -1021,7 +1021,7 @@ async fn job_download_output_include_glob_filters_matching_files() {
         "hashAlg": "xxh128",
         "totalSize": 200,
         "paths": [
-            {"path": "renders/frame_001.exr", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
+            {"path": "renders/frame_001.exr", "hash": "3eb2a779c2d6840a4345d8958d7b055c", "size": 100, "mtime": 1_700_000_000},
             {"path": "logs/render.log", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000}
         ]
     })
@@ -1096,9 +1096,9 @@ async fn job_download_output_include_multiple_patterns_ored() {
         "hashAlg": "xxh128",
         "totalSize": 300,
         "paths": [
-            {"path": "renders/frame_001.exr", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
+            {"path": "renders/frame_001.exr", "hash": "917e1274274fc195b27a2d2388d9568c", "size": 100, "mtime": 1_700_000_000},
             {"path": "logs/render.log", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000},
-            {"path": "scripts/setup.mel", "hash": "111222333444555666777888999aaabbb", "size": 100, "mtime": 1_700_000_000}
+            {"path": "scripts/setup.mel", "hash": "917e1274274fc195b27a2d2388d9568c", "size": 100, "mtime": 1_700_000_000}
         ]
     })
     .to_string();
@@ -1166,7 +1166,7 @@ async fn job_download_output_match_paths_by_job() {
         "hashAlg": "xxh128",
         "totalSize": 200,
         "paths": [
-            {"path": "renders/frame_001.exr", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
+            {"path": "renders/frame_001.exr", "hash": "05173a719bd5baad18b59f06dfac3afe", "size": 100, "mtime": 1_700_000_000},
             {"path": "logs/render.log", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000}
         ]
     })
@@ -1235,7 +1235,7 @@ async fn job_download_output_include_relative_path_prepends_star() {
         "hashAlg": "xxh128",
         "totalSize": 200,
         "paths": [
-            {"path": "renders/frame_001.exr", "hash": "aaa111bbb222ccc333ddd444eee55566", "size": 100, "mtime": 1_700_000_000},
+            {"path": "renders/frame_001.exr", "hash": "05173a719bd5baad18b59f06dfac3afe", "size": 100, "mtime": 1_700_000_000},
             {"path": "renders/frame_002.exr", "hash": "fff666eee555ddd444ccc333bbb22211", "size": 100, "mtime": 1_700_000_000}
         ]
     })

@@ -11,7 +11,7 @@ use deadline_job_attachments::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
 };
 use deadline_job_attachments::download::{
-    download_file, download_files_from_manifests, get_output_manifests_by_asset_root,
+    download_files_from_manifests, get_output_manifests_by_asset_root,
     merge_asset_manifests,
 };
 use deadline_job_attachments::models::{FileConflictResolution, JobAttachmentS3Settings};
@@ -99,7 +99,7 @@ async fn mock_s3_get_object(server: &MockServer, body: &[u8]) {
 #[test]
 fn merge_single_manifest_returns_same() {
     let manifest =
-        make_manifest_no_files(&[("file1.txt", "aabbccdd11223344aabbccdd11223344", 100)]);
+        make_manifest_no_files(&[("file1.txt", "b2852e22b53c811e73805beca166f642", 100)]);
     let result = merge_asset_manifests(&[manifest]).unwrap();
     assert!(result.is_some());
     let merged = result.unwrap();
@@ -110,7 +110,7 @@ fn merge_single_manifest_returns_same() {
 
 #[test]
 fn merge_two_manifests_non_overlapping_paths() {
-    let m1 = make_manifest_no_files(&[("file1.txt", "aabbccdd11223344aabbccdd11223344", 100)]);
+    let m1 = make_manifest_no_files(&[("file1.txt", "b2852e22b53c811e73805beca166f642", 100)]);
     let m2 = make_manifest_no_files(&[("file2.txt", "11223344aabbccdd11223344aabbccdd", 200)]);
     let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
     assert_eq!(result.paths.len(), 2);
@@ -138,7 +138,7 @@ fn merge_empty_list_returns_ok_none() {
 
 #[test]
 fn merge_single_manifest_returns_ok_some() {
-    let manifest = make_manifest_no_files(&[("a.txt", "aabbccdd11223344aabbccdd11223344", 10)]);
+    let manifest = make_manifest_no_files(&[("a.txt", "b2852e22b53c811e73805beca166f642", 10)]);
     // Should return Result<Option<...>>, not bare Option.
     let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[manifest]);
     let merged = result.unwrap().unwrap();
@@ -151,7 +151,7 @@ fn merge_different_hash_algorithms_returns_error() {
     // exists. When a second algorithm is added, this test should use two
     // different algorithms. For now, we test the function accepts matching
     // algorithms without error.
-    let m1 = make_manifest_no_files(&[("a.txt", "aabbccdd11223344aabbccdd11223344", 10)]);
+    let m1 = make_manifest_no_files(&[("a.txt", "b2852e22b53c811e73805beca166f642", 10)]);
     let m2 = make_manifest_no_files(&[("b.txt", "11223344aabbccdd11223344aabbccdd", 20)]);
     // Same algorithm — should return Ok(Some(...))
     let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[m1, m2]);
@@ -175,377 +175,6 @@ fn merge_recalculates_total_size_after_dedup() {
 // =====================================================================
 
 #[tokio::test]
-async fn download_file_happy_path_creates_file_and_sets_mtime() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-    let content = b"hello world";
-
-    mock_s3_get_object(&server, content).await;
-
-    let manifest_path = ManifestPath {
-        path: "subdir/test.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: content.len() as u64,
-        mtime: 1_700_000_000_000_000, // microseconds
-    };
-
-    let (bytes, local_path) = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::CreateCopy,
-        &Default::default(),
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(bytes, content.len() as u64);
-    let path = local_path.unwrap();
-    assert!(path.exists());
-    assert_eq!(fs::read(&path).unwrap(), content);
-}
-
-#[tokio::test]
-async fn download_file_creates_parent_directories() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-
-    mock_s3_get_object(&server, b"data").await;
-
-    let manifest_path = ManifestPath {
-        path: "deep/nested/dir/file.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: 4,
-        mtime: 1_700_000_000_000_000,
-    };
-
-    let (_, local_path) = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::CreateCopy,
-        &Default::default(),
-    )
-    .await
-    .unwrap();
-
-    let path = local_path.unwrap();
-    assert!(path.exists());
-    assert!(path.starts_with(download_dir.path().join("deep/nested/dir")));
-}
-
-#[tokio::test]
-async fn download_file_404_retries_without_algorithm_suffix() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-
-    // First request (with .xxh128 suffix) returns 404
-    Mock::given(method("GET"))
-        .and(path_regex(r".*\.xxh128$"))
-        .respond_with(
-            ResponseTemplate::new(404)
-                .set_body_string(r#"<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>"#),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    // Second request (without suffix) returns 200
-    Mock::given(method("GET"))
-        .and(path_regex(r".*/aabbccdd11223344aabbccdd11223344$"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"fallback content".to_vec()))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let manifest_path = ManifestPath {
-        path: "file.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: 16,
-        mtime: 1_700_000_000_000_000,
-    };
-
-    let (bytes, local_path) = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::CreateCopy,
-        &Default::default(),
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(bytes, 16);
-    let path = local_path.unwrap();
-    assert_eq!(fs::read_to_string(&path).unwrap(), "fallback content");
-}
-
-#[tokio::test]
-async fn download_file_404_on_both_attempts_returns_error() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-
-    Mock::given(method("GET"))
-        .respond_with(
-            ResponseTemplate::new(404)
-                .set_body_string(r#"<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>"#),
-        )
-        .mount(&server)
-        .await;
-
-    let manifest_path = ManifestPath {
-        path: "file.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: 10,
-        mtime: 1_700_000_000_000_000,
-    };
-
-    let err = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::CreateCopy,
-        &Default::default(),
-    )
-    .await
-    .unwrap_err();
-
-    let msg = err.to_string();
-    assert!(msg.contains("404"), "expected 404 in error: {msg}");
-}
-
-#[tokio::test]
-async fn download_file_403_non_kms_returns_get_object_guidance() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-
-    Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(403).set_body_string(
-            r#"<?xml version="1.0"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"#,
-        ))
-        .mount(&server)
-        .await;
-
-    let manifest_path = ManifestPath {
-        path: "file.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: 10,
-        mtime: 1_700_000_000_000_000,
-    };
-
-    let err = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::CreateCopy,
-        &Default::default(),
-    )
-    .await
-    .unwrap_err();
-
-    let msg = err.to_string();
-    assert!(
-        msg.contains("s3:GetObject"),
-        "expected GetObject guidance: {msg}"
-    );
-}
-
-#[tokio::test]
-async fn download_file_403_kms_returns_decrypt_guidance() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-
-    Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(403).set_body_string(
-            r#"<?xml version="1.0"?><Error><Code>AccessDenied</Code><Message>kms:Decrypt access denied</Message></Error>"#,
-        ))
-        .mount(&server)
-        .await;
-
-    let manifest_path = ManifestPath {
-        path: "file.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: 10,
-        mtime: 1_700_000_000_000_000,
-    };
-
-    let err = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::CreateCopy,
-        &Default::default(),
-    )
-    .await
-    .unwrap_err();
-
-    let msg = err.to_string();
-    assert!(msg.contains("kms:Decrypt"), "expected KMS guidance: {msg}");
-}
-
-#[tokio::test]
-async fn download_file_skip_existing_returns_none_path() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-
-    // Create the file locally first
-    let local_file = download_dir.path().join("existing.txt");
-    fs::write(&local_file, b"original").unwrap();
-
-    let manifest_path = ManifestPath {
-        path: "existing.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: 8,
-        mtime: 1_700_000_000_000_000,
-    };
-
-    let (bytes, local_path) = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::Skip,
-        &Default::default(),
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(bytes, 8);
-    assert!(local_path.is_none());
-    // Original file unchanged
-    assert_eq!(fs::read_to_string(&local_file).unwrap(), "original");
-}
-
-#[tokio::test]
-async fn download_file_overwrite_existing_replaces_content() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-
-    // Create the file locally first
-    let local_file = download_dir.path().join("existing.txt");
-    fs::write(&local_file, b"original").unwrap();
-
-    mock_s3_get_object(&server, b"new content").await;
-
-    let manifest_path = ManifestPath {
-        path: "existing.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: 11,
-        mtime: 1_700_000_000_000_000,
-    };
-
-    let (_, local_path) = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::Overwrite,
-        &Default::default(),
-    )
-    .await
-    .unwrap();
-
-    let path = local_path.unwrap();
-    assert_eq!(fs::read_to_string(&path).unwrap(), "new content");
-}
-
-#[tokio::test]
-async fn download_file_create_copy_generates_unique_name() {
-    let server = MockServer::start().await;
-    let s3_client = build_s3_client(&server).await;
-    let download_dir = TempDir::new().unwrap();
-
-    // Create the file locally first
-    let local_file = download_dir.path().join("file.txt");
-    fs::write(&local_file, b"original").unwrap();
-
-    mock_s3_get_object(&server, b"copy content").await;
-
-    let manifest_path = ManifestPath {
-        path: "file.txt".into(),
-        hash: "aabbccdd11223344aabbccdd11223344".into(),
-        size: 12,
-        mtime: 1_700_000_000_000_000,
-    };
-
-    let (_, local_path) = download_file(
-        &manifest_path,
-        HashAlgorithm::Xxh128,
-        download_dir.path().to_str().unwrap(),
-        &s3_client,
-        "test-bucket",
-        Some("root-prefix/Data"),
-        "123456789012",
-        None,
-        FileConflictResolution::CreateCopy,
-        &Default::default(),
-    )
-    .await
-    .unwrap();
-
-    let path = local_path.unwrap();
-    // Should be a different path than the original
-    assert_ne!(path, local_file);
-    // Original unchanged
-    assert_eq!(fs::read_to_string(&local_file).unwrap(), "original");
-    // Copy has new content
-    assert_eq!(fs::read_to_string(&path).unwrap(), "copy content");
-    // Copy name follows pattern: "file (1).txt"
-    let name = path.file_name().unwrap().to_str().unwrap();
-    assert!(name.contains("(1)"), "expected copy suffix in: {name}");
-}
-
-// =====================================================================
-//  cases 1-7: download_files_from_manifests
-// =====================================================================
-
-#[tokio::test]
 async fn download_files_from_manifests_single_manifest_downloads_all() {
     let server = MockServer::start().await;
     let s3_client = build_s3_client(&server).await;
@@ -554,7 +183,7 @@ async fn download_files_from_manifests_single_manifest_downloads_all() {
 
     mock_s3_get_object(&server, b"file content").await;
 
-    let manifest = make_manifest_no_files(&[("a.txt", "aabbccdd11223344aabbccdd11223344", 12)]);
+    let manifest = make_manifest_no_files(&[("a.txt", "b2852e22b53c811e73805beca166f642", 12)]);
 
     let mut manifests_by_root = HashMap::new();
     manifests_by_root.insert(root.clone(), manifest);
@@ -584,8 +213,8 @@ async fn download_files_from_manifests_multiple_roots() {
 
     mock_s3_get_object(&server, b"content").await;
 
-    let m1 = make_manifest_no_files(&[("f1.txt", "aabbccdd11223344aabbccdd11223344", 7)]);
-    let m2 = make_manifest_no_files(&[("f2.txt", "11223344aabbccdd11223344aabbccdd", 7)]);
+    let m1 = make_manifest_no_files(&[("f1.txt", "917e1274274fc195b27a2d2388d9568c", 7)]);
+    let m2 = make_manifest_no_files(&[("f2.txt", "917e1274274fc195b27a2d2388d9568c", 7)]);
 
     let mut manifests_by_root = HashMap::new();
     manifests_by_root.insert(root1.path().to_str().unwrap().to_owned(), m1);
@@ -618,7 +247,7 @@ async fn download_files_from_manifests_callback_cancel_returns_error() {
     mock_s3_get_object(&server, b"data").await;
 
     let manifest = make_manifest_no_files(&[
-        ("a.txt", "aabbccdd11223344aabbccdd11223344", 4),
+        ("a.txt", "b2852e22b53c811e73805beca166f642", 4),
         ("b.txt", "11223344aabbccdd11223344aabbccdd", 4),
     ]);
 
@@ -656,7 +285,7 @@ async fn download_files_from_manifests_skip_existing_tracks_skipped() {
     fs::write(download_dir.path().join("existing.txt"), b"old").unwrap();
 
     let manifest =
-        make_manifest_no_files(&[("existing.txt", "aabbccdd11223344aabbccdd11223344", 3)]);
+        make_manifest_no_files(&[("existing.txt", "b2852e22b53c811e73805beca166f642", 3)]);
 
     let mut manifests_by_root = HashMap::new();
     manifests_by_root.insert(root, manifest);

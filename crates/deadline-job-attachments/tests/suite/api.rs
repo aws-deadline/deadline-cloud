@@ -78,12 +78,12 @@ fn read_manifests_two_valid_files_returns_map() {
     let p1 = write_manifest_file(
         dir.path(),
         "manifest_a.manifest",
-        &[("file1.txt", "aabbccdd11223344aabbccdd11223344", 100)],
+        &[("file1.txt", "c044be4073bb71f1340036b3f23aa86d", 100)],
     );
     let p2 = write_manifest_file(
         dir.path(),
         "manifest_b.manifest",
-        &[("file2.txt", "eeff00112233445566778899aabbccdd", 200)],
+        &[("file2.txt", "c044be4073bb71f1340036b3f23aa86d", 200)],
     );
 
     let result = read_manifests(&[p1, p2]).unwrap();
@@ -99,7 +99,7 @@ fn read_manifests_one_invalid_path_errors() {
     let p1 = write_manifest_file(
         dir.path(),
         "valid.manifest",
-        &[("f.txt", "aabbccdd11223344aabbccdd11223344", 10)],
+        &[("f.txt", "c044be4073bb71f1340036b3f23aa86d", 10)],
     );
     let bad = dir
         .path()
@@ -285,12 +285,12 @@ async fn attachment_download_with_path_mapping_rules() {
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{hash1}_input"),
-        &[("a.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("a.txt", "b5e9c1ad071b3e7fc779cfaa5e523818", 5)],
     );
     let p2 = write_manifest_file(
         dir.path(),
         &format!("{hash2}_input"),
-        &[("b.txt", "eeff00112233445566778899aabbccdd", 5)],
+        &[("b.txt", "b5e9c1ad071b3e7fc779cfaa5e523818", 5)],
     );
 
     // Write path mapping rules file
@@ -341,7 +341,7 @@ async fn attachment_download_no_matching_rule_uses_cwd() {
     let p1 = write_manifest_file(
         dir.path(),
         &manifest_name,
-        &[("a.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("a.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
 
     let server = MockServer::start().await;
@@ -378,7 +378,7 @@ async fn attachment_download_no_rules_downloads_to_cwd() {
     let p1 = write_manifest_file(
         dir.path(),
         &manifest_name,
-        &[("x.txt", "aabbccdd11223344aabbccdd11223344", 3)],
+        &[("x.txt", "06b05ab6733a618578af5f94892f3950", 3)],
     );
 
     let server = MockServer::start().await;
@@ -440,12 +440,12 @@ async fn attachment_download_duplicate_destination_errors() {
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{hash}_input1"),
-        &[("a.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("a.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
     let p2 = write_manifest_file(
         dir.path(),
         &format!("{hash}_input2"),
-        &[("b.txt", "eeff00112233445566778899aabbccdd", 5)],
+        &[("b.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
 
     let rules = serde_json::json!([{
@@ -485,7 +485,7 @@ async fn attachment_download_malformed_s3_uri_errors() {
     let p1 = write_manifest_file(
         dir.path(),
         "m.manifest",
-        &[("f.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("f.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
 
     let server = MockServer::start().await;
@@ -596,7 +596,7 @@ async fn attachment_upload_both_rules_and_dirs_errors() {
     let p1 = write_manifest_file(
         dir.path(),
         "m.manifest",
-        &[("f.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("f.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
     let rules_path = dir.path().join("rules.json");
     fs::write(&rules_path, "[]").unwrap();
@@ -633,7 +633,7 @@ async fn attachment_upload_neither_rules_nor_dirs_errors() {
     let p1 = write_manifest_file(
         dir.path(),
         "m.manifest",
-        &[("f.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("f.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
 
     let server = MockServer::start().await;
@@ -670,7 +670,7 @@ async fn attachment_upload_no_matching_rule_errors() {
     let p1 = write_manifest_file(
         dir.path(),
         "completely_unrelated_name",
-        &[("f.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("f.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
 
     let server = MockServer::start().await;
@@ -731,7 +731,7 @@ async fn attachment_upload_malformed_s3_uri_errors() {
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{root_hash}_input"),
-        &[("f.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("f.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
 
     let server = MockServer::start().await;
@@ -765,7 +765,7 @@ async fn attachment_upload_invalid_root_dir_errors() {
     let p1 = write_manifest_file(
         dir.path(),
         "m.manifest",
-        &[("f.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("f.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
 
     let server = MockServer::start().await;
@@ -804,7 +804,7 @@ async fn attachment_download_parses_s3_uri_into_bucket_and_prefix() {
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{dest_hash}_input"),
-        &[("a.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("a.txt", "c044be4073bb71f1340036b3f23aa86d", 5)],
     );
 
     let rules = serde_json::json!([{
@@ -852,7 +852,7 @@ async fn attachment_download_conflict_resolution_create_copy() {
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{hash}_input"),
-        &[("existing.txt", "aabbccdd11223344aabbccdd11223344", 5)],
+        &[("existing.txt", "413485f7969e1fc938f86684549910dc", 5)],
     );
 
     // Pre-create the file so conflict resolution triggers
@@ -911,12 +911,12 @@ async fn attachment_download_hash_match_selects_correct_destination() {
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{hash_a}_input"),
-        &[("file_a.txt", "aabbccdd11223344aabbccdd11223344", 3)],
+        &[("file_a.txt", "06b05ab6733a618578af5f94892f3950", 3)],
     );
     let p2 = write_manifest_file(
         dir.path(),
         &format!("{hash_b}_input"),
-        &[("file_b.txt", "eeff00112233445566778899aabbccdd", 3)],
+        &[("file_b.txt", "06b05ab6733a618578af5f94892f3950", 3)],
     );
 
     let rules = serde_json::json!([

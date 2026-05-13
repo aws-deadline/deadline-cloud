@@ -5,17 +5,17 @@
 //! retrieval grouped by asset root.
 
 use std::collections::HashMap;
-use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 use crate::errors::JobAttachmentsError;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 
 use crate::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, decode_manifest,
+    AssetManifest, ManifestPath, ManifestVersion, decode_manifest,
 };
+#[cfg(test)]
+use crate::asset_manifests::HashAlgorithm;
 use crate::models::{Attachments, FileConflictResolution, JobAttachmentS3Settings};
 use crate::progress_tracker::{
     DownloadSummaryStatistics, ProgressReportMetadata, ProgressStatus, ProgressTracker,
@@ -23,8 +23,6 @@ use crate::progress_tracker::{
 
 /// Shared state for `CreateCopy` collision tracking across concurrent downloads.
 /// Maps local file path string → highest copy number used.
-pub type CollisionState = Arc<Mutex<HashMap<String, i32>>>;
-
 // ---------------------------------------------------------------------------
 // Path traversal validation
 // ---------------------------------------------------------------------------
@@ -75,170 +73,6 @@ fn normalize_path(path: &Path) -> PathBuf {
 // Helper: S3 error handling (matches upload patterns exactly)
 // ---------------------------------------------------------------------------
 
-fn s3_download_error(
-    status_code: u16,
-    raw: &str,
-    s3_bucket: &str,
-    s3_key: &str,
-    local_path: &Path,
-) -> JobAttachmentsError {
-    match status_code {
-        403 => {
-            let guidance = if raw.contains("kms:") {
-                "Forbidden or Access denied. Please check your AWS credentials and Job Attachments S3 bucket \
-                 encryption settings. If a customer-managed KMS key is set, confirm that your AWS IAM Role or \
-                 User has the 'kms:Decrypt' and 'kms:DescribeKey' permissions for the key used to encrypt the bucket."
-            } else {
-                "Forbidden or Access denied. Please check your AWS credentials, and ensure that \
-                 your AWS IAM Role or User has the 's3:GetObject' permission for this bucket. "
-            };
-            JobAttachmentsError::S3Client {
-                action: "downloading file".into(),
-                status_code: 403,
-                bucket: s3_bucket.into(),
-                key: s3_key.into(),
-                message: Some(format!(
-                    "{guidance} {raw} (Failed to download the file to {})",
-                    local_path.display()
-                )),
-            }
-        }
-        404 => JobAttachmentsError::S3Client {
-            action: "downloading file".into(),
-            status_code: 404,
-            bucket: s3_bucket.into(),
-            key: s3_key.into(),
-            message: Some(format!(
-                "Not found. Please check your bucket name and object key, \
-                 and ensure that they exist in the AWS account. {raw} \
-                 (Failed to download the file to {})",
-                local_path.display()
-            )),
-        },
-        408 => JobAttachmentsError::S3Client {
-            action: "downloading file".into(),
-            status_code: 408,
-            bucket: s3_bucket.into(),
-            key: s3_key.into(),
-            message: Some(format!(
-                "Request timeout. Please consider retrying later, or ensure \
-                 your network connection is stable. {raw}"
-            )),
-        },
-        500 => JobAttachmentsError::S3Client {
-            action: "downloading file".into(),
-            status_code: 500,
-            bucket: s3_bucket.into(),
-            key: s3_key.into(),
-            message: Some(format!(
-                "Internal server error. It might be an issue on AWS's side; \
-                 please consider retrying later or contacting AWS support. {raw}"
-            )),
-        },
-        503 => JobAttachmentsError::S3Client {
-            action: "downloading file".into(),
-            status_code: 503,
-            bucket: s3_bucket.into(),
-            key: s3_key.into(),
-            message: Some(format!(
-                "Service unavailable. AWS S3 might be down or experiencing \
-                 high traffic. Please consider retrying after some time. {raw}"
-            )),
-        },
-        _ => JobAttachmentsError::S3BotoCore {
-            action: "downloading file".into(),
-            details: raw.to_owned(),
-        },
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Helper: S3 GetObject with error handling
-// ---------------------------------------------------------------------------
-
-/// Downloads from S3 and streams directly to a file. Avoids buffering
-/// the entire file in memory.
-async fn s3_stream_to_file(
-    s3_client: &S3Client,
-    s3_bucket: &str,
-    s3_key: &str,
-    account_id: &str,
-    local_path: &Path,
-) -> Result<(), JobAttachmentsError> {
-    let result = s3_client
-        .get_object()
-        .bucket(s3_bucket)
-        .key(s3_key)
-        .expected_bucket_owner(account_id)
-        .send()
-        .await;
-
-    match result {
-        Ok(output) => {
-            let mut file = tokio::fs::File::create(local_path).await.map_err(|e| {
-                JobAttachmentsError::AssetSync(format!(
-                    "Failed to create {}: {e}",
-                    local_path.display()
-                ))
-            })?;
-            let mut body = output.body.into_async_read();
-            tokio::io::copy(&mut body, &mut file).await.map_err(|e| {
-                JobAttachmentsError::AssetSync(format!(
-                    "Failed to write {}: {e}",
-                    local_path.display()
-                ))
-            })?;
-            Ok(())
-        }
-        Err(sdk_err) => {
-            use aws_sdk_s3::error::ProvideErrorMetadata;
-            let status = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
-            let service_err = sdk_err.into_service_error();
-            let raw = format!("{service_err}");
-            let msg = service_err.message().unwrap_or_default();
-            let full_text = format!("{raw} {msg}");
-            Err(s3_download_error(
-                status, &full_text, s3_bucket, s3_key, local_path,
-            ))
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Helper: CreateCopy collision resolution
-// ---------------------------------------------------------------------------
-
-/// Generate a unique file path by appending " (N)" before the extension.
-/// Uses atomic file creation to handle concurrent downloads.
-fn get_new_copy_file_path(local_file_path: &Path, collision_state: &CollisionState) -> PathBuf {
-    let mut state = collision_state.lock().expect("collision mutex poisoned");
-    let key = local_file_path.to_string_lossy().to_string();
-    let num = state.entry(key).or_insert(0);
-
-    let stem = local_file_path
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy();
-    let ext = local_file_path
-        .extension()
-        .map(|e| format!(".{}", e.to_string_lossy()))
-        .unwrap_or_default();
-    let parent = local_file_path.parent().unwrap_or(Path::new("."));
-
-    loop {
-        *num += 1;
-        let candidate = parent.join(format!("{stem} ({num}){ext}"));
-        // Atomic check: try to exclusively create the file
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-        {
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Ok(_) | Err(_) => return candidate, // best effort on other errors
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Helper: extract asset root from S3 object metadata
@@ -494,108 +328,10 @@ pub fn merge_asset_manifests(
     )?))
 }
 
-/// Download a single file from S3 CAS to a local path.
-///
-/// Returns `(file_bytes, Option<local_path>)`. `None` path means the file
-/// was skipped (conflict resolution = Skip and file exists locally).
-pub async fn download_file(
-    file: &ManifestPath,
-    hash_algorithm: HashAlgorithm,
-    local_download_dir: &str,
-    s3_client: &S3Client,
-    s3_bucket: &str,
-    cas_prefix: Option<&str>,
-    account_id: &str,
-    progress_tracker: Option<&ProgressTracker>,
-    file_conflict_resolution: FileConflictResolution,
-    collision_state: &CollisionState,
-) -> Result<(u64, Option<PathBuf>), JobAttachmentsError> {
-    let file_bytes = file.size;
-
-    // Build local path
-    let mut local_file_path = PathBuf::from(local_download_dir).join(&file.path);
-
-    // Build S3 key
-    let s3_key = match cas_prefix {
-        Some(prefix) => format!("{}/{}.{}", prefix, file.hash, hash_algorithm.as_str()),
-        None => format!("{}.{}", file.hash, hash_algorithm.as_str()),
-    };
-
-    // Conflict resolution if file exists locally
-    if local_file_path.is_file() {
-        match file_conflict_resolution {
-            FileConflictResolution::Skip => {
-                if let Some(tracker) = progress_tracker {
-                    tracker.increase_skipped(1, file_bytes);
-                    tracker.report_progress();
-                }
-                return Ok((file_bytes, None));
-            }
-            FileConflictResolution::Overwrite => {} // proceed
-            FileConflictResolution::CreateCopy => {
-                local_file_path = get_new_copy_file_path(&local_file_path, collision_state);
-            }
-        }
-    }
-
-    // Create parent directories
-    if let Some(parent) = local_file_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| {
-            JobAttachmentsError::AssetSync(format!(
-                "Failed to create directory {}: {e}",
-                parent.display()
-            ))
-        })?;
-    }
-
-    // Download from S3 — stream directly to file, retry on 404 without suffix
-    let stream_result =
-        s3_stream_to_file(s3_client, s3_bucket, &s3_key, account_id, &local_file_path).await;
-
-    match stream_result {
-        Ok(()) => {}
-        Err(JobAttachmentsError::S3Client {
-            status_code: 404, ..
-        }) => {
-            // Retry without algorithm suffix (backward compatibility)
-            let fallback_key = match cas_prefix {
-                Some(prefix) => format!("{}/{}", prefix, file.hash),
-                None => file.hash.clone(),
-            };
-            s3_stream_to_file(
-                s3_client,
-                s3_bucket,
-                &fallback_key,
-                account_id,
-                &local_file_path,
-            )
-            .await?;
-        }
-        Err(e) => return Err(e),
-    }
-
-    // Set mtime from manifest (microseconds → seconds)
-    let mtime_secs = file.mtime as f64 / 1_000_000.0;
-    let ft = filetime::FileTime::from_unix_time(
-        mtime_secs as i64,
-        ((mtime_secs.fract()) * 1_000_000_000.0) as u32,
-    );
-    let _ = filetime::set_file_mtime(&local_file_path, ft);
-
-    // Report progress
-    if let Some(tracker) = progress_tracker {
-        tracker.increase_processed(1, file_bytes);
-        tracker.report_progress();
-    }
-
-    Ok((file_bytes, Some(local_file_path)))
-}
-
 /// Download all files from manifests grouped by local root directory.
 ///
-/// Returns download summary statistics with per-root file counts.
-// These are internal functions that always receive the default RandomState hasher.
-// Making the hasher generic would add complexity for no practical benefit.
+/// Uses openjd-snapshots' download engine for parallel downloads with
+/// conflict resolution and mtime restoration.
 #[allow(clippy::implicit_hasher, reason = "only used with default HashMap")]
 pub async fn download_files_from_manifests(
     s3_bucket: &str,
@@ -606,8 +342,14 @@ pub async fn download_files_from_manifests(
     on_downloading_files: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     conflict_resolution: FileConflictResolution,
 ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
+    use openjd_snapshots::{
+        AbsManifest, AsyncDataCache, DownloadOptions as OpenjdDownloadOptions,
+        FileEntry, S3DataCache, download_abs_manifest,
+        FileConflictResolution as OpenjdConflict,
+    };
+    use std::sync::Arc;
+
     // Compute totals
-    use futures::stream::{self, StreamExt, TryStreamExt};
     let mut total_files: u64 = 0;
     let mut total_bytes: u64 = 0;
     for manifest in manifests_by_root.values() {
@@ -622,82 +364,98 @@ pub async fn download_files_from_manifests(
         on_downloading_files,
     );
 
+    // Check cancellation before starting
+    if !progress_tracker.report_progress() {
+        return Err(JobAttachmentsError::Cancelled {
+            message: "Download cancelled.".into(),
+        });
+    }
+
     let start_time = std::time::Instant::now();
-    let collision_state: CollisionState = Arc::new(Mutex::new(HashMap::new()));
-    let mut downloaded_files_by_root: HashMap<String, Vec<String>> = HashMap::new();
 
     // Validate all paths before downloading
     for (local_root, manifest) in manifests_by_root {
         ensure_paths_within_directory(local_root, &manifest.paths)?;
     }
 
-    // Download files in parallel across all manifests
+    // Build S3DataCache
+    let prefix = cas_prefix.unwrap_or_default().to_string();
+    let s3_cache = S3DataCache::new(
+        s3_bucket.to_string(),
+        prefix,
+        s3_client.clone(),
+    )
+    .with_expected_bucket_owner(Some(account_id.to_string()));
+    let data_cache: Arc<dyn AsyncDataCache> = Arc::new(s3_cache);
 
-    // Compute download worker count from config
-    let num_workers = crate::s3::compute_download_workers(
-        crate::s3::get_s3_max_pool_connections(None).unwrap_or(50),
-    );
+    // Map our conflict resolution to openjd's
+    let openjd_conflict = match conflict_resolution {
+        FileConflictResolution::Skip => OpenjdConflict::Skip,
+        FileConflictResolution::Overwrite => OpenjdConflict::Overwrite,
+        FileConflictResolution::CreateCopy => OpenjdConflict::CreateCopy,
+    };
+
+    let mut downloaded_files_by_root: HashMap<String, Vec<String>> = HashMap::new();
 
     for (local_root, manifest) in manifests_by_root {
-        let results: Vec<(u64, Option<PathBuf>)> =
-            stream::iter(manifest.paths.iter().map(|file| {
-                let collision = &collision_state;
-                let tracker = &progress_tracker;
-                async move {
-                    let result = download_file(
-                        file,
-                        manifest.hash_alg,
-                        local_root,
-                        s3_client,
-                        s3_bucket,
-                        cas_prefix,
-                        account_id,
-                        Some(tracker),
-                        conflict_resolution,
-                        collision,
-                    )
-                    .await?;
-
-                    // Check cancellation after each file
-                    if !tracker.report_progress() {
-                        let processed = tracker.processed_files();
-                        return Err(JobAttachmentsError::Cancelled {
-                            message: format!(
-                                "Download cancelled. (Downloaded {} file{} before cancellation.)",
-                                processed,
-                                if processed == 1 { "" } else { "s" }
-                            ),
-                        });
-                    }
-
-                    Ok(result)
-                }
-            }))
-            .buffer_unordered(num_workers)
-            .try_collect()
-            .await?;
-
-        let mut downloaded = Vec::new();
-        for (_file_bytes, local_path) in results {
-            if let Some(path) = local_path {
-                downloaded.push(
-                    path.canonicalize()
-                        .unwrap_or(path.clone())
-                        .to_string_lossy()
-                        .to_string(),
-                );
-            }
+        // Build AbsSnapshot with absolute paths (root + relative)
+        let mut abs_snapshot = openjd_snapshots::Manifest::new(
+            openjd_snapshots::HashAlgorithm::Xxh128,
+            openjd_snapshots::WHOLE_FILE_CHUNK_SIZE,
+        );
+        for p in &manifest.paths {
+            let abs_path = if local_root.ends_with('/') {
+                format!("{}{}", local_root, p.path)
+            } else {
+                format!("{}/{}", local_root, p.path)
+            };
+            let mut entry = FileEntry::file(&abs_path, p.size, p.mtime as u64);
+            entry.hash = Some(p.hash.clone());
+            abs_snapshot.files.push(entry);
         }
+        abs_snapshot.total_size = manifest.total_size;
+
+        let result = download_abs_manifest(
+            &AbsManifest::Snapshot(abs_snapshot),
+            data_cache.clone(),
+            OpenjdDownloadOptions {
+                file_conflict_resolution: openjd_conflict,
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|e| {
+            JobAttachmentsError::AssetSync(format!("Download failed: {e}"))
+        })?;
+
+        // Collect downloaded file paths
+        let stats = &result.statistics;
+        let downloaded: Vec<String> = match &result.manifest {
+            AbsManifest::Snapshot(s) => s
+                .files
+                .iter()
+                .filter(|f| !f.deleted && f.symlink_target.is_none())
+                .map(|f| f.path.clone())
+                .collect(),
+            _ => vec![],
+        };
 
         downloaded_files_by_root
             .entry(local_root.clone())
             .or_default()
             .extend(downloaded);
+
+        progress_tracker.increase_processed(
+            stats.downloaded_files as u64,
+            stats.downloaded_bytes,
+        );
+        progress_tracker.increase_skipped(
+            stats.skipped_files as u64,
+            stats.skipped_bytes,
+        );
     }
 
-    // Final progress report
     progress_tracker.report_progress();
-
     let elapsed = start_time.elapsed().as_secs_f64();
     progress_tracker.set_total_time(elapsed);
 
