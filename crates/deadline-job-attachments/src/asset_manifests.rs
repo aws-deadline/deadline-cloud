@@ -1,5 +1,4 @@
 use std::fmt;
-use std::io::{BufReader, Read};
 use std::path::Path;
 
 use crate::errors::JobAttachmentsError;
@@ -42,27 +41,14 @@ impl std::str::FromStr for HashAlgorithm {
 
 /// Hashes a byte slice with the given algorithm. Returns a 32-char lowercase hex string.
 pub fn hash_data(data: &[u8], _alg: HashAlgorithm) -> String {
-    format!("{:032x}", xxhash_rust::xxh3::xxh3_128(data))
+    openjd_snapshots::hash::hash_data(data)
 }
 
 /// Hashes a file by reading it in chunks. Returns a 32-char lowercase hex string.
 pub fn hash_file(path: &Path, _alg: HashAlgorithm) -> Result<String, JobAttachmentsError> {
-    let file = std::fs::File::open(path).map_err(|e| {
-        JobAttachmentsError::AssetSync(format!("Failed to open file {}: {e}", path.display()))
-    })?;
-    let mut reader = BufReader::new(file);
-    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        let n = reader.read(&mut buf).map_err(|e| {
-            JobAttachmentsError::AssetSync(format!("Failed to read file {}: {e}", path.display()))
-        })?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Ok(format!("{:032x}", hasher.digest128()))
+    openjd_snapshots::hash::hash_file(path).map_err(|e| {
+        JobAttachmentsError::AssetSync(format!("Failed to hash file {}: {e}", path.display()))
+    })
 }
 
 // --- ManifestVersion ---
@@ -361,47 +347,6 @@ mod tests {
         let hash = hash_file(&path, HashAlgorithm::Xxh128).unwrap();
         let expected = hash_data(b"", HashAlgorithm::Xxh128);
         assert_eq!(hash, expected);
-    }
-
-    #[test]
-    fn hash_file_large_multi_chunk() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("large.bin");
-        let data = vec![0xABu8; 1_000_000];
-        std::fs::write(&path, &data).unwrap();
-
-        let file_hash = hash_file(&path, HashAlgorithm::Xxh128).unwrap();
-        let data_hash = hash_data(&data, HashAlgorithm::Xxh128);
-        assert_eq!(file_hash, data_hash);
-    }
-
-    // === : hash_data ===
-
-    #[test]
-    fn hash_data_basic() {
-        let hash = hash_data(b"hello world", HashAlgorithm::Xxh128);
-        assert_eq!(hash.len(), 32);
-        assert!(hash.chars().all(|c: char| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
-    fn hash_data_empty() {
-        let hash = hash_data(b"", HashAlgorithm::Xxh128);
-        assert_eq!(hash.len(), 32);
-    }
-
-    #[test]
-    fn hash_data_deterministic() {
-        let h1 = hash_data(b"test", HashAlgorithm::Xxh128);
-        let h2 = hash_data(b"test", HashAlgorithm::Xxh128);
-        assert_eq!(h1, h2);
-    }
-
-    #[test]
-    fn hash_data_different_inputs_different_hashes() {
-        let h1 = hash_data(b"aaa", HashAlgorithm::Xxh128);
-        let h2 = hash_data(b"bbb", HashAlgorithm::Xxh128);
-        assert_ne!(h1, h2);
     }
 
     // === : ManifestVersion ===

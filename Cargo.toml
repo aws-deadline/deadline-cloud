@@ -23,6 +23,9 @@ deadline-job-bundle = { path = "crates/deadline-job-bundle" }
 deadline-api = { path = "crates/deadline-api" }
 deadline-test-server = { path = "crates/deadline-test-server" }
 
+# OpenJD crates
+openjd-snapshots = "0.1"
+
 # Shared dependencies
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

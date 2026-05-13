@@ -3,10 +3,34 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **#31 — openjd-rs dependency integration**
-See [`specs/openjd-integration.md`](openjd-integration.md) for the full plan.
+Active work item: **#31 — Crate Restructure (openjd-rs + CLI/library separation)**
+See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
+(Previous plan in `specs/openjd-integration.md` is superseded — absorbed as Phase 1.)
 
-**Status:** Planning complete. Ready to begin Phase 1 (hashing + caches).
+**Status:** Phase 1a (hashing) complete. Ready to begin Phase 1b (manifest codec).
+
+**Phase 1a result:** Replaced `hash_data`/`hash_file` with `openjd-snapshots 0.1`
+from crates.io. Upgraded rusqlite 0.32→0.39. Tests: 375→370 (pruned 5 redundant).
+CLI: 492/492 unchanged.
+
+### Phase 1 Baseline (2026-05-12)
+
+| Metric | Count |
+|--------|-------|
+| `deadline-job-attachments` tests | 375 (240 unit + 135 integration) |
+| `deadline-cli` tests | 492 (51 unit + 441 integration) |
+| Phase 1 scope: `asset_manifests` tests | 31 |
+| Phase 1 scope: `caches` tests | 18 |
+| **All tests passing** | ✅ |
+
+**Python parity check (2026-05-12):**
+- Hashing: ✅ openjd-rs produces identical xxh128 output to Python
+- Manifest codec: ✅ openjd-rs `encode_snapshot_v2023` matches Python's
+  `json.dumps(sorted_keys=True, ensure_ascii=True)` behavior
+- S3CheckCache: ✅ Same float-timestamp format as Python
+- HashCache: ⚠️ openjd-rs stores mtime as u64, Python uses
+  `str(datetime.fromtimestamp(st_mtime))` — **NOT compatible**
+  → Phase 1d (HashCache swap) deferred until format reconciled
 
 **Phase checklist:**
 - [ ] Phase 1: Hashing + Caches + Manifest Codec

@@ -12,6 +12,15 @@ what was done and continue. Do NOT restart from scratch.
 4. Keep the adapter minimal: type aliases, delegating functions, From impls
 5. The OLD implementation code stays in place — do not delete it yet
 
+**Adapter placement rules:**
+- Create a NEW file (e.g., `openjd_adapter.rs`) for the adapter code
+- Do NOT modify existing source files — the old implementation must remain
+  byte-for-byte unchanged so that `git diff` clearly shows what's new vs old
+- The adapter file should compile and be importable (`mod openjd_adapter;` in lib.rs),
+  but is NOT yet wired into the existing code paths — it sits alongside the old code unused
+- Exception: if resolving a dependency version conflict (e.g., rusqlite upgrade)
+  requires a one-line API change in existing code, that's acceptable — document it
+
 **Constraints:**
 - Do NOT change any test code because tests define the contract
 - Do NOT delete any existing implementation code because we verify before deleting
