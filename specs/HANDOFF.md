@@ -8,7 +8,8 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 (Previous plan in `specs/openjd-integration.md` is superseded — absorbed as Phase 1.)
 
 **Status:** Phase 1d (HashCache) and Phase 3 (Path Mapping) complete.
-Phase 2 (Diff) — deferred (see below).
+Phase 2 (Diff) — deferred to Phase 4a.
+Phase 4 — PLANNING COMPLETE, awaiting go/no-go.
 
 **Phase 3 result:** Replaced trie-based `PathMappingRuleApplier` (~300 lines)
 with thin wrapper around `openjd_expr::path_mapping::apply_rules_with_format()`.
@@ -55,14 +56,33 @@ CLI: 492/492 unchanged.
 - S3CheckCache: ✅ Same float-timestamp format as Python
 - HashCache: ✅ Swapped to openjd-rs u64 mtime (one-time cache invalidation accepted)
 
+**Phase 4a result:** Added `AssetManifest ↔ Snapshot` type bridge
+(`asset_manifest_to_snapshot`, `snapshot_to_asset_manifest`) in `diff.rs`.
+Replaced `hash_diff` internals with `openjd_snapshots::diff_snapshots` delegate.
+`fast_diff` stays (filesystem-based, no openjd equivalent).
+Tests: 343→343 (no pruning — all tests validate integration contract).
+CLI: 492/492 unchanged.
+
+**Phase 4 plan (2026-05-12):** HIGH complexity — strangler fig approach.
+- Sub-phase 4a: Type bridge (`AssetManifest ↔ AbsSnapshot`) + diff replacement
+- Sub-phase 4b: Upload engine swap (hash_upload_abs_manifest via DeadlineS3Cache)
+- Sub-phase 4c: Download engine swap (download_abs_manifest via DeadlineS3Cache)
+- Sub-phase 4d: Dead code cleanup
+
+Key adapter: `DeadlineS3Cache` wrapping `openjd_snapshots::S3DataCache` with
+Deadline-specific error messages. Type bridge converts `AssetManifest ↔ AbsSnapshot`.
+Estimated test delta: 343 → ~290 (prune ~53 openjd-internal tests).
+
 **Phase checklist:**
 - [x] Phase 1a: Hashing ✅
 - [x] Phase 1b: Manifest Codec ✅
 - [x] Phase 1c: S3CheckCache ✅
 - [x] Phase 1d: HashCache ✅
-- [ ] Phase 2: Diff (deferred to Phase 4)
+- [x] Phase 4a: Type bridge + diff replacement ✅
 - [x] Phase 3: Path Mapping ✅
-- [ ] Phase 4: Upload/Download Engine
+- [ ] Phase 4b: Upload engine swap
+- [ ] Phase 4c: Download engine swap
+- [ ] Phase 4d: Cleanup
 - [ ] Phase 5: Template Validation (deferred)
 
 ---
