@@ -69,9 +69,20 @@ CLI: 492/492 unchanged.
 - Sub-phase 4c: Download engine swap (download_abs_manifest via DeadlineS3Cache)
 - Sub-phase 4d: Dead code cleanup
 
-Key adapter: `DeadlineS3Cache` wrapping `openjd_snapshots::S3DataCache` with
-Deadline-specific error messages. Type bridge converts `AssetManifest ↔ AbsSnapshot`.
-Estimated test delta: 343 → ~290 (prune ~53 openjd-internal tests).
+**Phase 4b decision (2026-05-12):** DEFERRED — requires caller restructuring.
+`hash_upload_abs_manifest` rejects pre-hashed files (it combines hash+upload).
+Our API separates hashing (`hash_assets_and_create_manifest`) from uploading
+(`upload_assets`) with a user confirmation step between them. Replacing the
+upload engine requires merging these into a single call, which changes the
+public API contract and touches `submission.rs`. Deferring to Phase 2
+(CLI/library boundary) when the confirmation flow is redesigned.
+
+`S3DataCache::put_object` also requires data in memory (no streaming), while
+our current code uses `ByteStream::from_path` for streaming uploads. The
+upload code works correctly and is well-tested — no urgency to replace.
+
+Next: Phase 4c (download engine) — `download_abs_manifest` IS a direct
+replacement for `download_files_from_manifests` (both take manifest + download).
 
 **Phase checklist:**
 - [x] Phase 1a: Hashing ✅
@@ -80,10 +91,18 @@ Estimated test delta: 343 → ~290 (prune ~53 openjd-internal tests).
 - [x] Phase 1d: HashCache ✅
 - [x] Phase 4a: Type bridge + diff replacement ✅
 - [x] Phase 3: Path Mapping ✅
-- [ ] Phase 4b: Upload engine swap
-- [ ] Phase 4c: Download engine swap
+- [ ] Phase 4b: Upload engine swap (DEFERRED — requires caller restructuring)
+- [ ] Phase 4c: Download engine swap (DEFERRED — backward compat blocker)
 - [ ] Phase 4d: Cleanup
 - [ ] Phase 5: Template Validation (deferred)
+
+**Phase 4c decision (2026-05-12):** DEFERRED — backward compatibility blocker.
+Our `download_file` retries with key `{hash}` (no algorithm suffix) on 404,
+for backward compatibility with old uploads. `S3DataCache` uses fixed key
+format `{hash}.{algorithm}` with no fallback. Replacing the download engine
+would break downloads of content uploaded before the algorithm suffix was added.
+Options: (a) add fallback to openjd-snapshots, (b) wrap S3DataCache with
+fallback logic, (c) accept breakage (not viable for production).
 
 ---
 
