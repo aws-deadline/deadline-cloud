@@ -728,46 +728,6 @@ pub async fn create_job_from_job_bundle(
             let cache_dir = config_file::get_cache_directory();
             let cache_dir_str = cache_dir.to_str();
 
-            let (hashing_summary, manifests) = upload::hash_assets_and_create_manifest(
-                &upload_group.asset_groups,
-                upload_group.total_input_files,
-                upload_group.total_input_bytes,
-                cache_dir_str,
-                params.hashing_progress_callback,
-            )
-            .map_err(|e| op_err(e.to_string()))?;
-
-            if hashing_summary.processed_files > 0 {
-                print("Hashing Summary:");
-                for line in hashing_summary.to_string().lines() {
-                    print(&format!("    {line}"));
-                }
-            }
-
-            // F5: Emit hashing summary telemetry
-            if let Some(tc) = params.telemetry {
-                let mut details = std::collections::HashMap::new();
-                details.insert("total_files".into(), json!(hashing_summary.total_files));
-                details.insert("total_bytes".into(), json!(hashing_summary.total_bytes));
-                details.insert(
-                    "processed_files".into(),
-                    json!(hashing_summary.processed_files),
-                );
-                details.insert(
-                    "processed_bytes".into(),
-                    json!(hashing_summary.processed_bytes),
-                );
-                details.insert("skipped_files".into(), json!(hashing_summary.skipped_files));
-                details.insert("skipped_bytes".into(), json!(hashing_summary.skipped_bytes));
-                details.insert("total_time".into(), json!(hashing_summary.total_time));
-                details.insert("transfer_rate".into(), json!(hashing_summary.transfer_rate));
-                tc.record_event(
-                    "com.amazon.rum.deadline.job_attachments.hashing_summary",
-                    details,
-                    false,
-                );
-            }
-
             let ja_settings = queue
                 .job_attachment_settings()
                 .expect("checked has_attachment_settings above");
@@ -783,7 +743,55 @@ pub async fn create_job_from_job_bundle(
 
             let upload_result: Result<_, DeadlineError> =
                 if let Some(ref snap_dir) = params.debug_snapshot_dir {
-                    // F8: Snapshot assets locally instead of uploading to S3
+                    // F8: Snapshot assets locally instead of uploading to S3.
+                    // Hash files first (snapshot needs hashes for CAS key names).
+                    use openjd_snapshots::{AbsManifest, CollectOptions, HashOptions, collect_abs_snapshot, hash_abs_manifest};
+                    use deadline_job_attachments::asset_manifests::{HashAlgorithm, ManifestPath, ManifestVersion};
+                    use deadline_job_attachments::models::AssetRootManifest;
+
+                    let mut manifests = Vec::new();
+                    for group in &upload_group.asset_groups {
+                        let asset_manifest = if group.inputs.is_empty() {
+                            None
+                        } else {
+                            let file_paths: Vec<std::path::PathBuf> = group.inputs.iter().cloned().collect();
+                            let abs_snapshot = collect_abs_snapshot(
+                                &[] as &[std::path::PathBuf], &file_paths, CollectOptions::default(),
+                            ).map_err(|e| op_err(e.to_string()))?;
+                            let hash_result = hash_abs_manifest(
+                                &AbsManifest::Snapshot(abs_snapshot), HashOptions::default(),
+                            ).map_err(|e| op_err(e.to_string()))?;
+                            let hashed = match &hash_result.manifest {
+                                AbsManifest::Snapshot(s) => s,
+                                _ => unreachable!(),
+                            };
+                            let root_str = &group.root_path;
+                            let paths: Vec<ManifestPath> = hashed.files.iter()
+                                .filter(|f| !f.deleted && f.symlink_target.is_none())
+                                .map(|f| {
+                                    let rel = f.path.strip_prefix(root_str)
+                                        .or_else(|| f.path.strip_prefix("/"))
+                                        .unwrap_or(&f.path)
+                                        .trim_start_matches('/');
+                                    ManifestPath {
+                                        path: rel.to_string(),
+                                        hash: f.hash.clone().unwrap_or_default(),
+                                        size: f.size.unwrap_or(0),
+                                        mtime: f.mtime.unwrap_or(0) as i64,
+                                    }
+                                }).collect();
+                            let total_size: u64 = paths.iter().map(|p| p.size).sum();
+                            Some(deadline_job_attachments::asset_manifests::AssetManifest::new(
+                                HashAlgorithm::Xxh128, ManifestVersion::V2023_03_03, total_size, paths,
+                            ).map_err(|e| op_err(e.to_string()))?)
+                        };
+                        manifests.push(AssetRootManifest {
+                            file_system_location_name: group.file_system_location_name.clone(),
+                            root_path: group.root_path.clone(),
+                            asset_manifest,
+                            outputs: group.outputs.iter().cloned().collect(),
+                        });
+                    }
                     upload::snapshot_assets(
                         &farm_id,
                         &queue_id,
@@ -798,7 +806,7 @@ pub async fn create_job_from_job_bundle(
                         &farm_id,
                         &queue_id,
                         &s3_settings,
-                        &manifests,
+                        &upload_group.asset_groups,
                         &upload_ctx,
                         params.upload_progress_callback,
                         cache_dir_str,
@@ -807,6 +815,26 @@ pub async fn create_job_from_job_bundle(
                     .await
                     .map_err(|e| op_err(e.to_string()))
                 };
+
+            // Emit upload summary telemetry (uses hashing_summary event name for backward compat)
+            if let Some(tc) = params.telemetry {
+                if let Ok((ref stats, _)) = upload_result {
+                    let mut details = std::collections::HashMap::new();
+                    details.insert("total_files".into(), json!(stats.total_files));
+                    details.insert("total_bytes".into(), json!(stats.total_bytes));
+                    details.insert("processed_files".into(), json!(stats.processed_files));
+                    details.insert("processed_bytes".into(), json!(stats.processed_bytes));
+                    details.insert("skipped_files".into(), json!(stats.skipped_files));
+                    details.insert("skipped_bytes".into(), json!(stats.skipped_bytes));
+                    details.insert("total_time".into(), json!(stats.total_time));
+                    details.insert("transfer_rate".into(), json!(stats.transfer_rate));
+                    tc.record_event(
+                        "com.amazon.rum.deadline.job_attachments.hashing_summary",
+                        details,
+                        false,
+                    );
+                }
+            }
 
             // Emit asset_upload or asset_snapshot success/fail telemetry
             if let Some(tc) = params.telemetry {

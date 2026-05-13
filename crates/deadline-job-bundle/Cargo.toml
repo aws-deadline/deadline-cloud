@@ -9,6 +9,7 @@ license.workspace = true
 deadline-api = { workspace = true }
 deadline-job-attachments = { workspace = true }
 deadline-config = { workspace = true }
+openjd-snapshots = { workspace = true }
 aws-sdk-deadline = { workspace = true }
 libc = { workspace = true }
 serde = { workspace = true }

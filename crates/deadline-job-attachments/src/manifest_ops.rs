@@ -8,14 +8,14 @@ use crate::errors::JobAttachmentsError;
 use serde::Serialize;
 
 use crate::api::read_manifests;
-use crate::asset_manifests::{AssetManifest, decode_manifest, hash_data};
+use crate::asset_manifests::{AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, decode_manifest, hash_data};
 use crate::diff::{FileStatus, fast_diff, hash_diff};
 use crate::download::{
     download_manifest_from_s3, get_output_manifests_by_asset_root, merge_asset_manifests,
 };
-use crate::models::{AssetRootGroup, JobAttachmentS3Settings};
+use crate::models::JobAttachmentS3Settings;
 use crate::progress_tracker::ProgressReportMetadata;
-use crate::upload::{S3UploadContext, hash_assets_and_create_manifest};
+use crate::upload::S3UploadContext;
 
 // --- Types ---
 
@@ -222,7 +222,7 @@ pub fn manifest_snapshot(
     config: &GlobConfig,
     diff: Option<&str>,
     force_rehash: bool,
-    callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<Option<ManifestSnapshot>, JobAttachmentsError> {
     let current_files = glob_files(root, config)?;
     if current_files.is_empty() && diff.is_none() {
@@ -237,18 +237,10 @@ pub fn manifest_snapshot(
 
         let changed_paths: Vec<String> = if force_rehash {
             // Hash all files, compare manifests
-            let group = build_single_group(root, &current_files);
-            let (_, manifests) = hash_assets_and_create_manifest(
-                &[group],
-                current_files.len() as u64,
-                total_bytes(&current_files),
-                None,
-                callback,
-            )?;
-            let current_manifest = manifests.first().and_then(|m| m.asset_manifest.as_ref());
+            let current_manifest = hash_files_to_manifest(root, &current_files)?;
             match current_manifest {
                 None => return Ok(None),
-                Some(cm) => {
+                Some(ref cm) => {
                     let diffs = hash_diff(&diff_manifest, cm);
                     diffs
                         .into_iter()
@@ -271,26 +263,10 @@ pub fn manifest_snapshot(
         }
 
         // Hash only the changed files
-        let group = build_single_group(root, &changed_paths);
-        let (_, manifests) = hash_assets_and_create_manifest(
-            &[group],
-            changed_paths.len() as u64,
-            total_bytes(&changed_paths),
-            None,
-            None,
-        )?;
-        manifests.into_iter().next().and_then(|m| m.asset_manifest)
+        hash_files_to_manifest(root, &changed_paths)?
     } else {
         // Full snapshot
-        let group = build_single_group(root, &current_files);
-        let (_, manifests) = hash_assets_and_create_manifest(
-            &[group],
-            current_files.len() as u64,
-            total_bytes(&current_files),
-            None,
-            callback,
-        )?;
-        manifests.into_iter().next().and_then(|m| m.asset_manifest)
+        hash_files_to_manifest(root, &current_files)?
     };
 
     match output_manifest {
@@ -311,7 +287,7 @@ pub fn manifest_diff(
     root: &str,
     config: &GlobConfig,
     force_rehash: bool,
-    callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<ManifestDiffResult, JobAttachmentsError> {
     let contents = std::fs::read_to_string(manifest_path)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to read manifest: {e}")))?;
@@ -325,16 +301,8 @@ pub fn manifest_diff(
     };
 
     if force_rehash {
-        let group = build_single_group(root, &current_files);
-        let (_, manifests) = hash_assets_and_create_manifest(
-            &[group],
-            current_files.len() as u64,
-            total_bytes(&current_files),
-            None,
-            callback,
-        )?;
-        if let Some(current) = manifests.first().and_then(|m| m.asset_manifest.as_ref()) {
-            for (status, path) in hash_diff(&reference, current) {
+        if let Some(current) = hash_files_to_manifest(root, &current_files)? {
+            for (status, path) in hash_diff(&reference, &current) {
                 match status {
                     FileStatus::New => result.new.push(path.path),
                     FileStatus::Modified => result.modified.push(path.path),
@@ -384,26 +352,63 @@ pub fn manifest_merge(
 
 // --- Internal helpers ---
 
-fn build_single_group(root: &str, files: &[String]) -> AssetRootGroup {
-    let mut inputs = std::collections::BTreeSet::new();
-    for f in files {
-        inputs.insert(std::path::PathBuf::from(f));
-    }
-    AssetRootGroup {
-        file_system_location_name: None,
-        root_path: root.to_owned(),
-        inputs,
-        outputs: std::collections::BTreeSet::new(),
-        references: std::collections::BTreeSet::new(),
-    }
-}
+/// Hash files and return an AssetManifest using openjd's hash engine.
+fn hash_files_to_manifest(
+    root: &str,
+    files: &[String],
+) -> Result<Option<AssetManifest>, JobAttachmentsError> {
+    use openjd_snapshots::{AbsManifest, CollectOptions, HashOptions, collect_abs_snapshot, hash_abs_manifest};
+    use std::path::PathBuf;
 
-fn total_bytes(files: &[String]) -> u64 {
-    files
+    if files.is_empty() {
+        return Ok(None);
+    }
+
+    let file_paths: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
+    let abs_snapshot = collect_abs_snapshot(
+        &[] as &[PathBuf],
+        &file_paths,
+        CollectOptions::default(),
+    )
+    .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to collect snapshot: {e}")))?;
+
+    let hash_result = hash_abs_manifest(
+        &AbsManifest::Snapshot(abs_snapshot),
+        HashOptions::default(),
+    )
+    .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to hash files: {e}")))?;
+
+    let hashed = match &hash_result.manifest {
+        AbsManifest::Snapshot(s) => s,
+        _ => unreachable!(),
+    };
+
+    let root_prefix = root.to_string();
+    let paths: Vec<ManifestPath> = hashed
+        .files
         .iter()
-        .filter_map(|f| std::fs::metadata(f).ok())
-        .map(|m| m.len())
-        .sum()
+        .filter(|f| !f.deleted && f.symlink_target.is_none())
+        .map(|f| {
+            let rel = f.path.strip_prefix(&root_prefix)
+                .or_else(|| f.path.strip_prefix("/"))
+                .unwrap_or(&f.path)
+                .trim_start_matches('/');
+            ManifestPath {
+                path: rel.to_string(),
+                hash: f.hash.clone().unwrap_or_default(),
+                size: f.size.unwrap_or(0),
+                mtime: f.mtime.unwrap_or(0) as i64,
+            }
+        })
+        .collect();
+
+    let total_size: u64 = paths.iter().map(|p| p.size).sum();
+    Ok(Some(AssetManifest::new(
+        HashAlgorithm::Xxh128,
+        ManifestVersion::V2023_03_03,
+        total_size,
+        paths,
+    )?))
 }
 
 /// Upload a manifest file to S3 CAS.

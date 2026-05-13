@@ -1209,6 +1209,7 @@ dependencies = [
  "deadline-job-attachments",
  "libc",
  "log",
+ "openjd-snapshots",
  "regex",
  "serde",
  "serde_json",

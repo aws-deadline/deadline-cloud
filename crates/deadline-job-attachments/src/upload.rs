@@ -3,12 +3,11 @@ use std::path::{Path, PathBuf};
 
 use crate::errors::JobAttachmentsError;
 use crate::models::PathFormat;
-use aws_sdk_s3::error::ProvideErrorMetadata;
 use aws_sdk_s3::primitives::ByteStream;
 use deadline_config::ini::IniConfig;
 
 use crate::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, hash_data, hash_file,
+    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, hash_data,
 };
 use crate::caches::{HashCache, S3CheckCache};
 use crate::models::{
@@ -18,7 +17,6 @@ use crate::models::{
 use crate::progress_tracker::{
     ProgressReportMetadata, ProgressStatus, ProgressTracker, SummaryStatistics,
 };
-use crate::s3::compute_upload_config;
 
 fn is_relative_to(path: &Path, base: &str) -> bool {
     let base_path = Path::new(base);
@@ -306,165 +304,6 @@ fn common_path(paths: &[&PathBuf]) -> PathBuf {
 
 /// Hashes a file using the cache. Returns the hash and sets `was_cached` if the
 /// cached entry was reused without re-hashing.
-fn hash_with_cache(
-    cache: &HashCache,
-    file_path: &Path,
-    mtime_secs: u64,
-    was_cached: &mut bool,
-) -> Result<String, JobAttachmentsError> {
-    if let Some(hash) = cache.get_if_fresh(file_path, "xxh128", 0, -1, mtime_secs) {
-        *was_cached = true;
-        return Ok(hash);
-    }
-    let h = hash_file(file_path)?;
-    cache
-        .put(file_path, "xxh128", 0, -1, &h, mtime_secs)
-        .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to write hash cache: {e}")))?;
-    Ok(h)
-}
-
-pub fn hash_assets_and_create_manifest(
-    asset_groups: &[AssetRootGroup],
-    total_input_files: u64,
-    total_input_bytes: u64,
-    hash_cache_dir: Option<&str>,
-    on_preparing_to_submit: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
-) -> Result<(SummaryStatistics, Vec<AssetRootManifest>), JobAttachmentsError> {
-    let start = std::time::Instant::now();
-
-    let progress_tracker = ProgressTracker::new(
-        ProgressStatus::PreparingInProgress,
-        total_input_files,
-        total_input_bytes,
-        on_preparing_to_submit,
-    );
-
-    let cache_dir = hash_cache_dir
-        .map(ToOwned::to_owned)
-        .or_else(crate::caches::default_cache_dir);
-
-    let mut asset_root_manifests = Vec::new();
-
-    for group in asset_groups {
-        let asset_manifest = if group.inputs.is_empty() {
-            None
-        } else {
-            let cache = cache_dir
-                .as_deref()
-                .map(|d| {
-                    HashCache::new(d)
-                        .map_err(|e| JobAttachmentsError::AssetSync(format!("Hash cache: {e}")))
-                })
-                .transpose()?;
-
-            let mut paths = Vec::new();
-            let sorted_inputs: Vec<_> = group.inputs.iter().cloned().collect();
-
-            for input_path in &sorted_inputs {
-                // Check cancellation
-                if !progress_tracker.continue_reporting() {
-                    return Err(JobAttachmentsError::Cancelled {
-                        message: "File hashing cancelled.".into(),
-                    });
-                }
-
-                let meta = std::fs::metadata(input_path).map_err(|e| {
-                    JobAttachmentsError::AssetSync(format!(
-                        "Failed to stat {}: {e}",
-                        input_path.display()
-                    ))
-                })?;
-                let file_size = meta.len();
-
-                #[cfg(unix)]
-                let (mtime_secs, mtime_nsec) = {
-                    use std::os::unix::fs::MetadataExt;
-                    (meta.mtime(), meta.mtime_nsec())
-                };
-                #[cfg(not(unix))]
-                let (mtime_secs, mtime_nsec) = {
-                    let dur = meta
-                        .modified()
-                        .unwrap_or(std::time::UNIX_EPOCH)
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default();
-                    (dur.as_secs() as i64, dur.subsec_nanos() as i64)
-                };
-
-                let mtime_ns = mtime_secs * 1_000_000_000 + mtime_nsec;
-                let mtime_us = mtime_ns / 1000; // truncate to microseconds
-
-                let mut was_cached = false;
-
-                let file_hash = match cache {
-                    Some(ref cache) => hash_with_cache(
-                        cache,
-                        input_path,
-                        mtime_ns as u64,
-                        &mut was_cached,
-                    )?,
-                    None => hash_file(input_path)?,
-                };
-
-                // Relative POSIX path
-                let root = Path::new(&group.root_path);
-                let rel_path = input_path
-                    .strip_prefix(root)
-                    .unwrap_or(input_path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-
-                paths.push(ManifestPath {
-                    path: rel_path,
-                    hash: file_hash,
-                    size: file_size,
-                    mtime: mtime_us,
-                });
-
-                if was_cached {
-                    progress_tracker.increase_skipped(1, file_size);
-                } else {
-                    progress_tracker.increase_processed(1, file_size);
-                }
-                if !progress_tracker.report_progress() {
-                    return Err(JobAttachmentsError::Cancelled {
-                        message: "File hashing cancelled.".into(),
-                    });
-                }
-            }
-
-            let total_size: u64 = paths.iter().map(|p| p.size).sum();
-            Some(AssetManifest::new(
-                HashAlgorithm::Xxh128,
-                ManifestVersion::V2023_03_03,
-                total_size,
-                paths,
-            )?)
-        };
-
-        asset_root_manifests.push(AssetRootManifest {
-            file_system_location_name: group.file_system_location_name.clone(),
-            root_path: group.root_path.clone(),
-            asset_manifest,
-            outputs: group.outputs.iter().cloned().collect(),
-        });
-    }
-
-    let elapsed = start.elapsed().as_secs_f64();
-    progress_tracker.set_total_time(elapsed);
-
-    Ok((
-        progress_tracker.get_summary_statistics(),
-        asset_root_manifests,
-    ))
-}
-
-// =====================================================================
-// S3 upload context and orchestration (batch 9b)
-// =====================================================================
-
-/// Build an S3 upload error with HTTP status-specific guidance.
-/// Shared by `upload_file_to_s3` and `upload_bytes_to_s3`.
 fn s3_upload_error(
     status_code: u16,
     raw: &str,
@@ -543,297 +382,29 @@ fn s3_upload_error(
 pub struct S3UploadContext {
     s3_client: aws_sdk_s3::Client,
     account_id: String,
-    small_file_threshold: usize,
-    num_upload_workers: usize,
 }
 
 impl S3UploadContext {
-    /// Build from a pre-configured S3 client, account ID, and optional config.
-    /// Reads `small_file_threshold_multiplier` and `s3_max_pool_connections`
-    /// from config to compute thresholds. Falls back to defaults if config is None.
+    /// Build from a pre-configured S3 client and account ID.
     pub fn new(
         s3_client: aws_sdk_s3::Client,
         account_id: String,
-        config: Option<&IniConfig>,
+        _config: Option<&IniConfig>,
     ) -> Result<Self, JobAttachmentsError> {
-        let (small_file_threshold, num_upload_workers) = compute_upload_config(config)?;
         Ok(Self {
             s3_client,
             account_id,
-            small_file_threshold,
-            num_upload_workers,
         })
     }
 
-    /// Check whether an object already exists in S3 via `HeadObject`.
-    pub async fn file_already_uploaded(
-        &self,
-        bucket: &str,
-        key: &str,
-    ) -> Result<bool, JobAttachmentsError> {
-        match self
-            .s3_client
-            .head_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await
-        {
-            Ok(_) => Ok(true),
-            Err(sdk_err) => {
-                // Extract HTTP status from the raw response if available
-                let status = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
-
-                if status == 404 {
-                    return Ok(false);
-                }
-                if status == 403 {
-                    return Err(JobAttachmentsError::S3Client {
-                        action: "checking if object exists".into(),
-                        status_code: 403,
-                        bucket: bucket.into(),
-                        key: key.into(),
-                        message: Some(format!(
-                            "Access denied. Ensure that the bucket is in the account {}, \
-                             and your AWS IAM Role or User has the 's3:ListBucket' permission for this bucket.",
-                            self.account_id
-                        )),
-                    });
-                }
-                // Check if it's a "not found" via the service error type
-                let service_err = sdk_err.into_service_error();
-                if service_err.is_not_found() {
-                    return Ok(false);
-                }
-                Err(JobAttachmentsError::S3BotoCore {
-                    action: "checking for the existence of an object in the S3 bucket".into(),
-                    details: format!("{service_err}"),
-                })
-            }
-        }
+    /// Returns a reference to the underlying S3 client.
+    pub fn s3_client(&self) -> &aws_sdk_s3::Client {
+        &self.s3_client
     }
 
-    /// Upload a single file to S3. Silently skips directories, non-existent
-    /// files, and symlinks. Files larger than `small_file_threshold` use
-    /// multipart upload; smaller files use single `PutObject`.
-    pub async fn upload_file_to_s3(
-        &self,
-        local_path: &Path,
-        s3_bucket: &str,
-        s3_upload_key: &str,
-        progress_tracker: Option<&ProgressTracker>,
-    ) -> Result<(), JobAttachmentsError> {
-        // Skip non-existent
-        if !local_path.exists() {
-            return Ok(());
-        }
-        // Skip directories
-        if local_path.is_dir() {
-            return Ok(());
-        }
-        // Reject symlinks
-        match std::fs::symlink_metadata(local_path) {
-            Ok(meta) if meta.file_type().is_symlink() => {
-                log::warn!("Skipping symlink: {}", local_path.display());
-                return Ok(());
-            }
-            Err(e) => {
-                log::warn!("Failed to stat {}. Skipping: {e}", local_path.display());
-                return Ok(());
-            }
-            Ok(meta) => {
-                if meta.len() as usize > self.small_file_threshold {
-                    return self
-                        .multipart_upload_file(
-                            local_path,
-                            s3_bucket,
-                            s3_upload_key,
-                            progress_tracker,
-                        )
-                        .await;
-                }
-            }
-        }
-
-        let body = ByteStream::from_path(local_path).await.map_err(|e| {
-            JobAttachmentsError::AssetSync(format!("Failed to read {}: {e}", local_path.display()))
-        })?;
-
-        let result = self
-            .s3_client
-            .put_object()
-            .bucket(s3_bucket)
-            .key(s3_upload_key)
-            .expected_bucket_owner(&self.account_id)
-            .body(body)
-            .send()
-            .await;
-
-        match result {
-            Ok(_) => {
-                if let Some(tracker) = progress_tracker {
-                    tracker.increase_processed(1, 0);
-                }
-                Ok(())
-            }
-            Err(sdk_err) => {
-                let status_code = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
-                let service_err = sdk_err.into_service_error();
-                let raw = format!("{service_err}");
-                let msg = service_err.message().unwrap_or_default();
-                let full_text = format!("{raw} {msg}");
-
-                Err(s3_upload_error(
-                    status_code,
-                    &full_text,
-                    "uploading file",
-                    s3_bucket,
-                    s3_upload_key,
-                ))
-            }
-        }
-    }
-
-    /// Upload a large file using S3 multipart upload.
-    /// Chunks the file into `S3_MULTIPART_UPLOAD_CHUNK_SIZE` parts,
-    /// uploads parts concurrently, then completes. Aborts on error or cancellation.
-    async fn multipart_upload_file(
-        &self,
-        local_path: &Path,
-        s3_bucket: &str,
-        s3_upload_key: &str,
-        progress_tracker: Option<&ProgressTracker>,
-    ) -> Result<(), JobAttachmentsError> {
-        use crate::s3::S3_MULTIPART_UPLOAD_CHUNK_SIZE;
-        use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
-        use futures::stream::{self, StreamExt, TryStreamExt};
-
-        // Initiate multipart upload
-        let create_resp = self
-            .s3_client
-            .create_multipart_upload()
-            .bucket(s3_bucket)
-            .key(s3_upload_key)
-            .expected_bucket_owner(&self.account_id)
-            .send()
-            .await
-            .map_err(|sdk_err| {
-                let status_code = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
-                let service_err = sdk_err.into_service_error();
-                let msg = service_err.message().unwrap_or_default();
-                s3_upload_error(
-                    status_code,
-                    &format!("{service_err} {msg}"),
-                    "initiating multipart upload",
-                    s3_bucket,
-                    s3_upload_key,
-                )
-            })?;
-
-        let upload_id = create_resp.upload_id().unwrap_or_default().to_owned();
-
-        // Read file and split into chunks
-        let file_bytes = std::fs::read(local_path).map_err(|e| {
-            JobAttachmentsError::AssetSync(format!("Failed to read {}: {e}", local_path.display()))
-        })?;
-
-        let chunks: Vec<(usize, &[u8])> = file_bytes
-            .chunks(S3_MULTIPART_UPLOAD_CHUNK_SIZE)
-            .enumerate()
-            .collect();
-
-        // Upload parts concurrently using buffer_unordered
-        let part_results: Result<Vec<CompletedPart>, JobAttachmentsError> =
-            stream::iter(chunks.into_iter().map(|(idx, chunk)| {
-                let part_number = (idx + 1) as i32;
-                let body = ByteStream::from(chunk.to_vec());
-                let client = &self.s3_client;
-                let account = &self.account_id;
-                let uid = &upload_id;
-                async move {
-                    let resp = client
-                        .upload_part()
-                        .bucket(s3_bucket)
-                        .key(s3_upload_key)
-                        .upload_id(uid)
-                        .part_number(part_number)
-                        .expected_bucket_owner(account)
-                        .body(body)
-                        .send()
-                        .await
-                        .map_err(|sdk_err| {
-                            let status_code =
-                                sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
-                            let service_err = sdk_err.into_service_error();
-                            let msg = service_err.message().unwrap_or_default();
-                            s3_upload_error(
-                                status_code,
-                                &format!("{service_err} {msg}"),
-                                "uploading part",
-                                s3_bucket,
-                                s3_upload_key,
-                            )
-                        })?;
-                    Ok(CompletedPart::builder()
-                        .part_number(part_number)
-                        .e_tag(resp.e_tag().unwrap_or_default())
-                        .build())
-                }
-            }))
-            .buffer_unordered(crate::s3::S3_UPLOAD_MAX_CONCURRENCY)
-            .try_collect()
-            .await;
-
-        match part_results {
-            Ok(mut parts) => {
-                // Parts must be sorted by part number for CompleteMultipartUpload
-                parts.sort_by_key(CompletedPart::part_number);
-
-                self.s3_client
-                    .complete_multipart_upload()
-                    .bucket(s3_bucket)
-                    .key(s3_upload_key)
-                    .upload_id(&upload_id)
-                    .expected_bucket_owner(&self.account_id)
-                    .multipart_upload(
-                        CompletedMultipartUpload::builder()
-                            .set_parts(Some(parts))
-                            .build(),
-                    )
-                    .send()
-                    .await
-                    .map_err(|sdk_err| {
-                        let status_code = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
-                        let service_err = sdk_err.into_service_error();
-                        let msg = service_err.message().unwrap_or_default();
-                        s3_upload_error(
-                            status_code,
-                            &format!("{service_err} {msg}"),
-                            "completing multipart upload",
-                            s3_bucket,
-                            s3_upload_key,
-                        )
-                    })?;
-
-                if let Some(tracker) = progress_tracker {
-                    tracker.increase_processed(1, 0);
-                }
-                Ok(())
-            }
-            Err(e) => {
-                // Abort the multipart upload on failure
-                let _ = self
-                    .s3_client
-                    .abort_multipart_upload()
-                    .bucket(s3_bucket)
-                    .key(s3_upload_key)
-                    .upload_id(&upload_id)
-                    .expected_bucket_owner(&self.account_id)
-                    .send()
-                    .await;
-                Err(e)
-            }
-        }
+    /// Returns the account ID used for ExpectedBucketOwner.
+    pub fn account_id(&self) -> &str {
+        &self.account_id
     }
 
     /// Upload raw bytes to S3 (used for manifest files). Includes `ExpectedBucketOwner`.
@@ -860,6 +431,7 @@ impl S3UploadContext {
         }
 
         req.send().await.map_err(|sdk_err| {
+            use aws_sdk_s3::error::ProvideErrorMetadata;
             let status_code = sdk_err.raw_response().map_or(0, |r| r.status().as_u16());
             let service_err = sdk_err.into_service_error();
             let raw = format!("{service_err}");
@@ -875,243 +447,38 @@ impl S3UploadContext {
         })?;
         Ok(())
     }
-
-    /// Verify S3 check cache integrity by sampling up to 30 cached entries
-    /// and confirming they exist in S3. Returns false if any are missing.
-    pub async fn verify_hash_cache_integrity(
-        &self,
-        s3_check_cache_dir: Option<&str>,
-        manifest: &AssetManifest,
-        s3_cas_prefix: &str,
-        s3_bucket: &str,
-    ) -> bool {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let cache_dir = s3_check_cache_dir
-            .map(ToOwned::to_owned)
-            .or_else(crate::caches::default_cache_dir);
-        let Some(Ok(cache)) = cache_dir.as_deref().map(S3CheckCache::new) else {
-            return true; // No cache → nothing to verify
-        };
-
-        // Build S3 keys for all manifest files, shuffle, sample up to 30
-        let mut s3_keys: Vec<String> = manifest
-            .paths
-            .iter()
-            .map(|f| format!("{}/{}.xxh128", s3_cas_prefix, f.hash))
-            .collect();
-
-        // Deterministic-ish shuffle using hash of first key + time
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        for i in (1..s3_keys.len()).rev() {
-            let mut h = DefaultHasher::new();
-            seed.hash(&mut h);
-            i.hash(&mut h);
-            let j = (h.finish() as usize) % (i + 1);
-            s3_keys.swap(i, j);
-        }
-
-        let mut sampled = Vec::new();
-        for key in &s3_keys {
-            let cache_key = format!("{s3_bucket}/{key}");
-            if cache.get_entry(&cache_key).is_some() {
-                sampled.push(key.clone());
-                if sampled.len() >= 30 {
-                    break;
-                }
-            }
-        }
-
-        for key in &sampled {
-            match self.file_already_uploaded(s3_bucket, key).await {
-                Ok(true) => {}
-                _ => return false,
-            }
-        }
-        true
-    }
-
-    /// Reset the S3 check cache by removing the database file.
-    pub fn reset_s3_check_cache(&self, s3_check_cache_dir: Option<&str>) {
-        let cache_dir = s3_check_cache_dir
-            .map(ToOwned::to_owned)
-            .or_else(crate::caches::default_cache_dir);
-        if let Some(dir) = cache_dir {
-            let db_path = Path::new(&dir).join("s3_check_cache.db");
-            if db_path.exists() {
-                log::debug!("Deleting s3_check_cache.db due to integrity mismatch");
-                let _ = std::fs::remove_file(db_path);
-            }
-        }
-    }
-
-    /// Upload all files from a manifest to S3 CAS. Small files in parallel,
-    /// large files serially. Uses S3 check cache to skip already-uploaded files.
-    pub async fn upload_input_files(
-        &self,
-        manifest: &AssetManifest,
-        s3_bucket: &str,
-        source_root: &Path,
-        s3_cas_prefix: &str,
-        progress_tracker: Option<&ProgressTracker>,
-        s3_check_cache_dir: Option<&str>,
-        force_s3_check: Option<bool>,
-    ) -> Result<(), JobAttachmentsError> {
-        use futures::stream::{self, StreamExt, TryStreamExt};
-
-        let cache_dir = s3_check_cache_dir
-            .map(ToOwned::to_owned)
-            .or_else(crate::caches::default_cache_dir);
-        let cache = cache_dir.as_deref().map(S3CheckCache::new).transpose()
-            .map_err(|e| JobAttachmentsError::AssetSync(format!("S3 check cache: {e}")))?;
-
-        let force = force_s3_check.unwrap_or(false);
-
-        // Separate files into small and large queues (matching Python's
-        // _separate_files_by_size). Small files upload in parallel; large
-        // files upload serially with internal multipart parallelism.
-        let mut small_files = Vec::new();
-        let mut large_files = Vec::new();
-        for file in &manifest.paths {
-            if (file.size as usize) > self.small_file_threshold {
-                large_files.push(file);
-            } else {
-                small_files.push(file);
-            }
-        }
-
-        // Upload small files in parallel
-        stream::iter(small_files.into_iter().map(|file| {
-            let cache = &cache;
-            async move {
-                self.upload_one_file(
-                    file,
-                    s3_bucket,
-                    source_root,
-                    s3_cas_prefix,
-                    progress_tracker,
-                    cache,
-                    force,
-                )
-                .await
-            }
-        }))
-        .buffer_unordered(self.num_upload_workers)
-        .try_collect::<Vec<()>>()
-        .await?;
-
-        // Upload large files serially
-        for file in large_files {
-            self.upload_one_file(
-                file,
-                s3_bucket,
-                source_root,
-                s3_cas_prefix,
-                progress_tracker,
-                &cache,
-                force,
-            )
-            .await?;
-        }
-
-        // Final progress report + cancellation check
-        if let Some(tracker) = progress_tracker {
-            tracker.report_progress();
-            if !tracker.continue_reporting() {
-                return Err(JobAttachmentsError::Cancelled {
-                    message: "File upload cancelled.".into(),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Upload a single file: check cache, check S3, upload if needed, update cache.
-    // Changing &Option<T> → Option<&T> would require restructuring callers
-    // that hold the Option in a variable and pass a reference to it.
-    #[allow(
-        clippy::ref_option,
-        reason = "callers pass &Option from local bindings"
-    )]
-    async fn upload_one_file(
-        &self,
-        file: &ManifestPath,
-        s3_bucket: &str,
-        source_root: &Path,
-        s3_cas_prefix: &str,
-        progress_tracker: Option<&ProgressTracker>,
-        cache: &Option<S3CheckCache>,
-        force: bool,
-    ) -> Result<(), JobAttachmentsError> {
-        let local_path = source_root.join(&file.path);
-        let s3_key = format!("{}/{}.{}", s3_cas_prefix, file.hash, "xxh128");
-        let cache_key = format!("{s3_bucket}/{s3_key}");
-
-        // Check cache unless force
-        if !force
-            && let Some(c) = cache
-            && c.get_entry(&cache_key).is_some()
-        {
-            if let Some(tracker) = progress_tracker {
-                tracker.increase_skipped(1, file.size);
-            }
-            return Ok(());
-        }
-
-        // HeadObject check
-        if self.file_already_uploaded(s3_bucket, &s3_key).await? {
-            if let Some(c) = cache {
-                let _ = c.put_entry(&cache_key);
-            }
-            if let Some(tracker) = progress_tracker {
-                tracker.increase_skipped(1, file.size);
-            }
-            return Ok(());
-        }
-
-        // Upload
-        self.upload_file_to_s3(&local_path, s3_bucket, &s3_key, progress_tracker)
-            .await?;
-
-        // Update cache
-        if let Some(c) = cache {
-            let _ = c.put_entry(&cache_key);
-        }
-
-        Ok(())
-    }
 }
-
-/// Orchestrate uploading all manifests to S3. Builds `ManifestProperties`
-/// and Attachments from the results.
+/// Orchestrate hashing and uploading asset files to S3. Builds `ManifestProperties`
+/// and Attachments from the results. Uses openjd's pipelined hash+upload engine.
 pub async fn upload_assets(
     farm_id: &str,
     queue_id: &str,
     job_attachment_settings: &JobAttachmentS3Settings,
-    manifests: &[AssetRootManifest],
+    asset_groups: &[AssetRootGroup],
     ctx: &S3UploadContext,
     on_uploading_assets: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     s3_check_cache_dir: Option<&str>,
     force_s3_check: Option<bool>,
 ) -> Result<(SummaryStatistics, Attachments), JobAttachmentsError> {
+    use openjd_snapshots::{
+        AbsManifest, AsyncDataCache, HashUploadOptions, S3DataCache,
+        collect_abs_snapshot, hash_upload_abs_manifest, CollectOptions,
+    };
+    use std::sync::Arc;
+
     if farm_id.is_empty() || queue_id.is_empty() {
         return Err(JobAttachmentsError::AssetSync(
             "upload_assets: Farm or Fleet ID is missing.".into(),
         ));
     }
 
-    // Compute totals from manifests that have files
+    // Compute totals
     let mut total_files: u64 = 0;
     let mut total_bytes: u64 = 0;
-    for m in manifests {
-        if let Some(ref am) = m.asset_manifest {
-            total_files += am.paths.len() as u64;
-            total_bytes += am.paths.iter().map(|p| p.size).sum::<u64>();
+    for group in asset_groups {
+        for input in &group.inputs {
+            total_files += 1;
+            total_bytes += std::fs::metadata(input).map(|m| m.len()).unwrap_or(0);
         }
     }
 
@@ -1125,21 +492,24 @@ pub async fn upload_assets(
     let start = std::time::Instant::now();
     let mut manifest_properties_list = Vec::new();
 
-    for arm in manifests {
-        let output_rel_paths: Vec<String> = arm
+    let cas_prefix = job_attachment_settings.full_cas_prefix()?;
+    let partial_prefix = job_attachment_settings.partial_manifest_prefix(farm_id, queue_id);
+
+    for group in asset_groups {
+        let output_rel_paths: Vec<String> = group
             .outputs
             .iter()
             .filter_map(|p| {
-                p.strip_prefix(&arm.root_path)
+                p.strip_prefix(&group.root_path)
                     .ok()
                     .map(|r| r.to_string_lossy().into_owned())
             })
             .collect();
 
         let mut props = ManifestProperties {
-            root_path: arm.root_path.clone(),
+            root_path: group.root_path.clone(),
             root_path_format: PathFormat::host(),
-            file_system_location_name: arm.file_system_location_name.clone(),
+            file_system_location_name: group.file_system_location_name.clone(),
             input_manifest_path: None,
             input_manifest_hash: None,
             output_relative_directories: if output_rel_paths.is_empty() {
@@ -1149,14 +519,113 @@ pub async fn upload_assets(
             },
         };
 
-        if let Some(ref manifest) = arm.asset_manifest {
-            let partial_prefix = job_attachment_settings.partial_manifest_prefix(farm_id, queue_id);
-            let cas_prefix = job_attachment_settings.full_cas_prefix()?;
+        if !group.inputs.is_empty() {
+            // Check cancellation before starting
+            if !progress_tracker.report_progress() {
+                return Err(JobAttachmentsError::Cancelled {
+                    message: "File upload cancelled.".into(),
+                });
+            }
 
-            // Upload manifest bytes first (Python order: manifest, then files)
-            
+            // Collect unhashed AbsSnapshot from files on disk
+            let file_paths: Vec<PathBuf> = group.inputs.iter().cloned().collect();
+            let abs_snapshot = collect_abs_snapshot(
+                &[] as &[PathBuf],
+                &file_paths,
+                CollectOptions::default(),
+            )
+            .map_err(|e| {
+                JobAttachmentsError::AssetSync(format!("Failed to collect snapshot: {e}"))
+            })?;
+
+            // Build S3DataCache
+            let s3_cache = S3DataCache::new(
+                job_attachment_settings.s3_bucket_name.clone(),
+                cas_prefix.clone(),
+                ctx.s3_client().clone(),
+            )
+            .with_expected_bucket_owner(Some(ctx.account_id().to_owned()));
+
+            // Attach S3CheckCache if available
+            let check_cache_dir = s3_check_cache_dir
+                .map(ToOwned::to_owned)
+                .or_else(crate::caches::default_cache_dir);
+            let s3_cache = if let Some(ref dir) = check_cache_dir {
+                if let Ok(check_cache) = S3CheckCache::new(dir) {
+                    s3_cache.with_s3_check_cache(Some(Arc::new(check_cache)))
+                } else {
+                    s3_cache
+                }
+            } else {
+                s3_cache
+            };
+            let s3_cache = if force_s3_check == Some(true) {
+                s3_cache.with_force_s3_check(true)
+            } else {
+                s3_cache
+            };
+
+            // HashCache for skipping unchanged files
+            let hash_cache_dir = s3_check_cache_dir
+                .map(ToOwned::to_owned)
+                .or_else(crate::caches::default_cache_dir);
+            let hash_cache = hash_cache_dir
+                .as_deref()
+                .and_then(|d| HashCache::new(d).ok())
+                .map(Arc::new);
+
+            let data_cache: Arc<dyn AsyncDataCache> = Arc::new(s3_cache);
+
+            // Hash + upload in one pipelined pass
+            let upload_result = hash_upload_abs_manifest(
+                &AbsManifest::Snapshot(abs_snapshot),
+                data_cache,
+                HashUploadOptions {
+                    hash_cache,
+                    ..Default::default()
+                },
+            )
+            .await
+            .map_err(|e| {
+                JobAttachmentsError::AssetSync(format!("Upload failed: {e}"))
+            })?;
+
+            // Build AssetManifest from the hashed result for manifest JSON encoding
+            let hashed_snapshot = match &upload_result.manifest {
+                AbsManifest::Snapshot(s) => s,
+                _ => unreachable!("input was Snapshot"),
+            };
+            let source_root = Path::new(&group.root_path);
+            let root_str = source_root.to_string_lossy();
+            let paths: Vec<ManifestPath> = hashed_snapshot
+                .files
+                .iter()
+                .filter(|f| !f.deleted && f.symlink_target.is_none())
+                .map(|f| {
+                    // Convert absolute path back to relative
+                    let rel = f.path.strip_prefix(&*root_str)
+                        .or_else(|| f.path.strip_prefix("/"))
+                        .unwrap_or(&f.path)
+                        .trim_start_matches('/');
+                    ManifestPath {
+                        path: rel.to_string(),
+                        hash: f.hash.clone().unwrap_or_default(),
+                        size: f.size.unwrap_or(0),
+                        mtime: f.mtime.unwrap_or(0) as i64,
+                    }
+                })
+                .collect();
+            let total_size: u64 = paths.iter().map(|p| p.size).sum();
+            let manifest = AssetManifest::new(
+                HashAlgorithm::Xxh128,
+                ManifestVersion::V2023_03_03,
+                total_size,
+                paths,
+            )?;
+
+            // Encode and upload manifest JSON
             let manifest_bytes = manifest.encode().into_bytes();
-            let manifest_name_prefix = hash_data(arm.root_path.as_bytes());
+            let manifest_name_prefix = hash_data(group.root_path.as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
             let full_key =
@@ -1170,35 +639,19 @@ pub async fn upload_assets(
             )
             .await?;
 
-            // Verify S3 check cache integrity before uploading files.
-            // Skip when force_s3_check is True — we'll HEAD every file anyway.
-            if force_s3_check != Some(true)
-                && !ctx
-                    .verify_hash_cache_integrity(
-                        s3_check_cache_dir,
-                        manifest,
-                        &cas_prefix,
-                        &job_attachment_settings.s3_bucket_name,
-                    )
-                    .await
-            {
-                ctx.reset_s3_check_cache(s3_check_cache_dir);
-            }
-
-            // Upload input files
-            ctx.upload_input_files(
-                manifest,
-                &job_attachment_settings.s3_bucket_name,
-                Path::new(&arm.root_path),
-                &cas_prefix,
-                Some(&progress_tracker),
-                s3_check_cache_dir,
-                force_s3_check,
-            )
-            .await?;
-
             props.input_manifest_path = Some(partial_key);
             props.input_manifest_hash = Some(hash_data(&manifest_bytes));
+
+            // Update progress tracker
+            let stats = &upload_result.statistics;
+            progress_tracker.increase_processed(
+                stats.hashed_files as u64,
+                stats.hashed_bytes,
+            );
+            progress_tracker.increase_skipped(
+                stats.skipped_files as u64,
+                stats.skipped_bytes,
+            );
         }
 
         manifest_properties_list.push(props);
@@ -1613,392 +1066,5 @@ mod tests {
         .unwrap();
 
         assert!(result.asset_groups.is_empty());
-    }
-
-    // === hash_assets_and_create_manifest single group with inputs ===
-
-    #[test]
-    fn hash_assets_creates_manifest_for_single_group() {
-        let dir = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir, "a.txt", b"hello");
-        let f2 = create_test_file(&dir, "b.txt", b"world");
-
-        let group = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1, f2].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-
-        let cache_dir = TempDir::new().unwrap();
-        let (stats, manifests) = hash_assets_and_create_manifest(
-            &[group],
-            2,
-            10,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(manifests.len(), 1);
-        assert!(manifests[0].asset_manifest.is_some());
-        assert_eq!(stats.processed_files + stats.skipped_files, 2);
-    }
-
-    // === Group with outputs but no inputs has None manifest ===
-
-    #[test]
-    fn hash_assets_output_only_group_has_no_manifest() {
-        let dir = TempDir::new().unwrap();
-        let out_dir = dir.path().join("output");
-        fs::create_dir_all(&out_dir).unwrap();
-
-        let group = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: Default::default(),
-            outputs: [out_dir].into_iter().collect(),
-            references: Default::default(),
-        };
-
-        let cache_dir = TempDir::new().unwrap();
-        let (_stats, manifests) = hash_assets_and_create_manifest(
-            &[group],
-            0,
-            0,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(manifests.len(), 1);
-        assert!(manifests[0].asset_manifest.is_none());
-    }
-
-    // === Multiple groups produce multiple manifests ===
-
-    #[test]
-    fn hash_assets_multiple_groups_multiple_manifests() {
-        let dir1 = TempDir::new().unwrap();
-        let dir2 = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir1, "a.txt", b"aaa");
-        let f2 = create_test_file(&dir2, "b.txt", b"bbb");
-
-        let groups = vec![
-            AssetRootGroup {
-                root_path: dir1.path().to_string_lossy().into(),
-                file_system_location_name: None,
-                inputs: [f1].into_iter().collect(),
-                outputs: Default::default(),
-                references: Default::default(),
-            },
-            AssetRootGroup {
-                root_path: dir2.path().to_string_lossy().into(),
-                file_system_location_name: None,
-                inputs: [f2].into_iter().collect(),
-                outputs: Default::default(),
-                references: Default::default(),
-            },
-        ];
-
-        let cache_dir = TempDir::new().unwrap();
-        let (_stats, manifests) = hash_assets_and_create_manifest(
-            &groups,
-            2,
-            6,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(manifests.len(), 2);
-        assert!(manifests[0].asset_manifest.is_some());
-        assert!(manifests[1].asset_manifest.is_some());
-    }
-
-    // === New file (not in cache) is hashed and cached ===
-
-    #[test]
-    fn hash_assets_new_file_hashed_and_cached() {
-        let dir = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir, "new.txt", b"new content");
-
-        let group = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-
-        let cache_dir = TempDir::new().unwrap();
-        let (stats, _) = hash_assets_and_create_manifest(
-            &[group],
-            1,
-            11,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(stats.processed_files, 1);
-        assert_eq!(stats.skipped_files, 0);
-    }
-
-    // === Cached unmodified file uses cached hash (skipped) ===
-
-    #[test]
-    fn hash_assets_cached_unmodified_file_skipped() {
-        let dir = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir, "cached.txt", b"cached content");
-
-        let cache_dir = TempDir::new().unwrap();
-
-        // First pass: hash the file (populates cache)
-        let group1 = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1.clone()].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-        let (stats1, _) = hash_assets_and_create_manifest(
-            &[group1],
-            1,
-            14,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-        assert_eq!(stats1.processed_files, 1);
-
-        // Second pass: same file, same mtime — should be skipped
-        let group2 = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-        let (stats2, _) = hash_assets_and_create_manifest(
-            &[group2],
-            1,
-            14,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-        assert_eq!(stats2.skipped_files, 1);
-        assert_eq!(stats2.processed_files, 0);
-    }
-
-    // === Cached file with different mtime is re-hashed ===
-
-    #[test]
-    fn hash_assets_modified_file_rehashed() {
-        let dir = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir, "modify.txt", b"original");
-
-        let cache_dir = TempDir::new().unwrap();
-
-        // First pass
-        let group1 = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1.clone()].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-        hash_assets_and_create_manifest(
-            &[group1],
-            1,
-            8,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-
-        // Modify the file (changes mtime)
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        fs::write(&f1, b"modified content").unwrap();
-
-        // Second pass: mtime changed, should be re-hashed (processed, not skipped)
-        let group2 = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-        let (stats2, _) = hash_assets_and_create_manifest(
-            &[group2],
-            1,
-            16,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-        assert_eq!(stats2.processed_files, 1);
-        assert_eq!(stats2.skipped_files, 0);
-    }
-
-    // === Callback returns false cancels with error ===
-
-    #[test]
-    fn hash_assets_callback_cancel_returns_error() {
-        let dir = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir, "a.txt", b"data");
-
-        let group = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-
-        let cache_dir = TempDir::new().unwrap();
-        let cancel_callback = |_: ProgressReportMetadata| -> bool { false };
-
-        let result = hash_assets_and_create_manifest(
-            &[group],
-            1,
-            4,
-            Some(cache_dir.path().to_str().unwrap()),
-            Some(Box::new(cancel_callback)),
-        );
-        assert!(result.is_err());
-    }
-
-    // === Progress tracker reports progress for each file ===
-
-    #[test]
-    fn hash_assets_reports_progress() {
-        let dir = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir, "a.txt", b"aaa");
-        let f2 = create_test_file(&dir, "b.txt", b"bbb");
-
-        let call_count = Arc::new(AtomicU32::new(0));
-        let count_clone = call_count.clone();
-        let callback = move |_: ProgressReportMetadata| -> bool {
-            count_clone.fetch_add(1, Ordering::SeqCst);
-            true
-        };
-
-        let group = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1, f2].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-
-        let cache_dir = TempDir::new().unwrap();
-        hash_assets_and_create_manifest(
-            &[group],
-            2,
-            6,
-            Some(cache_dir.path().to_str().unwrap()),
-            Some(Box::new(callback)),
-        )
-        .unwrap();
-
-        assert!(call_count.load(Ordering::SeqCst) >= 1);
-    }
-
-    // === Manifest paths are POSIX-style relative paths ===
-
-    #[test]
-    fn hash_assets_manifest_paths_are_posix_relative() {
-        let dir = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir, "sub/file.txt", b"content");
-
-        let group = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-
-        let cache_dir = TempDir::new().unwrap();
-        let (_, manifests) = hash_assets_and_create_manifest(
-            &[group],
-            1,
-            7,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-
-        let manifest = manifests[0].asset_manifest.as_ref().unwrap();
-        let path = &manifest.paths[0].path;
-        assert!(
-            path.contains('/') || !path.contains('\\'),
-            "path should use forward slashes: {path}"
-        );
-        assert!(!path.starts_with('/'), "path should be relative: {path}");
-    }
-
-    // === File mtime stored as microseconds (integer) ===
-
-    #[test]
-    fn hash_assets_mtime_is_microseconds_integer() {
-        let dir = TempDir::new().unwrap();
-        let f1 = create_test_file(&dir, "a.txt", b"data");
-
-        let group = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: [f1].into_iter().collect(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-
-        let cache_dir = TempDir::new().unwrap();
-        let (_, manifests) = hash_assets_and_create_manifest(
-            &[group],
-            1,
-            4,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-
-        let manifest = manifests[0].asset_manifest.as_ref().unwrap();
-        let mtime = manifest.paths[0].mtime;
-        assert!(
-            mtime > 1_000_000_000_000,
-            "mtime should be in microseconds since epoch, got: {mtime}"
-        );
-    }
-
-    // === Empty file list returns None manifest ===
-
-    #[test]
-    fn hash_assets_empty_inputs_returns_none_manifest() {
-        let dir = TempDir::new().unwrap();
-
-        let group = AssetRootGroup {
-            root_path: dir.path().to_string_lossy().into(),
-            file_system_location_name: None,
-            inputs: Default::default(),
-            outputs: Default::default(),
-            references: Default::default(),
-        };
-
-        let cache_dir = TempDir::new().unwrap();
-        let (_, manifests) = hash_assets_and_create_manifest(
-            &[group],
-            0,
-            0,
-            Some(cache_dir.path().to_str().unwrap()),
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(manifests.len(), 1);
-        assert!(manifests[0].asset_manifest.is_none());
     }
 }

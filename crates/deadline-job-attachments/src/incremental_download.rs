@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tempfile::NamedTempFile;
 
+#[allow(unused_imports)]
 use crate::asset_manifests::{AssetManifest, HashAlgorithm, ManifestPath, hash_data};
 use crate::errors::JobAttachmentsError;
 use crate::path_mapping::PathMappingRuleApplier;

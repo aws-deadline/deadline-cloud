@@ -265,19 +265,49 @@ pub async fn attachment_upload(
             );
         }
 
-        // Upload files from manifest — use destination_path as the local root
-        // (source_path is the original machine's path; destination_path is where
-        // files are on this machine after path mapping)
-        ctx.upload_input_files(
-            manifest,
-            &s3_settings.s3_bucket_name,
-            Path::new(&rule.destination_path),
-            &cas_prefix,
-            None, // progress tracker — TODO: wire up on_progress
-            None,
-            None,
-        )
-        .await?;
+        // Upload files from manifest via openjd hash+upload engine
+        {
+            use openjd_snapshots::{
+                AbsManifest, AsyncDataCache, CollectOptions, HashUploadOptions, S3DataCache,
+                collect_abs_snapshot, hash_upload_abs_manifest,
+            };
+            use std::sync::Arc;
+
+            let source_root = Path::new(&rule.destination_path);
+            let file_paths: Vec<std::path::PathBuf> = manifest
+                .paths
+                .iter()
+                .map(|p| source_root.join(&p.path))
+                .collect();
+
+            let abs_snapshot = collect_abs_snapshot(
+                &[] as &[std::path::PathBuf],
+                &file_paths,
+                CollectOptions::default(),
+            )
+            .map_err(|e| {
+                JobAttachmentsError::AssetSync(format!("Failed to collect snapshot: {e}"))
+            })?;
+
+            let s3_cache = S3DataCache::new(
+                s3_settings.s3_bucket_name.clone(),
+                cas_prefix.clone(),
+                ctx.s3_client().clone(),
+            )
+            .with_expected_bucket_owner(Some(ctx.account_id().to_owned()));
+
+            let data_cache: Arc<dyn AsyncDataCache> = Arc::new(s3_cache);
+
+            hash_upload_abs_manifest(
+                &AbsManifest::Snapshot(abs_snapshot),
+                data_cache,
+                HashUploadOptions::default(),
+            )
+            .await
+            .map_err(|e| {
+                JobAttachmentsError::AssetSync(format!("Upload failed: {e}"))
+            })?;
+        }
 
         // Upload manifest file itself if upload_manifest_path provided
         let manifest_bytes = manifest.encode().into_bytes();
