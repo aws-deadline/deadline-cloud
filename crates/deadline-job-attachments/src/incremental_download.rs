@@ -178,7 +178,7 @@ pub fn add_output_manifests_from_s3(
                 .unwrap_or("");
             let root_path = m["rootPath"].as_str().unwrap_or("");
             let input = format!("{loc_name}{root_path}");
-            (i, hash_data(input.as_bytes(), HashAlgorithm::Xxh128))
+            (i, hash_data(input.as_bytes()))
         })
         .collect();
 
@@ -630,7 +630,7 @@ mod tests {
     fn add_manifests_matches_keys_to_session_actions() {
         // session actions lacking manifests get populated
         let job = sample_job_with_attachments();
-        let root_path_hash = hash_data("/mnt/shared".as_bytes(), HashAlgorithm::Xxh128);
+        let root_path_hash = hash_data("/mnt/shared".as_bytes());
         let keys = vec![format!(
             "prefix/Manifests/sessionaction-abc-0/{root_path_hash}/manifest.json"
         )];

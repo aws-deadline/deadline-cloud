@@ -58,7 +58,7 @@ fn test_manifest(dir: &Path, files: &[(&str, &[u8])]) -> AssetManifest {
         }
         std::fs::write(&file_path, content).unwrap();
         let hash =
-            deadline_job_attachments::asset_manifests::hash_file(&file_path, HashAlgorithm::Xxh128)
+            deadline_job_attachments::asset_manifests::hash_file(&file_path)
                 .unwrap();
         let meta = std::fs::metadata(&file_path).unwrap();
         paths.push(ManifestPath {
@@ -1052,7 +1052,7 @@ async fn upload_input_files_large_file_multipart() {
     let file_path = dir.path().join("large.bin");
     std::fs::write(&file_path, &large_content).unwrap();
     let hash =
-        deadline_job_attachments::asset_manifests::hash_file(&file_path, HashAlgorithm::Xxh128)
+        deadline_job_attachments::asset_manifests::hash_file(&file_path)
             .unwrap();
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
@@ -1141,7 +1141,7 @@ async fn upload_file_to_s3_multipart_part_failure_aborts() {
     let file_path = dir.path().join("large.bin");
     std::fs::write(&file_path, &large_content).unwrap();
     let hash =
-        deadline_job_attachments::asset_manifests::hash_file(&file_path, HashAlgorithm::Xxh128)
+        deadline_job_attachments::asset_manifests::hash_file(&file_path)
             .unwrap();
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,
@@ -1210,8 +1210,7 @@ async fn upload_input_files_small_file_uses_put_object_not_multipart() {
     // 100 bytes — well below 8MB threshold
     std::fs::write(dir.path().join("small.txt"), [0x41u8; 100]).unwrap();
     let hash = deadline_job_attachments::asset_manifests::hash_file(
-        &dir.path().join("small.txt"),
-        HashAlgorithm::Xxh128,
+        &dir.path().join("small.txt")
     )
     .unwrap();
     let manifest = AssetManifest::new(
@@ -1278,7 +1277,7 @@ async fn upload_input_files_multipart_create_fails_propagates_error() {
     let file_path = dir.path().join("large.bin");
     std::fs::write(&file_path, &large_content).unwrap();
     let hash =
-        deadline_job_attachments::asset_manifests::hash_file(&file_path, HashAlgorithm::Xxh128)
+        deadline_job_attachments::asset_manifests::hash_file(&file_path)
             .unwrap();
     let manifest = AssetManifest::new(
         HashAlgorithm::Xxh128,

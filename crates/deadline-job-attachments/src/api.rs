@@ -10,7 +10,7 @@ use std::path::Path;
 use crate::errors::JobAttachmentsError;
 use deadline_config::ini::IniConfig;
 
-use crate::asset_manifests::{AssetManifest, HashAlgorithm, decode_manifest, hash_data};
+use crate::asset_manifests::{AssetManifest, decode_manifest, hash_data};
 use crate::download::download_files_from_manifests;
 use crate::models::{
     FileConflictResolution, JobAttachmentS3Settings, PathMappingRule, UploadManifestInfo,
@@ -160,7 +160,7 @@ pub async fn attachment_download(
         let destination = rule_list
             .iter()
             .find(|rule| {
-                let hashed = rule.get_hashed_source_path(manifest.hash_alg);
+                let hashed = rule.get_hashed_source_path();
                 file_name.contains(&hashed)
             })
             .map_or_else(
@@ -239,7 +239,7 @@ pub async fn attachment_upload(
         let rule = rule_list
             .iter()
             .find(|r| {
-                let hashed = r.get_hashed_source_path(manifest.hash_alg);
+                let hashed = r.get_hashed_source_path();
                 file_name.contains(&hashed)
             })
             .ok_or_else(|| {
@@ -281,8 +281,7 @@ pub async fn attachment_upload(
 
         // Upload manifest file itself if upload_manifest_path provided
         let manifest_bytes = manifest.encode().into_bytes();
-        let hash_alg = HashAlgorithm::Xxh128;
-        let manifest_hash = hash_data(&manifest_bytes, hash_alg);
+        let manifest_hash = hash_data(&manifest_bytes);
 
         let partial_key = if let Some(prefix) = upload_manifest_path {
             let key = format!("{prefix}/{file_name}");

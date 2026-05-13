@@ -8,7 +8,7 @@ use crate::errors::JobAttachmentsError;
 use serde::Serialize;
 
 use crate::api::read_manifests;
-use crate::asset_manifests::{AssetManifest, HashAlgorithm, decode_manifest, hash_data};
+use crate::asset_manifests::{AssetManifest, decode_manifest, hash_data};
 use crate::diff::{FileStatus, fast_diff, hash_diff};
 use crate::download::{
     download_manifest_from_s3, get_output_manifests_by_asset_root, merge_asset_manifests,
@@ -189,7 +189,7 @@ pub fn write_manifest(
     destination: &str,
     name: Option<&str>,
 ) -> Result<String, JobAttachmentsError> {
-    let root_hash = hash_data(root.as_bytes(), HashAlgorithm::Xxh128);
+    let root_hash = hash_data(root.as_bytes());
     let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
 
     let manifest_name = if let Some(n) = name {
@@ -532,7 +532,7 @@ pub async fn manifest_download(
     for (root, manifests) in &manifests_by_root {
         let merged = merge_asset_manifests(manifests)?;
         if let Some(manifest) = merged {
-            let root_hash = hash_data(root.as_bytes(), HashAlgorithm::Xxh128);
+            let root_hash = hash_data(root.as_bytes());
             let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
 
             // Name derivation: replace / with _, strip leading _

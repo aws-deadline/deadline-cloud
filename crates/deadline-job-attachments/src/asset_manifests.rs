@@ -39,13 +39,13 @@ impl std::str::FromStr for HashAlgorithm {
 
 // --- Hashing ---
 
-/// Hashes a byte slice with the given algorithm. Returns a 32-char lowercase hex string.
-pub fn hash_data(data: &[u8], _alg: HashAlgorithm) -> String {
+/// Hashes a byte slice. Returns a 32-char lowercase hex string (xxh128).
+pub fn hash_data(data: &[u8]) -> String {
     openjd_snapshots::hash::hash_data(data)
 }
 
-/// Hashes a file by reading it in chunks. Returns a 32-char lowercase hex string.
-pub fn hash_file(path: &Path, _alg: HashAlgorithm) -> Result<String, JobAttachmentsError> {
+/// Hashes a file by reading it in chunks. Returns a 32-char lowercase hex string (xxh128).
+pub fn hash_file(path: &Path) -> Result<String, JobAttachmentsError> {
     openjd_snapshots::hash::hash_file(path).map_err(|e| {
         JobAttachmentsError::AssetSync(format!("Failed to hash file {}: {e}", path.display()))
     })

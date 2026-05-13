@@ -44,7 +44,7 @@ fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> AssetManifest {
         }
         fs::write(&file_path, content).unwrap();
         let hash =
-            deadline_job_attachments::asset_manifests::hash_data(content, HashAlgorithm::Xxh128);
+            deadline_job_attachments::asset_manifests::hash_data(content);
         let meta = fs::metadata(&file_path).unwrap();
         paths.push(ManifestPath {
             path: name.to_string(),

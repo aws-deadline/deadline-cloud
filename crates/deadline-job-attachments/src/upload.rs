@@ -316,7 +316,7 @@ fn hash_with_cache(
         *was_cached = true;
         return Ok(hash);
     }
-    let h = hash_file(file_path, HashAlgorithm::Xxh128)?;
+    let h = hash_file(file_path)?;
     cache
         .put(file_path, "xxh128", 0, -1, &h, mtime_secs)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to write hash cache: {e}")))?;
@@ -403,7 +403,7 @@ pub fn hash_assets_and_create_manifest(
                         mtime_ns as u64,
                         &mut was_cached,
                     )?,
-                    None => hash_file(input_path, HashAlgorithm::Xxh128)?,
+                    None => hash_file(input_path)?,
                 };
 
                 // Relative POSIX path
@@ -1154,9 +1154,9 @@ pub async fn upload_assets(
             let cas_prefix = job_attachment_settings.full_cas_prefix()?;
 
             // Upload manifest bytes first (Python order: manifest, then files)
-            let hash_alg = HashAlgorithm::Xxh128;
+            
             let manifest_bytes = manifest.encode().into_bytes();
-            let manifest_name_prefix = hash_data(arm.root_path.as_bytes(), hash_alg);
+            let manifest_name_prefix = hash_data(arm.root_path.as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
             let full_key =
@@ -1198,7 +1198,7 @@ pub async fn upload_assets(
             .await?;
 
             props.input_manifest_path = Some(partial_key);
-            props.input_manifest_hash = Some(hash_data(&manifest_bytes, hash_alg));
+            props.input_manifest_hash = Some(hash_data(&manifest_bytes));
         }
 
         manifest_properties_list.push(props);
@@ -1304,9 +1304,9 @@ pub fn snapshot_assets(
             }
 
             // Write manifest
-            let hash_alg = HashAlgorithm::Xxh128;
+            
             let manifest_bytes = manifest.encode().into_bytes();
-            let manifest_name_prefix = hash_data(arm.root_path.as_bytes(), hash_alg);
+            let manifest_name_prefix = hash_data(arm.root_path.as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
 
@@ -1321,7 +1321,7 @@ pub fn snapshot_assets(
             })?;
 
             props.input_manifest_path = Some(partial_key);
-            props.input_manifest_hash = Some(hash_data(&manifest_bytes, hash_alg));
+            props.input_manifest_hash = Some(hash_data(&manifest_bytes));
         }
 
         manifest_properties_list.push(props);

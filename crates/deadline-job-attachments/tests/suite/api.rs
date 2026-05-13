@@ -276,12 +276,10 @@ async fn attachment_download_with_path_mapping_rules() {
 
     // Create manifest files with hashed source path in filename
     let hash1 = deadline_job_attachments::asset_manifests::hash_data(
-        dest1.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        dest1.path().to_string_lossy().as_bytes()
     );
     let hash2 = deadline_job_attachments::asset_manifests::hash_data(
-        dest2.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        dest2.path().to_string_lossy().as_bytes()
     );
 
     let p1 = write_manifest_file(
@@ -437,8 +435,7 @@ async fn attachment_download_duplicate_destination_errors() {
 
     // Both manifests have the same hashed source path → same destination
     let hash = deadline_job_attachments::asset_manifests::hash_data(
-        dest.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        dest.path().to_string_lossy().as_bytes()
     );
     let p1 = write_manifest_file(
         dir.path(),
@@ -551,11 +548,10 @@ async fn attachment_upload_with_root_dirs() {
 
     // Hash the root path to create manifest filename
     let root_hash = deadline_job_attachments::asset_manifests::hash_data(
-        root.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        root.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_job_attachments::asset_manifests::hash_data(b"hello", HashAlgorithm::Xxh128);
+        deadline_job_attachments::asset_manifests::hash_data(b"hello");
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{root_hash}_input"),
@@ -730,8 +726,7 @@ async fn attachment_upload_malformed_s3_uri_errors() {
     let dir = TempDir::new().unwrap();
     let root = TempDir::new().unwrap();
     let root_hash = deadline_job_attachments::asset_manifests::hash_data(
-        root.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        root.path().to_string_lossy().as_bytes()
     );
     let p1 = write_manifest_file(
         dir.path(),
@@ -804,8 +799,7 @@ async fn attachment_download_parses_s3_uri_into_bucket_and_prefix() {
     let dest = TempDir::new().unwrap();
 
     let dest_hash = deadline_job_attachments::asset_manifests::hash_data(
-        dest.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        dest.path().to_string_lossy().as_bytes()
     );
     let p1 = write_manifest_file(
         dir.path(),
@@ -853,8 +847,7 @@ async fn attachment_download_conflict_resolution_create_copy() {
     let dest = TempDir::new().unwrap();
 
     let hash = deadline_job_attachments::asset_manifests::hash_data(
-        dest.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        dest.path().to_string_lossy().as_bytes()
     );
     let p1 = write_manifest_file(
         dir.path(),
@@ -908,12 +901,10 @@ async fn attachment_download_hash_match_selects_correct_destination() {
     let dest_b = TempDir::new().unwrap();
 
     let hash_a = deadline_job_attachments::asset_manifests::hash_data(
-        dest_a.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        dest_a.path().to_string_lossy().as_bytes()
     );
     let hash_b = deadline_job_attachments::asset_manifests::hash_data(
-        dest_b.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        dest_b.path().to_string_lossy().as_bytes()
     );
 
     // Manifest filenames contain the hash of their respective source paths
@@ -979,11 +970,10 @@ async fn attachment_upload_with_path_mapping_rules_file() {
     fs::write(source.path().join("a.txt"), b"hello").unwrap();
 
     let source_hash = deadline_job_attachments::asset_manifests::hash_data(
-        source.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        source.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_job_attachments::asset_manifests::hash_data(b"hello", HashAlgorithm::Xxh128);
+        deadline_job_attachments::asset_manifests::hash_data(b"hello");
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{source_hash}_input"),
@@ -1039,11 +1029,10 @@ async fn attachment_upload_ascii_path_sets_asset_root_metadata() {
     fs::write(root.path().join("a.txt"), b"data").unwrap();
 
     let root_hash = deadline_job_attachments::asset_manifests::hash_data(
-        root.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        root.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
+        deadline_job_attachments::asset_manifests::hash_data(b"data");
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{root_hash}_input"),
@@ -1093,11 +1082,10 @@ async fn attachment_upload_with_manifest_path_uploads_manifest() {
     fs::write(root.path().join("a.txt"), b"data").unwrap();
 
     let root_hash = deadline_job_attachments::asset_manifests::hash_data(
-        root.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        root.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
+        deadline_job_attachments::asset_manifests::hash_data(b"data");
     let manifest_name = format!("{root_hash}_input");
     let p1 = write_manifest_file(dir.path(), &manifest_name, &[("a.txt", &file_hash, 4)]);
 
@@ -1143,11 +1131,10 @@ async fn attachment_upload_without_manifest_path_skips_manifest_upload() {
     fs::write(root.path().join("a.txt"), b"data").unwrap();
 
     let root_hash = deadline_job_attachments::asset_manifests::hash_data(
-        root.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        root.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_job_attachments::asset_manifests::hash_data(b"data", HashAlgorithm::Xxh128);
+        deadline_job_attachments::asset_manifests::hash_data(b"data");
     let manifest_name = format!("{root_hash}_input");
     let p1 = write_manifest_file(dir.path(), &manifest_name, &[("a.txt", &file_hash, 4)]);
 
@@ -1191,15 +1178,13 @@ async fn attachment_upload_multiple_manifests_preserves_order() {
     fs::write(root2.path().join("b.txt"), b"bbb").unwrap();
 
     let hash1 = deadline_job_attachments::asset_manifests::hash_data(
-        root1.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        root1.path().to_string_lossy().as_bytes()
     );
     let hash2 = deadline_job_attachments::asset_manifests::hash_data(
-        root2.path().to_string_lossy().as_bytes(),
-        HashAlgorithm::Xxh128,
+        root2.path().to_string_lossy().as_bytes()
     );
-    let fh1 = deadline_job_attachments::asset_manifests::hash_data(b"aaa", HashAlgorithm::Xxh128);
-    let fh2 = deadline_job_attachments::asset_manifests::hash_data(b"bbb", HashAlgorithm::Xxh128);
+    let fh1 = deadline_job_attachments::asset_manifests::hash_data(b"aaa");
+    let fh2 = deadline_job_attachments::asset_manifests::hash_data(b"bbb");
 
     let p1 = write_manifest_file(dir.path(), &format!("{hash1}_input"), &[("a.txt", &fh1, 3)]);
     let p2 = write_manifest_file(dir.path(), &format!("{hash2}_input"), &[("b.txt", &fh2, 3)]);

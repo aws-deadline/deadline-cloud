@@ -1,6 +1,6 @@
 use crate::errors::JobAttachmentsError;
 
-use crate::asset_manifests::{HashAlgorithm, hash_data};
+use crate::asset_manifests::{hash_data};
 
 use serde::Serialize;
 
@@ -430,8 +430,8 @@ pub struct PathMappingRule {
 }
 
 impl PathMappingRule {
-    pub fn get_hashed_source_path(&self, alg: HashAlgorithm) -> String {
-        hash_data(self.source_path.as_bytes(), alg)
+    pub fn get_hashed_source_path(&self) -> String {
+        hash_data(self.source_path.as_bytes())
     }
 }
 
@@ -867,11 +867,11 @@ mod tests {
             source_path: "/mnt/shared".into(),
             destination_path: "/local/shared".into(),
         };
-        let hash = rule.get_hashed_source_path(HashAlgorithm::Xxh128);
+        let hash = rule.get_hashed_source_path();
         assert_eq!(hash.len(), 32);
         assert!(hash.chars().all(|c: char| c.is_ascii_hexdigit()));
 
-        let hash2 = rule.get_hashed_source_path(HashAlgorithm::Xxh128);
+        let hash2 = rule.get_hashed_source_path();
         assert_eq!(hash, hash2);
     }
 
