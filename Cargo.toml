@@ -25,6 +25,7 @@ deadline-test-server = { path = "crates/deadline-test-server" }
 
 # OpenJD crates
 openjd-snapshots = "0.1"
+openjd-expr = "0.1"
 
 # Shared dependencies
 serde = { version = "1", features = ["derive"] }

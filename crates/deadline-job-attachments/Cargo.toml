@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 deadline-config = { workspace = true }
 openjd-snapshots = { workspace = true }
+openjd-expr = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
