@@ -402,7 +402,7 @@ impl S3UploadContext {
         &self.s3_client
     }
 
-    /// Returns the account ID used for ExpectedBucketOwner.
+    /// Returns the account ID used for `ExpectedBucketOwner`.
     pub fn account_id(&self) -> &str {
         &self.account_id
     }
@@ -591,10 +591,7 @@ pub async fn upload_assets(
             })?;
 
             // Build AssetManifest from the hashed result for manifest JSON encoding
-            let hashed_snapshot = match &upload_result.manifest {
-                AbsManifest::Snapshot(s) => s,
-                _ => unreachable!("input was Snapshot"),
-            };
+            let AbsManifest::Snapshot(hashed_snapshot) = &upload_result.manifest else { unreachable!("input was Snapshot") };
             let source_root = Path::new(&group.root_path);
             let root_str = source_root.to_string_lossy();
             let paths: Vec<ManifestPath> = hashed_snapshot
@@ -608,7 +605,7 @@ pub async fn upload_assets(
                         .unwrap_or(&f.path)
                         .trim_start_matches('/');
                     ManifestPath {
-                        path: rel.to_string(),
+                        path: rel.to_owned(),
                         hash: f.hash.clone().unwrap_or_default(),
                         size: f.size.unwrap_or(0),
                         mtime: f.mtime.unwrap_or(0) as i64,

@@ -16,9 +16,7 @@ pub const S3_READ_TIMEOUT_SECS: u64 = 30;
 /// Python uses `"standard"` string; Rust SDK uses `RetryConfig::standard()`.
 /// This constant exists for behavioral parity verification.
 pub const S3_RETRIES_MODE: &str = "standard";
-pub const S3_MULTIPART_UPLOAD_CHUNK_SIZE: usize = 8 * 1024 * 1024; // 8 MB
-pub const S3_UPLOAD_MAX_CONCURRENCY: usize = 10;
-pub const S3_DOWNLOAD_MAX_CONCURRENCY: usize = 10;
+
 pub const S3_USER_AGENT_EXTRA: &str =
     concat!("S3A/Deadline/NA/JobAttachments/", env!("CARGO_PKG_VERSION"));
 
@@ -27,9 +25,8 @@ pub const S3_USER_AGENT_EXTRA: &str =
 /// Builds an S3 client with job-attachments-specific configuration on top of
 /// the caller's `SdkConfig` (which provides credentials and region).
 ///
-/// Concurrency (pool connections, worker counts) is NOT configured here —
-/// callers use [`get_s3_max_pool_connections`] to determine worker counts
-/// for upload/download parallelism.
+/// Validates `s3_max_pool_connections` at construction time so misconfiguration
+/// is caught early rather than mid-transfer.
 pub fn build_s3_client(
     sdk_config: &aws_config::SdkConfig,
     config: Option<&IniConfig>,
@@ -98,61 +95,6 @@ pub fn get_s3_max_pool_connections(
     }
 
     Ok(value)
-}
-
-/// Reads `settings.small_file_threshold_multiplier` from config. Returns error
-/// if the value is not a positive integer.
-pub fn get_small_file_threshold_multiplier(
-    config: Option<&IniConfig>,
-) -> Result<usize, JobAttachmentsError> {
-    let value_str = match config {
-        Some(c) => get_setting("settings.small_file_threshold_multiplier", c),
-        None => get_setting_from_disk("settings.small_file_threshold_multiplier"),
-    }
-    .map_err(|e| {
-        JobAttachmentsError::AssetSync(format!(
-            "Failed to read small_file_threshold_multiplier setting: {e}"
-        ))
-    })?;
-
-    let value: usize = value_str.parse().map_err(|_| {
-        JobAttachmentsError::AssetSync(
-            "Failed to parse configuration settings. Please ensure that the following \
-             settings in the config file are integers: \
-             's3_max_pool_connections', 'small_file_threshold_multiplier'"
-                .into(),
-        )
-    })?;
-
-    if value == 0 {
-        return Err(JobAttachmentsError::AssetSync(format!(
-            "Nonvalid value for configuration setting: \
-             'small_file_threshold_multiplier' ({value}) must be positive integer."
-        )));
-    }
-
-    Ok(value)
-}
-
-/// Computes upload configuration from config settings.
-/// Returns `(small_file_threshold_bytes, num_upload_workers)`.
-pub fn compute_upload_config(
-    config: Option<&IniConfig>,
-) -> Result<(usize, usize), JobAttachmentsError> {
-    let multiplier = get_small_file_threshold_multiplier(config)?;
-    let pool_connections = get_s3_max_pool_connections(config)?;
-
-    let threshold = S3_MULTIPART_UPLOAD_CHUNK_SIZE * multiplier;
-    let divisor = multiplier.min(S3_UPLOAD_MAX_CONCURRENCY);
-    let workers = (pool_connections / divisor).max(1);
-
-    Ok((threshold, workers))
-}
-
-/// Computes the number of download workers from pool connections.
-/// Matches Python's `_get_num_download_workers`: `pool / MAX_CONCURRENCY`, min 1.
-pub fn compute_download_workers(s3_max_pool_connections: usize) -> usize {
-    (s3_max_pool_connections / S3_DOWNLOAD_MAX_CONCURRENCY).max(1)
 }
 
 // --- Account identity ---
@@ -301,89 +243,5 @@ mod tests {
         // No real creds — should fail with an error, not panic
         let result = get_account_id(&sdk_config).await;
         assert!(result.is_err());
-    }
-
-    // === get_small_file_threshold_multiplier ===
-
-    #[test]
-    fn get_small_file_threshold_multiplier_valid() {
-        let mut config = IniConfig::new();
-        set_setting(
-            "settings.small_file_threshold_multiplier",
-            "20",
-            &mut config,
-        )
-        .unwrap();
-        assert_eq!(
-            get_small_file_threshold_multiplier(Some(&config)).unwrap(),
-            20
-        );
-    }
-
-    #[test]
-    fn get_small_file_threshold_multiplier_not_integer_errors() {
-        let mut config = IniConfig::new();
-        set_setting(
-            "settings.small_file_threshold_multiplier",
-            "abc",
-            &mut config,
-        )
-        .unwrap();
-        assert!(get_small_file_threshold_multiplier(Some(&config)).is_err());
-    }
-
-    #[test]
-    fn get_small_file_threshold_multiplier_zero_errors() {
-        let mut config = IniConfig::new();
-        set_setting("settings.small_file_threshold_multiplier", "0", &mut config).unwrap();
-        assert!(get_small_file_threshold_multiplier(Some(&config)).is_err());
-    }
-
-    // === compute_upload_config ===
-
-    #[test]
-    fn compute_upload_config_defaults() {
-        let mut config = IniConfig::new();
-        set_setting("settings.s3_max_pool_connections", "50", &mut config).unwrap();
-        set_setting(
-            "settings.small_file_threshold_multiplier",
-            "20",
-            &mut config,
-        )
-        .unwrap();
-        let (threshold, workers) = compute_upload_config(Some(&config)).unwrap();
-        // 8MB * 20 = 160MB
-        assert_eq!(threshold, 8 * 1024 * 1024 * 20);
-        // 50 / min(20, 10) = 50 / 10 = 5
-        assert_eq!(workers, 5);
-    }
-
-    #[test]
-    fn compute_upload_config_small_multiplier() {
-        let mut config = IniConfig::new();
-        set_setting("settings.s3_max_pool_connections", "10", &mut config).unwrap();
-        set_setting("settings.small_file_threshold_multiplier", "2", &mut config).unwrap();
-        let (threshold, workers) = compute_upload_config(Some(&config)).unwrap();
-        // 8MB * 2 = 16MB
-        assert_eq!(threshold, 8 * 1024 * 1024 * 2);
-        // 10 / min(2, 10) = 10 / 2 = 5
-        assert_eq!(workers, 5);
-    }
-
-    // === Concurrency constants ===
-
-    #[test]
-    fn small_file_threshold_default() {
-        assert_eq!(S3_MULTIPART_UPLOAD_CHUNK_SIZE, 8 * 1024 * 1024);
-    }
-
-    #[test]
-    fn upload_max_concurrency_default() {
-        assert_eq!(S3_UPLOAD_MAX_CONCURRENCY, 10);
-    }
-
-    #[test]
-    fn download_max_concurrency_default() {
-        assert_eq!(S3_DOWNLOAD_MAX_CONCURRENCY, 10);
     }
 }

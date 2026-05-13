@@ -352,7 +352,7 @@ pub fn manifest_merge(
 
 // --- Internal helpers ---
 
-/// Hash files and return an AssetManifest using openjd's hash engine.
+/// Hash files and return an `AssetManifest` using openjd's hash engine.
 fn hash_files_to_manifest(
     root: &str,
     files: &[String],
@@ -378,12 +378,9 @@ fn hash_files_to_manifest(
     )
     .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to hash files: {e}")))?;
 
-    let hashed = match &hash_result.manifest {
-        AbsManifest::Snapshot(s) => s,
-        _ => unreachable!(),
-    };
+    let AbsManifest::Snapshot(hashed) = &hash_result.manifest else { unreachable!() };
 
-    let root_prefix = root.to_string();
+    let root_prefix = root.to_owned();
     let paths: Vec<ManifestPath> = hashed
         .files
         .iter()
@@ -394,7 +391,7 @@ fn hash_files_to_manifest(
                 .unwrap_or(&f.path)
                 .trim_start_matches('/');
             ManifestPath {
-                path: rel.to_string(),
+                path: rel.to_owned(),
                 hash: f.hash.clone().unwrap_or_default(),
                 size: f.size.unwrap_or(0),
                 mtime: f.mtime.unwrap_or(0) as i64,

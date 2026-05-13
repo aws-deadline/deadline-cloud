@@ -49,7 +49,7 @@ pub fn generate_path_mapping_rules(
 }
 
 /// Path mapper that delegates to openjd-expr's `apply_rules_with_format`.
-/// Rules are sorted by source_path length (longest first) for correct
+/// Rules are sorted by `source_path` length (longest first) for correct
 /// longest-prefix matching.
 #[derive(Debug)]
 pub struct PathMappingRuleApplier {

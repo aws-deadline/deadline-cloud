@@ -21,8 +21,8 @@ use crate::progress_tracker::{
     DownloadSummaryStatistics, ProgressReportMetadata, ProgressStatus, ProgressTracker,
 };
 
-/// Shared state for `CreateCopy` collision tracking across concurrent downloads.
-/// Maps local file path string → highest copy number used.
+// Shared state for `CreateCopy` collision tracking across concurrent downloads.
+// Maps local file path string → highest copy number used.
 // ---------------------------------------------------------------------------
 // Path traversal validation
 // ---------------------------------------------------------------------------
@@ -379,13 +379,13 @@ pub async fn download_files_from_manifests(
     }
 
     // Build S3DataCache
-    let prefix = cas_prefix.unwrap_or_default().to_string();
+    let prefix = cas_prefix.unwrap_or_default().to_owned();
     let s3_cache = S3DataCache::new(
-        s3_bucket.to_string(),
+        s3_bucket.to_owned(),
         prefix,
         s3_client.clone(),
     )
-    .with_expected_bucket_owner(Some(account_id.to_string()));
+    .with_expected_bucket_owner(Some(account_id.to_owned()));
     let data_cache: Arc<dyn AsyncDataCache> = Arc::new(s3_cache);
 
     // Map our conflict resolution to openjd's
@@ -437,7 +437,7 @@ pub async fn download_files_from_manifests(
                 .filter(|f| !f.deleted && f.symlink_target.is_none())
                 .map(|f| f.path.clone())
                 .collect(),
-            _ => vec![],
+            AbsManifest::Diff(_) => vec![],
         };
 
         downloaded_files_by_root

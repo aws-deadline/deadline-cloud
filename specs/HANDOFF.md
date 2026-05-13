@@ -10,18 +10,29 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## Current Status
 
-**Step 7 (Upload/Download Engine):** Steps 7a and 7b complete. Step 7c (cleanup) next.
+**Step 7c (Cleanup):** ✅ Complete (commit `778b35f`).
 
 **Baseline (2026-05-13):**
 
 | Crate | Tests | Status |
 |-------|-------|--------|
-| `deadline-job-attachments` | 305 | ✅ All pass |
+| `deadline-job-attachments` | 294 | ✅ All pass |
 | `deadline-cli` | 492 | ✅ All pass |
 
 ---
 
 ## What's Done (this session, 2026-05-13)
+
+**Step 7c — Cleanup (commit `778b35f`):**
+Deleted dead S3 concurrency helpers: `compute_upload_config`,
+`compute_download_workers`, `get_small_file_threshold_multiplier`, and
+constants `S3_MULTIPART_UPLOAD_CHUNK_SIZE`, `S3_UPLOAD_MAX_CONCURRENCY`,
+`S3_DOWNLOAD_MAX_CONCURRENCY`. These computed worker counts for the old
+manual upload/download loops replaced by openjd `S3DataCache` in 7a/7b.
+Pruned 11 tests. Fixed stale doc comment on `build_s3_client`.
+Tests: 305→294. -176 lines.
+
+**Step 7 is now complete.**
 
 **Step 7a — Upload engine swap (commit `8b0381e`):**
 Replaced `hash_assets_and_create_manifest` + `S3UploadContext::upload_input_files`
@@ -43,19 +54,13 @@ Deleted ~600 lines. Tests: 314→305.
 
 ---
 
-## Next: Step 7c (Cleanup)
+## Next: Step 9 (CLI/Library Boundary)
 
-Delete remaining dead code from the upload/download swap:
-- `s3.rs`: `compute_upload_config`, `compute_download_workers`,
-  `get_small_file_threshold_multiplier` — no longer called
-- `s3.rs` constants: `S3_UPLOAD_MAX_CONCURRENCY`, `S3_DOWNLOAD_MAX_CONCURRENCY`,
-  `S3_MULTIPART_UPLOAD_CHUNK_SIZE` — no longer referenced
-- Prune tests for deleted `s3.rs` helpers
-- Remove any unused imports/types
+Separate presentation from logic. See `specs/crate-restructure.md` Step 9
+for the full list of violations (progress callbacks, user interaction,
+config resolution, path types, presentation utilities).
 
-After 7c, Step 7 is complete and the next actionable work is:
-- **Step 9** (CLI/Library Boundary) — separate presentation from logic
-- Or move to a different work item
+After Step 9, proceed to Step 10 (crate merge) then Step 11 (idiomatic patterns).
 
 ---
 
@@ -71,6 +76,7 @@ After 7c, Step 7 is complete and the next actionable work is:
 | 6 | Path Mapping → openjd | (earlier session) |
 | 7a | Upload engine → openjd | `8b0381e` |
 | 7b | Download engine → openjd | `0998fd1` |
+| 7c | Cleanup (dead S3 helpers) | `778b35f` |
 | 8 | Cleanup (HashAlgorithm param) | `751dfc4` |
 
 ---

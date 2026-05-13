@@ -540,35 +540,4 @@ async fn get_output_manifests_merges_by_last_modified_order() {
     assert_eq!(merged.paths[0].hash, "fff666eee555ddd444ccc333bbb22211");
 }
 
-// =====================================================================
-// Batch 3: compute_download_workers (#9 download side)
-// =====================================================================
 
-// Python: _get_num_download_workers(s3_max_pool_connections=50) -> int
-// num_download_workers = s3_max_pool_connections / S3_DOWNLOAD_MAX_CONCURRENCY
-// Minimum 1.
-// This function doesn't exist in Rust yet — needs to be added.
-
-#[test]
-fn compute_download_workers_default_pool() {
-    // 50 / 10 = 5
-    assert_eq!(
-        deadline_job_attachments::s3::compute_download_workers(50),
-        5
-    );
-}
-
-#[test]
-fn compute_download_workers_small_pool() {
-    // 5 / 10 = 0 → clamped to 1
-    assert_eq!(deadline_job_attachments::s3::compute_download_workers(5), 1);
-}
-
-#[test]
-fn compute_download_workers_exact_concurrency() {
-    // 10 / 10 = 1
-    assert_eq!(
-        deadline_job_attachments::s3::compute_download_workers(10),
-        1
-    );
-}
