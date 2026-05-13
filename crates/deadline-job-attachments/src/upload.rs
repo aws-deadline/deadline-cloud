@@ -10,9 +10,7 @@ use deadline_config::ini::IniConfig;
 use crate::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, hash_data, hash_file,
 };
-use crate::caches::{
-    HashCache, HashCacheEntry, S3CheckCache, format_mtime_for_cache,
-};
+use crate::caches::{HashCache, S3CheckCache};
 use crate::models::{
     AssetRootGroup, AssetRootManifest, AssetUploadGroup, Attachments, FileSystemLocationType,
     JobAttachmentS3Settings, ManifestProperties, StorageProfile, join_s3_paths,
@@ -310,27 +308,18 @@ fn common_path(paths: &[&PathBuf]) -> PathBuf {
 /// cached entry was reused without re-hashing.
 fn hash_with_cache(
     cache: &HashCache,
-    full_path: &str,
     file_path: &Path,
-    hash_alg: HashAlgorithm,
-    mtime_str: &str,
+    mtime_secs: u64,
     was_cached: &mut bool,
 ) -> Result<String, JobAttachmentsError> {
-    if let Some(entry) = cache.get_entry(full_path, hash_alg, 0, -1)
-        && entry.last_modified_time == mtime_str
-    {
+    if let Some(hash) = cache.get_if_fresh(file_path, "xxh128", 0, -1, mtime_secs) {
         *was_cached = true;
-        return Ok(entry.file_hash);
+        return Ok(hash);
     }
-    let h = hash_file(file_path, hash_alg)?;
-    cache.put_entry(&HashCacheEntry {
-        file_path: full_path.to_owned(),
-        hash_algorithm: hash_alg,
-        file_hash: h.clone(),
-        last_modified_time: mtime_str.to_owned(),
-        range_start: 0,
-        range_end: -1,
-    });
+    let h = hash_file(file_path, HashAlgorithm::Xxh128)?;
+    cache
+        .put(file_path, "xxh128", 0, -1, &h, mtime_secs)
+        .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to write hash cache: {e}")))?;
     Ok(h)
 }
 
@@ -360,7 +349,13 @@ pub fn hash_assets_and_create_manifest(
         let asset_manifest = if group.inputs.is_empty() {
             None
         } else {
-            let cache = cache_dir.as_deref().map(HashCache::new).transpose()?;
+            let cache = cache_dir
+                .as_deref()
+                .map(|d| {
+                    HashCache::new(d)
+                        .map_err(|e| JobAttachmentsError::AssetSync(format!("Hash cache: {e}")))
+                })
+                .transpose()?;
 
             let mut paths = Vec::new();
             let sorted_inputs: Vec<_> = group.inputs.iter().cloned().collect();
@@ -373,7 +368,6 @@ pub fn hash_assets_and_create_manifest(
                     });
                 }
 
-                let full_path = input_path.to_string_lossy().into_owned();
                 let meta = std::fs::metadata(input_path).map_err(|e| {
                     JobAttachmentsError::AssetSync(format!(
                         "Failed to stat {}: {e}",
@@ -399,21 +393,17 @@ pub fn hash_assets_and_create_manifest(
 
                 let mtime_ns = mtime_secs * 1_000_000_000 + mtime_nsec;
                 let mtime_us = mtime_ns / 1000; // truncate to microseconds
-                let mtime_str = format_mtime_for_cache(mtime_secs, mtime_nsec);
 
-                let hash_alg = HashAlgorithm::Xxh128;
                 let mut was_cached = false;
 
                 let file_hash = match cache {
                     Some(ref cache) => hash_with_cache(
                         cache,
-                        &full_path,
                         input_path,
-                        hash_alg,
-                        &mtime_str,
+                        mtime_ns as u64,
                         &mut was_cached,
                     )?,
-                    None => hash_file(input_path, hash_alg)?,
+                    None => hash_file(input_path, HashAlgorithm::Xxh128)?,
                 };
 
                 // Relative POSIX path

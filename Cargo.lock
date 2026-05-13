@@ -1128,7 +1128,6 @@ dependencies = [
  "log",
  "openjd-snapshots",
  "regex",
- "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
