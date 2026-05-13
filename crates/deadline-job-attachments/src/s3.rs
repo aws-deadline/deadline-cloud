@@ -6,7 +6,7 @@
 //! builds a properly-configured S3 client on top of it.
 
 use crate::errors::JobAttachmentsError;
-use deadline_config::config_file::{get_setting, get_setting_from_disk};
+use deadline_config::config_file::get_setting;
 use deadline_config::ini::IniConfig;
 
 // --- Constants ---
@@ -29,14 +29,11 @@ pub const S3_USER_AGENT_EXTRA: &str =
 /// is caught early rather than mid-transfer.
 pub fn build_s3_client(
     sdk_config: &aws_config::SdkConfig,
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> aws_sdk_s3::Client {
     // Validate pool connections early so misconfiguration is caught at client
-    // construction time, not mid-transfer. The value itself is used by
-    // upload/download callers, not by the HTTP client.
-    if let Some(c) = config
-        && let Err(e) = get_s3_max_pool_connections(Some(c))
-    {
+    // construction time, not mid-transfer.
+    if let Err(e) = get_s3_max_pool_connections(config) {
         log::warn!("S3 pool connections config issue: {e}");
     }
 
@@ -64,20 +61,16 @@ pub fn build_s3_client(
 // --- Config helpers ---
 
 /// Reads `settings.s3_max_pool_connections` from config. Returns error if
-/// the value is not a positive integer. Falls back to the on-disk config
-/// file when no `IniConfig` is provided.
+/// the value is not a positive integer.
 pub fn get_s3_max_pool_connections(
-    config: Option<&IniConfig>,
+    config: &IniConfig,
 ) -> Result<usize, JobAttachmentsError> {
-    let value_str = match config {
-        Some(c) => get_setting("settings.s3_max_pool_connections", c),
-        None => get_setting_from_disk("settings.s3_max_pool_connections"),
-    }
-    .map_err(|e| {
-        JobAttachmentsError::AssetSync(format!(
-            "Failed to read s3_max_pool_connections setting: {e}"
-        ))
-    })?;
+    let value_str = get_setting("settings.s3_max_pool_connections", config)
+        .map_err(|e| {
+            JobAttachmentsError::AssetSync(format!(
+                "Failed to read s3_max_pool_connections setting: {e}"
+            ))
+        })?;
 
     let value: usize = value_str.parse().map_err(|_| {
         JobAttachmentsError::AssetSync(
@@ -172,7 +165,8 @@ mod tests {
             .behavior_version(aws_config::BehaviorVersion::latest())
             .region(aws_config::Region::new("us-west-2"))
             .build();
-        let client = build_s3_client(&sdk_config, None);
+        let config = IniConfig::new();
+        let client = build_s3_client(&sdk_config, &config);
         assert!(size_of_val(&client) > 0);
     }
 
@@ -187,7 +181,7 @@ mod tests {
             .region(aws_config::Region::new("us-west-2"))
             .build();
         // Should not panic — pool connections config is validated at build time
-        let _client = build_s3_client(&sdk_config, Some(&config));
+        let _client = build_s3_client(&sdk_config, &config);
     }
 
     // === user agent includes job attachments identifier ===
@@ -204,7 +198,7 @@ mod tests {
     fn get_s3_max_pool_connections_valid_integer() {
         let mut config = IniConfig::new();
         set_setting("settings.s3_max_pool_connections", "10", &mut config).unwrap();
-        let result = get_s3_max_pool_connections(Some(&config));
+        let result = get_s3_max_pool_connections(&config);
         assert_eq!(result.unwrap(), 10);
     }
 
@@ -212,7 +206,7 @@ mod tests {
     fn get_s3_max_pool_connections_not_integer_errors() {
         let mut config = IniConfig::new();
         set_setting("settings.s3_max_pool_connections", "abc", &mut config).unwrap();
-        let result = get_s3_max_pool_connections(Some(&config));
+        let result = get_s3_max_pool_connections(&config);
         assert!(result.is_err());
     }
 
@@ -220,7 +214,7 @@ mod tests {
     fn get_s3_max_pool_connections_zero_errors() {
         let mut config = IniConfig::new();
         set_setting("settings.s3_max_pool_connections", "0", &mut config).unwrap();
-        let result = get_s3_max_pool_connections(Some(&config));
+        let result = get_s3_max_pool_connections(&config);
         assert!(result.is_err());
     }
 
@@ -228,7 +222,7 @@ mod tests {
     fn get_s3_max_pool_connections_negative_errors() {
         let mut config = IniConfig::new();
         set_setting("settings.s3_max_pool_connections", "-5", &mut config).unwrap();
-        let result = get_s3_max_pool_connections(Some(&config));
+        let result = get_s3_max_pool_connections(&config);
         assert!(result.is_err());
     }
 

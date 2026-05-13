@@ -764,7 +764,7 @@ impl DeadlineServer {
                         auto_accept: true,
                         force_s3_check: None,
                         debug_snapshot_dir: None,
-                        config: Some(&config),
+                        config: &config,
                         print_callback: Box::new(|_| {}),
                         hashing_progress_callback: None,
                         upload_progress_callback: None,

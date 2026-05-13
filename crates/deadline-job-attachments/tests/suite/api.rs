@@ -64,7 +64,7 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
         .test_credentials()
         .load()
         .await;
-    deadline_job_attachments::s3::build_s3_client(&sdk_config, None)
+    deadline_job_attachments::s3::build_s3_client(&sdk_config, &deadline_config::ini::IniConfig::new())
 }
 
 // =====================================================================
@@ -580,7 +580,6 @@ async fn attachment_upload_with_root_dirs() {
         None,
         None,
         None,
-        None,
     )
     .await
     .unwrap();
@@ -614,7 +613,6 @@ async fn attachment_upload_both_rules_and_dirs_errors() {
         Some(rules_path.to_str().unwrap()),
         None,
         None,
-        None,
     )
     .await
     .unwrap_err();
@@ -645,7 +643,6 @@ async fn attachment_upload_neither_rules_nor_dirs_errors() {
         &s3_client,
         "123456789012",
         &[],
-        None,
         None,
         None,
         None,
@@ -685,7 +682,6 @@ async fn attachment_upload_no_matching_rule_errors() {
         None,
         None,
         None,
-        None,
     )
     .await
     .unwrap_err();
@@ -709,7 +705,6 @@ async fn attachment_upload_invalid_manifest_path_errors() {
         &s3_client,
         "123456789012",
         &["/tmp".to_owned()],
-        None,
         None,
         None,
         None,
@@ -746,7 +741,6 @@ async fn attachment_upload_malformed_s3_uri_errors() {
         None,
         None,
         None,
-        None,
     )
     .await
     .unwrap_err();
@@ -777,7 +771,6 @@ async fn attachment_upload_invalid_root_dir_errors() {
         &s3_client,
         "123456789012",
         &["/nonexistent/root/dir".to_owned()],
-        None,
         None,
         None,
         None,
@@ -1009,7 +1002,6 @@ async fn attachment_upload_with_path_mapping_rules_file() {
         Some(rules_path.to_str().unwrap()),
         None,
         None,
-        None,
     )
     .await
     .unwrap();
@@ -1063,7 +1055,6 @@ async fn attachment_upload_ascii_path_sets_asset_root_metadata() {
         None,
         Some("manifests/prefix"),
         None,
-        None,
     )
     .await
     .unwrap();
@@ -1109,7 +1100,6 @@ async fn attachment_upload_with_manifest_path_uploads_manifest() {
         &[root.path().to_string_lossy().into_owned()],
         None,
         Some("upload/prefix"),
-        None,
         None,
     )
     .await
@@ -1158,7 +1148,6 @@ async fn attachment_upload_without_manifest_path_skips_manifest_upload() {
         &[root.path().to_string_lossy().into_owned()],
         None,
         None, // no upload_manifest_path
-        None,
         None,
     )
     .await
@@ -1210,7 +1199,6 @@ async fn attachment_upload_multiple_manifests_preserves_order() {
             root1.path().to_string_lossy().into_owned(),
             root2.path().to_string_lossy().into_owned(),
         ],
-        None,
         None,
         None,
         None,

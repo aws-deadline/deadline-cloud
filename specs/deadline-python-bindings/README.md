@@ -13,6 +13,7 @@ Houdini, etc. — indirectly via the `gui/` package).
 | [architecture.md](architecture.md) | Module layout, PyO3 boundary design, callback patterns |
 | [python-package-contract.md](python-package-contract.md) | Python-side API: exports, TelemetryClient, progress callback keys, type conventions |
 | [dcc-profiles.md](dcc-profiles.md) | Per-DCC integration profiles |
+| [worker-agent-bindings.md](worker-agent-bindings.md) | Plan to expose attachment operations for the Python worker agent |
 
 ## Exported Functions
 

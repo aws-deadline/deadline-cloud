@@ -10,18 +10,27 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## Current Status
 
-**Step 7c (Cleanup):** ✅ Complete (commit `778b35f`).
+**Step 9.3 Phase A+B (Config Resolution):** ✅ Complete (commit `7b70fce`).
 
 **Baseline (2026-05-13):**
 
 | Crate | Tests | Status |
 |-------|-------|--------|
 | `deadline-job-attachments` | 294 | ✅ All pass |
+| `deadline-job-bundle` | 249 | ✅ All pass |
 | `deadline-cli` | 492 | ✅ All pass |
 
 ---
 
 ## What's Done (this session, 2026-05-13)
+
+**Step 9.3 Phase A+B — Config resolution (commit `7b70fce`):**
+Removed `Option<&IniConfig>` from `deadline-job-attachments` and
+`deadline-job-bundle` library APIs. Functions now require `&IniConfig`
+(caller must provide). Deleted `get_setting_from_disk` fallback from
+`s3.rs`. Removed unused `_config` param from `S3UploadContext::new`.
+Removed `config` param from `attachment_upload`. `deadline-api` still
+uses `Option<&IniConfig>` (Phase C, next).
 
 **Step 7c — Cleanup (commit `778b35f`):**
 Deleted dead S3 concurrency helpers: `compute_upload_config`,
@@ -54,13 +63,15 @@ Deleted ~600 lines. Tests: 314→305.
 
 ---
 
-## Next: Step 9 (CLI/Library Boundary)
+## Next: Step 9.3 Phase C (deadline-api config resolution)
 
-Separate presentation from logic. See `specs/crate-restructure.md` Step 9
-for the full list of violations (progress callbacks, user interaction,
-config resolution, path types, presentation utilities).
+Remove `Option<&IniConfig>` from `deadline-api` (~35 signatures, 4
+`get_setting_from_disk` calls). Same mechanical change as Phase A+B.
+Special case: `telemetry.rs` `get_or_create_identifier` which writes
+to config — split into read (library) + persist (caller).
 
-After Step 9, proceed to Step 10 (crate merge) then Step 11 (idiomatic patterns).
+After Phase C, Step 9.3 is complete. Then proceed to 9.1 (progress),
+9.2 (user interaction), 9.4 (path types), 9.5 (presentation utilities).
 
 ---
 

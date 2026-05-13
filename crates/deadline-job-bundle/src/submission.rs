@@ -258,7 +258,7 @@ pub struct SubmitJobParams<'a> {
     pub auto_accept: bool,
     pub force_s3_check: Option<bool>,
     pub debug_snapshot_dir: Option<String>,
-    pub config: Option<&'a IniConfig>,
+    pub config: &'a IniConfig,
     pub print_callback: Box<dyn Fn(&str) + Send + 'a>,
     pub hashing_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
     pub upload_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
@@ -270,11 +270,8 @@ pub struct SubmitJobParams<'a> {
 /// Callback for interactive confirmation prompts: `(message, default) -> should_continue`.
 pub type ConfirmFn = Box<dyn Fn(&str, bool) -> bool + Send>;
 
-fn get_setting(name: &str, config: Option<&IniConfig>) -> String {
-    match config {
-        Some(c) => config_file::get_setting(name, c).unwrap_or_default(),
-        None => config_file::get_setting_from_disk(name).unwrap_or_default(),
-    }
+fn get_setting(name: &str, config: &IniConfig) -> String {
+    config_file::get_setting(name, config).unwrap_or_default()
 }
 
 /// Submit a job bundle to Deadline Cloud. Returns the job ID on success.
@@ -410,7 +407,7 @@ pub async fn create_job_from_job_bundle(
     let farm_id = get_setting("defaults.farm_id", params.config);
     let queue_id = get_setting("defaults.queue_id", params.config);
 
-    let queue = session::deadline_client(params.config)
+    let queue = session::deadline_client(Some(params.config))
         .await
         .get_queue()
         .farm_id(&farm_id)
@@ -426,7 +423,7 @@ pub async fn create_job_from_job_bundle(
     let storage_profile = if storage_profile_id.is_empty() {
         None
     } else {
-        let sp_output = session::deadline_client(params.config)
+        let sp_output = session::deadline_client(Some(params.config))
             .await
             .get_storage_profile_for_queue()
             .farm_id(&farm_id)
@@ -447,7 +444,7 @@ pub async fn create_job_from_job_bundle(
     let mut asset_references = AssetReferences::from_dict(asset_references_obj.as_ref());
 
     let queue_parameter_definitions =
-        queue_parameters::get_queue_parameter_definitions(&farm_id, &queue_id, params.config)
+        queue_parameters::get_queue_parameter_definitions(&farm_id, &queue_id, Some(params.config))
             .await?;
 
     let mut parameters = merge_queue_job_parameters(
@@ -680,7 +677,7 @@ pub async fn create_job_from_job_bundle(
             Some(&queue_id),
             Some(queue_display_name.to_owned()),
             false,
-            params.config,
+            Some(params.config),
         )
         .await?;
 
@@ -738,7 +735,7 @@ pub async fn create_job_from_job_bundle(
             ))
             .map_err(|e| op_err(e.to_string()))?;
 
-            let upload_ctx = upload::S3UploadContext::new(s3_client, account_id, params.config)
+            let upload_ctx = upload::S3UploadContext::new(s3_client, account_id)
                 .map_err(|e| op_err(e.to_string()))?;
 
             let upload_result: Result<_, DeadlineError> =
@@ -978,7 +975,7 @@ pub async fn create_job_from_job_bundle(
         return Ok(None);
     }
 
-    let response = api::create_job(&create_job_args, params.config).await?;
+    let response = api::create_job(&create_job_args, Some(params.config)).await?;
 
     let job_id = response.job_id().to_owned();
 
@@ -993,7 +990,7 @@ pub async fn create_job_from_job_bundle(
         &farm_id,
         &queue_id,
         &job_id,
-        params.config,
+        Some(params.config),
         &*continue_cb,
     )
     .await?;

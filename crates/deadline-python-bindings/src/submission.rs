@@ -57,8 +57,10 @@ pub fn create_job_from_job_bundle(
 
     // Load config
     let config = match config_path.as_deref() {
-        Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p)).ok(),
-        None => deadline_config::config_file::read_config().ok(),
+        Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p))
+            .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
+        None => deadline_config::config_file::read_config()
+            .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
     };
 
     // Build callbacks
@@ -147,7 +149,7 @@ pub fn create_job_from_job_bundle(
         auto_accept,
         force_s3_check,
         debug_snapshot_dir,
-        config: config.as_ref(),
+        config: &config,
         print_callback: print_cb,
         hashing_progress_callback: hashing_cb,
         upload_progress_callback: upload_cb,

@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::errors::JobAttachmentsError;
-use deadline_config::ini::IniConfig;
 
 use crate::asset_manifests::{AssetManifest, decode_manifest, hash_data};
 use crate::download::download_files_from_manifests;
@@ -205,7 +204,6 @@ pub async fn attachment_upload(
     path_mapping_rules: Option<&str>,
     upload_manifest_path: Option<&str>,
     _on_progress: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
-    config: Option<&IniConfig>,
 ) -> Result<Vec<UploadManifestInfo>, JobAttachmentsError> {
     let file_name_manifest_dict = read_manifests(manifests)?;
 
@@ -223,7 +221,7 @@ pub async fn attachment_upload(
     let s3_settings = JobAttachmentS3Settings::from_s3_root_uri(s3_root_uri)?;
     let cas_prefix = s3_settings.full_cas_prefix()?;
 
-    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_owned(), config)?;
+    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_owned())?;
 
     let mut result = Vec::new();
 

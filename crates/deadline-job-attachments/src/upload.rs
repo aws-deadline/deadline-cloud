@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use crate::errors::JobAttachmentsError;
 use crate::models::PathFormat;
 use aws_sdk_s3::primitives::ByteStream;
-use deadline_config::ini::IniConfig;
 
 use crate::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, hash_data,
@@ -389,7 +388,6 @@ impl S3UploadContext {
     pub fn new(
         s3_client: aws_sdk_s3::Client,
         account_id: String,
-        _config: Option<&IniConfig>,
     ) -> Result<Self, JobAttachmentsError> {
         Ok(Self {
             s3_client,

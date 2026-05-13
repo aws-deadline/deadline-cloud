@@ -32,7 +32,7 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
         .test_credentials()
         .load()
         .await;
-    deadline_job_attachments::s3::build_s3_client(&sdk_config, None)
+    deadline_job_attachments::s3::build_s3_client(&sdk_config, &deadline_config::ini::IniConfig::new())
 }
 
 fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> AssetManifest {

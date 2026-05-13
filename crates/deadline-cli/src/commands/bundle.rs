@@ -277,7 +277,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     .unwrap_or(false),
                 force_s3_check: resolved_force_s3_check,
                 debug_snapshot_dir: effective_snapshot_dir,
-                config: Some(&config),
+                config: &config,
                 print_callback: Box::new(|msg| println!("{msg}")),
                 hashing_progress_callback: Some(Box::new(move |meta| {
                     hash_progress

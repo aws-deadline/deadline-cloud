@@ -1377,7 +1377,7 @@ async fn incremental_output_download(
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get S3 credentials:\n{e}")))?;
 
-        let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, Some(config));
+        let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, config);
         let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config)
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get account ID:\n{e}")))?;

@@ -320,7 +320,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     .map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
 
             let s3_client =
-                deadline_job_attachments::s3::build_s3_client(&sdk_config, Some(&config));
+                deadline_job_attachments::s3::build_s3_client(&sdk_config, &config);
             let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
@@ -386,7 +386,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 )));
             }
 
-            let (bucket, cas_prefix, sdk_config) = if let Some(ref uri) = s3_cas_uri {
+            let (bucket, cas_prefix, sdk_config, config) = if let Some(ref uri) = s3_cas_uri {
                 let settings =
                     deadline_job_attachments::models::JobAttachmentS3Settings::from_s3_root_uri(
                         uri,
@@ -395,7 +395,9 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 let cfg = aws_config::defaults(aws_config::BehaviorVersion::latest())
                     .load()
                     .await;
-                (settings.s3_bucket_name, settings.root_prefix, cfg)
+                let config = deadline_config::config_file::read_config()
+                    .unwrap_or_else(|_| deadline_config::ini::IniConfig::new());
+                (settings.s3_bucket_name, settings.root_prefix, cfg, config)
             } else {
                 // Derive from queue
                 let mut config = deadline_config::config_file::read_config()
@@ -444,10 +446,10 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                         .map_err(|e| {
                             CliError::Operation(format!("Failed to get credentials: {e}"))
                         })?;
-                (b, p, cfg)
+                (b, p, cfg, config)
             };
 
-            let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, None);
+            let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, &config);
             let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;

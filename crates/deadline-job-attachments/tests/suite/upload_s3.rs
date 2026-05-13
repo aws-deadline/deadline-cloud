@@ -109,8 +109,9 @@ async fn build_uploader(server: &MockServer) -> S3UploadContext {
         .test_credentials()
         .load()
         .await;
-    let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, None);
-    S3UploadContext::new(s3_client, "123456789012".into(), None).unwrap()
+    let config = deadline_config::ini::IniConfig::new();
+    let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, &config);
+    S3UploadContext::new(s3_client, "123456789012".into()).unwrap()
 }
 
 /// Build an uploader with multiplier=1 (threshold=8MB) and pool=10 (workers=5).
@@ -135,8 +136,8 @@ async fn build_uploader_low_threshold(server: &MockServer) -> S3UploadContext {
         .test_credentials()
         .load()
         .await;
-    let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, Some(&config));
-    S3UploadContext::new(s3_client, "123456789012".into(), Some(&config)).unwrap()
+    let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, &config);
+    S3UploadContext::new(s3_client, "123456789012".into()).unwrap()
 }
 
 /// 9MB — just over the 8MB threshold when multiplier=1.

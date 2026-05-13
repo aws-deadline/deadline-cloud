@@ -436,7 +436,7 @@ pub async fn manifest_upload(
         manifest_file.to_owned(),
     );
 
-    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_owned(), None)?;
+    let ctx = S3UploadContext::new(s3_client.clone(), account_id.to_owned())?;
     ctx.upload_bytes_to_s3(&contents, s3_bucket_name, &manifest_s3_key, Some(metadata))
         .await
 }

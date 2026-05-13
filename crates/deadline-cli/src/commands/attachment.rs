@@ -183,7 +183,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                 }
             });
 
-            let s3_client = s3::build_s3_client(&ctx.sdk_config, Some(&config));
+            let s3_client = s3::build_s3_client(&ctx.sdk_config, &config);
             let account_id = s3::get_account_id(&ctx.sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
@@ -238,7 +238,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
 
             let ctx = resolve_s3_context(&profile, s3_root_uri, &config).await?;
 
-            let s3_client = s3::build_s3_client(&ctx.sdk_config, Some(&config));
+            let s3_client = s3::build_s3_client(&ctx.sdk_config, &config);
             let account_id = s3::get_account_id(&ctx.sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
@@ -252,7 +252,6 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                 path_mapping_rules.as_deref(),
                 upload_manifest_path.as_deref(),
                 None,
-                Some(&config),
             )
             .await
             .map_err(|e| CliError::Operation(e.to_string()))?;

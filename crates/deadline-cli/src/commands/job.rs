@@ -1715,7 +1715,7 @@ async fn download_input_impl(
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download input:\n{e}")))?;
 
-    let s3_client = s3::build_s3_client(&sdk_config, Some(config));
+    let s3_client = s3::build_s3_client(&sdk_config, config);
     let account_id = s3::get_account_id(&sdk_config)
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download input:\n{e}")))?;
@@ -2673,7 +2673,7 @@ pub(crate) async fn download_output_impl(
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
-    let s3_client = s3::build_s3_client(&sdk_config, Some(config));
+    let s3_client = s3::build_s3_client(&sdk_config, config);
     let account_id = s3::get_account_id(&sdk_config)
         .await
         .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;

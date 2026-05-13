@@ -97,7 +97,8 @@ pick and execute work items.
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |
-| 31 | openjd-rs dependency integration | Not started | `openjd-integration.md` | — |
+| 31 | Crate restructure (openjd-rs integration + boundary cleanup) | In progress | `crate-restructure.md` | — |
+| 32 | Worker agent Python bindings (attachment operations) | Not started | `deadline-python-bindings/worker-agent-bindings.md` | 31 (Step 9) |
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Deferred
 
