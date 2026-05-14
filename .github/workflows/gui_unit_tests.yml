@@ -34,7 +34,7 @@ jobs:
             x11-utils libxcb-cursor0 libopengl0
 
       - name: Install hatch
-        run: pip install --upgrade hatch
+        run: pip install --upgrade hatch "virtualenv<21"
 
       - name: Run GUI unit tests
         env:
