@@ -1,30 +1,24 @@
 //! Level 1 tests for diff module (batch 9e-1).
 
-use deadline_lib::attachments::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
-};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use deadline_lib::attachments::diff::{FileStatus, fast_diff, hash_diff};
 use std::fs;
 use tempfile::TempDir;
 
-fn make_manifest(entries: &[(&str, &str, u64, i64)]) -> AssetManifest {
-    let paths: Vec<ManifestPath> = entries
+fn make_manifest(entries: &[(&str, &str, u64, i64)]) -> Snapshot {
+    let files: Vec<FileEntry> = entries
         .iter()
-        .map(|(p, h, s, m)| ManifestPath {
-            path: p.to_string(),
-            hash: h.to_string(),
-            size: *s,
-            mtime: *m,
+        .map(|(p, h, s, m)| {
+            let mut e = FileEntry::file(*p, *s, *m as u64);
+            e.hash = Some(h.to_string());
+            e
         })
         .collect();
-    let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    AssetManifest::new(
-        HashAlgorithm::Xxh128,
-        ManifestVersion::V2023_03_03,
-        total_size,
-        paths,
-    )
-    .unwrap()
+    let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
+    let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+    snap.files = files;
+    snap.total_size = total_size;
+    snap
 }
 
 fn create_file(dir: &TempDir, name: &str, content: &[u8]) -> String {

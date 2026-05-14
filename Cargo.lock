@@ -1114,6 +1114,7 @@ dependencies = [
  "insta-cmd",
  "libc",
  "log",
+ "openjd-snapshots",
  "predicates",
  "regex",
  "rmcp",

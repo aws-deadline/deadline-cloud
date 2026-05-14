@@ -9,9 +9,7 @@ use std::path::{Path, PathBuf};
 use deadline_lib::attachments::api::{
     attachment_download, attachment_upload, process_path_mapping, read_manifests,
 };
-use deadline_lib::attachments::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
-};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023};
 use deadline_lib::attachments::models::FileConflictResolution;
 use tempfile::TempDir;
 use wiremock::matchers::method;
@@ -34,24 +32,19 @@ impl Drop for CleanupDir {
 
 /// Create a valid manifest and write it to disk. Returns the file path.
 fn write_manifest_file(dir: &Path, filename: &str, files: &[(&str, &str, u64)]) -> String {
-    let paths: Vec<ManifestPath> = files
+    let entries: Vec<FileEntry> = files
         .iter()
-        .map(|(p, h, s)| ManifestPath {
-            path: p.to_string(),
-            hash: h.to_string(),
-            size: *s,
-            mtime: 1_700_000_000_000_000,
+        .map(|(p, h, s)| {
+            let mut e = FileEntry::file(*p, *s, 1_700_000_000_000_000);
+            e.hash = Some(h.to_string());
+            e
         })
         .collect();
-    let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    let manifest = AssetManifest::new(
-        HashAlgorithm::Xxh128,
-        ManifestVersion::V2023_03_03,
-        total_size,
-        paths,
-    )
-    .unwrap();
-    let encoded = manifest.encode();
+    let total_size: u64 = entries.iter().map(|f| f.size.unwrap_or(0)).sum();
+    let mut manifest = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+    manifest.files = entries;
+    manifest.total_size = total_size;
+    let encoded = encode_snapshot_v2023(&manifest).unwrap();
     let file_path = dir.join(filename);
     fs::write(&file_path, &encoded).unwrap();
     file_path.to_string_lossy().into_owned()
@@ -275,10 +268,10 @@ async fn attachment_download_with_path_mapping_rules() {
     let dest2 = TempDir::new().unwrap();
 
     // Create manifest files with hashed source path in filename
-    let hash1 = deadline_lib::attachments::asset_manifests::hash_data(
+    let hash1 = openjd_snapshots::hash::hash_data(
         dest1.path().to_string_lossy().as_bytes()
     );
-    let hash2 = deadline_lib::attachments::asset_manifests::hash_data(
+    let hash2 = openjd_snapshots::hash::hash_data(
         dest2.path().to_string_lossy().as_bytes()
     );
 
@@ -434,7 +427,7 @@ async fn attachment_download_duplicate_destination_errors() {
     let dest = TempDir::new().unwrap();
 
     // Both manifests have the same hashed source path → same destination
-    let hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let hash = openjd_snapshots::hash::hash_data(
         dest.path().to_string_lossy().as_bytes()
     );
     let p1 = write_manifest_file(
@@ -547,11 +540,11 @@ async fn attachment_upload_with_root_dirs() {
     fs::write(&src_file, b"hello").unwrap();
 
     // Hash the root path to create manifest filename
-    let root_hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let root_hash = openjd_snapshots::hash::hash_data(
         root.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_lib::attachments::asset_manifests::hash_data(b"hello");
+        openjd_snapshots::hash::hash_data(b"hello");
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{root_hash}_input"),
@@ -715,7 +708,7 @@ async fn attachment_upload_invalid_manifest_path_errors() {
 async fn attachment_upload_malformed_s3_uri_errors() {
     let dir = TempDir::new().unwrap();
     let root = TempDir::new().unwrap();
-    let root_hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let root_hash = openjd_snapshots::hash::hash_data(
         root.path().to_string_lossy().as_bytes()
     );
     let p1 = write_manifest_file(
@@ -784,7 +777,7 @@ async fn attachment_download_parses_s3_uri_into_bucket_and_prefix() {
     let dir = TempDir::new().unwrap();
     let dest = TempDir::new().unwrap();
 
-    let dest_hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let dest_hash = openjd_snapshots::hash::hash_data(
         dest.path().to_string_lossy().as_bytes()
     );
     let p1 = write_manifest_file(
@@ -832,7 +825,7 @@ async fn attachment_download_conflict_resolution_create_copy() {
     let dir = TempDir::new().unwrap();
     let dest = TempDir::new().unwrap();
 
-    let hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let hash = openjd_snapshots::hash::hash_data(
         dest.path().to_string_lossy().as_bytes()
     );
     let p1 = write_manifest_file(
@@ -886,10 +879,10 @@ async fn attachment_download_hash_match_selects_correct_destination() {
     let dest_a = TempDir::new().unwrap();
     let dest_b = TempDir::new().unwrap();
 
-    let hash_a = deadline_lib::attachments::asset_manifests::hash_data(
+    let hash_a = openjd_snapshots::hash::hash_data(
         dest_a.path().to_string_lossy().as_bytes()
     );
-    let hash_b = deadline_lib::attachments::asset_manifests::hash_data(
+    let hash_b = openjd_snapshots::hash::hash_data(
         dest_b.path().to_string_lossy().as_bytes()
     );
 
@@ -955,11 +948,11 @@ async fn attachment_upload_with_path_mapping_rules_file() {
     // Create source file
     fs::write(source.path().join("a.txt"), b"hello").unwrap();
 
-    let source_hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let source_hash = openjd_snapshots::hash::hash_data(
         source.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_lib::attachments::asset_manifests::hash_data(b"hello");
+        openjd_snapshots::hash::hash_data(b"hello");
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{source_hash}_input"),
@@ -1012,11 +1005,11 @@ async fn attachment_upload_ascii_path_sets_asset_root_metadata() {
     let root = TempDir::new().unwrap();
     fs::write(root.path().join("a.txt"), b"data").unwrap();
 
-    let root_hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let root_hash = openjd_snapshots::hash::hash_data(
         root.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_lib::attachments::asset_manifests::hash_data(b"data");
+        openjd_snapshots::hash::hash_data(b"data");
     let p1 = write_manifest_file(
         dir.path(),
         &format!("{root_hash}_input"),
@@ -1063,11 +1056,11 @@ async fn attachment_upload_with_manifest_path_uploads_manifest() {
     let root = TempDir::new().unwrap();
     fs::write(root.path().join("a.txt"), b"data").unwrap();
 
-    let root_hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let root_hash = openjd_snapshots::hash::hash_data(
         root.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_lib::attachments::asset_manifests::hash_data(b"data");
+        openjd_snapshots::hash::hash_data(b"data");
     let manifest_name = format!("{root_hash}_input");
     let p1 = write_manifest_file(dir.path(), &manifest_name, &[("a.txt", &file_hash, 4)]);
 
@@ -1110,11 +1103,11 @@ async fn attachment_upload_without_manifest_path_skips_manifest_upload() {
     let root = TempDir::new().unwrap();
     fs::write(root.path().join("a.txt"), b"data").unwrap();
 
-    let root_hash = deadline_lib::attachments::asset_manifests::hash_data(
+    let root_hash = openjd_snapshots::hash::hash_data(
         root.path().to_string_lossy().as_bytes()
     );
     let file_hash =
-        deadline_lib::attachments::asset_manifests::hash_data(b"data");
+        openjd_snapshots::hash::hash_data(b"data");
     let manifest_name = format!("{root_hash}_input");
     let p1 = write_manifest_file(dir.path(), &manifest_name, &[("a.txt", &file_hash, 4)]);
 
@@ -1155,14 +1148,14 @@ async fn attachment_upload_multiple_manifests_preserves_order() {
     fs::write(root1.path().join("a.txt"), b"aaa").unwrap();
     fs::write(root2.path().join("b.txt"), b"bbb").unwrap();
 
-    let hash1 = deadline_lib::attachments::asset_manifests::hash_data(
+    let hash1 = openjd_snapshots::hash::hash_data(
         root1.path().to_string_lossy().as_bytes()
     );
-    let hash2 = deadline_lib::attachments::asset_manifests::hash_data(
+    let hash2 = openjd_snapshots::hash::hash_data(
         root2.path().to_string_lossy().as_bytes()
     );
-    let fh1 = deadline_lib::attachments::asset_manifests::hash_data(b"aaa");
-    let fh2 = deadline_lib::attachments::asset_manifests::hash_data(b"bbb");
+    let fh1 = openjd_snapshots::hash::hash_data(b"aaa");
+    let fh2 = openjd_snapshots::hash::hash_data(b"bbb");
 
     let p1 = write_manifest_file(dir.path(), &format!("{hash1}_input"), &[("a.txt", &fh1, 3)]);
     let p2 = write_manifest_file(dir.path(), &format!("{hash2}_input"), &[("b.txt", &fh2, 3)]);

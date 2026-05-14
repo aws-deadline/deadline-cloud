@@ -1,53 +1,12 @@
 //! Manifest comparison: detect new, modified, deleted, and unchanged files.
 //!
-//! `hash_diff` delegates to `openjd_snapshots::diff_snapshots` via the type bridge.
+//! `hash_diff` delegates to `openjd_snapshots::diff_snapshots`.
 //! `fast_diff` is filesystem-based (no openjd equivalent) and stays here.
 
 use std::collections::HashMap;
 use std::path::Path;
 
 use openjd_snapshots::{DiffOptions, FileEntry, Snapshot, diff_snapshots};
-
-use crate::attachments::asset_manifests::{AssetManifest, ManifestPath};
-
-// =========================================================================
-// Type bridge: AssetManifest ↔ Snapshot
-// =========================================================================
-
-/// Convert an `AssetManifest` to an openjd `Snapshot` (relative-path, full manifest).
-pub fn asset_manifest_to_snapshot(manifest: &AssetManifest) -> Snapshot {
-    let mut snap = Snapshot::new(
-        openjd_snapshots::HashAlgorithm::Xxh128,
-        openjd_snapshots::WHOLE_FILE_CHUNK_SIZE,
-    );
-    for p in &manifest.paths {
-        let mut entry = FileEntry::file(&p.path, p.size, p.mtime as u64);
-        entry.hash = Some(p.hash.clone());
-        snap.files.push(entry);
-    }
-    snap.total_size = manifest.total_size;
-    snap
-}
-
-/// Convert an openjd `Snapshot` back to an `AssetManifest`.
-pub fn snapshot_to_asset_manifest(snap: &Snapshot) -> AssetManifest {
-    use crate::attachments::asset_manifests::{HashAlgorithm, ManifestVersion};
-    let paths: Vec<ManifestPath> = snap
-        .files
-        .iter()
-        .filter(|f| !f.deleted && f.symlink_target.is_none())
-        .map(|f| ManifestPath {
-            path: f.path.clone(),
-            hash: f.hash.clone().unwrap_or_default(),
-            size: f.size.unwrap_or(0),
-            mtime: f.mtime.unwrap_or(0) as i64,
-        })
-        .collect();
-    let total_size = paths.iter().map(|p| p.size).sum();
-    // unwrap is safe: paths are well-formed from a valid Snapshot
-    AssetManifest::new(HashAlgorithm::Xxh128, ManifestVersion::V2023_03_03, total_size, paths)
-        .expect("valid manifest from snapshot conversion")
-}
 
 // =========================================================================
 // Public API
@@ -69,11 +28,11 @@ pub enum FileStatus {
 pub fn fast_diff(
     root: &str,
     current_files: &[String],
-    reference_manifest: &AssetManifest,
+    reference_manifest: &Snapshot,
 ) -> Vec<(String, FileStatus)> {
     let root_path = Path::new(root);
-    let mut manifest_map: HashMap<String, &ManifestPath> = HashMap::new();
-    for entry in &reference_manifest.paths {
+    let mut manifest_map: HashMap<String, &FileEntry> = HashMap::new();
+    for entry in &reference_manifest.files {
         let normalized = entry.path.replace('\\', "/");
         manifest_map.insert(normalized, entry);
     }
@@ -100,7 +59,7 @@ pub fn fast_diff(
             }
             Some(entry) => {
                 let file_size = meta.len();
-                if file_size != entry.size {
+                if file_size != entry.size.unwrap_or(0) {
                     results.push((relative, FileStatus::Modified));
                     continue;
                 }
@@ -119,7 +78,8 @@ pub fn fast_diff(
                         .as_micros() as i64
                 };
 
-                if (mtime_us - entry.mtime).abs() > 1 {
+                let entry_mtime = entry.mtime.unwrap_or(0) as i64;
+                if (mtime_us - entry_mtime).abs() > 1 {
                     results.push((relative, FileStatus::Modified));
                 }
             }
@@ -127,7 +87,7 @@ pub fn fast_diff(
     }
 
     // Deleted: in manifest but not on disk
-    for entry in &reference_manifest.paths {
+    for entry in &reference_manifest.files {
         let normalized = entry.path.replace('\\', "/");
         if !seen_relative.contains(&normalized) {
             results.push((normalized, FileStatus::Deleted));
@@ -140,20 +100,17 @@ pub fn fast_diff(
 /// Hash-based diff between two manifests. Returns status for every path
 /// in either manifest.
 ///
-/// Delegates to `openjd_snapshots::diff_snapshots` via the type bridge.
+/// Delegates to `openjd_snapshots::diff_snapshots`.
 pub fn hash_diff(
-    reference: &AssetManifest,
-    compare: &AssetManifest,
-) -> Vec<(FileStatus, ManifestPath)> {
-    let ref_snap = asset_manifest_to_snapshot(reference);
-    let cmp_snap = asset_manifest_to_snapshot(compare);
-
+    reference: &Snapshot,
+    compare: &Snapshot,
+) -> Vec<(FileStatus, FileEntry)> {
     let opts = DiffOptions {
         ignore_hashes: false,
         ..Default::default()
     };
 
-    let diff_manifest = diff_snapshots(&ref_snap, &cmp_snap, &opts)
+    let diff_manifest = diff_snapshots(reference, compare, &opts)
         .expect("diff_snapshots should not fail on valid snapshots");
 
     let mut results = Vec::new();
@@ -162,39 +119,28 @@ pub fn hash_diff(
     for file in &diff_manifest.files {
         if file.deleted {
             // Deleted: look up original entry from reference
-            let mp = reference
-                .paths
+            let fe = reference
+                .files
                 .iter()
-                .find(|p| p.path == file.path)
+                .find(|f| f.path == file.path)
                 .cloned()
-                .unwrap_or_else(|| ManifestPath {
-                    path: file.path.clone(),
-                    hash: String::new(),
-                    size: 0,
-                    mtime: 0,
-                });
-            results.push((FileStatus::Deleted, mp));
+                .unwrap_or_else(|| FileEntry::new(&file.path));
+            results.push((FileStatus::Deleted, fe));
         } else {
             // New or modified — check if it existed in reference
-            let status = if reference.paths.iter().any(|p| p.path == file.path) {
+            let status = if reference.files.iter().any(|f| f.path == file.path) {
                 FileStatus::Modified
             } else {
                 FileStatus::New
             };
-            let mp = ManifestPath {
-                path: file.path.clone(),
-                hash: file.hash.clone().unwrap_or_default(),
-                size: file.size.unwrap_or(0),
-                mtime: file.mtime.unwrap_or(0) as i64,
-            };
-            results.push((status, mp));
+            results.push((status, file.clone()));
         }
     }
 
     // Unchanged: entries in compare that are NOT in the diff output
-    for cp in &compare.paths {
-        if !diff_manifest.files.iter().any(|f| f.path == cp.path) {
-            results.push((FileStatus::Unchanged, cp.clone()));
+    for cf in &compare.files {
+        if !diff_manifest.files.iter().any(|f| f.path == cf.path) {
+            results.push((FileStatus::Unchanged, cf.clone()));
         }
     }
 

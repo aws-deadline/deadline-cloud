@@ -5,9 +5,7 @@ use crate::attachments::errors::JobAttachmentsError;
 use crate::attachments::models::PathFormat;
 use aws_sdk_s3::primitives::ByteStream;
 
-use crate::attachments::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, hash_data,
-};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023};
 use crate::attachments::caches::{HashCache, S3CheckCache};
 use crate::attachments::models::{
     AssetRootGroup, AssetRootManifest, AssetUploadGroup, Attachments, FileSystemLocationType,
@@ -588,10 +586,10 @@ pub async fn upload_assets(
                 JobAttachmentsError::AssetSync(format!("Upload failed: {e}"))
             })?;
 
-            // Build AssetManifest from the hashed result for manifest JSON encoding
+            // Build Snapshot from the hashed result for manifest JSON encoding
             let AbsManifest::Snapshot(hashed_snapshot) = &upload_result.manifest else { unreachable!("input was Snapshot") };
             let root_str = group.root_path.to_string_lossy();
-            let paths: Vec<ManifestPath> = hashed_snapshot
+            let files: Vec<FileEntry> = hashed_snapshot
                 .files
                 .iter()
                 .filter(|f| !f.deleted && f.symlink_target.is_none())
@@ -601,25 +599,21 @@ pub async fn upload_assets(
                         .or_else(|| f.path.strip_prefix("/"))
                         .unwrap_or(&f.path)
                         .trim_start_matches('/');
-                    ManifestPath {
-                        path: rel.to_owned(),
-                        hash: f.hash.clone().unwrap_or_default(),
-                        size: f.size.unwrap_or(0),
-                        mtime: f.mtime.unwrap_or(0) as i64,
-                    }
+                    let mut entry = FileEntry::file(rel, f.size.unwrap_or(0), f.mtime.unwrap_or(0));
+                    entry.hash = f.hash.clone();
+                    entry
                 })
                 .collect();
-            let total_size: u64 = paths.iter().map(|p| p.size).sum();
-            let manifest = AssetManifest::new(
-                HashAlgorithm::Xxh128,
-                ManifestVersion::V2023_03_03,
-                total_size,
-                paths,
-            )?;
+            let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
+            let mut manifest = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+            manifest.files = files;
+            manifest.total_size = total_size;
 
             // Encode and upload manifest JSON
-            let manifest_bytes = manifest.encode().into_bytes();
-            let manifest_name_prefix = hash_data(group.root_path.to_string_lossy().as_bytes());
+            let manifest_bytes = encode_snapshot_v2023(&manifest)
+                .expect("valid snapshot encodes successfully")
+                .into_bytes();
+            let manifest_name_prefix = openjd_snapshots::hash::hash_data(group.root_path.to_string_lossy().as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
             let full_key =
@@ -634,7 +628,7 @@ pub async fn upload_assets(
             .await?;
 
             props.input_manifest_path = Some(partial_key);
-            props.input_manifest_hash = Some(hash_data(&manifest_bytes));
+            props.input_manifest_hash = Some(openjd_snapshots::hash::hash_data(&manifest_bytes));
 
             // Update progress tracker
             let stats = &upload_result.statistics;
@@ -682,8 +676,8 @@ pub fn snapshot_assets(
     let mut total_bytes: u64 = 0;
     for m in manifests {
         if let Some(ref am) = m.asset_manifest {
-            total_files += am.paths.len() as u64;
-            total_bytes += am.paths.iter().map(|p| p.size).sum::<u64>();
+            total_files += am.files.len() as u64;
+            total_bytes += am.files.iter().map(|f| f.size.unwrap_or(0)).sum::<u64>();
         }
     }
 
@@ -730,9 +724,10 @@ pub fn snapshot_assets(
             let partial_prefix = job_attachment_settings.partial_manifest_prefix(farm_id, queue_id);
 
             // Copy files to Data/
-            for file in &manifest.paths {
+            for file in &manifest.files {
                 let src = arm.root_path.join(&file.path);
-                let dest_name = format!("{}.xxh128", file.hash);
+                let hash = file.hash.as_deref().unwrap_or("");
+                let dest_name = format!("{hash}.xxh128");
                 let dest = data_dir.join(&dest_name);
                 std::fs::copy(&src, &dest).map_err(|e| {
                     JobAttachmentsError::AssetSync(format!(
@@ -742,7 +737,7 @@ pub fn snapshot_assets(
                     ))
                 })?;
 
-                progress_tracker.track_progress(file.size, true);
+                progress_tracker.track_progress(file.size.unwrap_or(0), true);
                 if !progress_tracker.continue_reporting() {
                     return Err(JobAttachmentsError::Cancelled {
                         message: "File snapshot cancelled.".into(),
@@ -751,9 +746,10 @@ pub fn snapshot_assets(
             }
 
             // Write manifest
-            
-            let manifest_bytes = manifest.encode().into_bytes();
-            let manifest_name_prefix = hash_data(arm.root_path.to_string_lossy().as_bytes());
+            let manifest_bytes = encode_snapshot_v2023(manifest)
+                .expect("valid snapshot encodes successfully")
+                .into_bytes();
+            let manifest_name_prefix = openjd_snapshots::hash::hash_data(arm.root_path.to_string_lossy().as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
 
@@ -768,7 +764,7 @@ pub fn snapshot_assets(
             })?;
 
             props.input_manifest_path = Some(partial_key);
-            props.input_manifest_hash = Some(hash_data(&manifest_bytes));
+            props.input_manifest_hash = Some(openjd_snapshots::hash::hash_data(&manifest_bytes));
         }
 
         manifest_properties_list.push(props);

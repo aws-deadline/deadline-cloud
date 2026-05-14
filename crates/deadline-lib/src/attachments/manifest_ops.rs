@@ -8,7 +8,7 @@ use crate::attachments::errors::JobAttachmentsError;
 use serde::Serialize;
 
 use crate::attachments::api::read_manifests;
-use crate::attachments::asset_manifests::{AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion, decode_manifest, hash_data};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023, encode_snapshot_v2023};
 use crate::attachments::diff::{FileStatus, fast_diff, hash_diff};
 use crate::attachments::download::{
     download_manifest_from_s3, get_output_manifests_by_asset_root, merge_asset_manifests,
@@ -184,11 +184,11 @@ pub fn glob_files(root: &Path, config: &GlobConfig) -> Result<Vec<String>, JobAt
 /// Write a manifest to disk. Returns the written file path.
 pub fn write_manifest(
     root: &Path,
-    manifest: &AssetManifest,
+    manifest: &Snapshot,
     destination: &Path,
     name: Option<&str>,
 ) -> Result<PathBuf, JobAttachmentsError> {
-    let root_hash = hash_data(root.to_string_lossy().as_bytes());
+    let root_hash = openjd_snapshots::hash::hash_data(root.to_string_lossy().as_bytes());
     let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
 
     let manifest_name = if let Some(n) = name {
@@ -207,7 +207,9 @@ pub fn write_manifest(
         })?;
     }
 
-    std::fs::write(&dest_path, manifest.encode())
+    let encoded = encode_snapshot_v2023(manifest)
+        .expect("valid snapshot encodes successfully");
+    std::fs::write(&dest_path, encoded)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}")))?;
 
     Ok(dest_path)
@@ -232,7 +234,8 @@ pub fn manifest_snapshot(
         let diff_contents = std::fs::read_to_string(diff_path).map_err(|e| {
             JobAttachmentsError::AssetSync(format!("Failed to read diff manifest: {e}"))
         })?;
-        let diff_manifest = decode_manifest(&diff_contents)?;
+        let diff_manifest = decode_v2023(&diff_contents)
+            .map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
 
         let changed_paths: Vec<String> = if force_rehash {
             // Hash all files, compare manifests
@@ -289,7 +292,8 @@ pub fn manifest_diff(
 ) -> Result<ManifestDiffResult, JobAttachmentsError> {
     let contents = std::fs::read_to_string(manifest_path)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to read manifest: {e}")))?;
-    let reference = decode_manifest(&contents)?;
+    let reference = decode_v2023(&contents)
+        .map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
     let root_str = root.to_string_lossy();
     let current_files = glob_files(root, config)?;
 
@@ -332,7 +336,7 @@ pub fn manifest_merge(
     name: Option<&str>,
 ) -> Result<Option<ManifestMergeResult>, JobAttachmentsError> {
     let manifest_map = read_manifests(manifest_files)?;
-    let manifests: Vec<AssetManifest> = manifest_map.into_values().collect();
+    let manifests: Vec<Snapshot> = manifest_map.into_values().collect();
 
     let merged = merge_asset_manifests(&manifests)?;
 
@@ -350,11 +354,11 @@ pub fn manifest_merge(
 
 // --- Internal helpers ---
 
-/// Hash files and return an `AssetManifest` using openjd's hash engine.
+/// Hash files and return a `Snapshot` using openjd's hash engine.
 fn hash_files_to_manifest(
     root: &str,
     files: &[String],
-) -> Result<Option<AssetManifest>, JobAttachmentsError> {
+) -> Result<Option<Snapshot>, JobAttachmentsError> {
     use openjd_snapshots::{AbsManifest, CollectOptions, HashOptions, collect_abs_snapshot, hash_abs_manifest};
     use std::path::PathBuf;
 
@@ -379,7 +383,7 @@ fn hash_files_to_manifest(
     let AbsManifest::Snapshot(hashed) = &hash_result.manifest else { unreachable!() };
 
     let root_prefix = root.to_owned();
-    let paths: Vec<ManifestPath> = hashed
+    let files: Vec<FileEntry> = hashed
         .files
         .iter()
         .filter(|f| !f.deleted && f.symlink_target.is_none())
@@ -388,22 +392,17 @@ fn hash_files_to_manifest(
                 .or_else(|| f.path.strip_prefix("/"))
                 .unwrap_or(&f.path)
                 .trim_start_matches('/');
-            ManifestPath {
-                path: rel.to_owned(),
-                hash: f.hash.clone().unwrap_or_default(),
-                size: f.size.unwrap_or(0),
-                mtime: f.mtime.unwrap_or(0) as i64,
-            }
+            let mut entry = FileEntry::file(rel, f.size.unwrap_or(0), f.mtime.unwrap_or(0));
+            entry.hash = f.hash.clone();
+            entry
         })
         .collect();
 
-    let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    Ok(Some(AssetManifest::new(
-        HashAlgorithm::Xxh128,
-        ManifestVersion::V2023_03_03,
-        total_size,
-        paths,
-    )?))
+    let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
+    let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+    snap.files = files;
+    snap.total_size = total_size;
+    Ok(Some(snap))
 }
 
 /// Upload a manifest file to S3 CAS.
@@ -465,7 +464,7 @@ pub async fn manifest_download(
 
     let s3_prefix = format!("{}/Manifests", s3_settings.root_prefix);
 
-    let mut manifests_by_root: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+    let mut manifests_by_root: HashMap<String, Vec<Snapshot>> = HashMap::new();
 
     // Download input manifests
     if download_input
@@ -530,7 +529,7 @@ pub async fn manifest_download(
     for (root, manifests) in &manifests_by_root {
         let merged = merge_asset_manifests(manifests)?;
         if let Some(manifest) = merged {
-            let root_hash = hash_data(root.as_bytes());
+            let root_hash = openjd_snapshots::hash::hash_data(root.as_bytes());
             let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
 
             // Name derivation: replace / with _, strip leading _
@@ -542,7 +541,9 @@ pub async fn manifest_download(
             let filename = format!("{manifest_name}-{root_hash}-{timestamp}.manifest");
             let local_path = download_dir.join(&filename);
 
-            std::fs::write(&local_path, manifest.encode()).map_err(|e| {
+            let encoded = encode_snapshot_v2023(&manifest)
+                .expect("valid snapshot encodes successfully");
+            std::fs::write(&local_path, encoded).map_err(|e| {
                 JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}"))
             })?;
 

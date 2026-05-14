@@ -11,11 +11,7 @@ use crate::attachments::errors::JobAttachmentsError;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 
-use crate::attachments::asset_manifests::{
-    AssetManifest, ManifestPath, ManifestVersion, decode_manifest,
-};
-#[cfg(test)]
-use crate::attachments::asset_manifests::HashAlgorithm;
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023, encode_snapshot_v2023};
 use crate::attachments::models::{Attachments, FileConflictResolution, JobAttachmentS3Settings};
 use crate::attachments::progress_tracker::{
     DownloadSummaryStatistics, ProgressStatus, ProgressTracker,
@@ -31,7 +27,7 @@ use crate::attachments::progress_tracker::{
 /// Rejects path traversal attacks (e.g. `../../etc/passwd`).
 fn ensure_paths_within_directory(
     root_path: &str,
-    paths: &[ManifestPath],
+    paths: &[FileEntry],
 ) -> Result<(), JobAttachmentsError> {
     let root = Path::new(root_path);
     if !root.is_absolute() {
@@ -125,11 +121,11 @@ fn get_output_manifest_prefix(
 /// Root mappings are applied first (merging manifests if two roots map to the same target),
 /// then each filter group is applied sequentially (AND between groups, OR within each group).
 pub(crate) fn rebuild_manifests(
-    initial: &HashMap<String, Vec<AssetManifest>>,
+    initial: &HashMap<String, Vec<Snapshot>>,
     root_mappings: &HashMap<String, String>,
     filter_groups: &[Vec<String>],
-) -> HashMap<String, Vec<AssetManifest>> {
-    let mut rebuilt: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+) -> HashMap<String, Vec<Snapshot>> {
+    let mut rebuilt: HashMap<String, Vec<Snapshot>> = HashMap::new();
     for (root, manifests) in initial {
         let mapped_root = root_mappings.get(root).unwrap_or(root).clone();
         rebuilt
@@ -191,9 +187,9 @@ pub fn matches_any_filter(file_path: &str, filters: &[String]) -> bool {
 
 /// Filter manifests by root, keeping only paths that match any filter.
 pub fn filter_manifests<S: std::hash::BuildHasher + Clone>(
-    manifests_by_root: &HashMap<String, Vec<AssetManifest>, S>,
+    manifests_by_root: &HashMap<String, Vec<Snapshot>, S>,
     filters: &[String],
-) -> HashMap<String, Vec<AssetManifest>, S> {
+) -> HashMap<String, Vec<Snapshot>, S> {
     let mut filtered = HashMap::with_capacity_and_hasher(
         manifests_by_root.len(),
         manifests_by_root.hasher().clone(),
@@ -201,22 +197,18 @@ pub fn filter_manifests<S: std::hash::BuildHasher + Clone>(
     for (root, manifest_list) in manifests_by_root {
         let mut filtered_manifests = Vec::new();
         for manifest in manifest_list {
-            let matching: Vec<ManifestPath> = manifest
-                .paths
+            let matching: Vec<FileEntry> = manifest
+                .files
                 .iter()
                 .filter(|p| matches_any_filter(&full_path(root, &p.path), filters))
                 .cloned()
                 .collect();
             if !matching.is_empty() {
-                let total_size = matching.iter().map(|p| p.size).sum();
-                if let Ok(m) = AssetManifest::new(
-                    manifest.hash_alg,
-                    manifest.manifest_version,
-                    total_size,
-                    matching,
-                ) {
-                    filtered_manifests.push(m);
-                }
+                let total_size = matching.iter().map(|p| p.size.unwrap_or(0)).sum();
+                let mut m = Snapshot::new(manifest.hash_alg, WHOLE_FILE_CHUNK_SIZE);
+                m.files = matching;
+                m.total_size = total_size;
+                filtered_manifests.push(m);
             }
         }
         if !filtered_manifests.is_empty() {
@@ -291,8 +283,8 @@ fn fnmatch(pattern: &str, text: &str) -> bool {
 ///   earlier ones. Recalculate `total_size`.
 /// - Different hash algorithms → `Err(JobAttachmentsError::AssetSync)`.
 pub fn merge_asset_manifests(
-    manifests: &[AssetManifest],
-) -> Result<Option<AssetManifest>, JobAttachmentsError> {
+    manifests: &[Snapshot],
+) -> Result<Option<Snapshot>, JobAttachmentsError> {
     if manifests.is_empty() {
         return Ok(None);
     }
@@ -301,31 +293,29 @@ pub fn merge_asset_manifests(
     }
 
     let hash_alg = manifests[0].hash_alg;
-    let mut merged: HashMap<String, ManifestPath> = HashMap::new();
+    let mut merged: HashMap<String, FileEntry> = HashMap::new();
 
     for manifest in manifests {
         if manifest.hash_alg != hash_alg {
             return Err(JobAttachmentsError::AssetSync(format!(
                 "Merging manifests with different hash algorithms is not supported: \
                  {} vs {}",
-                hash_alg.as_str(),
-                manifest.hash_alg.as_str(),
+                hash_alg,
+                manifest.hash_alg,
             )));
         }
-        for path in &manifest.paths {
-            merged.insert(path.path.clone(), path.clone());
+        for file in &manifest.files {
+            merged.insert(file.path.clone(), file.clone());
         }
     }
 
-    let paths: Vec<ManifestPath> = merged.into_values().collect();
-    let total_size: u64 = paths.iter().map(|p| p.size).sum();
+    let files: Vec<FileEntry> = merged.into_values().collect();
+    let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
 
-    Ok(Some(AssetManifest::new(
-        hash_alg,
-        ManifestVersion::V2023_03_03,
-        total_size,
-        paths,
-    )?))
+    let mut snap = Snapshot::new(hash_alg, WHOLE_FILE_CHUNK_SIZE);
+    snap.files = files;
+    snap.total_size = total_size;
+    Ok(Some(snap))
 }
 
 /// Download all files from manifests grouped by local root directory.
@@ -335,7 +325,7 @@ pub fn merge_asset_manifests(
 #[allow(clippy::implicit_hasher, reason = "only used with default HashMap")]
 pub async fn download_files_from_manifests(
     s3_bucket: &str,
-    manifests_by_root: &HashMap<String, AssetManifest>,
+    manifests_by_root: &HashMap<String, Snapshot>,
     cas_prefix: Option<&str>,
     s3_client: &S3Client,
     account_id: &str,
@@ -353,7 +343,7 @@ pub async fn download_files_from_manifests(
     let mut total_files: u64 = 0;
     let mut total_bytes: u64 = 0;
     for manifest in manifests_by_root.values() {
-        total_files += manifest.paths.len() as u64;
+        total_files += manifest.files.len() as u64;
         total_bytes += manifest.total_size;
     }
 
@@ -375,7 +365,7 @@ pub async fn download_files_from_manifests(
 
     // Validate all paths before downloading
     for (local_root, manifest) in manifests_by_root {
-        ensure_paths_within_directory(local_root, &manifest.paths)?;
+        ensure_paths_within_directory(local_root, &manifest.files)?;
     }
 
     // Build S3DataCache
@@ -403,14 +393,14 @@ pub async fn download_files_from_manifests(
             openjd_snapshots::HashAlgorithm::Xxh128,
             openjd_snapshots::WHOLE_FILE_CHUNK_SIZE,
         );
-        for p in &manifest.paths {
+        for p in &manifest.files {
             let abs_path = if local_root.ends_with('/') {
                 format!("{}{}", local_root, p.path)
             } else {
                 format!("{}/{}", local_root, p.path)
             };
-            let mut entry = FileEntry::file(&abs_path, p.size, p.mtime as u64);
-            entry.hash = Some(p.hash.clone());
+            let mut entry = FileEntry::file(&abs_path, p.size.unwrap_or(0), p.mtime.unwrap_or(0));
+            entry.hash = p.hash.clone();
             abs_snapshot.files.push(entry);
         }
         abs_snapshot.total_size = manifest.total_size;
@@ -495,7 +485,7 @@ pub async fn get_output_manifests_by_asset_root(
     session_action_id: Option<&str>,
     s3_client: &S3Client,
     account_id: &str,
-) -> Result<HashMap<String, Vec<AssetManifest>>, JobAttachmentsError> {
+) -> Result<HashMap<String, Vec<Snapshot>>, JobAttachmentsError> {
     // Handle session_action_id case
     if let Some(sa_id) = session_action_id {
         if step_id.is_none() || task_id.is_none() {
@@ -542,7 +532,7 @@ pub async fn get_output_manifests_by_asset_root(
     let selected_keys = select_latest_manifests_per_task(&manifest_keys);
 
     // Download each manifest and group by asset root with timestamps
-    let mut by_root: HashMap<String, Vec<(DateTime<Utc>, AssetManifest)>> = HashMap::new();
+    let mut by_root: HashMap<String, Vec<(DateTime<Utc>, Snapshot)>> = HashMap::new();
 
     for key in &selected_keys {
         let (asset_root, last_modified, manifest) =
@@ -563,10 +553,10 @@ pub async fn get_output_manifests_by_asset_root(
 
     // Sort each asset root's manifests by LastModified (oldest first, newer wins)
     // then merge them
-    let mut outputs: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+    let mut outputs: HashMap<String, Vec<Snapshot>> = HashMap::new();
     for (root, mut manifest_list) in by_root {
         manifest_list.sort_by_key(|(ts, _)| *ts);
-        let manifests: Vec<AssetManifest> = manifest_list.into_iter().map(|(_, m)| m).collect();
+        let manifests: Vec<Snapshot> = manifest_list.into_iter().map(|(_, m)| m).collect();
         if let Some(merged) = merge_asset_manifests(&manifests)? {
             outputs.insert(root, vec![merged]);
         }
@@ -722,7 +712,7 @@ pub async fn download_manifest_from_s3(
     s3_bucket: &str,
     manifest_key: &str,
     account_id: &str,
-) -> Result<(Option<String>, DateTime<Utc>, AssetManifest), JobAttachmentsError> {
+) -> Result<(Option<String>, DateTime<Utc>, Snapshot), JobAttachmentsError> {
     let result = s3_client
         .get_object()
         .bucket(s3_bucket)
@@ -769,7 +759,7 @@ pub async fn download_manifest_from_s3(
         .into_bytes();
     let contents = String::from_utf8(body_bytes.to_vec())
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Manifest is not valid UTF-8: {e}")))?;
-    let manifest = decode_manifest(&contents)?;
+    let manifest = decode_v2023(&contents).map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
 
     Ok((asset_root, last_modified, manifest))
 }
@@ -785,8 +775,8 @@ async fn get_manifests_by_session_action_id(
     session_action_id: &str,
     s3_client: &S3Client,
     account_id: &str,
-) -> Result<HashMap<String, Vec<AssetManifest>>, JobAttachmentsError> {
-    let mut outputs: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+) -> Result<HashMap<String, Vec<Snapshot>>, JobAttachmentsError> {
+    let mut outputs: HashMap<String, Vec<Snapshot>> = HashMap::new();
 
     // Try task-specific prefix first
     let task_prefix = get_output_manifest_prefix(
@@ -872,10 +862,10 @@ async fn get_manifests_by_session_action_id(
 /// `download_files_from_manifests`.
 pub struct OutputDownloader {
     s3_settings: JobAttachmentS3Settings,
-    initial_outputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    initial_outputs_by_root: HashMap<String, Vec<Snapshot>>,
     include_filter_groups: Vec<Vec<String>>,
     root_mappings: HashMap<String, String>,
-    outputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    outputs_by_root: HashMap<String, Vec<Snapshot>>,
     s3_client: S3Client,
     account_id: String,
 }
@@ -940,7 +930,7 @@ impl OutputDownloader {
         for (root, manifests) in &self.outputs_by_root {
             let paths: Vec<String> = manifests
                 .iter()
-                .flat_map(|m| m.paths.iter().map(|p| p.path.clone()))
+                .flat_map(|m| m.files.iter().map(|p| p.path.clone()))
                 .collect();
             if !paths.is_empty() {
                 result.insert(root.clone(), paths);
@@ -1012,8 +1002,8 @@ pub async fn get_input_manifests_by_asset_root(
     attachments: &Attachments,
     s3_client: &S3Client,
     account_id: &str,
-) -> Result<HashMap<String, Vec<AssetManifest>>, JobAttachmentsError> {
-    let mut inputs: HashMap<String, Vec<AssetManifest>> = HashMap::new();
+) -> Result<HashMap<String, Vec<Snapshot>>, JobAttachmentsError> {
+    let mut inputs: HashMap<String, Vec<Snapshot>> = HashMap::new();
 
     for manifest_props in &attachments.manifests {
         if let Some(ref input_path) = manifest_props.input_manifest_path {
@@ -1038,10 +1028,10 @@ pub async fn get_input_manifests_by_asset_root(
 /// Inputs are job-level only (no step/task scoping).
 pub struct InputDownloader {
     s3_settings: JobAttachmentS3Settings,
-    initial_inputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    initial_inputs_by_root: HashMap<String, Vec<Snapshot>>,
     include_filter_groups: Vec<Vec<String>>,
     root_mappings: HashMap<String, String>,
-    inputs_by_root: HashMap<String, Vec<AssetManifest>>,
+    inputs_by_root: HashMap<String, Vec<Snapshot>>,
     s3_client: S3Client,
     account_id: String,
 }
@@ -1091,7 +1081,7 @@ impl InputDownloader {
         for (root, manifests) in &self.inputs_by_root {
             let paths: Vec<String> = manifests
                 .iter()
-                .flat_map(|m| m.paths.iter().map(|p| p.path.clone()))
+                .flat_map(|m| m.files.iter().map(|p| p.path.clone()))
                 .collect();
             if !paths.is_empty() {
                 result.insert(root.clone(), paths);
@@ -1157,23 +1147,20 @@ mod tests {
 
     // --- Helper to build test manifests ---
 
-    fn make_manifest(paths: &[&str]) -> AssetManifest {
-        let manifest_paths: Vec<ManifestPath> = paths
+    fn make_manifest(paths: &[&str]) -> Snapshot {
+        let files: Vec<FileEntry> = paths
             .iter()
-            .map(|p| ManifestPath {
-                path: p.to_string(),
-                hash: "aaa111bbb222ccc333ddd444eee55566".into(),
-                size: 100,
-                mtime: 1_700_000_000,
+            .map(|p| {
+                let mut e = FileEntry::file(*p, 100, 1_700_000_000);
+                e.hash = Some("aaa111bbb222ccc333ddd444eee55566".into());
+                e
             })
             .collect();
-        AssetManifest::new(
-            HashAlgorithm::Xxh128,
-            ManifestVersion::V2023_03_03,
-            manifest_paths.iter().map(|p| p.size).sum(),
-            manifest_paths,
-        )
-        .unwrap()
+        let total_size = files.iter().map(|f| f.size.unwrap_or(0)).sum();
+        let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+        snap.files = files;
+        snap.total_size = total_size;
+        snap
     }
 
     // --- rebuild_manifests L1 tests ---
@@ -1191,7 +1178,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         let paths: Vec<&str> = result["/root"]
             .iter()
-            .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+            .flat_map(|m| m.files.iter().map(|p| p.path.as_str()))
             .collect();
         assert!(paths.contains(&"a.txt"));
         assert!(paths.contains(&"b.txt"));
@@ -1209,7 +1196,7 @@ mod tests {
 
         assert!(!result.contains_key("/old"));
         assert!(result.contains_key("/new"));
-        assert_eq!(result["/new"][0].paths[0].path, "file.txt");
+        assert_eq!(result["/new"][0].files[0].path, "file.txt");
     }
 
     #[test]
@@ -1228,7 +1215,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         let all_paths: Vec<&str> = result["/merged"]
             .iter()
-            .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+            .flat_map(|m| m.files.iter().map(|p| p.path.as_str()))
             .collect();
         assert!(all_paths.contains(&"one.txt"));
         assert!(all_paths.contains(&"two.txt"));
@@ -1248,7 +1235,7 @@ mod tests {
 
         let paths: Vec<&str> = result["/root"]
             .iter()
-            .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+            .flat_map(|m| m.files.iter().map(|p| p.path.as_str()))
             .collect();
         assert_eq!(paths, vec!["render.exr"]);
     }
@@ -1271,7 +1258,7 @@ mod tests {
             .get("/root")
             .map(|ms| {
                 ms.iter()
-                    .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+                    .flat_map(|m| m.files.iter().map(|p| p.path.as_str()))
                     .collect()
             })
             .unwrap_or_default();
@@ -1309,7 +1296,7 @@ mod tests {
         assert!(result.contains_key("/new"));
         let paths: Vec<&str> = result["/new"]
             .iter()
-            .flat_map(|m| m.paths.iter().map(|p| p.path.as_str()))
+            .flat_map(|m| m.files.iter().map(|p| p.path.as_str()))
             .collect();
         assert_eq!(paths, vec!["sub/file.exr"]);
     }

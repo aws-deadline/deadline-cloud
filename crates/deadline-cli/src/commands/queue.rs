@@ -1363,7 +1363,7 @@ async fn incremental_output_download(
 
     let mut downloaded_manifests: Vec<(
         chrono::DateTime<Utc>,
-        deadline_lib::attachments::asset_manifests::AssetManifest,
+        openjd_snapshots::Snapshot,
     )> = Vec::new();
     let mut downloaded_files_count: usize = 0;
     let mut downloaded_bytes: u64 = 0;
@@ -1480,7 +1480,7 @@ async fn incremental_output_download(
                 &mut downloaded_manifests,
             );
 
-        let total_bytes: u64 = manifest_paths.iter().map(|p| p.size).sum();
+        let total_bytes: u64 = manifest_paths.iter().map(|p| p.size.unwrap_or(0)).sum();
         let total_files = manifest_paths.len();
 
         // SYNC-007: Set stats from manifest paths so dry-run reports would-be counts
@@ -1495,7 +1495,7 @@ async fn incremental_output_download(
             let path_refs: Vec<&str> = manifest_paths.iter().map(|p| p.path.as_str()).collect();
             let size_by_path: std::collections::HashMap<String, u64> = manifest_paths
                 .iter()
-                .map(|p| (p.path.clone(), p.size))
+                .map(|p| (p.path.clone(), p.size.unwrap_or(0)))
                 .collect();
             let summary =
                 crate::path_utils::summarize_path_list(&path_refs, 30, Some(&size_by_path));
@@ -1520,7 +1520,7 @@ async fn incremental_output_download(
             // Group manifest paths by parent directory for download
             let mut manifests_by_root: std::collections::HashMap<
                 String,
-                deadline_lib::attachments::asset_manifests::AssetManifest,
+                openjd_snapshots::Snapshot,
             > = std::collections::HashMap::new();
             for mp in &manifest_paths {
                 let dir = Path::new(&mp.path)
@@ -1528,26 +1528,18 @@ async fn incremental_output_download(
                     .map_or_else(|| "/".to_owned(), |p| p.to_string_lossy().to_string());
                 let root = if dir.is_empty() { "/".to_owned() } else { dir };
                 let entry = manifests_by_root.entry(root).or_insert_with(|| {
-                    deadline_lib::attachments::asset_manifests::AssetManifest::new(
-                        deadline_lib::attachments::asset_manifests::HashAlgorithm::Xxh128,
-                        deadline_lib::attachments::asset_manifests::ManifestVersion::V2023_03_03,
-                        0,
-                        vec![],
+                    openjd_snapshots::Snapshot::new(
+                        openjd_snapshots::HashAlgorithm::Xxh128,
+                        openjd_snapshots::WHOLE_FILE_CHUNK_SIZE,
                     )
-                    .expect("valid manifest params")
                 });
                 let filename = Path::new(&mp.path)
                     .file_name()
                     .map_or_else(|| mp.path.clone(), |f| f.to_string_lossy().to_string());
-                entry
-                    .paths
-                    .push(deadline_lib::attachments::asset_manifests::ManifestPath {
-                        path: filename,
-                        hash: mp.hash.clone(),
-                        size: mp.size,
-                        mtime: mp.mtime,
-                    });
-                entry.total_size += mp.size;
+                let mut fe = openjd_snapshots::FileEntry::file(&filename, mp.size.unwrap_or(0), mp.mtime.unwrap_or(0));
+                fe.hash = mp.hash.clone();
+                entry.files.push(fe);
+                entry.total_size += mp.size.unwrap_or(0);
             }
 
             match deadline_lib::attachments::download::download_files_from_manifests(

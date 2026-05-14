@@ -5,9 +5,7 @@
 
 use std::path::Path;
 
-use deadline_lib::attachments::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
-};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use deadline_lib::attachments::caches::S3CheckCache;
 use deadline_lib::attachments::models::{AssetRootGroup, AssetRootManifest, JobAttachmentS3Settings};
 use deadline_lib::attachments::upload::{S3UploadContext, snapshot_assets, upload_assets};
@@ -46,33 +44,25 @@ impl wiremock::Respond for MultipartPostResponder {
     }
 }
 
-fn test_manifest(dir: &Path, files: &[(&str, &[u8])]) -> AssetManifest {
-    let mut paths = Vec::new();
+fn test_manifest(dir: &Path, files: &[(&str, &[u8])]) -> Snapshot {
+    let mut entries = Vec::new();
     for (name, content) in files {
         let file_path = dir.join(name);
         if let Some(parent) = file_path.parent() {
             std::fs::create_dir_all(parent).unwrap();
         }
         std::fs::write(&file_path, content).unwrap();
-        let hash =
-            deadline_lib::attachments::asset_manifests::hash_file(&file_path)
-                .unwrap();
+        let hash = openjd_snapshots::hash::hash_file(&file_path).unwrap();
         let meta = std::fs::metadata(&file_path).unwrap();
-        paths.push(ManifestPath {
-            path: name.to_string(),
-            hash,
-            size: meta.len(),
-            mtime: 1_000_000, // fixed for tests
-        });
+        let mut e = FileEntry::file(*name, meta.len(), 1_000_000);
+        e.hash = Some(hash);
+        entries.push(e);
     }
-    let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    AssetManifest::new(
-        HashAlgorithm::Xxh128,
-        ManifestVersion::V2023_03_03,
-        total_size,
-        paths,
-    )
-    .unwrap()
+    let total_size: u64 = entries.iter().map(|f| f.size.unwrap_or(0)).sum();
+    let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+    snap.files = entries;
+    snap.total_size = total_size;
+    snap
 }
 
 /// Create files on disk and return an AssetRootGroup with those files as inputs.

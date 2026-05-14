@@ -733,8 +733,7 @@ pub async fn create_job_from_job_bundle(
                 if let Some(ref snap_dir) = params.debug_snapshot_dir {
                     // F8: Snapshot assets locally instead of uploading to S3.
                     // Hash files first (snapshot needs hashes for CAS key names).
-                    use openjd_snapshots::{AbsManifest, CollectOptions, HashOptions, collect_abs_snapshot, hash_abs_manifest};
-                    use crate::attachments::asset_manifests::{HashAlgorithm, ManifestPath, ManifestVersion};
+                    use openjd_snapshots::{AbsManifest, CollectOptions, FileEntry, HashAlgorithm, HashOptions, Snapshot, WHOLE_FILE_CHUNK_SIZE, collect_abs_snapshot, hash_abs_manifest};
                     use crate::attachments::models::AssetRootManifest;
 
                     let mut manifests = Vec::new();
@@ -754,24 +753,22 @@ pub async fn create_job_from_job_bundle(
                                 _ => unreachable!(),
                             };
                             let root_str = group.root_path.to_string_lossy();
-                            let paths: Vec<ManifestPath> = hashed.files.iter()
+                            let files: Vec<FileEntry> = hashed.files.iter()
                                 .filter(|f| !f.deleted && f.symlink_target.is_none())
                                 .map(|f| {
                                     let rel = f.path.strip_prefix(&*root_str)
                                         .or_else(|| f.path.strip_prefix("/"))
                                         .unwrap_or(&f.path)
                                         .trim_start_matches('/');
-                                    ManifestPath {
-                                        path: rel.to_string(),
-                                        hash: f.hash.clone().unwrap_or_default(),
-                                        size: f.size.unwrap_or(0),
-                                        mtime: f.mtime.unwrap_or(0) as i64,
-                                    }
+                                    let mut entry = FileEntry::file(rel, f.size.unwrap_or(0), f.mtime.unwrap_or(0));
+                                    entry.hash = f.hash.clone();
+                                    entry
                                 }).collect();
-                            let total_size: u64 = paths.iter().map(|p| p.size).sum();
-                            Some(crate::attachments::asset_manifests::AssetManifest::new(
-                                HashAlgorithm::Xxh128, ManifestVersion::V2023_03_03, total_size, paths,
-                            ).map_err(|e| op_err(e.to_string()))?)
+                            let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
+                            let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+                            snap.files = files;
+                            snap.total_size = total_size;
+                            Some(snap)
                         };
                         manifests.push(AssetRootManifest {
                             file_system_location_name: group.file_system_location_name.clone(),

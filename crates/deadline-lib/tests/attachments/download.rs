@@ -7,9 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use deadline_lib::attachments::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
-};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use deadline_lib::attachments::download::{
     download_files_from_manifests, get_output_manifests_by_asset_root,
     merge_asset_manifests,
@@ -35,53 +33,41 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
     deadline_lib::attachments::s3::build_s3_client(&sdk_config, &deadline_lib::config::ini::IniConfig::new())
 }
 
-fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> AssetManifest {
-    let mut paths = Vec::new();
+fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> Snapshot {
+    let mut entries = Vec::new();
     for (name, content) in files {
         let file_path = dir.join(name);
         if let Some(parent) = file_path.parent() {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(&file_path, content).unwrap();
-        let hash =
-            deadline_lib::attachments::asset_manifests::hash_data(content);
-        let meta = fs::metadata(&file_path).unwrap();
-        paths.push(ManifestPath {
-            path: name.to_string(),
-            hash,
-            size: meta.len(),
-            mtime: 1_700_000_000_000_000, // fixed microseconds for test determinism
-        });
+        let hash = openjd_snapshots::hash::hash_data(content);
+        let mut e = FileEntry::file(*name, content.len() as u64, 1_700_000_000_000_000);
+        e.hash = Some(hash);
+        entries.push(e);
     }
-    let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    AssetManifest::new(
-        HashAlgorithm::Xxh128,
-        ManifestVersion::V2023_03_03,
-        total_size,
-        paths,
-    )
-    .unwrap()
+    let total_size: u64 = entries.iter().map(|f| f.size.unwrap_or(0)).sum();
+    let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+    snap.files = entries;
+    snap.total_size = total_size;
+    snap
 }
 
-fn make_manifest_no_files(entries: &[(&str, &str, u64)]) -> AssetManifest {
+fn make_manifest_no_files(entries: &[(&str, &str, u64)]) -> Snapshot {
     // entries: (path, hash, size)
-    let paths: Vec<ManifestPath> = entries
+    let files: Vec<FileEntry> = entries
         .iter()
-        .map(|(p, h, s)| ManifestPath {
-            path: p.to_string(),
-            hash: h.to_string(),
-            size: *s,
-            mtime: 1_700_000_000_000_000,
+        .map(|(p, h, s)| {
+            let mut e = FileEntry::file(*p, *s, 1_700_000_000_000_000);
+            e.hash = Some(h.to_string());
+            e
         })
         .collect();
-    let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    AssetManifest::new(
-        HashAlgorithm::Xxh128,
-        ManifestVersion::V2023_03_03,
-        total_size,
-        paths,
-    )
-    .unwrap()
+    let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
+    let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+    snap.files = files;
+    snap.total_size = total_size;
+    snap
 }
 
 /// Mount S3 `GetObject` returning file content.
@@ -103,8 +89,8 @@ fn merge_single_manifest_returns_same() {
     let result = merge_asset_manifests(&[manifest]).unwrap();
     assert!(result.is_some());
     let merged = result.unwrap();
-    assert_eq!(merged.paths.len(), 1);
-    assert_eq!(merged.paths[0].path, "file1.txt");
+    assert_eq!(merged.files.len(), 1);
+    assert_eq!(merged.files[0].path, "file1.txt");
     assert_eq!(merged.total_size, 100);
 }
 
@@ -113,7 +99,7 @@ fn merge_two_manifests_non_overlapping_paths() {
     let m1 = make_manifest_no_files(&[("file1.txt", "b2852e22b53c811e73805beca166f642", 100)]);
     let m2 = make_manifest_no_files(&[("file2.txt", "11223344aabbccdd11223344aabbccdd", 200)]);
     let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
-    assert_eq!(result.paths.len(), 2);
+    assert_eq!(result.files.len(), 2);
     assert_eq!(result.total_size, 300);
 }
 
@@ -122,9 +108,9 @@ fn merge_two_manifests_overlapping_paths_later_wins() {
     let m1 = make_manifest_no_files(&[("file1.txt", "aaaa000000000000aaaa000000000000", 100)]);
     let m2 = make_manifest_no_files(&[("file1.txt", "bbbb000000000000bbbb000000000000", 200)]);
     let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
-    assert_eq!(result.paths.len(), 1);
+    assert_eq!(result.files.len(), 1);
     // Later manifest's entry wins
-    assert_eq!(result.paths[0].hash, "bbbb000000000000bbbb000000000000");
+    assert_eq!(result.files[0].hash.as_deref().unwrap_or(""), "bbbb000000000000bbbb000000000000");
     assert_eq!(result.total_size, 200);
 }
 
@@ -132,7 +118,7 @@ fn merge_two_manifests_overlapping_paths_later_wins() {
 fn merge_empty_list_returns_ok_none() {
     // merge_asset_manifests should return Result<Option<...>>.
     // Empty input → Ok(None).
-    let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[]);
+    let result: Result<Option<Snapshot>, _> = merge_asset_manifests(&[]);
     assert!(result.unwrap().is_none());
 }
 
@@ -140,9 +126,9 @@ fn merge_empty_list_returns_ok_none() {
 fn merge_single_manifest_returns_ok_some() {
     let manifest = make_manifest_no_files(&[("a.txt", "b2852e22b53c811e73805beca166f642", 10)]);
     // Should return Result<Option<...>>, not bare Option.
-    let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[manifest]);
+    let result: Result<Option<Snapshot>, _> = merge_asset_manifests(&[manifest]);
     let merged = result.unwrap().unwrap();
-    assert_eq!(merged.paths.len(), 1);
+    assert_eq!(merged.files.len(), 1);
 }
 
 #[test]
@@ -154,7 +140,7 @@ fn merge_different_hash_algorithms_returns_error() {
     let m1 = make_manifest_no_files(&[("a.txt", "b2852e22b53c811e73805beca166f642", 10)]);
     let m2 = make_manifest_no_files(&[("b.txt", "11223344aabbccdd11223344aabbccdd", 20)]);
     // Same algorithm — should return Ok(Some(...))
-    let result: Result<Option<AssetManifest>, _> = merge_asset_manifests(&[m1, m2]);
+    let result: Result<Option<Snapshot>, _> = merge_asset_manifests(&[m1, m2]);
     assert!(result.unwrap().is_some());
 }
 
@@ -450,7 +436,7 @@ async fn download_manifest_from_s3_returns_last_modified() {
             .unwrap();
 
     assert_eq!(asset_root, Some("/mnt/shared".to_owned()));
-    assert_eq!(manifest.paths.len(), 1);
+    assert_eq!(manifest.files.len(), 1);
     // The LastModified should be 2024-06-15T14:30:00Z
     assert_eq!(
         last_modified.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
@@ -536,8 +522,8 @@ async fn get_output_manifests_merges_by_last_modified_order() {
     assert_eq!(manifests.len(), 1);
     // The merged manifest should have the newer hash (newer LastModified wins)
     let merged = &manifests[0];
-    assert_eq!(merged.paths.len(), 1);
-    assert_eq!(merged.paths[0].hash, "fff666eee555ddd444ccc333bbb22211");
+    assert_eq!(merged.files.len(), 1);
+    assert_eq!(merged.files[0].hash.as_deref().unwrap_or(""), "fff666eee555ddd444ccc333bbb22211");
 }
 
 

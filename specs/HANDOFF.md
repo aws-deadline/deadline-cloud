@@ -128,7 +128,7 @@ Use openjd types directly (`Snapshot`, `FileEntry`, `hash::hash_data`)
 instead of our wrapper types (`AssetManifest`, `ManifestPath`, `hash_data`).
 See `specs/crate-restructure.md` § 11 for full plan.
 
-**Status:** Planning complete. Awaiting go/no-go.
+**Status:** ✅ Complete (commit `cf24fe3`).
 
 **Baseline (2026-05-14, pre-Step 11):**
 
@@ -136,6 +136,13 @@ See `specs/crate-restructure.md` § 11 for full plan.
 |-------|-------|--------|
 | `deadline-lib` | 816 | ✅ All pass |
 | `deadline-cli` | 499 | ✅ All pass |
+
+**Final (2026-05-14, post-Step 11):**
+
+| Crate | Tests | Delta |
+|-------|-------|-------|
+| `deadline-lib` | 796 | -20 (deleted wrapper unit tests) |
+| `deadline-cli` | 499 | 0 |
 
 ---
 
@@ -159,6 +166,7 @@ See `specs/crate-restructure.md` § 11 for full plan.
 | 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | `18155ae` |
 | 9.5 | Presentation utilities (move to CLI) | `be667f9` |
 | 10 | Crate consolidation (4 crates → deadline-lib) | `b9133e4` |
+| 11 | Collapse type bridge (openjd types directly) | `cf24fe3` |
 
 ---
 

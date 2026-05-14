@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::attachments::errors::JobAttachmentsError;
 
-use crate::attachments::asset_manifests::{AssetManifest, decode_manifest, hash_data};
+use openjd_snapshots::{Snapshot, decode_v2023, encode_snapshot_v2023};
 use crate::attachments::download::download_files_from_manifests;
 use crate::attachments::models::{
     FileConflictResolution, JobAttachmentS3Settings, PathMappingRule, UploadManifestInfo,
@@ -23,7 +23,7 @@ use crate::attachments::upload::S3UploadContext;
 /// exist upfront; collects invalid ones into a single error.
 pub fn read_manifests(
     manifest_paths: &[String],
-) -> Result<HashMap<String, AssetManifest>, JobAttachmentsError> {
+) -> Result<HashMap<String, Snapshot>, JobAttachmentsError> {
     if manifest_paths.is_empty() {
         return Ok(HashMap::new());
     }
@@ -50,7 +50,8 @@ pub fn read_manifests(
         let contents = std::fs::read_to_string(path).map_err(|e| {
             JobAttachmentsError::AssetSync(format!("Failed to read manifest {path}: {e}"))
         })?;
-        let manifest = decode_manifest(&contents)?;
+        let manifest = decode_v2023(&contents)
+            .map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
         result.insert(filename, manifest);
     }
 
@@ -153,7 +154,7 @@ pub async fn attachment_download(
     let s3_settings = JobAttachmentS3Settings::from_s3_root_uri(s3_root_uri)?;
     let cas_prefix = s3_settings.full_cas_prefix()?;
 
-    let mut manifests_by_root: HashMap<String, AssetManifest> = HashMap::new();
+    let mut manifests_by_root: HashMap<String, Snapshot> = HashMap::new();
 
     for (file_name, manifest) in &file_name_manifest_dict {
         let destination = rule_list
@@ -272,9 +273,9 @@ pub async fn attachment_upload(
 
             let source_root = Path::new(&rule.destination_path);
             let file_paths: Vec<std::path::PathBuf> = manifest
-                .paths
+                .files
                 .iter()
-                .map(|p| source_root.join(&p.path))
+                .map(|f| source_root.join(&f.path))
                 .collect();
 
             let abs_snapshot = collect_abs_snapshot(
@@ -307,8 +308,10 @@ pub async fn attachment_upload(
         }
 
         // Upload manifest file itself if upload_manifest_path provided
-        let manifest_bytes = manifest.encode().into_bytes();
-        let manifest_hash = hash_data(&manifest_bytes);
+        let manifest_bytes = encode_snapshot_v2023(manifest)
+            .expect("valid snapshot encodes successfully")
+            .into_bytes();
+        let manifest_hash = openjd_snapshots::hash::hash_data(&manifest_bytes);
 
         let partial_key = if let Some(prefix) = upload_manifest_path {
             let key = format!("{prefix}/{file_name}");

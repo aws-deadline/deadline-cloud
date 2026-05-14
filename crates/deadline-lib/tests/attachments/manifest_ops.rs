@@ -1,8 +1,6 @@
 //! Level 1 tests for `manifest_ops` module (batch 9e-1).
 
-use deadline_lib::attachments::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
-};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023};
 use deadline_lib::attachments::manifest_ops::{
     GlobConfig, glob_files, manifest_diff, manifest_merge, manifest_snapshot, resolve_glob_config,
     write_manifest,
@@ -11,24 +9,20 @@ use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 
-fn make_manifest(entries: &[(&str, &str, u64, i64)]) -> AssetManifest {
-    let paths: Vec<ManifestPath> = entries
+fn make_manifest(entries: &[(&str, &str, u64, i64)]) -> Snapshot {
+    let files: Vec<FileEntry> = entries
         .iter()
-        .map(|(p, h, s, m)| ManifestPath {
-            path: p.to_string(),
-            hash: h.to_string(),
-            size: *s,
-            mtime: *m,
+        .map(|(p, h, s, m)| {
+            let mut e = FileEntry::file(*p, *s, *m as u64);
+            e.hash = Some(h.to_string());
+            e
         })
         .collect();
-    let total_size: u64 = paths.iter().map(|p| p.size).sum();
-    AssetManifest::new(
-        HashAlgorithm::Xxh128,
-        ManifestVersion::V2023_03_03,
-        total_size,
-        paths,
-    )
-    .unwrap()
+    let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
+    let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+    snap.files = files;
+    snap.total_size = total_size;
+    snap
 }
 
 fn create_file(dir: &TempDir, name: &str, content: &[u8]) -> String {
@@ -286,8 +280,8 @@ fn manifest_merge_two_files_produces_result() {
 
     let m1_path = dir.path().join("m1.manifest");
     let m2_path = dir.path().join("m2.manifest");
-    fs::write(&m1_path, m1.encode()).unwrap();
-    fs::write(&m2_path, m2.encode()).unwrap();
+    fs::write(&m1_path, encode_snapshot_v2023(&m1).unwrap()).unwrap();
+    fs::write(&m2_path, encode_snapshot_v2023(&m2).unwrap()).unwrap();
 
     let dest = dir.path().join("output");
     fs::create_dir_all(&dest).unwrap();

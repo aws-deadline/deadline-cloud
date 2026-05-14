@@ -6,9 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use deadline_lib::attachments::asset_manifests::{
-    AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
-};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023};
 use deadline_lib::attachments::manifest_ops::{AssetType, manifest_download, manifest_upload};
 use deadline_lib::attachments::models::JobAttachmentS3Settings;
 use tempfile::TempDir;
@@ -25,19 +23,13 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
     deadline_lib::attachments::s3::build_s3_client(&sdk_config, &deadline_lib::config::ini::IniConfig::new())
 }
 
-fn make_test_manifest() -> AssetManifest {
-    AssetManifest::new(
-        HashAlgorithm::Xxh128,
-        ManifestVersion::V2023_03_03,
-        5,
-        vec![ManifestPath {
-            path: "file.txt".into(),
-            hash: "aa".repeat(16),
-            size: 5,
-            mtime: 1_700_000_000_000_000,
-        }],
-    )
-    .unwrap()
+fn make_test_manifest() -> Snapshot {
+    let mut e = FileEntry::file("file.txt", 5, 1_700_000_000_000_000);
+    e.hash = Some("aa".repeat(16));
+    let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+    snap.files = vec![e];
+    snap.total_size = 5;
+    snap
 }
 
 // =====================================================================
@@ -59,7 +51,7 @@ async fn manifest_upload_with_prefix_uploads_to_correct_key() {
     let dir = TempDir::new().unwrap();
     let manifest = make_test_manifest();
     let manifest_path = dir.path().join("test.manifest");
-    fs::write(&manifest_path, manifest.encode()).unwrap();
+    fs::write(&manifest_path, encode_snapshot_v2023(&manifest).unwrap()).unwrap();
 
     let s3_client = build_s3_client(&server).await;
 
@@ -90,7 +82,7 @@ async fn manifest_upload_without_prefix_uploads_to_manifests_root() {
     let dir = TempDir::new().unwrap();
     let manifest = make_test_manifest();
     let manifest_path = dir.path().join("test.manifest");
-    fs::write(&manifest_path, manifest.encode()).unwrap();
+    fs::write(&manifest_path, encode_snapshot_v2023(&manifest).unwrap()).unwrap();
 
     let s3_client = build_s3_client(&server).await;
 
@@ -125,7 +117,7 @@ async fn manifest_upload_sets_file_system_location_name_metadata() {
     let dir = TempDir::new().unwrap();
     let manifest = make_test_manifest();
     let manifest_path = dir.path().join("test.manifest");
-    fs::write(&manifest_path, manifest.encode()).unwrap();
+    fs::write(&manifest_path, encode_snapshot_v2023(&manifest).unwrap()).unwrap();
 
     let s3_client = build_s3_client(&server).await;
 
@@ -183,7 +175,7 @@ async fn manifest_download_input_manifests_downloaded_and_written() {
     let server = MockServer::start().await;
 
     let manifest = make_test_manifest();
-    let manifest_json = manifest.encode();
+    let manifest_json = encode_snapshot_v2023(&manifest).unwrap();
 
     // Mock S3 GetObject for the input manifest
     Mock::given(method("GET"))
@@ -238,7 +230,7 @@ async fn manifest_download_input_only_skips_output_manifests() {
 
     let manifest = make_test_manifest();
     Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(manifest.encode()))
+        .respond_with(ResponseTemplate::new(200).set_body_string(encode_snapshot_v2023(&manifest).unwrap()))
         .mount(&server)
         .await;
 

@@ -1,9 +1,25 @@
 use crate::attachments::errors::JobAttachmentsError;
 
-use crate::attachments::asset_manifests::{hash_data};
-
 use serde::Serialize;
 use std::path::PathBuf;
+
+/// Escape non-ASCII characters to `\uXXXX` sequences for S3 metadata.
+fn escape_to_ascii(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        if ch.is_ascii() {
+            out.push(ch);
+        } else {
+            let mut buf = [0u16; 2];
+            let encoded = ch.encode_utf16(&mut buf);
+            for &unit in encoded.iter() {
+                use std::fmt::Write;
+                write!(out, "\\u{unit:04x}").expect("write to String");
+            }
+        }
+    }
+    out
+}
 
 // --- PathFormat ---
 
@@ -370,7 +386,7 @@ impl ManifestProperties {
             // S3 metadata must be ASCII. JSON-encode with \u escapes.
             let json_root = serde_json::to_string(&self.root_path).expect("JSON serialization");
             // serde_json outputs UTF-8 by default; we need ASCII \u escapes
-            let ascii_json = crate::attachments::asset_manifests::escape_to_ascii(&json_root);
+            let ascii_json = escape_to_ascii(&json_root);
             metadata.insert(
                 "asset-root-json".into(),
                 serde_json::Value::String(ascii_json.clone()),
@@ -432,7 +448,7 @@ pub struct PathMappingRule {
 
 impl PathMappingRule {
     pub fn get_hashed_source_path(&self) -> String {
-        hash_data(self.source_path.as_bytes())
+        openjd_snapshots::hash::hash_data(self.source_path.as_bytes())
     }
 }
 
@@ -546,7 +562,7 @@ pub struct AssetUploadGroup {
 pub struct AssetRootManifest {
     pub file_system_location_name: Option<String>,
     pub root_path: PathBuf,
-    pub asset_manifest: Option<crate::attachments::asset_manifests::AssetManifest>,
+    pub asset_manifest: Option<openjd_snapshots::Snapshot>,
     pub outputs: Vec<std::path::PathBuf>,
 }
 

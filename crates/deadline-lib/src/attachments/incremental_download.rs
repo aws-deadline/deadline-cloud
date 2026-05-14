@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use tempfile::NamedTempFile;
 
 #[allow(unused_imports, reason = "HashAlgorithm used conditionally in tests")]
-use crate::attachments::asset_manifests::{AssetManifest, HashAlgorithm, ManifestPath, hash_data};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use crate::attachments::errors::JobAttachmentsError;
 use crate::attachments::path_mapping::PathMappingRuleApplier;
 
@@ -179,7 +179,7 @@ pub fn add_output_manifests_from_s3(
                 .unwrap_or("");
             let root_path = m["rootPath"].as_str().unwrap_or("");
             let input = format!("{loc_name}{root_path}");
-            (i, hash_data(input.as_bytes()))
+            (i, openjd_snapshots::hash::hash_data(input.as_bytes()))
         })
         .collect();
 
@@ -255,7 +255,7 @@ pub fn add_output_manifests_from_s3(
 /// Unmapped paths are recorded in `output_unmapped_paths`.
 pub fn make_manifest_paths_absolute(
     root_path: &str,
-    manifest: &mut AssetManifest,
+    manifest: &mut Snapshot,
     path_mapping_rule_applier: Option<&PathMappingRuleApplier>,
     source_path_format: Option<&str>,
     output_unmapped_paths: &mut Vec<String>,
@@ -264,7 +264,7 @@ pub fn make_manifest_paths_absolute(
 
     // Join each manifest path with root_path using source OS conventions,
     // then normalize
-    for mp in &mut manifest.paths {
+    for mp in &mut manifest.files {
         let joined = if is_windows {
             // Windows: join with backslash, normalize
             let full = format!("{}\\{}", root_path.trim_end_matches('\\'), mp.path);
@@ -279,10 +279,10 @@ pub fn make_manifest_paths_absolute(
     // Apply path mapping if provided
     if let Some(applier) = path_mapping_rule_applier {
         let mut mapped_paths = Vec::new();
-        for mp in manifest.paths.drain(..) {
+        for mp in manifest.files.drain(..) {
             match applier.strict_transform(&mp.path) {
                 Ok(transformed) => {
-                    mapped_paths.push(ManifestPath {
+                    mapped_paths.push(FileEntry {
                         path: transformed.to_string_lossy().into_owned(),
                         ..mp
                     });
@@ -292,8 +292,8 @@ pub fn make_manifest_paths_absolute(
                 }
             }
         }
-        manifest.paths = mapped_paths;
-        manifest.total_size = manifest.paths.iter().map(|p| p.size).sum();
+        manifest.files = mapped_paths;
+        manifest.total_size = manifest.files.iter().map(|p| p.size.unwrap_or(0)).sum();
     }
 
     Ok(())
@@ -302,15 +302,15 @@ pub fn make_manifest_paths_absolute(
 /// Merge manifests ordered by last-modified timestamp. Later manifests'
 /// files overwrite earlier ones. Uses case-insensitive path keys for dedup.
 pub fn merge_absolute_path_manifest_list(
-    downloaded_manifests: &mut [(DateTime<Utc>, AssetManifest)],
-) -> Vec<ManifestPath> {
+    downloaded_manifests: &mut [(DateTime<Utc>, Snapshot)],
+) -> Vec<FileEntry> {
     // Sort by timestamp so earlier manifests are processed first
     downloaded_manifests.sort_by_key(|(ts, _)| *ts);
 
     // Insert into map keyed by lowercased path; later entries overwrite earlier
-    let mut merged: HashMap<String, ManifestPath> = HashMap::new();
+    let mut merged: HashMap<String, FileEntry> = HashMap::new();
     for (_, manifest) in downloaded_manifests.iter() {
-        for mp in &manifest.paths {
+        for mp in &manifest.files {
             merged.insert(mp.path.to_lowercase(), mp.clone());
         }
     }
@@ -631,7 +631,7 @@ mod tests {
     fn add_manifests_matches_keys_to_session_actions() {
         // session actions lacking manifests get populated
         let job = sample_job_with_attachments();
-        let root_path_hash = hash_data("/mnt/shared".as_bytes());
+        let root_path_hash = openjd_snapshots::hash::hash_data("/mnt/shared".as_bytes());
         let keys = vec![format!(
             "prefix/Manifests/sessionaction-abc-0/{root_path_hash}/manifest.json"
         )];
@@ -724,22 +724,20 @@ mod tests {
     // make_manifest_paths_absolute tests
     // ===================================================================
 
-    fn make_manifest(paths: Vec<(&str, &str, u64)>) -> AssetManifest {
-        AssetManifest::new(
-            HashAlgorithm::Xxh128,
-            crate::attachments::asset_manifests::ManifestVersion::V2023_03_03,
-            paths.iter().map(|(_, _, s)| *s).sum(),
-            paths
-                .iter()
-                .map(|(p, h, s)| ManifestPath {
-                    path: p.to_string(),
-                    hash: h.to_string(),
-                    size: *s,
-                    mtime: 1_000_000,
-                })
-                .collect(),
-        )
-        .unwrap()
+    fn make_manifest(paths: Vec<(&str, &str, u64)>) -> Snapshot {
+        let files: Vec<FileEntry> = paths
+            .iter()
+            .map(|(p, h, s)| {
+                let mut entry = FileEntry::file(*p, *s, 1_000_000);
+                entry.hash = Some(h.to_string());
+                entry
+            })
+            .collect();
+        let total_size = paths.iter().map(|(_, _, s)| *s).sum();
+        let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+        snap.files = files;
+        snap.total_size = total_size;
+        snap
     }
 
     #[test]
@@ -749,7 +747,7 @@ mod tests {
         let mut unmapped = vec![];
         make_manifest_paths_absolute("/mnt/shared", &mut manifest, None, None, &mut unmapped)
             .unwrap();
-        assert_eq!(manifest.paths[0].path, "/mnt/shared/subdir/file.txt");
+        assert_eq!(manifest.files[0].path, "/mnt/shared/subdir/file.txt");
         assert!(unmapped.is_empty());
     }
 
@@ -773,7 +771,7 @@ mod tests {
             &mut unmapped,
         )
         .unwrap();
-        assert_eq!(manifest.paths[0].path, "/local/mapped/subdir/file.txt");
+        assert_eq!(manifest.files[0].path, "/local/mapped/subdir/file.txt");
         assert!(unmapped.is_empty());
     }
 
@@ -783,7 +781,7 @@ mod tests {
         let mut manifest = make_manifest(vec![("a/b.txt", "aaa", 50)]);
         let mut unmapped = vec![];
         make_manifest_paths_absolute("/root", &mut manifest, None, None, &mut unmapped).unwrap();
-        assert!(manifest.paths[0].path.starts_with("/root/"));
+        assert!(manifest.files[0].path.starts_with("/root/"));
     }
 
     #[test]
@@ -806,7 +804,7 @@ mod tests {
             &mut unmapped,
         )
         .unwrap();
-        assert_eq!(manifest.paths[0].path, "/local/mapped/subdir/file.txt");
+        assert_eq!(manifest.files[0].path, "/local/mapped/subdir/file.txt");
     }
 
     #[test]
@@ -835,7 +833,7 @@ mod tests {
             &mut unmapped,
         )
         .unwrap();
-        assert!(manifest2.paths.is_empty());
+        assert!(manifest2.files.is_empty());
         assert_eq!(unmapped.len(), 1);
         assert!(unmapped[0].contains("/mnt/other"));
     }
@@ -866,7 +864,7 @@ mod tests {
         let mut manifests = vec![(ts1, m1), (ts2, m2)];
         let result = merge_absolute_path_manifest_list(&mut manifests);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].hash, "new_hash");
+        assert_eq!(result[0].hash.as_deref(), Some("new_hash"));
     }
 
     #[test]
@@ -879,13 +877,13 @@ mod tests {
         let mut manifests = vec![(ts1, m1), (ts2, m2)];
         let result = merge_absolute_path_manifest_list(&mut manifests);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].hash, "hash2"); // later wins
+        assert_eq!(result[0].hash.as_deref(), Some("hash2")); // later wins
     }
 
     #[test]
     fn merge_empty_list() {
         // empty → empty
-        let mut manifests: Vec<(DateTime<Utc>, AssetManifest)> = vec![];
+        let mut manifests: Vec<(DateTime<Utc>, Snapshot)> = vec![];
         let result = merge_absolute_path_manifest_list(&mut manifests);
         assert!(result.is_empty());
     }
@@ -901,6 +899,6 @@ mod tests {
         let mut manifests = vec![(ts_late, m_late), (ts_early, m_early)];
         let result = merge_absolute_path_manifest_list(&mut manifests);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].hash, "late_hash"); // later timestamp wins even if provided first
+        assert_eq!(result[0].hash.as_deref(), Some("late_hash")); // later timestamp wins even if provided first
     }
 }
