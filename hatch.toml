@@ -15,6 +15,13 @@ lint = ["style", "typing"]
 [[envs.all.matrix]]
 python = ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
+[envs.gui]
+features = ["gui"]
+pre-install-commands = ["pip install -r requirements-testing.txt"]
+
+[envs.gui.scripts]
+test = "pytest --cov-config pyproject-gui-coverage.toml --cov=src/deadline/client/ui --cov-report=html:build/coverage-gui --cov-report=xml:build/coverage-gui/coverage.xml --cov-report=term-missing --numprocesses=auto {args:test/unit/deadline_client/ui/gui}"
+
 [envs.integ]
 pre-install-commands = [
   "pip install -r requirements-integ-testing.txt",
