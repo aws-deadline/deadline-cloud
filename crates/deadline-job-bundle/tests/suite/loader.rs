@@ -8,6 +8,7 @@ use deadline_job_bundle::loader::{
     save_yaml_or_json_to_file, validate_directory_symlink_containment,
 };
 use std::fs;
+use std::path::Path;
 #[cfg(unix)]
 use std::os::unix::fs as unix_fs;
 use tempfile::TempDir;
@@ -18,7 +19,7 @@ use tempfile::TempDir;
 fn validate_symlinks_no_symlinks_succeeds() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("template.yaml"), "spec: 1").unwrap();
-    validate_directory_symlink_containment(dir.path().to_str().unwrap()).unwrap();
+    validate_directory_symlink_containment(dir.path()).unwrap();
 }
 
 #[cfg(unix)]
@@ -30,7 +31,7 @@ fn validate_symlinks_bundle_is_symlink_succeeds() {
     fs::write(real_dir.join("template.yaml"), "spec: 1").unwrap();
     let link = dir.path().join("link");
     unix_fs::symlink(&real_dir, &link).unwrap();
-    validate_directory_symlink_containment(link.to_str().unwrap()).unwrap();
+    validate_directory_symlink_containment(&link).unwrap();
 }
 
 #[test]
@@ -38,7 +39,7 @@ fn validate_symlinks_not_a_directory_returns_error() {
     let dir = TempDir::new().unwrap();
     let file = dir.path().join("not_a_dir");
     fs::write(&file, "data").unwrap();
-    let err = validate_directory_symlink_containment(file.to_str().unwrap()).unwrap_err();
+    let err = validate_directory_symlink_containment(&file).unwrap_err();
     assert!(err.to_string().contains("not a directory"), "got: {err}");
 }
 
@@ -51,7 +52,7 @@ fn validate_symlinks_outside_bundle_returns_error() {
     let outside = dir.path().join("outside.txt");
     fs::write(&outside, "secret").unwrap();
     unix_fs::symlink(&outside, bundle.join("link.txt")).unwrap();
-    let err = validate_directory_symlink_containment(bundle.to_str().unwrap()).unwrap_err();
+    let err = validate_directory_symlink_containment(&bundle).unwrap_err();
     assert!(err.to_string().contains("resolves outside"), "got: {err}");
 }
 
@@ -63,7 +64,7 @@ fn validate_symlinks_inside_bundle_succeeds() {
     fs::create_dir(&bundle).unwrap();
     fs::write(bundle.join("real.txt"), "data").unwrap();
     unix_fs::symlink(bundle.join("real.txt"), bundle.join("link.txt")).unwrap();
-    validate_directory_symlink_containment(bundle.to_str().unwrap()).unwrap();
+    validate_directory_symlink_containment(&bundle).unwrap();
 }
 
 #[test]
@@ -72,7 +73,7 @@ fn validate_symlinks_nested_dirs_succeeds() {
     let sub = dir.path().join("a").join("b");
     fs::create_dir_all(&sub).unwrap();
     fs::write(sub.join("file.txt"), "data").unwrap();
-    validate_directory_symlink_containment(dir.path().to_str().unwrap()).unwrap();
+    validate_directory_symlink_containment(dir.path()).unwrap();
 }
 
 // ── read_yaml_or_json ───────────────────────────────────────────────
@@ -82,7 +83,7 @@ fn read_yaml_or_json_only_json_returns_json() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("template.json"), r#"{"key": "value"}"#).unwrap();
     let (contents, file_type) =
-        read_yaml_or_json(dir.path().to_str().unwrap(), "template", true).unwrap();
+        read_yaml_or_json(dir.path(), "template", true).unwrap();
     assert_eq!(file_type, "JSON");
     assert_eq!(contents, r#"{"key": "value"}"#);
 }
@@ -92,7 +93,7 @@ fn read_yaml_or_json_only_yaml_returns_yaml() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("template.yaml"), "key: value").unwrap();
     let (contents, file_type) =
-        read_yaml_or_json(dir.path().to_str().unwrap(), "template", true).unwrap();
+        read_yaml_or_json(dir.path(), "template", true).unwrap();
     assert_eq!(file_type, "YAML");
     assert_eq!(contents, "key: value");
 }
@@ -102,7 +103,7 @@ fn read_yaml_or_json_both_exist_returns_error() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("template.json"), "{}").unwrap();
     fs::write(dir.path().join("template.yaml"), "key: val").unwrap();
-    let err = read_yaml_or_json(dir.path().to_str().unwrap(), "template", true).unwrap_err();
+    let err = read_yaml_or_json(dir.path(), "template", true).unwrap_err();
     assert!(
         err.to_string().contains("only one is permitted"),
         "got: {err}"
@@ -112,7 +113,7 @@ fn read_yaml_or_json_both_exist_returns_error() {
 #[test]
 fn read_yaml_or_json_neither_exists_required_returns_error() {
     let dir = TempDir::new().unwrap();
-    let err = read_yaml_or_json(dir.path().to_str().unwrap(), "template", true).unwrap_err();
+    let err = read_yaml_or_json(dir.path(), "template", true).unwrap_err();
     assert!(
         err.to_string()
             .contains("lacks a template.json or template.yaml"),
@@ -124,7 +125,7 @@ fn read_yaml_or_json_neither_exists_required_returns_error() {
 fn read_yaml_or_json_neither_exists_optional_returns_empty() {
     let dir = TempDir::new().unwrap();
     let (contents, file_type) =
-        read_yaml_or_json(dir.path().to_str().unwrap(), "params", false).unwrap();
+        read_yaml_or_json(dir.path(), "params", false).unwrap();
     assert_eq!(contents, "");
     assert_eq!(file_type, "");
 }
@@ -133,7 +134,7 @@ fn read_yaml_or_json_neither_exists_optional_returns_empty() {
 fn read_yaml_or_json_utf8_content_decoded() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("data.json"), r#"{"name": "café"}"#).unwrap();
-    let (contents, _) = read_yaml_or_json(dir.path().to_str().unwrap(), "data", true).unwrap();
+    let (contents, _) = read_yaml_or_json(dir.path(), "data", true).unwrap();
     assert!(contents.contains("café"));
 }
 
@@ -141,19 +142,19 @@ fn read_yaml_or_json_utf8_content_decoded() {
 
 #[test]
 fn parse_valid_json() {
-    let val = parse_yaml_or_json_content(r#"{"a": 1}"#, "JSON", "/tmp", "test").unwrap();
+    let val = parse_yaml_or_json_content(r#"{"a": 1}"#, "JSON", Path::new("/tmp"), "test").unwrap();
     assert_eq!(val["a"], 1);
 }
 
 #[test]
 fn parse_valid_yaml() {
-    let val = parse_yaml_or_json_content("a: 1", "YAML", "/tmp", "test").unwrap();
+    let val = parse_yaml_or_json_content("a: 1", "YAML", Path::new("/tmp"), "test").unwrap();
     assert_eq!(val["a"], 1);
 }
 
 #[test]
 fn parse_invalid_json_returns_error() {
-    let err = parse_yaml_or_json_content("{bad", "JSON", "/tmp", "test").unwrap_err();
+    let err = parse_yaml_or_json_content("{bad", "JSON", Path::new("/tmp"), "test").unwrap_err();
     assert!(
         err.to_string().contains("Error loading 'test.json'"),
         "got: {err}"
@@ -162,7 +163,7 @@ fn parse_invalid_json_returns_error() {
 
 #[test]
 fn parse_invalid_yaml_returns_error() {
-    let err = parse_yaml_or_json_content(":\n  :\n    - :", "YAML", "/tmp", "test").unwrap_err();
+    let err = parse_yaml_or_json_content(":\n  :\n    - :", "YAML", Path::new("/tmp"), "test").unwrap_err();
     assert!(
         err.to_string().contains("Error loading 'test.yaml'"),
         "got: {err}"
@@ -171,7 +172,7 @@ fn parse_invalid_yaml_returns_error() {
 
 #[test]
 fn parse_unknown_type_returns_error() {
-    let err = parse_yaml_or_json_content("<xml/>", "XML", "/tmp", "test").unwrap_err();
+    let err = parse_yaml_or_json_content("<xml/>", "XML", Path::new("/tmp"), "test").unwrap_err();
     assert!(
         err.to_string().contains("Unexpected file type"),
         "got: {err}"
@@ -184,7 +185,7 @@ fn parse_unknown_type_returns_error() {
 fn read_object_valid_returns_parsed() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("data.json"), r#"{"x": 42}"#).unwrap();
-    let val = read_yaml_or_json_object(dir.path().to_str().unwrap(), "data", true)
+    let val = read_yaml_or_json_object(dir.path(), "data", true)
         .unwrap()
         .unwrap();
     assert_eq!(val["x"], 42);
@@ -194,7 +195,7 @@ fn read_object_valid_returns_parsed() {
 fn read_object_missing_optional_returns_none() {
     let dir = TempDir::new().unwrap();
     assert!(
-        read_yaml_or_json_object(dir.path().to_str().unwrap(), "data", false)
+        read_yaml_or_json_object(dir.path(), "data", false)
             .unwrap()
             .is_none()
     );
@@ -206,7 +207,7 @@ fn read_object_missing_optional_returns_none() {
 fn save_yaml_writes_file_with_block_literal_multiline() {
     let dir = TempDir::new().unwrap();
     let data = serde_json::json!({"script": "line1\nline2\nline3"});
-    save_yaml_or_json_to_file(dir.path().to_str().unwrap(), "out", "YAML", &data).unwrap();
+    save_yaml_or_json_to_file(dir.path(), "out", "YAML", &data).unwrap();
     let contents = fs::read_to_string(dir.path().join("out.yaml")).unwrap();
     assert!(
         contents.contains("|\n") || contents.contains("|-\n"),
@@ -219,7 +220,7 @@ fn save_yaml_writes_file_with_block_literal_multiline() {
 fn save_json_writes_pretty_printed() {
     let dir = TempDir::new().unwrap();
     let data = serde_json::json!({"key": "value"});
-    save_yaml_or_json_to_file(dir.path().to_str().unwrap(), "out", "JSON", &data).unwrap();
+    save_yaml_or_json_to_file(dir.path(), "out", "JSON", &data).unwrap();
     let contents = fs::read_to_string(dir.path().join("out.json")).unwrap();
     assert!(
         contents.contains("  \"key\""),
@@ -231,7 +232,7 @@ fn save_json_writes_pretty_printed() {
 fn save_unknown_type_returns_error() {
     let dir = TempDir::new().unwrap();
     let err = save_yaml_or_json_to_file(
-        dir.path().to_str().unwrap(),
+        dir.path(),
         "out",
         "XML",
         &serde_json::json!({}),
@@ -288,8 +289,8 @@ fn yaml_dump_preserves_insertion_order() {
 fn roundtrip_yaml() {
     let dir = TempDir::new().unwrap();
     let data = serde_json::json!({"specificationVersion": "jobtemplate-2023-09", "name": "Test"});
-    save_yaml_or_json_to_file(dir.path().to_str().unwrap(), "t", "YAML", &data).unwrap();
-    let val = read_yaml_or_json_object(dir.path().to_str().unwrap(), "t", true)
+    save_yaml_or_json_to_file(dir.path(), "t", "YAML", &data).unwrap();
+    let val = read_yaml_or_json_object(dir.path(), "t", true)
         .unwrap()
         .unwrap();
     assert_eq!(val["specificationVersion"], "jobtemplate-2023-09");
@@ -300,8 +301,8 @@ fn roundtrip_yaml() {
 fn roundtrip_json() {
     let dir = TempDir::new().unwrap();
     let data = serde_json::json!({"key": [1, 2, 3]});
-    save_yaml_or_json_to_file(dir.path().to_str().unwrap(), "d", "JSON", &data).unwrap();
-    let val = read_yaml_or_json_object(dir.path().to_str().unwrap(), "d", true)
+    save_yaml_or_json_to_file(dir.path(), "d", "JSON", &data).unwrap();
+    let val = read_yaml_or_json_object(dir.path(), "d", true)
         .unwrap()
         .unwrap();
     assert_eq!(val["key"], serde_json::json!([1, 2, 3]));

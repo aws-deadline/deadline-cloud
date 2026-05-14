@@ -2,6 +2,7 @@ use clap::Subcommand;
 use deadline_config::config_file;
 use deadline_job_bundle::{SubmissionHandler, SubmitJobParams, create_job_from_job_bundle};
 use regex::Regex;
+use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use super::config::CliError;
@@ -263,7 +264,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             };
 
             let submit_params = SubmitJobParams {
-                job_bundle_dir: job_bundle_dir.clone(),
+                job_bundle_dir: PathBuf::from(&job_bundle_dir),
                 job_parameters,
                 name,
                 priority: Some(priority),
@@ -284,7 +285,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 job_attachments_file_system,
                 require_paths_exist,
                 submitter_name: Some(submitter_name.unwrap_or_else(|| "CLI".into())),
-                known_asset_paths: known_asset_path,
+                known_asset_paths: known_asset_path.into_iter().map(PathBuf::from).collect(),
                 auto_accept: yes
                     || config_file::str2bool(
                         &config_file::get_setting("settings.auto_accept", &config)
@@ -292,7 +293,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     )
                     .unwrap_or(false),
                 force_s3_check: resolved_force_s3_check,
-                debug_snapshot_dir: effective_snapshot_dir,
+                debug_snapshot_dir: effective_snapshot_dir.map(PathBuf::from),
                 config: &config,
                 handler: &CliSubmissionHandler,
                 hashing_progress_callback: Some(Box::new(move |processed, total| {

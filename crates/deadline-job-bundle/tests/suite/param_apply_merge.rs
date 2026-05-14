@@ -5,6 +5,7 @@ use deadline_job_bundle::parameters::{
     parameter_definition_difference,
 };
 use deadline_job_bundle::submission::AssetReferences;
+use std::path::Path;
 
 // ── apply_job_parameters (cases 81-93) ──────────────────────────────
 
@@ -14,7 +15,7 @@ fn apply_params_sets_value() {
     let job_params = vec![serde_json::json!({"name": "Frame", "value": "10"})];
     let mut params = vec![serde_json::json!({"name": "Frame", "type": "INT", "default": 1})];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert_eq!(params[0]["value"], "10");
 }
 
@@ -24,7 +25,7 @@ fn apply_params_path_relative_made_absolute() {
     let job_params = vec![serde_json::json!({"name": "Out", "value": "relative/path"})];
     let mut params = vec![serde_json::json!({"name": "Out", "type": "PATH"})];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     let value = params[0]["value"].as_str().unwrap();
     assert!(
         std::path::Path::new(value).is_absolute(),
@@ -42,7 +43,7 @@ fn apply_params_path_with_allowed_values_not_resolved() {
         "allowedValues": ["relative", "other"]
     })];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert_eq!(params[0]["value"], "relative");
 }
 
@@ -52,7 +53,7 @@ fn apply_params_path_empty_value_skipped() {
     let job_params = vec![serde_json::json!({"name": "Out", "value": ""})];
     let mut params = vec![serde_json::json!({"name": "Out", "type": "PATH", "dataFlow": "IN"})];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     // Empty PATH should not be added to asset references
     assert!(asset_refs.input_directories.is_empty());
     assert!(asset_refs.input_filenames.is_empty());
@@ -65,7 +66,7 @@ fn apply_params_no_value_no_default_returns_error() {
     let mut params = vec![serde_json::json!({"name": "Frame", "type": "INT"})];
     let mut asset_refs = AssetReferences::new();
     let err =
-        apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap_err();
+        apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap_err();
     assert!(
         err.to_string().contains("No parameter value provided"),
         "Expected 'No parameter value provided', got: {err}"
@@ -80,7 +81,7 @@ fn apply_params_path_in_directory_adds_to_input_dirs() {
         "name": "In", "type": "PATH", "dataFlow": "IN", "objectType": "DIRECTORY"
     })];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert!(asset_refs.input_directories.contains("/input/dir"));
 }
 
@@ -92,7 +93,7 @@ fn apply_params_path_in_file_adds_to_input_filenames() {
         "name": "In", "type": "PATH", "dataFlow": "IN", "objectType": "FILE"
     })];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert!(asset_refs.input_filenames.contains("/input/file.txt"));
 }
 
@@ -104,7 +105,7 @@ fn apply_params_path_out_directory_adds_to_output_dirs() {
         "name": "Out", "type": "PATH", "dataFlow": "OUT", "objectType": "DIRECTORY"
     })];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert!(asset_refs.output_directories.contains("/output/dir"));
 }
 
@@ -116,7 +117,7 @@ fn apply_params_path_out_file_adds_parent_to_output_dirs() {
         "name": "Out", "type": "PATH", "dataFlow": "OUT", "objectType": "FILE"
     })];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert!(
         asset_refs.output_directories.contains("/output/dir"),
         "Expected parent dir '/output/dir', got: {:?}",
@@ -132,7 +133,7 @@ fn apply_params_path_inout_adds_to_both() {
         "name": "IO", "type": "PATH", "dataFlow": "INOUT", "objectType": "DIRECTORY"
     })];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert!(asset_refs.input_directories.contains("/io/dir"));
     assert!(asset_refs.output_directories.contains("/io/dir"));
 }
@@ -145,7 +146,7 @@ fn apply_params_path_none_adds_to_referenced() {
         "name": "Ref", "type": "PATH", "dataFlow": "NONE"
     })];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert!(asset_refs.referenced_paths.contains("/ref/path"));
 }
 
@@ -158,7 +159,7 @@ fn apply_params_path_invalid_data_flow_returns_error() {
     })];
     let mut asset_refs = AssetReferences::new();
     let err =
-        apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap_err();
+        apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap_err();
     assert!(
         err.to_string().contains("dataFlow") || err.to_string().contains("NONE"),
         "Expected dataFlow error, got: {err}"
@@ -171,7 +172,7 @@ fn apply_params_non_path_no_asset_refs() {
     let job_params = vec![serde_json::json!({"name": "Frame", "value": "10"})];
     let mut params = vec![serde_json::json!({"name": "Frame", "type": "INT", "default": 1})];
     let mut asset_refs = AssetReferences::new();
-    apply_job_parameters(&job_params, "/bundle", &mut params, &mut asset_refs).unwrap();
+    apply_job_parameters(&job_params, Path::new("/bundle"), &mut params, &mut asset_refs).unwrap();
     assert!(!asset_refs.is_non_empty());
 }
 

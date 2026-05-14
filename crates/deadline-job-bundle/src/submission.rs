@@ -116,7 +116,7 @@ const DEFAULT_SUPPORTED_APP_PARAMETER_NAMES: &[&str] = &[
 )]
 pub fn split_parameter_args(
     parameters: &[Value],
-    job_bundle_dir: &str,
+    job_bundle_dir: &Path,
     app_name: Option<&str>,
     supported_app_parameter_names: Option<&[&str]>,
 ) -> Result<
@@ -146,7 +146,8 @@ pub fn split_parameter_args(
                 app_parameters.insert(app_param.into(), value.clone());
             } else {
                 return Err(op_err(format!(
-                    "Unrecognized parameter named '{name}' from job bundle:\n{job_bundle_dir}"
+                    "Unrecognized parameter named '{name}' from job bundle:\n{}",
+                    job_bundle_dir.display()
                 )));
             }
         } else if name.contains(':') {
@@ -260,7 +261,7 @@ pub trait SubmissionHandler: Send + Sync {
 
 /// Parameters for job submission.
 pub struct SubmitJobParams<'a> {
-    pub job_bundle_dir: String,
+    pub job_bundle_dir: PathBuf,
     pub job_parameters: Vec<Value>,
     pub name: Option<String>,
     pub priority: Option<i32>,
@@ -271,10 +272,10 @@ pub struct SubmitJobParams<'a> {
     pub job_attachments_file_system: Option<String>,
     pub require_paths_exist: bool,
     pub submitter_name: Option<String>,
-    pub known_asset_paths: Vec<String>,
+    pub known_asset_paths: Vec<PathBuf>,
     pub auto_accept: bool,
     pub force_s3_check: Option<bool>,
-    pub debug_snapshot_dir: Option<String>,
+    pub debug_snapshot_dir: Option<PathBuf>,
     pub config: &'a IniConfig,
     pub handler: &'a dyn SubmissionHandler,
     pub hashing_progress_callback: Option<ProgressFn>,
@@ -319,7 +320,7 @@ pub async fn create_job_from_job_bundle(
     if let Some(ref ehd) = env_hooks_dir {
         if allow_env_hooks {
             if Path::new(ehd).is_dir() {
-                let mut env_mgr = HookManager::new(ehd, handler);
+                let mut env_mgr = HookManager::new(Path::new(ehd), handler);
                 if let Some(eh) = env_mgr.load_hooks()? {
                     merged_hooks = Some(eh.clone());
                 }
@@ -499,9 +500,7 @@ pub async fn create_job_from_job_bundle(
             farm_id: farm_id.clone(),
             queue_id: queue_id.clone(),
             job_bundle_dir: std::fs::canonicalize(&params.job_bundle_dir)
-                .unwrap_or_else(|_| PathBuf::from(&params.job_bundle_dir))
-                .to_string_lossy()
-                .into_owned(),
+                .unwrap_or_else(|_| params.job_bundle_dir.clone()),
             parameters: parameters
                 .iter()
                 .filter_map(|p| {
@@ -568,10 +567,12 @@ pub async fn create_job_from_job_bundle(
     if asset_references.is_non_empty() && has_attachment_settings {
         expand_input_directories(&mut asset_references, params.require_paths_exist)?;
 
-        let mut known_paths = params.known_asset_paths.clone();
+        let mut known_paths: Vec<String> = params.known_asset_paths.iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
         known_paths.push(
             std::fs::canonicalize(&params.job_bundle_dir)
-                .unwrap_or_else(|_| Path::new(&params.job_bundle_dir).to_path_buf())
+                .unwrap_or_else(|_| params.job_bundle_dir.clone())
                 .to_string_lossy()
                 .into_owned(),
         );
@@ -750,11 +751,11 @@ pub async fn create_job_from_job_bundle(
                                 AbsManifest::Snapshot(s) => s,
                                 _ => unreachable!(),
                             };
-                            let root_str = &group.root_path;
+                            let root_str = group.root_path.to_string_lossy();
                             let paths: Vec<ManifestPath> = hashed.files.iter()
                                 .filter(|f| !f.deleted && f.symlink_target.is_none())
                                 .map(|f| {
-                                    let rel = f.path.strip_prefix(root_str)
+                                    let rel = f.path.strip_prefix(&*root_str)
                                         .or_else(|| f.path.strip_prefix("/"))
                                         .unwrap_or(&f.path)
                                         .trim_start_matches('/');
@@ -781,7 +782,7 @@ pub async fn create_job_from_job_bundle(
                         &farm_id,
                         &queue_id,
                         &s3_settings,
-                        Path::new(snap_dir),
+                        snap_dir,
                         &manifests,
                         params.upload_progress_callback,
                     )
@@ -980,7 +981,7 @@ pub async fn create_job_from_job_bundle(
 
     handler.on_message(&format!(
         "Submitted job bundle:\n   {}",
-        params.job_bundle_dir
+        params.job_bundle_dir.display()
     ));
     handler.on_message(&format!("{status_message}\n{job_id}"));
 
@@ -1007,9 +1008,7 @@ pub async fn create_job_from_job_bundle(
             farm_id: farm_id.clone(),
             queue_id: queue_id.clone(),
             job_bundle_dir: std::fs::canonicalize(&params.job_bundle_dir)
-                .unwrap_or_else(|_| PathBuf::from(&params.job_bundle_dir))
-                .to_string_lossy()
-                .into_owned(),
+                .unwrap_or_else(|_| params.job_bundle_dir.clone()),
             parameters: std::collections::HashMap::new(),
             submitter_name: submitter_name.to_owned(),
             asset_references: serde_json::json!({}),
@@ -1029,7 +1028,7 @@ pub async fn create_job_from_job_bundle(
 
 /// Write a debug snapshot of the `CreateJob` payload and helper scripts.
 fn save_debug_snapshot(
-    snapshot_dir: &str,
+    snapshot_dir: &Path,
     create_job_args: &serde_json::Map<String, Value>,
     queue_json: &Value,
     storage_profile_json: Option<&Value>,
@@ -1044,7 +1043,7 @@ fn save_debug_snapshot(
     let args_json = serde_json::to_string_pretty(&Value::Object(create_job_args.clone()))
         .map_err(|e| op_err(format!("Failed to serialize create_job_args: {e}")))?;
     fs::write(
-        Path::new(snapshot_dir).join("create_job_args.json"),
+        snapshot_dir.join("create_job_args.json"),
         &args_json,
     )
     .map_err(|e| op_err(format!("Failed to write create_job_args.json: {e}")))?;
@@ -1057,12 +1056,12 @@ fn save_debug_snapshot(
             Value::Object(_) | Value::Array(_) => {
                 let file_name = format!("{kebab}_param.json");
                 let content = serde_json::to_string_pretty(param_value).unwrap_or_default();
-                let _ = fs::write(Path::new(snapshot_dir).join(&file_name), &content);
+                let _ = fs::write(snapshot_dir.join(&file_name), &content);
                 cli_args.push((format!("--{kebab}"), format!("file://{file_name}")));
             }
             Value::String(s) if s.contains('\n') => {
                 let file_name = format!("{kebab}_param.data");
-                let _ = fs::write(Path::new(snapshot_dir).join(&file_name), s.as_bytes());
+                let _ = fs::write(snapshot_dir.join(&file_name), s.as_bytes());
                 cli_args.push((format!("--{kebab}"), format!("file://{file_name}")));
             }
             _ => {
@@ -1083,7 +1082,7 @@ fn save_debug_snapshot(
     let has_attachments = create_job_args.contains_key("attachments");
 
     // 3. submit_job.sh
-    let sh_path = Path::new(snapshot_dir).join("submit_job.sh");
+    let sh_path = snapshot_dir.join("submit_job.sh");
     let mut sh = fs::File::create(&sh_path)
         .map_err(|e| op_err(format!("Failed to create submit_job.sh: {e}")))?;
     writeln!(sh, "#!/bin/sh").ok();
@@ -1103,7 +1102,7 @@ fn save_debug_snapshot(
         .map_err(|e| op_err(format!("Failed to write submit_job.sh: {e}")))?;
 
     // 4. submit_job.bat
-    let bat_path = Path::new(snapshot_dir).join("submit_job.bat");
+    let bat_path = snapshot_dir.join("submit_job.bat");
     let mut bat = fs::File::create(&bat_path)
         .map_err(|e| op_err(format!("Failed to create submit_job.bat: {e}")))?;
     writeln!(
@@ -1122,14 +1121,14 @@ fn save_debug_snapshot(
 
     // 5. queue.json — full queue response
     let queue_str = serde_json::to_string_pretty(queue_json).unwrap_or_else(|_| "{}".to_owned());
-    fs::write(Path::new(snapshot_dir).join("queue.json"), &queue_str)
+    fs::write(snapshot_dir.join("queue.json"), &queue_str)
         .map_err(|e| op_err(format!("Failed to write queue.json: {e}")))?;
 
     // 6. storage_profile.json — when storage profile is configured
     if let Some(sp) = storage_profile_json {
         let sp_str = serde_json::to_string_pretty(sp).unwrap_or_else(|_| "{}".to_owned());
         fs::write(
-            Path::new(snapshot_dir).join("storage_profile.json"),
+            snapshot_dir.join("storage_profile.json"),
             &sp_str,
         )
         .map_err(|e| op_err(format!("Failed to write storage_profile.json: {e}")))?;

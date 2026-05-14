@@ -33,6 +33,23 @@ Replaced `print_callback`, `continue_callback`, and
 Hook messages moved from stderr to stdout (6 snapshots updated).
 Tests: 294/249/168/492 unchanged.
 
+**Step 9.4 — Path types (commit `18155ae`):**
+Converted `&str`/`String` filesystem path parameters to `&Path`/`PathBuf`
+across all library crates. 19 files changed, 305 insertions, 258 deletions.
+Struct fields: `AssetRootGroup.root_path`, `AssetRootManifest.root_path`,
+`ManifestSnapshot`, `ManifestMergeResult`, `ManifestDownloadEntry`,
+`HookMetadata.job_bundle_dir`, `HookManager`,
+`SubmitJobParams.{job_bundle_dir,debug_snapshot_dir,known_asset_paths}`.
+Functions: `glob_files`, `write_manifest`, `manifest_snapshot/diff/merge/download`,
+`validate_directory_symlink_containment`, `HookManager::new`,
+`generate_hooks_confirmation_message`, `read_yaml_or_json`,
+`read_yaml_or_json_object`, `parse_yaml_or_json_content`,
+`save_yaml_or_json_to_file`, `read_job_bundle_parameters`,
+`apply_job_parameters`, `split_parameter_args`, `save_debug_snapshot`.
+Reverted `FileSystemLocation.path` to `String` (remote machine path, not local).
+Eliminated `bundle_dir_str` shim — all internal functions now take `&Path`.
+Tests: 294/249/168/492 unchanged.
+
 **Step 9.2 — Progress reporting boundary (commit `2a68161`):**
 Removed `ProgressReportMetadata` struct and pre-formatted `progress_message`
 from library API. Simplified callback type from `Fn(ProgressReportMetadata) -> bool`
@@ -97,11 +114,11 @@ Step 9 (CLI/Library Boundary) sub-step order and status:
 | 9.1 | Config resolution (no disk reads in library) | ✅ Done |
 | 9.2 | Progress reporting (library returns raw stats) | ✅ Done |
 | 9.3 | User interaction (remove callbacks, return decision points) | ✅ Done |
-| 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | **Next** |
-| 9.5 | Presentation utilities (move formatting to CLI) | Not started |
+| 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | ✅ Done |
+| 9.5 | Presentation utilities (move formatting to CLI) | **Next** |
 
 **9.4** is next: convert `&str`/`String` path parameters to `&Path`/`PathBuf`
-across all library crates. ~80 signatures to update.
+across all library crates.
 
 **Baseline (2026-05-14, pre-9.4):**
 
@@ -111,6 +128,24 @@ across all library crates. ~80 signatures to update.
 | `deadline-job-bundle` | 249 | ✅ All pass |
 | `deadline-api` | 168 | ✅ All pass |
 | `deadline-cli` | 492 | ✅ All pass |
+
+**9.4 Plan (assessed: HIGH complexity, ~138 call sites, mechanical):**
+
+Phased direct swap (no strangler fig — changes are purely type-level):
+
+- **Phase A:** `deadline-job-attachments` — struct fields (`AssetRootGroup.root_path`,
+  `AssetRootManifest.root_path`, `ManifestSnapshot`, `ManifestMergeResult`,
+  `ManifestDownloadEntry`, `FileSystemLocation.path`) + functions (`glob_files`,
+  `set_root_path`, `matches_any_filter` stays `&str`)
+- **Phase B:** `deadline-job-bundle` — `SubmitJobParams.job_bundle_dir/.debug_snapshot_dir/.known_asset_paths`,
+  `HookManager`, `HookMetadata.job_bundle_dir`, `validate_directory_symlink_containment`,
+  `generate_hooks_confirmation_message`
+- **Phase C:** `deadline-cli` + `deadline-python-bindings` callers
+
+Keep as `String`: `ManifestPath.path` (codec), `PathMappingRule` fields (cross-platform),
+`UploadManifestInfo.output_manifest_path` (S3 key), `PathSummary.path` (display).
+
+**Status:** ✅ Complete (commit `18155ae`).
 
 ---
 
@@ -131,6 +166,7 @@ across all library crates. ~80 signatures to update.
 | 9.1 | Config resolution (all library crates) | `7e0ca66`, `7ba0287` |
 | 9.2 | Progress reporting (simplify callback API) | `2a68161` |
 | 9.3 | User interaction (SubmissionHandler trait) | `ef6b13e` |
+| 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | `18155ae` |
 
 ---
 

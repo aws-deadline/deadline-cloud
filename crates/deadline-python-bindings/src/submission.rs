@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::path::PathBuf;
 
 use crate::DeadlineOperationError;
 
@@ -159,7 +160,7 @@ pub fn create_job_from_job_bundle(
     );
 
     let submit_params = deadline_job_bundle::SubmitJobParams {
-        job_bundle_dir,
+        job_bundle_dir: PathBuf::from(job_bundle_dir),
         job_parameters,
         name,
         priority,
@@ -170,10 +171,10 @@ pub fn create_job_from_job_bundle(
         job_attachments_file_system,
         require_paths_exist,
         submitter_name,
-        known_asset_paths,
+        known_asset_paths: known_asset_paths.into_iter().map(PathBuf::from).collect(),
         auto_accept,
         force_s3_check,
-        debug_snapshot_dir,
+        debug_snapshot_dir: debug_snapshot_dir.map(PathBuf::from),
         config: &config,
         handler: &handler,
         hashing_progress_callback: hashing_cb,

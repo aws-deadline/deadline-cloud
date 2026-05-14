@@ -3,6 +3,7 @@ use crate::errors::JobAttachmentsError;
 use crate::asset_manifests::{hash_data};
 
 use serde::Serialize;
+use std::path::PathBuf;
 
 // --- PathFormat ---
 
@@ -524,7 +525,7 @@ impl StorageProfile {
 #[derive(Debug, Clone)]
 pub struct AssetRootGroup {
     pub file_system_location_name: Option<String>,
-    pub root_path: String,
+    pub root_path: PathBuf,
     pub inputs: std::collections::BTreeSet<std::path::PathBuf>,
     pub outputs: std::collections::BTreeSet<std::path::PathBuf>,
     pub references: std::collections::BTreeSet<std::path::PathBuf>,
@@ -544,7 +545,7 @@ pub struct AssetUploadGroup {
 #[derive(Debug, Clone)]
 pub struct AssetRootManifest {
     pub file_system_location_name: Option<String>,
-    pub root_path: String,
+    pub root_path: PathBuf,
     pub asset_manifest: Option<crate::asset_manifests::AssetManifest>,
     pub outputs: Vec<std::path::PathBuf>,
 }

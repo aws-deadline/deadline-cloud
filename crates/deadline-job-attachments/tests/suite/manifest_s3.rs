@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::fs;
+use std::path::PathBuf;
 
 use deadline_job_attachments::asset_manifests::{
     AssetManifest, HashAlgorithm, ManifestPath, ManifestVersion,
@@ -155,7 +156,7 @@ async fn manifest_download_no_attachments_returns_empty() {
     let job_attachments: HashMap<String, serde_json::Value> = HashMap::new();
 
     let result = manifest_download(
-        dir.path().to_str().unwrap(),
+        dir.path(),
         "farm-1",
         "queue-1",
         "job-1",
@@ -207,7 +208,7 @@ async fn manifest_download_input_manifests_downloaded_and_written() {
         .unwrap();
 
     let result = manifest_download(
-        dir.path().to_str().unwrap(),
+        dir.path(),
         "farm-1",
         "queue-1",
         "job-1",
@@ -222,7 +223,7 @@ async fn manifest_download_input_manifests_downloaded_and_written() {
     .unwrap();
 
     assert_eq!(result.downloaded.len(), 1);
-    assert_eq!(result.downloaded[0].manifest_root, "/tmp/assets");
+    assert_eq!(result.downloaded[0].manifest_root, PathBuf::from("/tmp/assets"));
     assert!(std::path::Path::new(&result.downloaded[0].local_manifest_path).is_file());
 }
 
@@ -257,7 +258,7 @@ async fn manifest_download_input_only_skips_output_manifests() {
 
     // asset_type=Input — should download inputs but not call get_output_manifests
     let result = manifest_download(
-        dir.path().to_str().unwrap(),
+        dir.path(),
         "farm-1",
         "queue-1",
         "job-1",

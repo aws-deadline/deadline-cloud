@@ -8,6 +8,7 @@ use deadline_job_attachments::manifest_ops::{
     write_manifest,
 };
 use std::fs;
+use std::path::Path;
 use tempfile::TempDir;
 
 fn make_manifest(entries: &[(&str, &str, u64, i64)]) -> AssetManifest {
@@ -88,7 +89,7 @@ fn glob_files_returns_all_files_with_default_config() {
         include: vec!["**/*".into()],
         exclude: vec![],
     };
-    let files = glob_files(dir.path().to_str().unwrap(), &config).unwrap();
+    let files = glob_files(dir.path(), &config).unwrap();
     assert_eq!(files.len(), 2);
 }
 
@@ -101,7 +102,7 @@ fn glob_files_include_filter_works() {
         include: vec!["*.exr".into()],
         exclude: vec![],
     };
-    let files = glob_files(dir.path().to_str().unwrap(), &config).unwrap();
+    let files = glob_files(dir.path(), &config).unwrap();
     assert_eq!(files.len(), 1);
     assert!(files[0].contains("b.exr"));
 }
@@ -115,7 +116,7 @@ fn glob_files_exclude_filter_works() {
         include: vec!["**/*".into()],
         exclude: vec!["*.tmp".into()],
     };
-    let files = glob_files(dir.path().to_str().unwrap(), &config).unwrap();
+    let files = glob_files(dir.path(), &config).unwrap();
     assert_eq!(files.len(), 1);
     assert!(files[0].contains("a.txt"));
 }
@@ -127,7 +128,7 @@ fn glob_files_empty_dir_returns_empty() {
         include: vec!["**/*".into()],
         exclude: vec![],
     };
-    let files = glob_files(dir.path().to_str().unwrap(), &config).unwrap();
+    let files = glob_files(dir.path(), &config).unwrap();
     assert!(files.is_empty());
 }
 
@@ -140,24 +141,24 @@ fn write_manifest_creates_file_with_name() {
     let dir = TempDir::new().unwrap();
     let manifest = make_manifest(&[("a.txt", "aa".repeat(16).as_str(), 10, 1000)]);
     let path = write_manifest(
-        "/some/root",
+        Path::new("/some/root"),
         &manifest,
-        dir.path().to_str().unwrap(),
+        dir.path(),
         Some("myname"),
     )
     .unwrap();
-    assert!(std::path::Path::new(&path).is_file());
-    assert!(path.contains("myname-"));
-    assert!(path.ends_with(".manifest"));
+    assert!(path.is_file());
+    assert!(path.to_string_lossy().contains("myname-"));
+    assert!(path.to_string_lossy().ends_with(".manifest"));
 }
 
 #[test]
 fn write_manifest_derives_name_from_root() {
     let dir = TempDir::new().unwrap();
     let manifest = make_manifest(&[("a.txt", "aa".repeat(16).as_str(), 10, 1000)]);
-    let path = write_manifest("/some/root", &manifest, dir.path().to_str().unwrap(), None).unwrap();
+    let path = write_manifest(Path::new("/some/root"), &manifest, dir.path(), None).unwrap();
     // /some/root → _some_root → some_root (strip leading _)
-    assert!(path.contains("some_root-"));
+    assert!(path.to_string_lossy().contains("some_root-"));
 }
 
 #[test]
@@ -165,17 +166,13 @@ fn write_manifest_replaces_slashes_backslashes_colons() {
     let dir = TempDir::new().unwrap();
     let manifest = make_manifest(&[("a.txt", "aa".repeat(16).as_str(), 10, 1000)]);
     let path = write_manifest(
-        "C:\\Users\\test:data/files",
+        Path::new("C:\\Users\\test:data/files"),
         &manifest,
-        dir.path().to_str().unwrap(),
+        dir.path(),
         None,
     )
     .unwrap();
-    let filename = std::path::Path::new(&path)
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let filename = path.file_name().unwrap().to_str().unwrap();
     assert!(!filename.contains('/'));
     assert!(!filename.contains('\\'));
     assert!(!filename.contains(':'));
@@ -186,8 +183,8 @@ fn write_manifest_creates_parent_dirs() {
     let dir = TempDir::new().unwrap();
     let dest = dir.path().join("deep/nested/dir");
     let manifest = make_manifest(&[("a.txt", "aa".repeat(16).as_str(), 10, 1000)]);
-    let path = write_manifest("/root", &manifest, dest.to_str().unwrap(), Some("test")).unwrap();
-    assert!(std::path::Path::new(&path).is_file());
+    let path = write_manifest(Path::new("/root"), &manifest, &dest, Some("test")).unwrap();
+    assert!(path.is_file());
 }
 
 // =====================================================================
@@ -204,8 +201,8 @@ fn manifest_snapshot_creates_manifest_from_files() {
         exclude: vec![],
     };
     let result = manifest_snapshot(
-        dir.path().to_str().unwrap(),
-        dir.path().to_str().unwrap(),
+        dir.path(),
+        dir.path(),
         None,
         &config,
         None,
@@ -214,7 +211,7 @@ fn manifest_snapshot_creates_manifest_from_files() {
     .unwrap();
     assert!(result.is_some());
     let snap = result.unwrap();
-    assert!(std::path::Path::new(&snap.manifest).is_file());
+    assert!(snap.manifest.is_file());
 }
 
 #[test]
@@ -225,8 +222,8 @@ fn manifest_snapshot_empty_dir_returns_none() {
         exclude: vec![],
     };
     let result = manifest_snapshot(
-        dir.path().to_str().unwrap(),
-        dir.path().to_str().unwrap(),
+        dir.path(),
+        dir.path(),
         None,
         &config,
         None,
@@ -252,8 +249,8 @@ fn manifest_diff_detects_new_file() {
         exclude: vec![],
     };
     let snap = manifest_snapshot(
-        dir.path().to_str().unwrap(),
-        dir.path().to_str().unwrap(),
+        dir.path(),
+        dir.path(),
         None,
         &config,
         None,
@@ -266,8 +263,8 @@ fn manifest_diff_detects_new_file() {
     create_file(&dir, "added.txt", b"added");
 
     let diff = manifest_diff(
-        &snap.manifest,
-        dir.path().to_str().unwrap(),
+        &snap.manifest.to_string_lossy(),
+        dir.path(),
         &config,
         false,
     )
@@ -296,27 +293,27 @@ fn manifest_merge_two_files_produces_result() {
     fs::create_dir_all(&dest).unwrap();
 
     let result = manifest_merge(
-        "/root",
+        Path::new("/root"),
         &[
             m1_path.to_str().unwrap().into(),
             m2_path.to_str().unwrap().into(),
         ],
-        dest.to_str().unwrap(),
+        &dest,
         Some("merged"),
     )
     .unwrap();
     assert!(result.is_some());
     let merge = result.unwrap();
-    assert!(std::path::Path::new(&merge.local_manifest_path).is_file());
+    assert!(merge.local_manifest_path.is_file());
 }
 
 #[test]
 fn manifest_merge_nonexistent_file_returns_error() {
     let dir = TempDir::new().unwrap();
     let result = manifest_merge(
-        "/root",
+        Path::new("/root"),
         &["/nonexistent/path.manifest".into()],
-        dir.path().to_str().unwrap(),
+        dir.path(),
         None,
     );
     assert!(result.is_err());

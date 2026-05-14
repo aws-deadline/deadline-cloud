@@ -2,6 +2,7 @@ use clap::Subcommand;
 use deadline_job_attachments::manifest_ops::{
     manifest_diff, manifest_snapshot, manifest_upload, resolve_glob_config,
 };
+use std::path::Path;
 
 use super::config::CliError;
 
@@ -127,8 +128,8 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 
             let result = manifest_snapshot(
-                &root,
-                &dest,
+                Path::new(&root),
+                Path::new(&dest),
                 name.as_deref(),
                 &config,
                 diff.as_deref(),
@@ -138,7 +139,7 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
 
             if let Some(snap) = result {
                 if !json {
-                    println!("Manifest generated at {}", snap.manifest);
+                    println!("Manifest generated at {}", snap.manifest.display());
                 }
                 if json {
                     println!("{}", serde_json::to_string(&snap).unwrap_or_default());
@@ -175,7 +176,7 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
             let config = resolve_glob_config(&include, &exclude, include_exclude_config.as_deref())
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 
-            let differences = manifest_diff(&manifest, &root, &config, force_rehash)
+            let differences = manifest_diff(&manifest, Path::new(&root), &config, force_rehash)
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 
             if json {

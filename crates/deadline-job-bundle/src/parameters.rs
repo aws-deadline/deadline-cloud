@@ -432,24 +432,25 @@ pub fn validate_job_parameter_value(
 }
 
 pub fn read_job_bundle_parameters(
-    bundle_dir: &str,
+    bundle_dir: &Path,
 ) -> Result<Vec<serde_json::Value>, DeadlineError> {
     let template =
         read_yaml_or_json_object(bundle_dir, "template", true)?.unwrap_or(serde_json::Value::Null);
     let param_values = read_yaml_or_json_object(bundle_dir, "parameter_values", false)?;
 
+    let bundle_dir_display = bundle_dir.display();
     let obj = template.as_object().ok_or_else(|| op_err(format!(
-        "Job Template for job bundle {bundle_dir}:\nThe document does not contain a top-level object."
+        "Job Template for job bundle {bundle_dir_display}:\nThe document does not contain a top-level object."
     )))?;
 
     let spec = obj.get("specificationVersion").and_then(|v| v.as_str()).ok_or_else(|| {
         op_err(format!(
-            "Job Template for job bundle {bundle_dir}:\nDocument does not contain a specificationVersion."
+            "Job Template for job bundle {bundle_dir_display}:\nDocument does not contain a specificationVersion."
         ))
     })?;
     if spec != "jobtemplate-2023-09" {
         return Err(op_err(format!(
-            "Job Template for job bundle {bundle_dir}:\nDocument has an unsupported specificationVersion: {spec}"
+            "Job Template for job bundle {bundle_dir_display}:\nDocument has an unsupported specificationVersion: {spec}"
         )));
     }
 
@@ -458,7 +459,7 @@ pub fn read_job_bundle_parameters(
     if let Some(defs) = obj.get("parameterDefinitions") {
         let arr = defs.as_array().ok_or_else(|| {
             op_err(format!(
-                "Job Template for job bundle {bundle_dir}:\nJob parameter definitions must be a list."
+                "Job Template for job bundle {bundle_dir_display}:\nJob parameter definitions must be a list."
             ))
         })?;
         for def in arr {
@@ -502,11 +503,11 @@ pub fn read_job_bundle_parameters(
         {
             if Path::new(&default).is_absolute() {
                 return Err(op_err(format!(
-                    "Job Template for job bundle {bundle_dir}:\nDefault PATH '{default}' for parameter '{name}' is absolute.\nPATH values must be relative, and must resolve within the Job Bundle directory."
+                    "Job Template for job bundle {bundle_dir_display}:\nDefault PATH '{default}' for parameter '{name}' is absolute.\nPATH values must be relative, and must resolve within the Job Bundle directory."
                 )));
             }
             let bundle_real = std::fs::canonicalize(bundle_dir)
-                .unwrap_or_else(|_| Path::new(bundle_dir).to_path_buf());
+                .unwrap_or_else(|_| bundle_dir.to_path_buf());
             let joined = bundle_real.join(&default);
             // Use canonicalize if path exists, otherwise normalize manually
             let default_real = std::fs::canonicalize(&joined).unwrap_or_else(|_| {
@@ -525,13 +526,13 @@ pub fn read_job_bundle_parameters(
             });
             if !default_real.starts_with(&bundle_real) {
                 return Err(op_err(format!(
-                    "Job Template for job bundle {bundle_dir}:\nDefault PATH '{}' for parameter '{name}' specifies files outside of Job Bundle directory '{}'.\nPATH values must be relative, and must resolve within the Job Bundle directory.",
+                    "Job Template for job bundle {bundle_dir_display}:\nDefault PATH '{}' for parameter '{name}' specifies files outside of Job Bundle directory '{}'.\nPATH values must be relative, and must resolve within the Job Bundle directory.",
                     default_real.display(),
                     bundle_real.display()
                 )));
             }
-            let abs = std::path::absolute(Path::new(bundle_dir).join(&default))
-                .unwrap_or_else(|_| Path::new(bundle_dir).join(&default));
+            let abs = std::path::absolute(bundle_dir.join(&default))
+                .unwrap_or_else(|_| bundle_dir.join(&default));
             let normalized = abs.to_string_lossy().into_owned();
             param
                 .as_object_mut()
@@ -590,7 +591,7 @@ pub fn read_job_bundle_parameters(
 
 pub fn apply_job_parameters(
     job_params: &[serde_json::Value],
-    job_bundle_dir: &str,
+    job_bundle_dir: &Path,
     parameters: &mut [serde_json::Value],
     asset_references: &mut AssetReferences,
 ) -> Result<(), DeadlineError> {
@@ -640,7 +641,8 @@ pub fn apply_job_parameters(
                 Some(s) => s.to_owned(),
                 None => {
                     return Err(op_err(format!(
-                        "Job Template for job bundle {job_bundle_dir}:\nNo parameter value provided for Job Template parameter {name}, and it has no default value."
+                        "Job Template for job bundle {}:\nNo parameter value provided for Job Template parameter {name}, and it has no default value.",
+                        job_bundle_dir.display()
                     )));
                 }
             }
@@ -653,7 +655,8 @@ pub fn apply_job_parameters(
                 .unwrap_or("NONE");
             if !VALID_DATA_FLOWS.contains(&data_flow) {
                 return Err(op_err(format!(
-                    "Job Template for job bundle {job_bundle_dir}:\nJob Template parameter {name} had an incorrect value {data_flow} for 'dataFlow'. Valid values are ['NONE', 'IN', 'OUT', 'INOUT']"
+                    "Job Template for job bundle {}:\nJob Template parameter {name} had an incorrect value {data_flow} for 'dataFlow'. Valid values are ['NONE', 'IN', 'OUT', 'INOUT']",
+                    job_bundle_dir.display()
                 )));
             }
             if data_flow == "NONE" {

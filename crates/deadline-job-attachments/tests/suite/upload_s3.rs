@@ -87,7 +87,7 @@ fn test_group(dir: &Path, files: &[(&str, &[u8])]) -> AssetRootGroup {
         inputs.insert(file_path);
     }
     AssetRootGroup {
-        root_path: dir.to_string_lossy().into_owned(),
+        root_path: dir.to_path_buf(),
         file_system_location_name: None,
         inputs,
         outputs: std::collections::BTreeSet::new(),
@@ -231,7 +231,7 @@ async fn upload_assets_output_only_manifest_has_no_input_path() {
     let s3_settings = test_s3_settings();
 
     let groups = vec![AssetRootGroup {
-        root_path: dir.path().to_string_lossy().into(),
+        root_path: dir.path().to_path_buf(),
         file_system_location_name: None,
         inputs: std::collections::BTreeSet::new(),
         outputs: [out_dir].into_iter().collect(),
@@ -440,7 +440,7 @@ async fn snapshot_assets_copies_files_to_local_dir() {
 
     let manifests = vec![AssetRootManifest {
         file_system_location_name: None,
-        root_path: dir.path().to_string_lossy().into(),
+        root_path: dir.path().to_path_buf(),
         asset_manifest: Some(manifest),
         outputs: vec![],
     }];
@@ -488,7 +488,7 @@ async fn snapshot_assets_callback_cancel_returns_error() {
 
     let manifests = vec![AssetRootManifest {
         file_system_location_name: None,
-        root_path: dir.path().to_string_lossy().into(),
+        root_path: dir.path().to_path_buf(),
         asset_manifest: Some(manifest),
         outputs: vec![],
     }];

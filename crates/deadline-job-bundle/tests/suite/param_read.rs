@@ -35,7 +35,7 @@ fn read_params_valid_template_with_values() {
         "parameterValues": [{"name": "Frame", "value": "10"}]
     });
     let dir = make_bundle(&template, Some(&pv));
-    let params = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap();
+    let params = read_job_bundle_parameters(dir.path()).unwrap();
     assert_eq!(params.len(), 1);
     assert_eq!(params[0]["name"], "Frame");
     assert_eq!(params[0]["value"], "10");
@@ -46,7 +46,7 @@ fn read_params_valid_template_with_values() {
 fn read_params_template_not_dict_returns_error() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("template.yaml"), "- item1\n- item2").unwrap();
-    let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
+    let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     assert!(
         err.to_string().contains("top-level object"),
         "Expected 'top-level object' error, got: {err}"
@@ -58,7 +58,7 @@ fn read_params_template_not_dict_returns_error() {
 fn read_params_missing_spec_version_returns_error() {
     let template = serde_json::json!({"name": "Test"});
     let dir = make_bundle(&template, None);
-    let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
+    let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     assert!(
         err.to_string().contains("specificationVersion"),
         "Expected 'specificationVersion' error, got: {err}"
@@ -72,7 +72,7 @@ fn read_params_unsupported_spec_version_returns_error() {
         "specificationVersion": "jobtemplate-2099-01"
     });
     let dir = make_bundle(&template, None);
-    let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
+    let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     assert!(
         err.to_string().contains("unsupported"),
         "Expected 'unsupported' error, got: {err}"
@@ -87,7 +87,7 @@ fn read_params_param_defs_not_list_returns_error() {
         "parameterDefinitions": "not a list"
     });
     let dir = make_bundle(&template, None);
-    let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
+    let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     assert!(
         err.to_string().contains("must be a list"),
         "Expected 'must be a list' error, got: {err}"
@@ -101,7 +101,7 @@ fn read_params_no_param_defs_returns_empty() {
         "specificationVersion": "jobtemplate-2023-09"
     });
     let dir = make_bundle(&template, None);
-    let params = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap();
+    let params = read_job_bundle_parameters(dir.path()).unwrap();
     assert!(params.is_empty());
 }
 
@@ -121,7 +121,7 @@ fn read_params_extra_param_value_kept() {
         ]
     });
     let dir = make_bundle(&template, Some(&pv));
-    let params = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap();
+    let params = read_job_bundle_parameters(dir.path()).unwrap();
     assert_eq!(params.len(), 2);
     // The extra parameter should be present
     assert!(params.iter().any(|p| p["name"] == "deadline:priority"));
@@ -144,7 +144,7 @@ fn read_params_path_relative_default_made_absolute() {
         serde_yaml::to_string(&template).unwrap(),
     )
     .unwrap();
-    let params = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap();
+    let params = read_job_bundle_parameters(dir.path()).unwrap();
     let value = params[0]["value"].as_str().unwrap();
     assert!(
         std::path::Path::new(value).is_absolute(),
@@ -162,7 +162,7 @@ fn read_params_path_absolute_default_returns_error() {
         ]
     });
     let dir = make_bundle(&template, None);
-    let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
+    let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     assert!(
         err.to_string().contains("is absolute"),
         "Expected 'is absolute' error, got: {err}"
@@ -179,7 +179,7 @@ fn read_params_path_default_outside_bundle_returns_error() {
         ]
     });
     let dir = make_bundle(&template, None);
-    let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
+    let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     assert!(
         err.to_string().contains("outside"),
         "Expected 'outside' error, got: {err}"
@@ -201,7 +201,7 @@ fn read_params_path_with_allowed_values_default_not_resolved() {
         ]
     });
     let dir = make_bundle(&template, None);
-    let params = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap();
+    let params = read_job_bundle_parameters(dir.path()).unwrap();
     // With allowedValues, the default should NOT be made absolute
     // The parameter should not have a "value" set by path resolution
     let has_value = params[0].get("value").is_some();
@@ -228,7 +228,7 @@ fn read_params_hidden_no_value_no_default_returns_error() {
         ]
     });
     let dir = make_bundle(&template, None);
-    let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
+    let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     assert!(
         err.to_string().contains("Hidden parameter"),
         "Expected 'Hidden parameter' error, got: {err}"
@@ -246,7 +246,7 @@ fn read_params_multiple_hidden_missing_lists_all() {
         ]
     });
     let dir = make_bundle(&template, None);
-    let err = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap_err();
+    let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("Secret1"),
@@ -273,7 +273,7 @@ fn read_params_hidden_with_default_succeeds() {
         ]
     });
     let dir = make_bundle(&template, None);
-    let result = read_job_bundle_parameters(dir.path().to_str().unwrap());
+    let result = read_job_bundle_parameters(dir.path());
     assert!(result.is_ok());
 }
 
@@ -287,7 +287,7 @@ fn read_params_no_param_values_file_uses_defaults() {
         ]
     });
     let dir = make_bundle(&template, None);
-    let params = read_job_bundle_parameters(dir.path().to_str().unwrap()).unwrap();
+    let params = read_job_bundle_parameters(dir.path()).unwrap();
     assert_eq!(params.len(), 1);
     // No "value" key set, only "default"
     assert_eq!(params[0]["default"], 1);

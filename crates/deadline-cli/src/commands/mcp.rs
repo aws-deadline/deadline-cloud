@@ -3,6 +3,7 @@ use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::{
     ServerHandler, ServiceExt, schemars, tool, tool_handler, tool_router, transport::stdio,
 };
+use std::path::PathBuf;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -758,7 +759,7 @@ impl DeadlineServer {
             let result = std::thread::spawn(move || {
                 handle.block_on(async {
                     let submit_params = deadline_job_bundle::submission::SubmitJobParams {
-                        job_bundle_dir: bundle_dir,
+                        job_bundle_dir: PathBuf::from(bundle_dir),
                         job_parameters: job_params,
                         name,
                         priority,
@@ -769,7 +770,7 @@ impl DeadlineServer {
                         job_attachments_file_system: fs_type,
                         require_paths_exist: require_paths,
                         submitter_name: Some(submitter),
-                        known_asset_paths: parsed_known_asset_paths,
+                        known_asset_paths: parsed_known_asset_paths.into_iter().map(PathBuf::from).collect(),
                         auto_accept: true,
                         force_s3_check: None,
                         debug_snapshot_dir: None,

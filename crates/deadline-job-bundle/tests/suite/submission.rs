@@ -2,6 +2,7 @@
 
 use deadline_job_bundle::submission::{AssetReferences, parse_frame_range, split_parameter_args};
 use std::collections::BTreeSet;
+use std::path::Path;
 use test_case::test_case;
 
 // ── AssetReferences ─────────────────────────────────────────────────
@@ -142,7 +143,7 @@ fn asset_refs_to_dict_empty_has_empty_arrays() {
 #[test_case("deadline:targetTaskRunStatus", "targetTaskRunStatus" ; "targetTaskRunStatus")]
 fn split_params_known_deadline_param(full_name: &str, expected_key: &str) {
     let params = vec![serde_json::json!({"name": full_name, "value": "50", "type": "INT"})];
-    let (app, job) = split_parameter_args(&params, "/bundle", None, None).unwrap();
+    let (app, job) = split_parameter_args(&params, Path::new("/bundle"), None, None).unwrap();
     assert!(app.contains_key(expected_key));
     assert!(job.is_empty());
 }
@@ -150,7 +151,7 @@ fn split_params_known_deadline_param(full_name: &str, expected_key: &str) {
 #[test]
 fn split_params_regular_param_with_lowercased_type() {
     let params = vec![serde_json::json!({"name": "Frame", "value": "1", "type": "STRING"})];
-    let (app, job) = split_parameter_args(&params, "/bundle", None, None).unwrap();
+    let (app, job) = split_parameter_args(&params, Path::new("/bundle"), None, None).unwrap();
     assert!(app.is_empty());
     assert!(
         job["Frame"].as_object().unwrap().contains_key("string"),
@@ -163,7 +164,7 @@ fn split_params_regular_param_with_lowercased_type() {
 fn split_params_unrecognized_deadline_param_returns_error() {
     let params =
         vec![serde_json::json!({"name": "deadline:unknownParam", "value": "x", "type": "STRING"})];
-    let err = split_parameter_args(&params, "/bundle", None, None).unwrap_err();
+    let err = split_parameter_args(&params, Path::new("/bundle"), None, None).unwrap_err();
     assert!(
         err.to_string().contains("Unrecognized parameter"),
         "got: {err}"
@@ -174,7 +175,7 @@ fn split_params_unrecognized_deadline_param_returns_error() {
 fn split_params_other_app_prefix_silently_dropped() {
     let params =
         vec![serde_json::json!({"name": "maya:renderLayer", "value": "default", "type": "STRING"})];
-    let (app, job) = split_parameter_args(&params, "/bundle", None, None).unwrap();
+    let (app, job) = split_parameter_args(&params, Path::new("/bundle"), None, None).unwrap();
     assert!(app.is_empty());
     assert!(job.is_empty());
 }
@@ -182,14 +183,14 @@ fn split_params_other_app_prefix_silently_dropped() {
 #[test]
 fn split_params_no_value_key_skipped() {
     let params = vec![serde_json::json!({"name": "Frame", "type": "INT"})];
-    let (app, job) = split_parameter_args(&params, "/bundle", None, None).unwrap();
+    let (app, job) = split_parameter_args(&params, Path::new("/bundle"), None, None).unwrap();
     assert!(app.is_empty());
     assert!(job.is_empty());
 }
 
 #[test]
 fn split_params_empty_list() {
-    let (app, job) = split_parameter_args(&[], "/bundle", None, None).unwrap();
+    let (app, job) = split_parameter_args(&[], Path::new("/bundle"), None, None).unwrap();
     assert!(app.is_empty());
     assert!(job.is_empty());
 }
@@ -199,7 +200,7 @@ fn split_params_custom_app_name() {
     let params =
         vec![serde_json::json!({"name": "maya:renderLayer", "value": "default", "type": "STRING"})];
     let (app, _) =
-        split_parameter_args(&params, "/bundle", Some("maya"), Some(&["renderLayer"])).unwrap();
+        split_parameter_args(&params, Path::new("/bundle"), Some("maya"), Some(&["renderLayer"])).unwrap();
     assert_eq!(app["renderLayer"], "default");
 }
 

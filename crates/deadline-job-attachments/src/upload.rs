@@ -183,7 +183,7 @@ pub fn prepare_paths_for_upload(
         } else {
             common
         };
-        group.root_path = root.to_string_lossy().into_owned();
+        group.root_path = root;
     }
 
     // Sort groups by (root_path, file_system_location_name)
@@ -234,7 +234,7 @@ fn find_group_key(
                 loc_path.to_owned(),
                 AssetRootGroup {
                     file_system_location_name: Some(loc_name.to_owned()),
-                    root_path: String::new(),
+                    root_path: PathBuf::new(),
                     inputs: BTreeSet::new(),
                     outputs: BTreeSet::new(),
                     references: BTreeSet::new(),
@@ -250,7 +250,7 @@ fn find_group_key(
                 top.clone(),
                 AssetRootGroup {
                     file_system_location_name: None,
-                    root_path: String::new(),
+                    root_path: PathBuf::new(),
                     inputs: BTreeSet::new(),
                     outputs: BTreeSet::new(),
                     references: BTreeSet::new(),
@@ -505,7 +505,7 @@ pub async fn upload_assets(
             .collect();
 
         let mut props = ManifestProperties {
-            root_path: group.root_path.clone(),
+            root_path: group.root_path.to_string_lossy().into_owned(),
             root_path_format: PathFormat::host(),
             file_system_location_name: group.file_system_location_name.clone(),
             input_manifest_path: None,
@@ -590,8 +590,7 @@ pub async fn upload_assets(
 
             // Build AssetManifest from the hashed result for manifest JSON encoding
             let AbsManifest::Snapshot(hashed_snapshot) = &upload_result.manifest else { unreachable!("input was Snapshot") };
-            let source_root = Path::new(&group.root_path);
-            let root_str = source_root.to_string_lossy();
+            let root_str = group.root_path.to_string_lossy();
             let paths: Vec<ManifestPath> = hashed_snapshot
                 .files
                 .iter()
@@ -620,7 +619,7 @@ pub async fn upload_assets(
 
             // Encode and upload manifest JSON
             let manifest_bytes = manifest.encode().into_bytes();
-            let manifest_name_prefix = hash_data(group.root_path.as_bytes());
+            let manifest_name_prefix = hash_data(group.root_path.to_string_lossy().as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
             let full_key =
@@ -715,7 +714,7 @@ pub fn snapshot_assets(
             .collect();
 
         let mut props = ManifestProperties {
-            root_path: arm.root_path.clone(),
+            root_path: arm.root_path.to_string_lossy().into_owned(),
             root_path_format: PathFormat::host(),
             file_system_location_name: arm.file_system_location_name.clone(),
             input_manifest_path: None,
@@ -732,7 +731,7 @@ pub fn snapshot_assets(
 
             // Copy files to Data/
             for file in &manifest.paths {
-                let src = Path::new(&arm.root_path).join(&file.path);
+                let src = arm.root_path.join(&file.path);
                 let dest_name = format!("{}.xxh128", file.hash);
                 let dest = data_dir.join(&dest_name);
                 std::fs::copy(&src, &dest).map_err(|e| {
@@ -754,7 +753,7 @@ pub fn snapshot_assets(
             // Write manifest
             
             let manifest_bytes = manifest.encode().into_bytes();
-            let manifest_name_prefix = hash_data(arm.root_path.as_bytes());
+            let manifest_name_prefix = hash_data(arm.root_path.to_string_lossy().as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
 
@@ -845,7 +844,7 @@ mod tests {
             os_family: crate::models::StorageProfileOperatingSystemFamily::host(),
             file_system_locations: vec![FileSystemLocation {
                 name: "SharedLoc".into(),
-                path: shared_dir.to_string_lossy().into(),
+                path: shared_dir.to_string_lossy().into_owned(),
                 location_type: FileSystemLocationType::Shared,
             }],
         };
@@ -877,7 +876,7 @@ mod tests {
             os_family: crate::models::StorageProfileOperatingSystemFamily::host(),
             file_system_locations: vec![FileSystemLocation {
                 name: "LocalLoc".into(),
-                path: local_dir.to_string_lossy().into(),
+                path: local_dir.to_string_lossy().into_owned(),
                 location_type: FileSystemLocationType::Local,
             }],
         };
@@ -918,8 +917,8 @@ mod tests {
         assert_eq!(result.asset_groups.len(), 1);
         let root = &result.asset_groups[0].root_path;
         assert!(
-            root.contains("sub"),
-            "root should contain 'sub' directory, got: {root}"
+            root.to_string_lossy().contains("sub"),
+            "root should contain 'sub' directory, got: {}", root.display()
         );
     }
 
@@ -1013,7 +1012,7 @@ mod tests {
             os_family: crate::models::StorageProfileOperatingSystemFamily::host(),
             file_system_locations: vec![FileSystemLocation {
                 name: "SharedLoc".into(),
-                path: shared_dir.to_string_lossy().into(),
+                path: shared_dir.to_string_lossy().into_owned(),
                 location_type: FileSystemLocationType::Shared,
             }],
         };
@@ -1045,7 +1044,7 @@ mod tests {
             os_family: crate::models::StorageProfileOperatingSystemFamily::host(),
             file_system_locations: vec![FileSystemLocation {
                 name: "SharedLoc".into(),
-                path: shared_dir.to_string_lossy().into(),
+                path: shared_dir.to_string_lossy().into_owned(),
                 location_type: FileSystemLocationType::Shared,
             }],
         };

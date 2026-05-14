@@ -2,7 +2,7 @@
 //! upload, and download.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::errors::JobAttachmentsError;
 use serde::Serialize;
@@ -45,8 +45,8 @@ impl Default for GlobConfig {
 /// Result of a manifest snapshot operation.
 #[derive(Debug, Clone, Serialize)]
 pub struct ManifestSnapshot {
-    pub root: String,
-    pub manifest: String,
+    pub root: PathBuf,
+    pub manifest: PathBuf,
 }
 
 /// Result of a manifest diff operation.
@@ -60,15 +60,15 @@ pub struct ManifestDiffResult {
 /// Result of a manifest merge operation.
 #[derive(Debug, Clone, Serialize)]
 pub struct ManifestMergeResult {
-    pub manifest_root: String,
-    pub local_manifest_path: String,
+    pub manifest_root: PathBuf,
+    pub local_manifest_path: PathBuf,
 }
 
 /// One entry in a manifest download response.
 #[derive(Debug, Clone, Serialize)]
 pub struct ManifestDownloadEntry {
-    pub manifest_root: String,
-    pub local_manifest_path: String,
+    pub manifest_root: PathBuf,
+    pub local_manifest_path: PathBuf,
 }
 
 /// Response from `manifest_download`.
@@ -141,8 +141,8 @@ pub fn resolve_glob_config(
 }
 
 /// Return absolute normalized paths of all files matching the glob config under root.
-pub fn glob_files(root: &str, config: &GlobConfig) -> Result<Vec<String>, JobAttachmentsError> {
-    let base = std::path::absolute(Path::new(root))
+pub fn glob_files(root: &Path, config: &GlobConfig) -> Result<Vec<String>, JobAttachmentsError> {
+    let base = std::path::absolute(root)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Invalid root path: {e}")))?;
 
     let mut matched: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -183,23 +183,23 @@ pub fn glob_files(root: &str, config: &GlobConfig) -> Result<Vec<String>, JobAtt
 
 /// Write a manifest to disk. Returns the written file path.
 pub fn write_manifest(
-    root: &str,
+    root: &Path,
     manifest: &AssetManifest,
-    destination: &str,
+    destination: &Path,
     name: Option<&str>,
-) -> Result<String, JobAttachmentsError> {
-    let root_hash = hash_data(root.as_bytes());
+) -> Result<PathBuf, JobAttachmentsError> {
+    let root_hash = hash_data(root.to_string_lossy().as_bytes());
     let timestamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
 
     let manifest_name = if let Some(n) = name {
         n.to_owned()
     } else {
-        let derived = root.replace(['/', '\\', ':'], "_");
+        let derived = root.to_string_lossy().replace(['/', '\\', ':'], "_");
         derived.strip_prefix('_').unwrap_or(&derived).to_owned()
     };
 
     let filename = format!("{manifest_name}-{root_hash}-{timestamp}.manifest");
-    let dest_path = Path::new(destination).join(&filename);
+    let dest_path = destination.join(&filename);
 
     if let Some(parent) = dest_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
@@ -210,18 +210,19 @@ pub fn write_manifest(
     std::fs::write(&dest_path, manifest.encode())
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}")))?;
 
-    Ok(dest_path.to_string_lossy().into_owned())
+    Ok(dest_path)
 }
 
 /// Create a manifest snapshot of files in a directory.
 pub fn manifest_snapshot(
-    root: &str,
-    destination: &str,
+    root: &Path,
+    destination: &Path,
     name: Option<&str>,
     config: &GlobConfig,
     diff: Option<&str>,
     force_rehash: bool,
 ) -> Result<Option<ManifestSnapshot>, JobAttachmentsError> {
+    let root_str = root.to_string_lossy();
     let current_files = glob_files(root, config)?;
     if current_files.is_empty() && diff.is_none() {
         return Ok(None);
@@ -235,7 +236,7 @@ pub fn manifest_snapshot(
 
         let changed_paths: Vec<String> = if force_rehash {
             // Hash all files, compare manifests
-            let current_manifest = hash_files_to_manifest(root, &current_files)?;
+            let current_manifest = hash_files_to_manifest(&root_str, &current_files)?;
             match current_manifest {
                 None => return Ok(None),
                 Some(ref cm) => {
@@ -243,16 +244,16 @@ pub fn manifest_snapshot(
                     diffs
                         .into_iter()
                         .filter(|(s, _)| *s == FileStatus::New || *s == FileStatus::Modified)
-                        .map(|(_, p)| Path::new(root).join(&p.path).to_string_lossy().into_owned())
+                        .map(|(_, p)| root.join(&p.path).to_string_lossy().into_owned())
                         .collect()
                 }
             }
         } else {
-            let diffs = fast_diff(root, &current_files, &diff_manifest);
+            let diffs = fast_diff(&root_str, &current_files, &diff_manifest);
             diffs
                 .into_iter()
                 .filter(|(_, s)| *s != FileStatus::Deleted)
-                .map(|(p, _)| Path::new(root).join(&p).to_string_lossy().into_owned())
+                .map(|(p, _)| root.join(&p).to_string_lossy().into_owned())
                 .collect()
         };
 
@@ -261,10 +262,10 @@ pub fn manifest_snapshot(
         }
 
         // Hash only the changed files
-        hash_files_to_manifest(root, &changed_paths)?
+        hash_files_to_manifest(&root_str, &changed_paths)?
     } else {
         // Full snapshot
-        hash_files_to_manifest(root, &current_files)?
+        hash_files_to_manifest(&root_str, &current_files)?
     };
 
     match output_manifest {
@@ -272,7 +273,7 @@ pub fn manifest_snapshot(
         Some(manifest) => {
             let path = write_manifest(root, &manifest, destination, name)?;
             Ok(Some(ManifestSnapshot {
-                root: root.to_owned(),
+                root: root.to_path_buf(),
                 manifest: path,
             }))
         }
@@ -282,13 +283,14 @@ pub fn manifest_snapshot(
 /// Compute file differences between a manifest and a directory.
 pub fn manifest_diff(
     manifest_path: &str,
-    root: &str,
+    root: &Path,
     config: &GlobConfig,
     force_rehash: bool,
 ) -> Result<ManifestDiffResult, JobAttachmentsError> {
     let contents = std::fs::read_to_string(manifest_path)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to read manifest: {e}")))?;
     let reference = decode_manifest(&contents)?;
+    let root_str = root.to_string_lossy();
     let current_files = glob_files(root, config)?;
 
     let mut result = ManifestDiffResult {
@@ -298,7 +300,7 @@ pub fn manifest_diff(
     };
 
     if force_rehash {
-        if let Some(current) = hash_files_to_manifest(root, &current_files)? {
+        if let Some(current) = hash_files_to_manifest(&root_str, &current_files)? {
             for (status, path) in hash_diff(&reference, &current) {
                 match status {
                     FileStatus::New => result.new.push(path.path),
@@ -309,7 +311,7 @@ pub fn manifest_diff(
             }
         }
     } else {
-        for (path, status) in fast_diff(root, &current_files, &reference) {
+        for (path, status) in fast_diff(&root_str, &current_files, &reference) {
             match status {
                 FileStatus::New => result.new.push(path),
                 FileStatus::Modified => result.modified.push(path),
@@ -324,9 +326,9 @@ pub fn manifest_diff(
 
 /// Merge multiple manifest files into one.
 pub fn manifest_merge(
-    root: &str,
+    root: &Path,
     manifest_files: &[String],
-    destination: &str,
+    destination: &Path,
     name: Option<&str>,
 ) -> Result<Option<ManifestMergeResult>, JobAttachmentsError> {
     let manifest_map = read_manifests(manifest_files)?;
@@ -339,7 +341,7 @@ pub fn manifest_merge(
         Some(manifest) => {
             let path = write_manifest(root, &manifest, destination, name)?;
             Ok(Some(ManifestMergeResult {
-                manifest_root: root.to_owned(),
+                manifest_root: root.to_path_buf(),
                 local_manifest_path: path,
             }))
         }
@@ -447,7 +449,7 @@ pub async fn manifest_upload(
     reason = "S3 + Deadline context params needed for manifest resolution"
 )]
 pub async fn manifest_download(
-    download_dir: &str,
+    download_dir: &Path,
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
@@ -538,15 +540,15 @@ pub async fn manifest_download(
                 manifest_name = manifest_name[1..].to_string();
             }
             let filename = format!("{manifest_name}-{root_hash}-{timestamp}.manifest");
-            let local_path = Path::new(download_dir).join(&filename);
+            let local_path = download_dir.join(&filename);
 
             std::fs::write(&local_path, manifest.encode()).map_err(|e| {
                 JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}"))
             })?;
 
             downloaded.push(ManifestDownloadEntry {
-                manifest_root: root.clone(),
-                local_manifest_path: local_path.to_string_lossy().into_owned(),
+                manifest_root: PathBuf::from(root),
+                local_manifest_path: local_path,
             });
         }
     }

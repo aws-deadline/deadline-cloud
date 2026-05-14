@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
@@ -91,7 +91,7 @@ pub struct HookMetadata {
     pub priority: i32,
     pub farm_id: String,
     pub queue_id: String,
-    pub job_bundle_dir: String,
+    pub job_bundle_dir: PathBuf,
     pub parameters: HashMap<String, Value>,
     pub submitter_name: String,
     pub asset_references: Value,
@@ -119,7 +119,7 @@ impl HookMetadata {
         env.insert("DEADLINE_QUEUE_ID".into(), self.queue_id.clone());
         env.insert(
             "DEADLINE_JOB_BUNDLE_DIR".into(),
-            self.job_bundle_dir.clone(),
+            self.job_bundle_dir.to_string_lossy().into_owned(),
         );
         if let Some(ref sp) = self.storage_profile_id {
             env.insert("DEADLINE_STORAGE_PROFILE_ID".into(), sp.clone());
@@ -310,17 +310,17 @@ pub fn merge_payload(original: &Value, modified: &Value) -> Value {
 use crate::submission::SubmissionHandler;
 
 pub struct HookManager<'a> {
-    pub job_bundle_dir: String,
+    pub job_bundle_dir: PathBuf,
     pub hooks: Option<HookConfiguration>,
     script_resolve_dir: String,
     handler: &'a dyn SubmissionHandler,
 }
 
 impl<'a> HookManager<'a> {
-    pub fn new(job_bundle_dir: &str, handler: &'a dyn SubmissionHandler) -> Self {
+    pub fn new(job_bundle_dir: &Path, handler: &'a dyn SubmissionHandler) -> Self {
         let script_resolve_dir = get_script_resolve_dir(job_bundle_dir);
         Self {
-            job_bundle_dir: job_bundle_dir.to_owned(),
+            job_bundle_dir: job_bundle_dir.to_path_buf(),
             hooks: None,
             script_resolve_dir,
             handler,
@@ -347,7 +347,7 @@ impl<'a> HookManager<'a> {
             Some(h) if !h.pre_submission.is_empty() => &h.pre_submission,
             _ => return Ok(payload),
         };
-        metadata.job_bundle_dir.clone_from(&self.script_resolve_dir);
+        metadata.job_bundle_dir = PathBuf::from(&self.script_resolve_dir);
         let mut current = payload;
         for (i, hook) in hooks.iter().enumerate() {
             let hook_name = format_hook_name(hook);
@@ -422,7 +422,7 @@ impl<'a> HookManager<'a> {
     }
 }
 
-pub fn generate_hooks_confirmation_message(hooks: &HookConfiguration, bundle_dir: &str) -> String {
+pub fn generate_hooks_confirmation_message(hooks: &HookConfiguration, bundle_dir: &Path) -> String {
     let mut lines = vec![
         "This job bundle contains submission hooks that will execute on your machine:\n".into(),
     ];
@@ -440,7 +440,7 @@ pub fn generate_hooks_confirmation_message(hooks: &HookConfiguration, bundle_dir
         }
         lines.push(String::new());
     }
-    lines.push(format!("  Bundle: {bundle_dir}\n"));
+    lines.push(format!("  Bundle: {}\n", bundle_dir.display()));
     lines.join("\n")
 }
 
@@ -453,8 +453,8 @@ fn format_hook_name(hook: &HookDefinition) -> String {
     name
 }
 
-fn get_script_resolve_dir(job_bundle_dir: &str) -> String {
-    let origin_file = Path::new(job_bundle_dir).join(".hooks_origin");
+fn get_script_resolve_dir(job_bundle_dir: &Path) -> String {
+    let origin_file = job_bundle_dir.join(".hooks_origin");
     if origin_file.is_file()
         && let Ok(content) = std::fs::read_to_string(&origin_file)
     {
@@ -463,7 +463,7 @@ fn get_script_resolve_dir(job_bundle_dir: &str) -> String {
             return origin;
         }
     }
-    job_bundle_dir.to_owned()
+    job_bundle_dir.to_string_lossy().into_owned()
 }
 
 fn resolve_command(command: &str, script_dir: &str) -> Result<String, DeadlineError> {
@@ -1028,7 +1028,7 @@ mod tests {
     #[test]
     fn load_hooks_no_file() {
         let dir = TempDir::new().unwrap();
-        let mut mgr = HookManager::new(dir.path().to_str().unwrap(), &NullHandler);
+        let mut mgr = HookManager::new(dir.path(), &NullHandler);
         let result = mgr.load_hooks().unwrap();
         assert!(result.is_none());
     }
@@ -1041,7 +1041,7 @@ mod tests {
             "preSubmission:\n  - command: python\n    args: [\"-c\", \"pass\"]\n",
         )
         .unwrap();
-        let mut mgr = HookManager::new(dir.path().to_str().unwrap(), &NullHandler);
+        let mut mgr = HookManager::new(dir.path(), &NullHandler);
         let hooks = mgr.load_hooks().unwrap().unwrap();
         assert_eq!(hooks.pre_submission.len(), 1);
         assert_eq!(hooks.pre_submission[0].command, "python");
@@ -1055,7 +1055,7 @@ mod tests {
             r#"{"postSubmission": [{"command": "echo", "args": ["done"]}]}"#,
         )
         .unwrap();
-        let mut mgr = HookManager::new(dir.path().to_str().unwrap(), &NullHandler);
+        let mut mgr = HookManager::new(dir.path(), &NullHandler);
         let hooks = mgr.load_hooks().unwrap().unwrap();
         assert_eq!(hooks.post_submission.len(), 1);
     }
@@ -1065,7 +1065,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         std::fs::write(dir.path().join("hooks.yaml"), "preSubmission: []\n").unwrap();
         std::fs::write(dir.path().join("hooks.json"), "{}").unwrap();
-        let mut mgr = HookManager::new(dir.path().to_str().unwrap(), &NullHandler);
+        let mut mgr = HookManager::new(dir.path(), &NullHandler);
         let err = mgr.load_hooks().unwrap_err().to_string();
         assert!(err.contains("both hooks.json and hooks.yaml"), "got: {err}");
     }
@@ -1099,7 +1099,7 @@ mod tests {
             priority: 50,
             farm_id: "farm-123".into(),
             queue_id: "queue-456".into(),
-            job_bundle_dir: dir.into(),
+            job_bundle_dir: PathBuf::from(dir),
             parameters: HashMap::new(),
             submitter_name: "Test".into(),
             asset_references: json!({}),
@@ -1121,7 +1121,7 @@ mod tests {
             ),
         );
         let handler = CapturingHandler::new();
-        let mut mgr = HookManager::new(dir_str, &handler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &handler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         let result = mgr
@@ -1147,7 +1147,7 @@ mod tests {
                 sh_cmd()
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         let result = mgr
@@ -1167,7 +1167,7 @@ mod tests {
                 sh_cmd()
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         let err = mgr
@@ -1188,7 +1188,7 @@ mod tests {
                 sh_cmd()
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         let err = mgr
@@ -1209,7 +1209,7 @@ mod tests {
                 sh_cmd()
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         let err = mgr
@@ -1231,7 +1231,7 @@ mod tests {
                 "preSubmission:\n  - command: python3\n    args: [\"-c\", \"import sys,json; d=json.load(sys.stdin); open('{escaped}', 'w').write(d['jobName'])\"]\n"
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         meta.job_name = "StdinTestJob".into();
@@ -1253,7 +1253,7 @@ mod tests {
                 "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo $DEADLINE_JOB_NAME > '{escaped}'\"]\n"
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         meta.job_name = "MyTestJob".into();
@@ -1278,7 +1278,7 @@ mod tests {
                 "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo $CUSTOM_VAR > '{escaped}'\"]\n    env:\n      CUSTOM_VAR: custom_value\n"
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         mgr.execute_pre_submission_hooks(&mut meta, json!({}))
@@ -1298,7 +1298,7 @@ mod tests {
             dir.path(),
             "preSubmission:\n  - command: nonexistent_command_xyz\n",
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         let err = mgr
@@ -1322,7 +1322,7 @@ mod tests {
             dir.path(),
             &format!("preSubmission:\n  - command: {sh_path}\n    args: [\"-c\", \"exit 0\"]\n"),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
         mgr.execute_pre_submission_hooks(&mut meta, json!({}))
@@ -1353,7 +1353,7 @@ mod tests {
         .unwrap();
 
         let history_str = history_dir.to_str().unwrap();
-        let mut mgr = HookManager::new(history_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(history_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(history_str);
         // Should resolve myscript.sh from original_dir via .hooks_origin
@@ -1374,7 +1374,7 @@ mod tests {
                 sh_cmd()
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let meta = make_metadata_for_dir(dir_str);
         // Should NOT panic or return error
@@ -1392,7 +1392,7 @@ mod tests {
                 sh_cmd()
             ),
         );
-        let mut mgr = HookManager::new(dir_str, &NullHandler);
+        let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler);
         mgr.load_hooks().unwrap();
         let meta = make_metadata_for_dir(dir_str);
         // Should NOT panic or return error
@@ -1418,7 +1418,7 @@ mod tests {
                 script.to_str().unwrap()
             ),
         );
-        let mut mgr = HookManager::new(dir.path().to_str().unwrap(), &NullHandler);
+        let mut mgr = HookManager::new(dir.path(), &NullHandler);
         mgr.load_hooks().unwrap();
         // Simulate CreateJob failure: don't call execute_post_submission_hooks
         assert!(!marker.exists());
@@ -1443,7 +1443,7 @@ mod tests {
                 script.to_str().unwrap()
             ),
         );
-        let mut mgr = HookManager::new(dir.path().to_str().unwrap(), &NullHandler);
+        let mut mgr = HookManager::new(dir.path(), &NullHandler);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir.path().to_str().unwrap());
         meta.job_id = Some("job-789".into());
@@ -1470,7 +1470,7 @@ mod tests {
                 env: HashMap::new(),
             }],
         };
-        let msg = generate_hooks_confirmation_message(&hooks, "/path/to/bundle");
+        let msg = generate_hooks_confirmation_message(&hooks, Path::new("/path/to/bundle"));
         assert!(msg.contains("Pre-submission hooks:"), "got: {msg}");
         assert!(msg.contains("python validate.py"), "got: {msg}");
         assert!(msg.contains("Post-submission hooks:"), "got: {msg}");
@@ -1488,7 +1488,7 @@ mod tests {
             priority: 50,
             farm_id: "farm-123".into(),
             queue_id: "queue-456".into(),
-            job_bundle_dir: "/path/to/bundle".into(),
+            job_bundle_dir: PathBuf::from("/path/to/bundle"),
             parameters: HashMap::from([("Param1".into(), json!("value1"))]),
             submitter_name: "TestSubmitter".into(),
             asset_references: json!({"inputFilenames": ["/file.txt"]}),
@@ -1504,7 +1504,7 @@ mod tests {
             priority: 50,
             farm_id: "farm-123".into(),
             queue_id: "queue-456".into(),
-            job_bundle_dir: "/path/to/bundle".into(),
+            job_bundle_dir: PathBuf::from("/path/to/bundle"),
             parameters: HashMap::new(),
             submitter_name: "TestSubmitter".into(),
             asset_references: json!({}),
