@@ -1,6 +1,6 @@
 use clap::Subcommand;
-use deadline_api::{client, responses::WorkerResponse, session};
-use deadline_config::config_file;
+use deadline_lib::api::{client, responses::WorkerResponse, session};
+use deadline_lib::config::config_file;
 
 use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
@@ -42,7 +42,7 @@ pub(crate) fn run(action: WorkerAction) -> Result<(), CliError> {
 fn setup(
     profile: Option<String>,
     farm_id: Option<String>,
-) -> Result<deadline_config::ini::IniConfig, CliError> {
+) -> Result<deadline_lib::config::ini::IniConfig, CliError> {
     let mut config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,

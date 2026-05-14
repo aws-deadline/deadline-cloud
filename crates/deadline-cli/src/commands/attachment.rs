@@ -1,9 +1,9 @@
 use clap::Subcommand;
-use deadline_config::config_file;
-use deadline_config::ini::IniConfig;
-use deadline_job_attachments::api::{attachment_download, attachment_upload};
-use deadline_job_attachments::models::FileConflictResolution;
-use deadline_job_attachments::s3;
+use deadline_lib::config::config_file;
+use deadline_lib::config::ini::IniConfig;
+use deadline_lib::attachments::api::{attachment_download, attachment_upload};
+use deadline_lib::attachments::models::FileConflictResolution;
+use deadline_lib::attachments::s3;
 
 use super::config::CliError;
 
@@ -81,7 +81,7 @@ async fn resolve_s3_context(
         let uri = s3_root_uri
             .filter(|u| !u.is_empty())
             .ok_or_else(|| CliError::Operation("No valid s3 root path available".into()))?;
-        let sdk_config = deadline_api::session::get_sdk_config(config).await;
+        let sdk_config = deadline_lib::api::session::get_sdk_config(config).await;
         Ok(S3Context {
             sdk_config,
             s3_root_uri: uri,
@@ -97,14 +97,14 @@ async fn resolve_s3_context(
         let uri = if let Some(u) = s3_root_uri.filter(|u| !u.is_empty()) {
             u
         } else {
-            let queue = deadline_api::session::deadline_client(config)
+            let queue = deadline_lib::api::session::deadline_client(config)
                 .await
                 .get_queue()
                 .farm_id(&farm_id)
                 .queue_id(&queue_id)
                 .send()
                 .await
-                .map_err(|e| CliError::Operation(deadline_api::client::format_sdk_error(&e)))?;
+                .map_err(|e| CliError::Operation(deadline_lib::api::client::format_sdk_error(&e)))?;
             match queue.job_attachment_settings() {
                 Some(s) if !s.s3_bucket_name().is_empty() => {
                     let bucket = s.s3_bucket_name();
@@ -120,7 +120,7 @@ async fn resolve_s3_context(
         };
 
         // Get queue-scoped credentials (unconditional — matches Python)
-        let sdk_config = deadline_api::session::get_queue_user_config(
+        let sdk_config = deadline_lib::api::session::get_queue_user_config(
             Some(&farm_id),
             Some(&queue_id),
             None,

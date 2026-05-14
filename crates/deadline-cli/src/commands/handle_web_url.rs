@@ -2,7 +2,7 @@ use clap::Args;
 use std::collections::HashMap;
 use std::io::BufRead;
 
-use deadline_config::config_file;
+use deadline_lib::config::config_file;
 
 use super::config::CliError;
 use super::job::download_output_impl;

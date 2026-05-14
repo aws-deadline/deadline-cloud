@@ -29,10 +29,10 @@ fn make_runtime() -> PyResult<tokio::runtime::Runtime> {
 }
 
 /// Load config from a path or the default location.
-fn load_config(config_path: Option<&str>) -> PyResult<deadline_config::ini::IniConfig> {
+fn load_config(config_path: Option<&str>) -> PyResult<deadline_lib::config::ini::IniConfig> {
     match config_path {
-        Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p)),
-        None => deadline_config::config_file::read_config(),
+        Some(p) => deadline_lib::config::config_file::read_config_from(std::path::Path::new(p)),
+        None => deadline_lib::config::config_file::read_config(),
     }
     .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }

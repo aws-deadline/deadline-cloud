@@ -34,7 +34,7 @@ The CLI binary is also at `target/debug/deadline`.
 make test                      # Rust + Python tests
 cargo test                     # Rust tests only
 cargo test -p deadline-cli     # CLI subprocess tests
-cargo test -p deadline-config  # single crate
+cargo test -p deadline-lib     # library crate
 cargo insta review             # review new/changed output snapshots
 ```
 
@@ -95,10 +95,7 @@ deadline (Rust binary)
 |-------|-------------|
 | `deadline-cli` | CLI binary — argument parsing, subcommand dispatch, output formatting |
 | `deadline-python-bindings` | PyO3 extension module (`deadline._native`) for Python GUI and DCC plugins |
-| `deadline-config` | INI config file read/write, setting resolution |
-| `deadline-api` | AWS Deadline Cloud API, session, auth, telemetry |
-| `deadline-job-bundle` | Job bundle parsing, template loading, parameter validation |
-| `deadline-job-attachments` | Asset manifests, S3 upload/download, hash cache |
+| `deadline-lib` | Unified library: config, API, job bundles, job attachments |
 | `deadline-test-server` | Test-only wiremock stub server |
 
 See [specs/architecture.md](specs/architecture.md) for the crate dependency graph and

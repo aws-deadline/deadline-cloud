@@ -13,12 +13,14 @@ This repo is a complete replacement for `deadline-cloud-python`. It ships:
 ```
 deadline-cloud-rs/
 ├── crates/                          # Rust workspace
+│   ├── deadline-lib/                # Library — config, API, bundles, attachments
+│   │   └── src/
+│   │       ├── config/              # INI config read/write
+│   │       ├── api/                 # AWS API calls, auth, telemetry
+│   │       ├── bundle/              # Job bundle parsing, submission
+│   │       └── attachments/         # S3 transfer, hashing, manifests
 │   ├── deadline-cli/                # Binary — headless CLI commands
 │   ├── deadline-python-bindings/    # PyO3 extension module (deadline._native)
-│   ├── deadline-config/             # Config read/write
-│   ├── deadline-api/                # AWS API calls, auth, telemetry
-│   ├── deadline-job-bundle/         # Job bundle parsing, submission
-│   ├── deadline-job-attachments/    # S3 transfer, hashing, manifests
 │   └── deadline-test-server/        # Test infrastructure
 ├── gui/                             # Python Qt GUI package
 │   └── deadline/
@@ -43,22 +45,21 @@ deadline-cloud-rs/
 
 ```
 deadline-cli (binary)
-├── deadline-config
-├── deadline-api
-│   └── deadline-config
-├── deadline-job-bundle
-│   ├── deadline-api
-│   ├── deadline-job-attachments
-│   └── deadline-config
-├── deadline-job-attachments
-│   └── deadline-config
-└── rmcp (MCP server, built into CLI)
+├── deadline-lib
+│   ├── config       — INI config, settings, hierarchical resolution
+│   ├── api          — AWS SDK client, auth, session, telemetry
+│   │   └── config
+│   ├── bundle       — Job bundle parsing, submission orchestration
+│   │   ├── api
+│   │   ├── attachments
+│   │   └── config
+│   └── attachments  — S3 transfer, manifests, hash/check caches
+│       └── config
+├── openjd-snapshots — hashing, manifests, upload/download engine
+└── rmcp             — MCP server (built into CLI)
 
 deadline-python-bindings (PyO3 extension module, abi3-py39)
-├── deadline-config
-├── deadline-api
-├── deadline-job-bundle
-├── deadline-job-attachments
+├── deadline-lib
 ├── pyo3
 └── pythonize
 
@@ -80,10 +81,11 @@ deadline-test-server (dev-dependency of deadline-cli)
 | `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting, MCP server (`mcp-server` subcommand via rmcp SDK). No business logic beyond presentation. |
 | `deadline-python-bindings` | PyO3 extension module (`deadline._native`). Exposes config, auth, API listing, submission, and telemetry as native Python functions. Uses `abi3-py39` for compatibility with Python 3.9+. |
 | `gui/` | Python package. Qt widgets (presentation), controllers (call `deadline._native`), data classes (pure Python). Shipped alongside the Rust artifacts. DCC submitters import from this package. |
-| `deadline-config` | INI config file read/write, hierarchical setting resolution, str2bool. No AWS dependencies. |
-| `deadline-api` | AWS API calls (Deadline Cloud service), session/credential management, auth, telemetry, error types (`DeadlineError`), submitter info, path utilities, job monitoring types. Owns the SDK/HTTP interaction. |
-| `deadline-job-bundle` | Job bundle parsing, parameter validation, and submission orchestration. Owns the full lifecycle: load bundle → validate → merge parameters → upload attachments → CreateJob → poll for completion. |
-| `deadline-job-attachments` | Asset manifest handling, S3 upload/download, hash cache, content-addressed storage. Owns its error types (`JobAttachmentsError`), `PathFormat`, and file conflict resolution. Independent S3/STS clients. |
+| `deadline-lib` | Unified library crate containing all business logic as modules (see below). |
+| `deadline-lib::config` | INI config file read/write, hierarchical setting resolution, str2bool. No AWS dependencies. |
+| `deadline-lib::api` | AWS API calls (Deadline Cloud service), session/credential management, auth, telemetry, error types (`DeadlineError`), job monitoring types. Owns the SDK/HTTP interaction. |
+| `deadline-lib::bundle` | Job bundle parsing, parameter validation, and submission orchestration. Owns the full lifecycle: load bundle → validate → merge parameters → upload attachments → CreateJob → poll for completion. |
+| `deadline-lib::attachments` | Asset manifest handling, S3 upload/download via openjd-snapshots, hash cache, content-addressed storage. Owns its error types (`JobAttachmentsError`), `PathFormat`, and file conflict resolution. Independent S3/STS clients. |
 | `deadline-test-server` | Test-only. Wiremock-based fake AWS server and `TestHarness` for CLI subprocess tests. |
 
 ## Python ↔ Rust Interface
@@ -117,9 +119,9 @@ and other compiled Python extensions use.
 ```
 deadline-cli
   → Clap parses args
-  → Config loaded once via deadline-config
+  → Config loaded once via deadline-lib::config
   → CLI flags applied as in-memory overrides
-  → Business logic via deadline-job-bundle, deadline-job-attachments, deadline-api
+  → Business logic via deadline-lib::{bundle, attachments, api}
   → Output formatted and printed
 ```
 
@@ -214,7 +216,7 @@ replaced by the Rust code compiled into the PyO3 module.
   Rust errors to `DeadlineOperationError` Python exceptions.
 - **No mocking:** Tests use real temp directories and wiremock HTTP servers.
   See [`testing.md`](testing.md).
-- **API responses:** `deadline-api` owns session management, credential
+- **API responses:** `deadline-lib::api` owns session management, credential
   scoping, telemetry (via a client-level interceptor), and error mapping
   for all Deadline Cloud API calls. Consumer crates import SDK types
   directly from `aws-sdk-deadline` and use the SDK's fluent builders at

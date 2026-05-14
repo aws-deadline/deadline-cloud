@@ -1,5 +1,5 @@
-use deadline_api::{client, session};
-use deadline_config::ini::IniConfig;
+use deadline_lib::api::{client, session};
+use deadline_lib::config::ini::IniConfig;
 
 /// When an API call fails with AccessDenied/ResourceNotFound/ValidationException,
 /// try to list available resources to help the user identify typos.

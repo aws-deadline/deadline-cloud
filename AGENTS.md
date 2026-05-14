@@ -54,7 +54,7 @@ Key directories:
 ```bash
 cargo build                              # full workspace
 cargo test                               # full test suite
-cargo test -p deadline-config            # single crate
+cargo test -p deadline-lib              # library crate
 cargo test -p deadline-cli               # CLI subprocess tests (Level 2)
 cargo insta review                       # review new/changed CLI output snapshots
 ```

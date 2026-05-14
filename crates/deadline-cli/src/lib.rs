@@ -125,7 +125,7 @@ fn resolve_log_level(cli_level: Option<&str>) -> String {
     }
 
     // Read from config
-    let config_level = deadline_config::config_file::get_setting_from_disk("settings.log_level")
+    let config_level = deadline_lib::config::config_file::get_setting_from_disk("settings.log_level")
         .unwrap_or_default()
         .to_uppercase();
 
@@ -330,7 +330,7 @@ pub fn cli_main() {
 
     if let Some(command) = cli.command {
         let cmd_name = command_name(&command);
-        deadline_api::session::set_cli_command_name(&cmd_name);
+        deadline_lib::api::session::set_cli_command_name(&cmd_name);
 
         let result = match command {
             Commands::Config { action } => commands::config::run(action),

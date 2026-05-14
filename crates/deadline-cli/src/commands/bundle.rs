@@ -1,6 +1,6 @@
 use clap::Subcommand;
-use deadline_config::config_file;
-use deadline_job_bundle::{SubmissionHandler, SubmitJobParams, create_job_from_job_bundle};
+use deadline_lib::config::config_file;
+use deadline_lib::bundle::{SubmissionHandler, SubmitJobParams, create_job_from_job_bundle};
 use regex::Regex;
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -22,7 +22,7 @@ impl SubmissionHandler for CliSubmissionHandler {
     fn should_continue(&self) -> bool {
         crate::common::should_continue()
     }
-    fn on_upload_summary(&self, stats: &deadline_job_attachments::progress_tracker::SummaryStatistics) {
+    fn on_upload_summary(&self, stats: &deadline_lib::attachments::progress_tracker::SummaryStatistics) {
         println!("{}", stats.format_upload_summary());
     }
 }
@@ -242,7 +242,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 "Uploading Attachments",
             ));
 
-            let telemetry = deadline_api::telemetry::create_telemetry(&config);
+            let telemetry = deadline_lib::api::telemetry::create_telemetry(&config);
 
             // F8: If snapshot path ends in .zip, use a temp dir then zip after
             let snapshot_tmpdir: Option<std::path::PathBuf> = if save_debug_snapshot

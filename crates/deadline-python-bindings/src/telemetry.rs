@@ -7,7 +7,7 @@ use crate::DeadlineOperationError;
 /// Python-owned telemetry client. Automatically flushes on drop.
 #[pyclass]
 pub struct TelemetryClient {
-    inner: Option<deadline_api::telemetry::TelemetryClient>,
+    inner: Option<deadline_lib::api::telemetry::TelemetryClient>,
 }
 
 #[pymethods]
@@ -21,12 +21,12 @@ impl TelemetryClient {
     )]
     fn new(config_path: Option<&str>) -> PyResult<Self> {
         let config = match config_path {
-            Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p))
-                .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
-            None => deadline_config::config_file::read_config()
-                .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
+            Some(p) => deadline_lib::config::config_file::read_config_from(std::path::Path::new(p))
+                .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
+            None => deadline_lib::config::config_file::read_config()
+                .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
         };
-        let client = deadline_api::telemetry::create_telemetry(&config);
+        let client = deadline_lib::api::telemetry::create_telemetry(&config);
         Ok(Self {
             inner: Some(client),
         })

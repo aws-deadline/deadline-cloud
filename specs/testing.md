@@ -162,8 +162,8 @@ crate-level allow:
 
 This applies to:
 - `crates/deadline-cli/tests/cli.rs`
-- `crates/deadline-job-attachments/tests/suite.rs`
-- `crates/deadline-job-bundle/tests/suite.rs`
+- `crates/deadline-lib/tests/attachments.rs`
+- `crates/deadline-lib/tests/bundle.rs`
 
 When adding a new integration test crate, include the same allow at the
 top of its entry file.

@@ -1,0 +1,54 @@
+[package]
+name = "deadline-lib"
+description = "AWS Deadline Cloud library — config, API, job bundles, and job attachments"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# AWS SDK
+aws-config = { workspace = true }
+aws-sdk-deadline = { workspace = true }
+aws-sdk-sts = { workspace = true }
+aws-sdk-cloudwatchlogs = { workspace = true }
+aws-sdk-s3 = { version = "1", features = ["behavior-version-latest"] }
+aws-smithy-types = { workspace = true }
+aws-smithy-runtime-api = "1"
+aws-smithy-async = "1"
+aws-credential-types = "1"
+
+# OpenJD crates
+openjd-snapshots = { workspace = true }
+openjd-expr = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Utilities
+chrono = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+regex = { workspace = true }
+thiserror = { workspace = true }
+libc = { workspace = true }
+indexmap = "2"
+uuid = { version = "1", features = ["v4"] }
+ureq = "3"
+semver = "1"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+filetime = "0.2"
+glob = "0.3"
+tempfile = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+test-case = { workspace = true }
+wiremock = { workspace = true }
+serial_test = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

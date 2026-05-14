@@ -7,10 +7,10 @@ use crate::DeadlineOperationError;
 pub fn list_farms<'py>(py: Python<'py>, config_path: Option<&str>) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_api::session::deadline_client(&config));
-    let builder = deadline_api::client::apply_dcm_principal(dl.list_farms(), &config);
+    let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
+    let builder = deadline_lib::api::client::apply_dcm_principal(dl.list_farms(), &config);
     let pages = rt
-        .block_on(deadline_api::client::collect_paginated(
+        .block_on(deadline_lib::api::client::collect_paginated(
             builder.into_paginator().send(),
         ))
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
@@ -34,11 +34,11 @@ pub fn get_farm<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_api::session::deadline_client(&config));
+    let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
     let output = rt
         .block_on(dl.get_farm().farm_id(farm_id).send())
-        .map_err(|e| DeadlineOperationError::new_err(deadline_api::client::format_sdk_error(&e)))?;
-    let resp = deadline_api::responses::FarmResponse::from(output);
+        .map_err(|e| DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e)))?;
+    let resp = deadline_lib::api::responses::FarmResponse::from(output);
     let result =
         serde_json::to_value(&resp).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result).map_err(|e| DeadlineOperationError::new_err(e.to_string()))
@@ -53,11 +53,11 @@ pub fn list_queues<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_api::session::deadline_client(&config));
+    let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
     let builder =
-        deadline_api::client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), &config);
+        deadline_lib::api::client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), &config);
     let pages = rt
-        .block_on(deadline_api::client::collect_paginated(
+        .block_on(deadline_lib::api::client::collect_paginated(
             builder.into_paginator().send(),
         ))
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
@@ -81,11 +81,11 @@ pub fn get_queue<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_api::session::deadline_client(&config));
+    let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
     let output = rt
         .block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id).send())
-        .map_err(|e| DeadlineOperationError::new_err(deadline_api::client::format_sdk_error(&e)))?;
-    let resp = deadline_api::responses::QueueResponse::from(output);
+        .map_err(|e| DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e)))?;
+    let resp = deadline_lib::api::responses::QueueResponse::from(output);
     let result =
         serde_json::to_value(&resp).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result).map_err(|e| DeadlineOperationError::new_err(e.to_string()))
@@ -103,8 +103,8 @@ pub fn list_storage_profiles_for_queue<'py>(
     let rt = crate::make_runtime()?;
     let result = rt
         .block_on(async {
-            let client = deadline_api::session::deadline_client(&config).await;
-            let pages = deadline_api::client::collect_paginated(
+            let client = deadline_lib::api::session::deadline_client(&config).await;
+            let pages = deadline_lib::api::client::collect_paginated(
                 client
                     .list_storage_profiles_for_queue()
                     .farm_id(farm_id)
@@ -128,7 +128,7 @@ pub fn list_storage_profiles_for_queue<'py>(
                     })
                 })
                 .collect();
-            Ok::<_, deadline_api::errors::DeadlineError>(
+            Ok::<_, deadline_lib::api::errors::DeadlineError>(
                 serde_json::json!({"storageProfiles": profiles}),
             )
         })
@@ -148,7 +148,7 @@ pub fn get_queue_parameter_definitions<'py>(
     let rt = crate::make_runtime()?;
     let result = rt
         .block_on(
-            deadline_api::queue_parameters::get_queue_parameter_definitions(
+            deadline_lib::api::queue_parameters::get_queue_parameter_definitions(
                 farm_id,
                 queue_id,
                 &config,

@@ -1,7 +1,7 @@
 /// Path summarization and sequence detection for CLI output formatting.
 use std::collections::{BTreeMap, BTreeSet};
 
-use deadline_job_attachments::progress_tracker::human_readable_file_size;
+use deadline_lib::attachments::progress_tracker::human_readable_file_size;
 
 // ---------------------------------------------------------------------------
 // Numbered path detection and sequence grouping

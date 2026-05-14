@@ -62,11 +62,11 @@ pub(crate) enum CliConfigError {
 
 /// Apply CLI flag overrides to a config and validate required options.
 pub(crate) fn apply_cli_options_to_config(
-    config: &mut deadline_config::ini::IniConfig,
+    config: &mut deadline_lib::config::ini::IniConfig,
     options: &CliOptions,
     required: &[&str],
 ) -> Result<(), CliConfigError> {
-    use deadline_config::config_file;
+    use deadline_lib::config::config_file;
 
     if let Some(ref v) = options.profile {
         config_file::set_setting("defaults.aws_profile_name", v, config)
@@ -399,8 +399,8 @@ mod tests {
 
     // -- apply_cli_options_to_config --
 
-    fn empty_config() -> deadline_config::ini::IniConfig {
-        deadline_config::ini::IniConfig::new()
+    fn empty_config() -> deadline_lib::config::ini::IniConfig {
+        deadline_lib::config::ini::IniConfig::new()
     }
 
     #[test]
@@ -417,12 +417,12 @@ mod tests {
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
         assert_eq!(
-            deadline_config::config_file::get_setting("defaults.aws_profile_name", &config)
+            deadline_lib::config::config_file::get_setting("defaults.aws_profile_name", &config)
                 .unwrap(),
             "my-profile"
         );
         assert_eq!(
-            deadline_config::config_file::get_setting("defaults.farm_id", &config).unwrap(),
+            deadline_lib::config::config_file::get_setting("defaults.farm_id", &config).unwrap(),
             "farm-abc"
         );
     }
@@ -434,7 +434,7 @@ mod tests {
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
         // aws_profile_name should still be the default "(default)"
-        let val = deadline_config::config_file::get_setting("defaults.aws_profile_name", &config)
+        let val = deadline_lib::config::config_file::get_setting("defaults.aws_profile_name", &config)
             .unwrap();
         assert_eq!(val, "(default)");
     }
@@ -482,7 +482,7 @@ mod tests {
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
         let val =
-            deadline_config::config_file::get_setting("settings.auto_accept", &config).unwrap();
+            deadline_lib::config::config_file::get_setting("settings.auto_accept", &config).unwrap();
         assert_eq!(val, "true");
     }
 
@@ -495,7 +495,7 @@ mod tests {
             ..Default::default()
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
-        let val = deadline_config::config_file::get_setting("settings.storage_profile_id", &config)
+        let val = deadline_lib::config::config_file::get_setting("settings.storage_profile_id", &config)
             .unwrap();
         assert_eq!(val, "sp-abc");
     }
@@ -510,7 +510,7 @@ mod tests {
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
         let val =
-            deadline_config::config_file::get_setting("settings.conflict_resolution", &config)
+            deadline_lib::config::config_file::get_setting("settings.conflict_resolution", &config)
                 .unwrap();
         assert_eq!(val, "CREATE_COPY");
     }

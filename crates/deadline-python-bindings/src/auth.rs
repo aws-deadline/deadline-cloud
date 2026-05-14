@@ -11,20 +11,20 @@ use crate::DeadlineOperationError;
     reason = "PyO3 requires PyResult return type"
 )]
 pub fn get_credentials_source(config_path: Option<&str>) -> PyResult<String> {
-    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_config::ini::IniConfig::new());
-    let source = deadline_api::auth::get_credentials_source(&config);
+    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
+    let source = deadline_lib::api::auth::get_credentials_source(&config);
     Ok(source.to_string())
 }
 
 #[pyfunction]
 #[pyo3(signature = (config_path=None))]
 pub fn check_auth_status(py: Python<'_>, config_path: Option<&str>) -> PyResult<PyObject> {
-    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_config::ini::IniConfig::new());
+    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
     let rt = crate::make_runtime()?;
     let result = rt.block_on(async {
-        let source = deadline_api::auth::get_credentials_source(&config);
-        let status = deadline_api::auth::check_authentication_status(&config).await;
-        let api_available = status == deadline_api::auth::AwsAuthenticationStatus::Authenticated;
+        let source = deadline_lib::api::auth::get_credentials_source(&config);
+        let status = deadline_lib::api::auth::check_authentication_status(&config).await;
+        let api_available = status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
         (source.to_string(), status.to_string(), api_available)
     });
     let dict = pyo3::types::PyDict::new(py);
@@ -41,7 +41,7 @@ pub fn check_auth_status_with_progress(
     config_path: Option<&str>,
     on_progress: Option<PyObject>,
 ) -> PyResult<PyObject> {
-    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_config::ini::IniConfig::new());
+    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
     let notify = |msg: &str| {
         if let Some(ref cb) = on_progress {
             Python::with_gil(|py| {
@@ -52,10 +52,10 @@ pub fn check_auth_status_with_progress(
     let rt = crate::make_runtime()?;
     let result = rt.block_on(async {
         notify("Checking credentials source...");
-        let source = deadline_api::auth::get_credentials_source(&config);
+        let source = deadline_lib::api::auth::get_credentials_source(&config);
         notify("Checking authentication status...");
-        let status = deadline_api::auth::check_authentication_status(&config).await;
-        let api_available = status == deadline_api::auth::AwsAuthenticationStatus::Authenticated;
+        let status = deadline_lib::api::auth::check_authentication_status(&config).await;
+        let api_available = status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
         notify("Done");
         (source.to_string(), status.to_string(), api_available)
     });
@@ -69,12 +69,12 @@ pub fn check_auth_status_with_progress(
 #[pyfunction]
 #[pyo3(signature = (config_path=None))]
 pub fn check_api_available(config_path: Option<&str>) -> PyResult<bool> {
-    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_config::ini::IniConfig::new());
+    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
     let rt = crate::make_runtime()?;
-    let status = rt.block_on(deadline_api::auth::check_authentication_status(
+    let status = rt.block_on(deadline_lib::api::auth::check_authentication_status(
         &config,
     ));
-    Ok(status == deadline_api::auth::AwsAuthenticationStatus::Authenticated)
+    Ok(status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated)
 }
 
 #[pyfunction]
@@ -84,10 +84,10 @@ pub fn login(
     on_pending_authorization: Option<PyObject>,
     on_cancellation_check: Option<PyObject>,
 ) -> PyResult<String> {
-    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_config::ini::IniConfig::new());
+    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
 
     let pending_cb = on_pending_authorization.as_ref().map(|cb| {
-        move |source: deadline_api::auth::AwsCredentialsSource| {
+        move |source: deadline_lib::api::auth::AwsCredentialsSource| {
             Python::with_gil(|py| {
                 let kwargs = pyo3::types::PyDict::new(py);
                 let source_enum = py
@@ -113,10 +113,10 @@ pub fn login(
     });
 
     let rt = crate::make_runtime()?;
-    rt.block_on(deadline_api::auth::login(
+    rt.block_on(deadline_lib::api::auth::login(
         pending_cb
             .as_ref()
-            .map(|f| f as &dyn Fn(deadline_api::auth::AwsCredentialsSource)),
+            .map(|f| f as &dyn Fn(deadline_lib::api::auth::AwsCredentialsSource)),
         cancel_cb.as_ref().map(|f| f as &dyn Fn() -> bool),
         &config,
         None,
@@ -127,6 +127,6 @@ pub fn login(
 #[pyfunction]
 #[pyo3(signature = (config_path=None))]
 pub fn logout(config_path: Option<&str>) -> PyResult<String> {
-    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_config::ini::IniConfig::new());
-    deadline_api::auth::logout(&config, None).map_err(DeadlineOperationError::new_err)
+    let config = crate::load_config(config_path).unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
+    deadline_lib::api::auth::logout(&config, None).map_err(DeadlineOperationError::new_err)
 }

@@ -1,7 +1,7 @@
 # Coding Patterns
 
 Patterns and conventions for writing code in this workspace. Read this
-before implementing API calls or touching `deadline-api`.
+before implementing API calls or touching `deadline-lib::api`.
 
 ## Design Principles
 
@@ -232,7 +232,7 @@ base session.
 
 For the full pattern including queue-scoped credentials, fleet-scoped
 credentials, caching, and endpoint propagation, see
-[`deadline-api/credential-scoping.md`](deadline-api/credential-scoping.md).
+[`deadline-lib/api/credential-scoping.md`](deadline-lib/api/credential-scoping.md).
 
 ## Serialization: API Responses vs Owned File Formats
 

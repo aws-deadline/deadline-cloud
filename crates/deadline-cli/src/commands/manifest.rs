@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use deadline_job_attachments::manifest_ops::{
+use deadline_lib::attachments::manifest_ops::{
     manifest_diff, manifest_snapshot, manifest_upload, resolve_glob_config,
 };
 use std::path::Path;
@@ -239,7 +239,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 )));
             }
 
-            let mut config = deadline_config::config_file::read_config()
+            let mut config = deadline_lib::config::config_file::read_config()
                 .map_err(|e| CliError::Operation(e.to_string()))?;
             crate::common::apply_cli_options_to_config(
                 &mut config,
@@ -254,19 +254,19 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 &["farm_id", "queue_id"],
             )?;
 
-            let farm = deadline_config::config_file::get_setting("defaults.farm_id", &config)
+            let farm = deadline_lib::config::config_file::get_setting("defaults.farm_id", &config)
                 .unwrap_or_default();
-            let queue = deadline_config::config_file::get_setting("defaults.queue_id", &config)
+            let queue = deadline_lib::config::config_file::get_setting("defaults.queue_id", &config)
                 .unwrap_or_default();
 
             let _asset = match asset_type.to_lowercase().as_str() {
-                "input" => deadline_job_attachments::manifest_ops::AssetType::Input,
-                "output" => deadline_job_attachments::manifest_ops::AssetType::Output,
-                _ => deadline_job_attachments::manifest_ops::AssetType::All,
+                "input" => deadline_lib::attachments::manifest_ops::AssetType::Input,
+                "output" => deadline_lib::attachments::manifest_ops::AssetType::Output,
+                _ => deadline_lib::attachments::manifest_ops::AssetType::All,
             };
 
             // Get queue attachment settings
-            let queue_resp = deadline_api::session::deadline_client(&config)
+            let queue_resp = deadline_lib::api::session::deadline_client(&config)
                 .await
                 .get_queue()
                 .farm_id(&farm)
@@ -276,7 +276,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 .map_err(|e| {
                     CliError::Operation(format!(
                         "Failed to get queue: {}",
-                        deadline_api::client::format_sdk_error(&e)
+                        deadline_lib::api::client::format_sdk_error(&e)
                     ))
                 })?;
             let ja_settings = queue_resp.job_attachment_settings().ok_or_else(|| {
@@ -288,7 +288,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             let prefix = ja_settings.root_prefix();
 
             // Get job to check for attachments
-            let job_output = deadline_api::session::deadline_client(&config)
+            let job_output = deadline_lib::api::session::deadline_client(&config)
                 .await
                 .get_job()
                 .farm_id(&farm)
@@ -299,7 +299,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 .map_err(|e| {
                     CliError::Operation(format!(
                         "Failed to get job: {}",
-                        deadline_api::client::format_sdk_error(&e)
+                        deadline_lib::api::client::format_sdk_error(&e)
                     ))
                 })?;
             let attachments_sdk = job_output.attachments().ok_or_else(|| {
@@ -315,13 +315,13 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
 
             // Get queue-scoped credentials
             let sdk_config =
-                deadline_api::session::get_queue_scoped_config(&farm, &queue, &config)
+                deadline_lib::api::session::get_queue_scoped_config(&farm, &queue, &config)
                     .await
                     .map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
 
             let s3_client =
-                deadline_job_attachments::s3::build_s3_client(&sdk_config, &config);
-            let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config)
+                deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);
+            let account_id = deadline_lib::attachments::s3::get_account_id(&sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 
@@ -388,19 +388,19 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
 
             let (bucket, cas_prefix, sdk_config, config) = if let Some(ref uri) = s3_cas_uri {
                 let settings =
-                    deadline_job_attachments::models::JobAttachmentS3Settings::from_s3_root_uri(
+                    deadline_lib::attachments::models::JobAttachmentS3Settings::from_s3_root_uri(
                         uri,
                     )
                     .map_err(|e| CliError::Operation(e.to_string()))?;
                 let cfg = aws_config::defaults(aws_config::BehaviorVersion::latest())
                     .load()
                     .await;
-                let config = deadline_config::config_file::read_config()
-                    .unwrap_or_else(|_| deadline_config::ini::IniConfig::new());
+                let config = deadline_lib::config::config_file::read_config()
+                    .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
                 (settings.s3_bucket_name, settings.root_prefix, cfg, config)
             } else {
                 // Derive from queue
-                let mut config = deadline_config::config_file::read_config()
+                let mut config = deadline_lib::config::config_file::read_config()
                     .map_err(|e| CliError::Operation(e.to_string()))?;
                 crate::common::apply_cli_options_to_config(
                     &mut config,
@@ -414,12 +414,12 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     },
                     &["farm_id", "queue_id"],
                 )?;
-                let farm = deadline_config::config_file::get_setting("defaults.farm_id", &config)
+                let farm = deadline_lib::config::config_file::get_setting("defaults.farm_id", &config)
                     .unwrap_or_default();
-                let queue = deadline_config::config_file::get_setting("defaults.queue_id", &config)
+                let queue = deadline_lib::config::config_file::get_setting("defaults.queue_id", &config)
                     .unwrap_or_default();
 
-                let queue_resp = deadline_api::session::deadline_client(&config)
+                let queue_resp = deadline_lib::api::session::deadline_client(&config)
                     .await
                     .get_queue()
                     .farm_id(&farm)
@@ -429,7 +429,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     .map_err(|e| {
                         CliError::Operation(format!(
                             "Failed to get queue: {}",
-                            deadline_api::client::format_sdk_error(&e)
+                            deadline_lib::api::client::format_sdk_error(&e)
                         ))
                     })?;
                 let ja_settings = queue_resp.job_attachment_settings().ok_or_else(|| {
@@ -441,7 +441,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 let p = ja_settings.root_prefix().to_owned();
 
                 let cfg =
-                    deadline_api::session::get_queue_scoped_config(&farm, &queue, &config)
+                    deadline_lib::api::session::get_queue_scoped_config(&farm, &queue, &config)
                         .await
                         .map_err(|e| {
                             CliError::Operation(format!("Failed to get credentials: {e}"))
@@ -449,8 +449,8 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 (b, p, cfg, config)
             };
 
-            let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, &config);
-            let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config)
+            let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);
+            let account_id = deadline_lib::attachments::s3::get_account_id(&sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 

@@ -4,10 +4,10 @@
 
 ```
 deadline-cli (binary)
-├── deadline-config
-├── deadline-api
-├── deadline-job-bundle
-├── deadline-job-attachments
+├── deadline-lib
+│   ├── config
+│   ├── api
+│   ├── bundle
 └── rmcp (MCP server, built into CLI)
 ```
 

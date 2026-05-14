@@ -1,10 +1,10 @@
 use clap::Subcommand;
-use deadline_api::log_retrieval::SessionAutoSelect;
-use deadline_api::responses::{self, JobResponse};
-use deadline_api::telemetry::{create_telemetry, record_success_fail};
-use deadline_api::{api, client, job_monitoring, log_retrieval, session};
-use deadline_config::config_file;
-use deadline_config::ini::IniConfig;
+use deadline_lib::api::log_retrieval::SessionAutoSelect;
+use deadline_lib::api::responses::{self, JobResponse};
+use deadline_lib::api::telemetry::{create_telemetry, record_success_fail};
+use deadline_lib::api::{api, client, job_monitoring, log_retrieval, session};
+use deadline_lib::config::config_file;
+use deadline_lib::config::ini::IniConfig;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -36,7 +36,7 @@ fn parse_trace_format(s: &str) -> Result<String, String> {
 
 fn parse_conflict_resolution(
     s: &str,
-) -> Result<deadline_job_attachments::models::FileConflictResolution, String> {
+) -> Result<deadline_lib::attachments::models::FileConflictResolution, String> {
     s.parse()
 }
 
@@ -220,7 +220,7 @@ pub(crate) enum JobAction {
         #[arg(long)]
         task_id: Option<String>,
         #[arg(long, value_parser = parse_conflict_resolution)]
-        conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+        conflict_resolution: Option<deadline_lib::attachments::models::FileConflictResolution>,
         /// Glob pattern for files to include in download. Repeatable.
         #[arg(short = 'i', long = "include")]
         include: Vec<String>,
@@ -246,7 +246,7 @@ pub(crate) enum JobAction {
         #[arg(long)]
         job_id: Option<String>,
         #[arg(long, value_parser = parse_conflict_resolution)]
-        conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+        conflict_resolution: Option<deadline_lib::attachments::models::FileConflictResolution>,
         /// Glob pattern for files to include in download. Repeatable.
         #[arg(short = 'i', long = "include")]
         include: Vec<String>,
@@ -387,7 +387,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            let tc = create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
+            let tc = create_telemetry(&deadline_lib::config::config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
             let result = run_download_output(
                 profile,
                 farm_id,
@@ -417,7 +417,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            let tc = create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
+            let tc = create_telemetry(&deadline_lib::config::config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
             let result = run_download_input(
                 profile,
                 farm_id,
@@ -679,7 +679,7 @@ async fn run_wait(
             }
         }
         Err(e) => {
-            let is_timeout = matches!(e, deadline_api::errors::DeadlineError::OperationTimedOut(_));
+            let is_timeout = matches!(e, deadline_lib::api::errors::DeadlineError::OperationTimedOut(_));
             if is_json {
                 println!(
                     "{}",
@@ -1449,7 +1449,7 @@ async fn run_download_output(
     job_id: Option<String>,
     step_id: Option<String>,
     task_id: Option<String>,
-    conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    conflict_resolution: Option<deadline_lib::attachments::models::FileConflictResolution>,
     include: Vec<String>,
     match_paths_by: String,
     yes: bool,
@@ -1465,7 +1465,7 @@ async fn run_download_output(
         });
     }
 
-    let include_patterns = deadline_job_attachments::download::normalize_filters(&include);
+    let include_patterns = deadline_lib::attachments::download::normalize_filters(&include);
     let include_patterns = if include_patterns.is_empty() {
         None
     } else {
@@ -1525,7 +1525,7 @@ async fn run_download_input(
     farm_id: Option<String>,
     queue_id: Option<String>,
     job_id: Option<String>,
-    conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    conflict_resolution: Option<deadline_lib::attachments::models::FileConflictResolution>,
     include: Vec<String>,
     match_paths_by: String,
     yes: bool,
@@ -1533,7 +1533,7 @@ async fn run_download_input(
 ) -> Result<(), CliError> {
     let is_json = output.eq_ignore_ascii_case("json");
 
-    let include_patterns = deadline_job_attachments::download::normalize_filters(&include);
+    let include_patterns = deadline_lib::attachments::download::normalize_filters(&include);
     let include_patterns = if include_patterns.is_empty() {
         None
     } else {
@@ -1589,20 +1589,20 @@ async fn download_input_impl(
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
-    conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    conflict_resolution: Option<deadline_lib::attachments::models::FileConflictResolution>,
     is_json: bool,
     auto_accept: bool,
     include_patterns: Option<&[String]>,
     match_paths_by: &str,
 ) -> Result<(), CliError> {
-    use deadline_job_attachments::progress_tracker::human_readable_file_size;
+    use deadline_lib::attachments::progress_tracker::human_readable_file_size;
     use crate::path_utils::summarize_path_list;
-    use deadline_job_attachments::download::InputDownloader;
-    use deadline_job_attachments::models::{
+    use deadline_lib::attachments::download::InputDownloader;
+    use deadline_lib::attachments::models::{
         Attachments, FileConflictResolution, JobAttachmentS3Settings, ManifestProperties,
         PathFormat,
     };
-    use deadline_job_attachments::s3;
+    use deadline_lib::attachments::s3;
 
     // Get job
     let dl = session::deadline_client(config).await;
@@ -2340,9 +2340,9 @@ async fn search_jobs_call(
     config: &IniConfig,
 ) -> Result<
     aws_sdk_deadline::operation::search_jobs::SearchJobsOutput,
-    deadline_api::errors::DeadlineError,
+    deadline_lib::api::errors::DeadlineError,
 > {
-    use deadline_api::errors::DeadlineError;
+    use deadline_lib::api::errors::DeadlineError;
 
     let filter = filter_expressions
         .map(api::build_filter_expressions)
@@ -2536,19 +2536,19 @@ pub(crate) async fn download_output_impl(
     job_id: &str,
     step_id: Option<&str>,
     task_id: Option<&str>,
-    conflict_resolution: Option<deadline_job_attachments::models::FileConflictResolution>,
+    conflict_resolution: Option<deadline_lib::attachments::models::FileConflictResolution>,
     is_json: bool,
     auto_accept: bool,
     include_patterns: Option<&[String]>,
     match_paths_by: &str,
 ) -> Result<(), CliError> {
-    use deadline_job_attachments::progress_tracker::human_readable_file_size;
+    use deadline_lib::attachments::progress_tracker::human_readable_file_size;
     use crate::path_utils::summarize_path_list;
-    use deadline_job_attachments::download::OutputDownloader;
-    use deadline_job_attachments::models::{
+    use deadline_lib::attachments::download::OutputDownloader;
+    use deadline_lib::attachments::models::{
         FileConflictResolution, JobAttachmentS3Settings, PathFormat,
     };
-    use deadline_job_attachments::s3;
+    use deadline_lib::attachments::s3;
 
     // Get job
     let dl = session::deadline_client(config).await;
@@ -2612,7 +2612,7 @@ pub(crate) async fn download_output_impl(
                 .map(|(k, v)| {
                     (
                         k.clone(),
-                        deadline_api::type_conversions::task_parameter_value_to_value(v),
+                        deadline_lib::api::type_conversions::task_parameter_value_to_value(v),
                     )
                 })
                 .collect();
@@ -3004,7 +3004,7 @@ async fn batch_get<F, Fut>(
 >
 where
     F: Fn(Vec<serde_json::Value>) -> Fut,
-    Fut: Future<Output = Result<serde_json::Value, deadline_api::errors::DeadlineError>>,
+    Fut: Future<Output = Result<serde_json::Value, deadline_lib::api::errors::DeadlineError>>,
 {
     let mut remaining = identifiers;
     let mut results = std::collections::HashMap::new();
@@ -3670,7 +3670,7 @@ async fn collect_paginated_session_actions(
     session_id: &str,
 ) -> Result<
     Vec<aws_sdk_deadline::operation::list_session_actions::ListSessionActionsOutput>,
-    deadline_api::errors::DeadlineError,
+    deadline_lib::api::errors::DeadlineError,
 > {
     client::collect_paginated(
         client

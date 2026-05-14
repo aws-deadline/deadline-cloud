@@ -5,10 +5,10 @@
 ```
 gui/ (Python) ── import deadline._native ──► deadline-python-bindings
                                                  │
-                                                 ├── deadline-config
-                                                 ├── deadline-api
-                                                 ├── deadline-job-bundle
-                                                 └── deadline-job-attachments
+                                                 ├── deadline-lib
+                                                 │   ├── config
+                                                 │   ├── api
+                                                 │   ├── bundle
 ```
 
 DCC plugins don't load this module directly. They import

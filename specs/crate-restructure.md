@@ -342,6 +342,42 @@ After Step 7, openjd-snapshots handles parallel hashing and upload via tokio.
 Remaining sequential code in our orchestration layer is fine — it's I/O
 coordination, not CPU work.
 
+### 11.5 Collapse type bridge — use openjd types directly
+
+**Goal:** Delete `AssetManifest`, `ManifestPath`, `HashAlgorithm`,
+`ManifestVersion`, and all conversion code. Use `openjd_snapshots::Snapshot`,
+`FileEntry`, etc. directly throughout the codebase.
+
+**What gets deleted:**
+- `asset_manifests.rs` (~200 lines) — `AssetManifest`, `ManifestPath`,
+  `HashAlgorithm`, `ManifestVersion`, `hash_data`, `hash_file` wrappers,
+  `encode`/`decode_manifest` type-bridge functions
+- `diff.rs::asset_manifest_to_snapshot()` — type bridge helper
+- `caches.rs` re-exports — callers use `openjd_snapshots::HashCache` directly
+
+**What callers change to:**
+```rust
+// Before
+use crate::asset_manifests::{AssetManifest, ManifestPath, hash_data, decode_manifest};
+let manifest = decode_manifest(json)?;
+let hash = hash_data(bytes);
+
+// After
+use openjd_snapshots::{Snapshot, FileEntry, decode_v2023, hash};
+let snapshot = decode_v2023(json)?;
+let hash = hash::hash_data(bytes);
+```
+
+**Why this is Step 11 (not Step 10):**
+- Step 10 is a guaranteed-safe mechanical move (same code, different layout)
+- This step changes semantics: different types flow through the system
+- Must update every caller of `AssetManifest` (~20 sites across attachments)
+- Must update integration tests that construct `AssetManifest` directly
+- Must verify openjd's error messages are acceptable (or map them)
+
+**Estimated impact:** -400 lines, 0 new lines of logic (just deletions
+and type substitutions).
+
 ---
 
 ## Execution Order
@@ -349,15 +385,17 @@ coordination, not CPU work.
 ```
 Steps 1–6 (hashing, codec, caches, diff, path mapping)  ← DONE
     ↓
-Step 8 (cleanup vestigial wrappers)  ← CURRENT
+Step 8 (cleanup vestigial wrappers)  ← DONE
     ↓
-Step 7 (upload/download engine)  ← blocked on openjd-snapshots contributions
+Step 7 (upload/download engine)  ← DONE
     ↓
-Step 9 (CLI/library boundary)  ← can start in parallel
+Step 9 (CLI/library boundary)  ← DONE
     ↓
-Step 10 (crate merge)  ← after API surface is stable
+Step 10 (crate merge → deadline-lib)  ← NEXT
     ↓
-Step 11 (idiomatic patterns)  ← ongoing, interleaved
+Step 11.5 (collapse type bridge — use openjd types directly)
+    ↓
+Step 11.1–11.4 (idiomatic patterns)  ← ongoing, interleaved
 ```
 
 ---

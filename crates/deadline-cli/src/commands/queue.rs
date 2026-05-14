@@ -3,12 +3,12 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Local, Utc};
 use clap::Subcommand;
-use deadline_api::telemetry::{create_telemetry, record_success_fail};
-use deadline_api::{api, client, session};
-use deadline_config::config_file;
-use deadline_job_attachments::incremental_download::IncrementalDownloadJob;
-use deadline_job_attachments::incremental_download::IncrementalDownloadState;
-use deadline_job_attachments::models::FileConflictResolution;
+use deadline_lib::api::telemetry::{create_telemetry, record_success_fail};
+use deadline_lib::api::{api, client, session};
+use deadline_lib::config::config_file;
+use deadline_lib::attachments::incremental_download::IncrementalDownloadJob;
+use deadline_lib::attachments::incremental_download::IncrementalDownloadState;
+use deadline_lib::attachments::models::FileConflictResolution;
 
 use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
@@ -120,7 +120,7 @@ fn setup(
     farm_id: Option<String>,
     queue_id: Option<String>,
     required: &[&str],
-) -> Result<deadline_config::ini::IniConfig, CliError> {
+) -> Result<deadline_lib::config::ini::IniConfig, CliError> {
     let mut config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
     crate::common::apply_cli_options_to_config(
         &mut config,
@@ -301,7 +301,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let dl = session::deadline_client(&config).await;
             match dl.get_queue().farm_id(&farm).queue_id(&queue).send().await {
                 Ok(output) => {
-                    let resp = deadline_api::responses::QueueResponse::from(output);
+                    let resp = deadline_lib::api::responses::QueueResponse::from(output);
                     let val = serde_json::to_value(&resp)
                         .map_err(|e| CliError::Operation(e.to_string()))?;
                     println!("{}", crate::common::cli_object_repr(&val));
@@ -427,7 +427,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
-            match deadline_api::queue_parameters::get_queue_parameter_definitions(
+            match deadline_lib::api::queue_parameters::get_queue_parameter_definitions(
                 &farm,
                 &queue,
                 &config,
@@ -470,7 +470,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             conflict_resolution,
             dry_run,
         } => {
-            let tc = create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
+            let tc = create_telemetry(&deadline_lib::config::config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
             let result = run_sync_output(
                 profile,
                 farm_id,
@@ -702,7 +702,7 @@ async fn run_sync_output(
         .map_err(|e: String| CliError::Operation(e))?;
 
     // Run the incremental output download orchestration
-    let tc = create_telemetry(&deadline_config::config_file::read_config().unwrap_or_else(|_| deadline_config::ini::IniConfig::new()));
+    let tc = create_telemetry(&deadline_lib::config::config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
     let updated_checkpoint = incremental_output_download(
         &farm,
         &queue_id_str,
@@ -741,12 +741,12 @@ async fn incremental_output_download(
     farm_id: &str,
     queue_id: &str,
     queue: &aws_sdk_deadline::operation::get_queue::GetQueueOutput,
-    config: &deadline_config::ini::IniConfig,
+    config: &deadline_lib::config::ini::IniConfig,
     mut checkpoint: IncrementalDownloadState,
     local_storage_profile_id: &Option<String>,
     conflict: FileConflictResolution,
     dry_run: bool,
-    telemetry: &deadline_api::telemetry::TelemetryClient,
+    telemetry: &deadline_lib::api::telemetry::TelemetryClient,
 ) -> Result<IncrementalDownloadState, CliError> {
     let now = Utc::now();
     let new_completed = std::cmp::max(
@@ -1039,7 +1039,7 @@ async fn incremental_output_download(
         if let Some(dc_job) = download_candidates.get_mut(job_id.as_str()) {
             dc_job["attachments"] = job_detail.attachments.as_ref().map_or(
                 serde_json::Value::Null,
-                deadline_api::type_conversions::attachments_to_value,
+                deadline_lib::api::type_conversions::attachments_to_value,
             );
             dc_job["storageProfileId"] =
                 serde_json::json!(job_detail.storage_profile_id.as_deref());
@@ -1168,7 +1168,7 @@ async fn incremental_output_download(
 
         // Print path mapping rules for each non-local storage profile
         for (sp_id, sp) in &storage_profiles {
-            use deadline_job_attachments::models::StorageProfile;
+            use deadline_lib::attachments::models::StorageProfile;
             if sp_id == local_sp_id {
                 continue;
             }
@@ -1193,7 +1193,7 @@ async fn incremental_output_download(
             let dest_sp = StorageProfile::from_json(local_sp);
             if let (Some(src), Some(dst)) = (source_sp, dest_sp) {
                 let rules =
-                    deadline_job_attachments::path_mapping::generate_path_mapping_rules(&src, &dst);
+                    deadline_lib::attachments::path_mapping::generate_path_mapping_rules(&src, &dst);
                 if rules.is_empty() {
                     eprintln!(
                         "   No rules generated. Storage profiles {local_name} and {sp_name} share no file system location names."
@@ -1363,7 +1363,7 @@ async fn incremental_output_download(
 
     let mut downloaded_manifests: Vec<(
         chrono::DateTime<Utc>,
-        deadline_job_attachments::asset_manifests::AssetManifest,
+        deadline_lib::attachments::asset_manifests::AssetManifest,
     )> = Vec::new();
     let mut downloaded_files_count: usize = 0;
     let mut downloaded_bytes: u64 = 0;
@@ -1377,8 +1377,8 @@ async fn incremental_output_download(
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get S3 credentials:\n{e}")))?;
 
-        let s3_client = deadline_job_attachments::s3::build_s3_client(&sdk_config, config);
-        let account_id = deadline_job_attachments::s3::get_account_id(&sdk_config)
+        let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, config);
+        let account_id = deadline_lib::attachments::s3::get_account_id(&sdk_config)
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get account ID:\n{e}")))?;
 
@@ -1389,7 +1389,7 @@ async fn incremental_output_download(
             };
 
             let manifest_prefix = format!("{prefix}/Manifests/{farm_id}/{queue_id}/{job_id}/");
-            let manifest_keys = deadline_job_attachments::download::list_output_manifest_keys(
+            let manifest_keys = deadline_lib::attachments::download::list_output_manifest_keys(
                 &s3_client,
                 bucket,
                 &manifest_prefix,
@@ -1423,7 +1423,7 @@ async fn incremental_output_download(
             }
 
             for key in &manifest_keys {
-                match deadline_job_attachments::download::download_manifest_from_s3(
+                match deadline_lib::attachments::download::download_manifest_from_s3(
                     &s3_client,
                     bucket,
                     key,
@@ -1439,7 +1439,7 @@ async fn incremental_output_download(
                             .and_then(|m| m["rootPathFormat"].as_str());
 
                         let mut unmapped = Vec::new();
-                        let _ = deadline_job_attachments::incremental_download::make_manifest_paths_absolute(
+                        let _ = deadline_lib::attachments::incremental_download::make_manifest_paths_absolute(
                         &asset_root, &mut manifest, None, root_path_format, &mut unmapped,
                     );
                         unmapped_paths_count += unmapped.len();
@@ -1476,7 +1476,7 @@ async fn incremental_output_download(
 
         // Merge and download
         let manifest_paths =
-            deadline_job_attachments::incremental_download::merge_absolute_path_manifest_list(
+            deadline_lib::attachments::incremental_download::merge_absolute_path_manifest_list(
                 &mut downloaded_manifests,
             );
 
@@ -1509,7 +1509,7 @@ async fn incremental_output_download(
             phase = std::time::Instant::now();
             eprintln!("Downloading {total_files} files from S3...");
 
-            let s3_settings = deadline_job_attachments::models::JobAttachmentS3Settings {
+            let s3_settings = deadline_lib::attachments::models::JobAttachmentS3Settings {
                 s3_bucket_name: bucket.to_owned(),
                 root_prefix: prefix.to_owned(),
             };
@@ -1520,7 +1520,7 @@ async fn incremental_output_download(
             // Group manifest paths by parent directory for download
             let mut manifests_by_root: std::collections::HashMap<
                 String,
-                deadline_job_attachments::asset_manifests::AssetManifest,
+                deadline_lib::attachments::asset_manifests::AssetManifest,
             > = std::collections::HashMap::new();
             for mp in &manifest_paths {
                 let dir = Path::new(&mp.path)
@@ -1528,9 +1528,9 @@ async fn incremental_output_download(
                     .map_or_else(|| "/".to_owned(), |p| p.to_string_lossy().to_string());
                 let root = if dir.is_empty() { "/".to_owned() } else { dir };
                 let entry = manifests_by_root.entry(root).or_insert_with(|| {
-                    deadline_job_attachments::asset_manifests::AssetManifest::new(
-                        deadline_job_attachments::asset_manifests::HashAlgorithm::Xxh128,
-                        deadline_job_attachments::asset_manifests::ManifestVersion::V2023_03_03,
+                    deadline_lib::attachments::asset_manifests::AssetManifest::new(
+                        deadline_lib::attachments::asset_manifests::HashAlgorithm::Xxh128,
+                        deadline_lib::attachments::asset_manifests::ManifestVersion::V2023_03_03,
                         0,
                         vec![],
                     )
@@ -1541,7 +1541,7 @@ async fn incremental_output_download(
                     .map_or_else(|| mp.path.clone(), |f| f.to_string_lossy().to_string());
                 entry
                     .paths
-                    .push(deadline_job_attachments::asset_manifests::ManifestPath {
+                    .push(deadline_lib::attachments::asset_manifests::ManifestPath {
                         path: filename,
                         hash: mp.hash.clone(),
                         size: mp.size,
@@ -1550,7 +1550,7 @@ async fn incremental_output_download(
                 entry.total_size += mp.size;
             }
 
-            match deadline_job_attachments::download::download_files_from_manifests(
+            match deadline_lib::attachments::download::download_files_from_manifests(
                 bucket,
                 &manifests_by_root,
                 Some(&cas_prefix),
@@ -1596,7 +1596,7 @@ async fn incremental_output_download(
     eprintln!("  Downloaded files: {downloaded_files_count}");
     eprintln!(
         "  Downloaded bytes: {}",
-        deadline_job_attachments::progress_tracker::human_readable_file_size(downloaded_bytes)
+        deadline_lib::attachments::progress_tracker::human_readable_file_size(downloaded_bytes)
     );
     eprintln!("  Jobs with downloads:");
     eprintln!("    completed: {}", completed_job_ids.len());
@@ -1714,7 +1714,7 @@ fn is_writable(path: &Path) -> bool {
 fn storage_profile_output_to_value(
     output: &aws_sdk_deadline::operation::get_storage_profile_for_queue::GetStorageProfileForQueueOutput,
 ) -> serde_json::Value {
-    deadline_api::type_conversions::storage_profile_output_to_value(output)
+    deadline_lib::api::type_conversions::storage_profile_output_to_value(output)
 }
 
 #[cfg(test)]

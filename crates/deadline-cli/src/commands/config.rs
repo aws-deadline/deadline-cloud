@@ -1,5 +1,5 @@
 use crate::common::json_with_spaces;
-use deadline_config::config_file;
+use deadline_lib::config::config_file;
 
 /// CLI-specific error type that distinguishes known operation errors
 /// from unexpected errors for the error handler in main.rs.

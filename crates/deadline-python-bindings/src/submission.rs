@@ -58,10 +58,10 @@ pub fn create_job_from_job_bundle(
 
     // Load config
     let config = match config_path.as_deref() {
-        Some(p) => deadline_config::config_file::read_config_from(std::path::Path::new(p))
-            .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
-        None => deadline_config::config_file::read_config()
-            .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
+        Some(p) => deadline_lib::config::config_file::read_config_from(std::path::Path::new(p))
+            .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
+        None => deadline_lib::config::config_file::read_config()
+            .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
     };
 
     // Build handler
@@ -75,7 +75,7 @@ pub fn create_job_from_job_bundle(
     unsafe impl Send for PySubmissionHandler {}
     unsafe impl Sync for PySubmissionHandler {}
 
-    impl deadline_job_bundle::SubmissionHandler for PySubmissionHandler {
+    impl deadline_lib::bundle::SubmissionHandler for PySubmissionHandler {
         fn on_message(&self, msg: &str) {
             if let Some(ref cb) = self.on_print {
                 Python::with_gil(|py| {
@@ -103,7 +103,7 @@ pub fn create_job_from_job_bundle(
                 None => true,
             }
         }
-        fn on_upload_summary(&self, stats: &deadline_job_attachments::progress_tracker::SummaryStatistics) {
+        fn on_upload_summary(&self, stats: &deadline_lib::attachments::progress_tracker::SummaryStatistics) {
             if let Some(ref cb) = self.on_print {
                 let msg = stats.format_upload_summary();
                 Python::with_gil(|py| {
@@ -120,7 +120,7 @@ pub fn create_job_from_job_bundle(
     };
 
     let hashing_cb = on_hashing_progress.map(
-        |cb| -> deadline_job_attachments::progress_tracker::ProgressFn {
+        |cb| -> deadline_lib::attachments::progress_tracker::ProgressFn {
             Box::new(move |processed, total| {
                 Python::with_gil(|py| {
                     let dict = PyDict::new(py);
@@ -129,8 +129,8 @@ pub fn create_job_from_job_bundle(
                     let _ = dict.set_item("transferRate", 0.0);
                     let _ = dict.set_item("progressMessage", format!(
                         "Processed {} / {}",
-                        deadline_job_attachments::progress_tracker::human_readable_file_size(processed),
-                        deadline_job_attachments::progress_tracker::human_readable_file_size(total),
+                        deadline_lib::attachments::progress_tracker::human_readable_file_size(processed),
+                        deadline_lib::attachments::progress_tracker::human_readable_file_size(total),
                     ));
                     let _ = dict.set_item("processedFiles", 0u64);
                     let _ = dict.set_item("processedBytes", processed);
@@ -144,7 +144,7 @@ pub fn create_job_from_job_bundle(
     );
 
     let upload_cb = on_upload_progress.map(
-        |cb| -> deadline_job_attachments::progress_tracker::ProgressFn {
+        |cb| -> deadline_lib::attachments::progress_tracker::ProgressFn {
             Box::new(move |processed, total| {
                 Python::with_gil(|py| {
                     let dict = PyDict::new(py);
@@ -153,8 +153,8 @@ pub fn create_job_from_job_bundle(
                     let _ = dict.set_item("transferRate", 0.0);
                     let _ = dict.set_item("progressMessage", format!(
                         "Uploaded {} / {}",
-                        deadline_job_attachments::progress_tracker::human_readable_file_size(processed),
-                        deadline_job_attachments::progress_tracker::human_readable_file_size(total),
+                        deadline_lib::attachments::progress_tracker::human_readable_file_size(processed),
+                        deadline_lib::attachments::progress_tracker::human_readable_file_size(total),
                     ));
                     let _ = dict.set_item("processedFiles", 0u64);
                     let _ = dict.set_item("processedBytes", processed);
@@ -167,7 +167,7 @@ pub fn create_job_from_job_bundle(
         },
     );
 
-    let submit_params = deadline_job_bundle::SubmitJobParams {
+    let submit_params = deadline_lib::bundle::SubmitJobParams {
         job_bundle_dir: PathBuf::from(job_bundle_dir),
         job_parameters,
         name,
@@ -192,7 +192,7 @@ pub fn create_job_from_job_bundle(
 
     let rt = crate::make_runtime()?;
     let job_id = rt
-        .block_on(deadline_job_bundle::create_job_from_job_bundle(
+        .block_on(deadline_lib::bundle::create_job_from_job_bundle(
             submit_params,
         ))
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;

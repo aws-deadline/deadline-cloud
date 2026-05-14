@@ -6,8 +6,8 @@ crates. The user-facing entry point for the `deadline` binary.
 
 Consumers: end users via the `deadline` binary.
 
-Dependencies: `deadline-config`, `deadline-api`, `deadline-job-bundle`,
-`deadline-job-attachments`, `deadline-test-server` (dev).
+Dependencies: `deadline-lib` (config, api, bundle, attachments),
+`deadline-test-server` (dev).
 
 ## Design: Thin Dispatch Layer
 

@@ -1,7 +1,7 @@
 use clap::Subcommand;
-use deadline_api::{auth, session};
-use deadline_config::config_file;
-use deadline_config::ini::IniConfig;
+use deadline_lib::api::{auth, session};
+use deadline_lib::config::config_file;
+use deadline_lib::config::ini::IniConfig;
 
 use super::config::CliError;
 

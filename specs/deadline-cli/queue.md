@@ -60,7 +60,7 @@ Requires: farm_id, queue_id, `--storage-profile-id`. Calls
 ## `queue paramdefs`
 
 Requires: farm_id, queue_id. Calls `get_queue_parameter_definitions` from
-`deadline-api`, which:
+`deadline-lib::api`, which:
 1. Lists all queue environments
 2. Fetches each environment's full details
 3. Sorts by priority
@@ -77,7 +77,7 @@ Uses a checkpoint file to track download progress across invocations.
 
 ### Job Discovery
 
-Uses `list_jobs_by_filter_expression` (in `deadline-api`) to paginate
+Uses `list_jobs_by_filter_expression` (in `deadline-lib::api`) to paginate
 through all matching jobs via `createdAt` thresholding. Two queries:
 
 1. **Active jobs**: filter by `TASK_RUN_STATUS` in `[READY, ASSIGNED,

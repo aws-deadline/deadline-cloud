@@ -25,6 +25,14 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## What's Done (this session, 2026-05-14)
 
+**Step 10 — Crate consolidation (commit `b9133e4`):**
+Merged `deadline-config`, `deadline-api`, `deadline-job-bundle`, and
+`deadline-job-attachments` into a single `deadline-lib` crate with modules:
+`config`, `api`, `bundle`, `attachments`. Updated `deadline-cli` (34 use-path
+changes, 13 files) and `deadline-python-bindings` (63 reference changes, 6
+files). Deleted 4 old crate directories. 87 files changed, -90 net lines.
+Tests: deadline-lib 792 (97+154+249+292), deadline-cli 499. All unchanged.
+
 **Step 9.3 — User interaction boundary (commit `ef6b13e`):**
 Replaced `print_callback`, `continue_callback`, and
 `interactive_confirmation_callback` in `SubmitJobParams` with a
@@ -114,37 +122,18 @@ Deleted ~600 lines. Tests: 314→305.
 
 ---
 
-## Next: Step 9.5 — Presentation Utilities
+## Next: Step 11.5 — Collapse Type Bridge
 
-Step 9 (CLI/Library Boundary) sub-step order and status:
+Use openjd types directly (`Snapshot`, `FileEntry`, `hash::hash_data`)
+instead of our wrapper types (`AssetManifest`, `ManifestPath`, `hash_data`).
+See `specs/crate-restructure.md` § 11.5 for full plan.
 
-| Sub-step | What | Status |
-|----------|------|--------|
-| 9.1 | Config resolution (no disk reads in library) | ✅ Done |
-| 9.2 | Progress reporting (library returns raw stats) | ✅ Done |
-| 9.3 | User interaction (remove callbacks, return decision points) | ✅ Done |
-| 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | ✅ Done |
-| 9.5 | Presentation utilities (move formatting to CLI) | ✅ Done |
+**Final counts (2026-05-14, post-Step 10):**
 
-**9.5** ✅ Complete (commit `be667f9`): deduplicated `human_readable_file_size`,
-moved CLI-only presentation code out of library crates, removed `Display`
-impl from `SummaryStatistics`, added `on_upload_summary` to `SubmissionHandler`.
-
-**Final counts (2026-05-14, post-9.5):**
-
-| Crate | Tests | Delta |
-|-------|-------|-------|
-| `deadline-job-attachments` | 292 | -2 (Display tests removed) |
-| `deadline-job-bundle` | 249 | 0 |
-| `deadline-api` | 154 | -14 (path_utils moved to CLI) |
-| `deadline-cli` | 499 | +7 (path summarization tests) |
-
-**9.5 Plan:** ✅ Complete — see commit `be667f9`.
-
-**Callers updated:** 7 sites
-**Tests deleted:** 2 (Display impl tests)
-**Tests moved:** 7 (path_utils → deadline-cli)
-**Blockers:** None
+| Crate | Tests | Delta vs pre-merge |
+|-------|-------|-----|
+| `deadline-lib` | 792 | = 97+154+249+292 (sum of 4 old crates) |
+| `deadline-cli` | 499 | 0 |
 
 ---
 
@@ -167,6 +156,7 @@ impl from `SummaryStatistics`, added `on_upload_summary` to `SubmissionHandler`.
 | 9.3 | User interaction (SubmissionHandler trait) | `ef6b13e` |
 | 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | `18155ae` |
 | 9.5 | Presentation utilities (move to CLI) | `be667f9` |
+| 10 | Crate consolidation (4 crates → deadline-lib) | `b9133e4` |
 
 ---
 

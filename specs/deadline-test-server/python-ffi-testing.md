@@ -61,8 +61,8 @@ tests need the same isolation.
 
 ## Why This Works
 
-The FFI functions call the same Rust code as the CLI (`deadline-api`,
-`deadline-config`, etc.). That code uses the AWS SDK, which reads
+The FFI functions call the same Rust code as the CLI (`deadline-lib::api`,
+`deadline-lib::config`, etc.). That code uses the AWS SDK, which reads
 `AWS_ENDPOINT_URL_*` environment variables to determine where to send
 requests. Setting those env vars before calling the FFI redirects all
 API traffic to the local stub server.

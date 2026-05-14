@@ -1098,35 +1098,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deadline-api"
-version = "0.1.0"
-dependencies = [
- "aws-config",
- "aws-credential-types",
- "aws-sdk-cloudwatchlogs",
- "aws-sdk-deadline",
- "aws-sdk-sts",
- "aws-smithy-async",
- "aws-smithy-runtime-api",
- "aws-smithy-types",
- "chrono",
- "deadline-config",
- "indexmap",
- "log",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml",
- "serial_test",
- "tempfile",
- "test-case",
- "tokio",
- "ureq",
- "uuid",
- "wiremock",
-]
-
-[[package]]
 name = "deadline-cli"
 version = "0.1.0"
 dependencies = [
@@ -1135,10 +1106,7 @@ dependencies = [
  "aws-sdk-deadline",
  "chrono",
  "clap",
- "deadline-api",
- "deadline-config",
- "deadline-job-attachments",
- "deadline-job-bundle",
+ "deadline-lib",
  "deadline-test-server",
  "env_logger",
  "indicatif",
@@ -1161,72 +1129,48 @@ dependencies = [
 ]
 
 [[package]]
-name = "deadline-config"
-version = "0.1.0"
-dependencies = [
- "indexmap",
- "serial_test",
- "tempfile",
- "test-case",
- "thiserror",
-]
-
-[[package]]
-name = "deadline-job-attachments"
+name = "deadline-lib"
 version = "0.1.0"
 dependencies = [
  "aws-config",
+ "aws-credential-types",
+ "aws-sdk-cloudwatchlogs",
+ "aws-sdk-deadline",
  "aws-sdk-s3",
  "aws-sdk-sts",
+ "aws-smithy-async",
+ "aws-smithy-runtime-api",
  "aws-smithy-types",
  "chrono",
- "deadline-config",
  "filetime",
  "futures",
  "glob",
+ "indexmap",
+ "libc",
  "log",
  "openjd-expr",
  "openjd-snapshots",
  "regex",
+ "semver",
  "serde",
  "serde_json",
+ "serde_yaml",
+ "serial_test",
  "tempfile",
  "test-case",
+ "thiserror",
  "tokio",
+ "ureq",
  "uuid",
  "wiremock",
  "xxhash-rust",
 ]
 
 [[package]]
-name = "deadline-job-bundle"
-version = "0.1.0"
-dependencies = [
- "aws-sdk-deadline",
- "chrono",
- "deadline-api",
- "deadline-config",
- "deadline-job-attachments",
- "libc",
- "log",
- "openjd-snapshots",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "test-case",
- "tokio",
-]
-
-[[package]]
 name = "deadline-python-bindings"
 version = "0.1.0"
 dependencies = [
- "deadline-api",
- "deadline-config",
- "deadline-job-attachments",
- "deadline-job-bundle",
+ "deadline-lib",
  "pyo3",
  "pythonize",
  "serde_json",

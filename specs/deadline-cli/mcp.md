@@ -15,7 +15,7 @@ interrupted.
 
 ### Tool categories
 
-- **Pass-through (13):** Call `deadline-api` functions, return
+- **Pass-through (13):** Call `deadline-lib::api` functions, return
   `serde_json::Value` directly. Thin async methods.
 - **Custom (2):** `submit_job` validates inputs (directory exists, params
   are JSON array, farm_id/queue_id required) then calls
@@ -56,8 +56,8 @@ key concepts, and configuration guidance.
 ## Dependencies
 
 `rmcp` v1.5 (server, transport-io, macros), `schemars` for JSON Schema
-generation, `deadline-api` for all AWS API calls, `deadline-job-bundle`
-for submission, `deadline-job-attachments` for download.
+generation, `deadline-lib::api` for all AWS API calls, `deadline-lib::bundle`
+for submission, `deadline-lib::attachments` for download.
 
 ## Known differences from Python
 

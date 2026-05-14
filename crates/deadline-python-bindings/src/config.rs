@@ -6,7 +6,7 @@ use crate::DeadlineOperationError;
 #[pyo3(signature = (name, config_path=None))]
 pub fn get_setting(name: &str, config_path: Option<&str>) -> PyResult<String> {
     let config = crate::load_config(config_path)?;
-    deadline_config::config_file::get_setting(name, &config)
+    deadline_lib::config::config_file::get_setting(name, &config)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }
 
@@ -15,13 +15,13 @@ pub fn get_setting(name: &str, config_path: Option<&str>) -> PyResult<String> {
 pub fn set_setting(name: &str, value: &str, config_path: Option<&str>) -> PyResult<()> {
     let path = match config_path {
         Some(p) => std::path::PathBuf::from(p),
-        None => deadline_config::config_file::get_config_file_path(),
+        None => deadline_lib::config::config_file::get_config_file_path(),
     };
-    let mut config = deadline_config::config_file::read_config_from(&path)
+    let mut config = deadline_lib::config::config_file::read_config_from(&path)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
-    deadline_config::config_file::set_setting(name, value, &mut config)
+    deadline_lib::config::config_file::set_setting(name, value, &mut config)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
-    deadline_config::config_file::write_config_to(&config, &path)
+    deadline_lib::config::config_file::write_config_to(&config, &path)
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }
 
