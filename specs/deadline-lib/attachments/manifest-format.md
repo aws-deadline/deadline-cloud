@@ -2,12 +2,14 @@
 
 ## Version
 
-`2023-03-03` — the only supported version. Stored in the `ManifestVersion` enum.
+`2023-03-03` — the only supported version. Handled internally by
+`openjd_snapshots::decode_v2023` / `encode_snapshot_v2023`.
 
 ## JSON Structure
 
 ```json
 {
+  "manifestVersion": "2023-03-03",
   "hashAlg": "xxh128",
   "totalSize": 1234567,
   "paths": [
@@ -21,23 +23,28 @@
 }
 ```
 
-## ManifestEntry Fields
+## Rust Types
+
+Manifests are represented directly as `openjd_snapshots::Snapshot`
+(type alias for `Manifest<Rel, Full>`). Individual file entries are
+`openjd_snapshots::FileEntry`.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `path` | `String` | Relative POSIX-style. Never starts with `/`. |
+| `hash` | `Option<String>` | 32-char hex xxh128. `None` before hashing. |
+| `size` | `Option<u64>` | File size in bytes. |
+| `mtime` | `Option<u64>` | Modification time in microseconds since epoch. |
+
+## FileEntry Fields
 
 - `path` — relative POSIX-style path. Windows paths converted at creation time
   (backslashes → forward slashes). Never starts with `/`.
 - `hash` — hex-encoded content hash (xxh128, 32 hex characters)
-- `size` — file size in bytes (u64)
+- `size` — file size in bytes
 - `mtime` — modification time in microseconds since epoch, truncated (not
   rounded) from nanoseconds: `trunc(mtime_ns / 1000)`. The download side
   restores mtime from this value.
-
-## ManifestPath
-
-Two variants representing absolute vs relative manifests:
-- Absolute manifests have full filesystem paths — required for filesystem operations
-- Relative manifests have paths relative to an unspecified root — portable across systems
-
-The `AssetManifest` type is generic over the path representation.
 
 ## Canonical Encoding
 

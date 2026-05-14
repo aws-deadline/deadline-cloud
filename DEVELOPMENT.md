@@ -49,7 +49,7 @@ For Rust-only work (no GUI), you can skip the venv and use
 | Run all tests (Rust + Python) | `make test` |
 | Run Rust tests only | `make test-rust` |
 | Run Python GUI tests only | `make test-python` |
-| Run single crate tests | `cargo test -p deadline-config` |
+| Run single crate tests | `cargo test -p deadline-lib` |
 | Review snapshot changes | `cargo insta review` |
 | Lint | `make lint` |
 | Format code | `cargo fmt` |
@@ -67,10 +67,12 @@ The CLI binary is at `target/debug/deadline` (or on PATH after `make`).
 deadline-cloud-rs/
 ├── crates/
 │   ├── deadline-cli/                # Binary — CLI commands, output formatting
-│   ├── deadline-api/                # AWS API calls, auth, session, telemetry
-│   ├── deadline-config/             # INI config read/write, setting resolution
-│   ├── deadline-job-bundle/         # Job bundle parsing, validation, submission
-│   ├── deadline-job-attachments/    # S3 transfer, hashing, manifests
+│   ├── deadline-lib/                # Unified library: config, API, bundles, attachments
+│   │   └── src/
+│   │       ├── api/                 # AWS API calls, auth, session, telemetry
+│   │       ├── attachments/         # S3 transfer, manifests, download/upload orchestration
+│   │       ├── bundle/              # Job bundle parsing, validation, submission
+│   │       └── config/              # INI config read/write, setting resolution
 │   ├── deadline-python-bindings/    # PyO3 module (deadline._native)
 │   └── deadline-test-server/        # Test-only wiremock stub server
 ├── gui/                             # Python Qt GUI (PySide6/qtpy)
@@ -89,10 +91,7 @@ deadline-cloud-rs/
 | Crate | What it does |
 |-------|-------------|
 | `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting. No business logic. |
-| `deadline-api` | All AWS Deadline Cloud API calls, session/credential management, auth, telemetry. |
-| `deadline-config` | INI config file I/O, hierarchical setting resolution. No AWS dependencies. |
-| `deadline-job-bundle` | Job bundle parsing, parameter validation, submission orchestration. |
-| `deadline-job-attachments` | Asset manifests, S3 upload/download, hash cache. Independent S3/STS clients. |
+| `deadline-lib` | Unified library: config (INI I/O), API (AWS SDK calls, auth, session), bundles (parsing, submission), attachments (S3 transfer, manifests). |
 | `deadline-python-bindings` | PyO3 extension module exposing Rust functions to Python for the GUI. |
 | `deadline-test-server` | Test-only. Wiremock stub server and `TestHarness` for CLI subprocess tests. |
 
@@ -100,15 +99,19 @@ deadline-cloud-rs/
 
 ```
 deadline-cli
-├── deadline-api → deadline-config
-├── deadline-job-bundle → deadline-api, deadline-job-attachments
-├── deadline-job-attachments → deadline-config
+├── deadline-lib
+├── openjd-snapshots (for types in queue sync-output)
 └── deadline-test-server (dev-dependency)
 
 deadline-python-bindings
-├── deadline-api, deadline-config
-├── deadline-job-bundle, deadline-job-attachments
+├── deadline-lib
 └── pyo3, pythonize
+
+deadline-lib
+├── openjd-snapshots (hashing, manifests, upload/download engine)
+├── openjd-expr (path mapping)
+├── aws-sdk-deadline, aws-sdk-s3, aws-sdk-sts
+└── (no dependency on CLI or bindings)
 ```
 
 ## How To...
@@ -118,9 +121,10 @@ deadline-python-bindings
 1. Create a new file in `crates/deadline-cli/src/commands/` (or add to
    an existing command group).
 2. Define the clap structs for arguments and subcommands.
-3. Implement the handler by calling functions from the library crates
-   (`deadline-api`, `deadline-job-bundle`, etc.). The CLI crate contains
-   no business logic — only argument parsing and output formatting.
+3. Implement the handler by calling functions from `deadline-lib`
+   modules (`deadline_lib::api`, `deadline_lib::bundle`, etc.). The CLI
+   crate contains no business logic — only argument parsing and output
+   formatting.
 4. Register the command in `crates/deadline-cli/src/main.rs`.
 5. Write Level 2 tests in `crates/deadline-cli/tests/cli/`. Use
    `TestHarness` to start a stub server and run the binary as a
@@ -135,17 +139,17 @@ Callers own their SDK calls — there are no thin wrapper functions.
 Call the SDK fluent builder directly at the call site:
 
 ```rust
-let client = deadline_api::session::deadline_client(config).await;
+let client = deadline_lib::api::session::deadline_client(config).await;
 let output = client.get_farm().farm_id(id).send().await
-    .map_err(|e| deadline_api::api::format_sdk_error(&e))?;
+    .map_err(|e| deadline_lib::api::api::format_sdk_error(&e))?;
 ```
 
 For paginated list operations, use the SDK paginator with
 `collect_paginated`:
 
 ```rust
-let client = deadline_api::session::deadline_client(config).await;
-let pages = deadline_api::client::collect_paginated(
+let client = deadline_lib::api::session::deadline_client(config).await;
+let pages = deadline_lib::api::client::collect_paginated(
     client.list_steps().farm_id(f).queue_id(q).job_id(j)
         .into_paginator().send()
 ).await?;

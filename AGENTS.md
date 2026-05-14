@@ -34,7 +34,7 @@ deadline (Rust binary)
 ```
 
 Key directories:
-- `crates/` — Rust crates (CLI, API, config, job-bundle, job-attachments, PyO3 bindings)
+- `crates/` — Rust crates (CLI, lib, PyO3 bindings, test-server)
 - `gui/` — Python GUI code (Qt widgets, dialogs, config shim, entry point)
 - `pyproject.toml` — maturin config for building the `deadline` Python package
 

@@ -22,19 +22,22 @@ STS clients with custom timeouts, signatures, and pool sizes.
 src/attachments/
 ├── mod.rs                  # Re-exports all public modules
 ├── models.rs               # Data types: storage profiles, attachment settings, conflict resolution
-├── asset_manifests.rs      # Manifest type bridge (AssetManifest ↔ openjd Snapshot), encode/decode
 ├── upload.rs               # Path grouping, manifest creation, S3 CAS upload orchestration
 ├── download.rs             # S3 CAS download orchestration, conflict resolution, mtime restoration
-├── caches.rs               # Re-exports openjd_snapshots::{HashCache, S3CheckCache}
+├── caches.rs               # Re-exports openjd_snapshots::{HashCache, S3CheckCache}, default_cache_dir
 ├── s3.rs                   # S3 client builder, STS account ID lookup
-├── api.rs                  # Deadline API calls for attachment/queue settings
-├── manifest_ops.rs         # CLI-facing: snapshot, diff, upload, download
+├── api.rs                  # Public API: read_manifests, attachment_download, attachment_upload
+├── manifest_ops.rs         # CLI-facing: snapshot, diff, merge, upload, download
 ├── diff.rs                 # Manifest diffing via openjd_snapshots::diff_snapshots
 ├── progress_tracker.rs     # Time-based progress reporting, cancellation, SummaryStatistics
 ├── path_mapping.rs         # Rule generation from storage profiles, delegates to openjd_expr
 ├── errors.rs               # JobAttachmentsError enum
 └── incremental_download.rs # Checkpoint persistence for resumable downloads
 ```
+
+Types used throughout: `openjd_snapshots::Snapshot` (manifest), `FileEntry`
+(file metadata), `HashAlgorithm`. No local wrapper types — openjd types flow
+directly through the system.
 
 ## Key Design Decisions
 
