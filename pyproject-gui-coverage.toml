@@ -1,8 +1,6 @@
 [tool.coverage.run]
 branch = true
 parallel = true
-source_pkgs = ["deadline"]
-include = ["*/deadline/client/ui/*"]
 plugins = ["coverage_conditional_plugin"]
 
 [tool.coverage.paths]
@@ -11,6 +9,7 @@ source = ["src/"]
 [tool.coverage.report]
 show_missing = true
 fail_under = 50
+include = ["src/deadline/client/ui/*"]
 
 [tool.coverage.coverage_conditional_plugin.rules]
 # This cannot be empty otherwise coverage-conditional-plugin crashes with:
