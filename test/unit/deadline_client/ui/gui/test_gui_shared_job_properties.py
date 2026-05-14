@@ -6,7 +6,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from unittest.mock import patch
 
 import pytest
@@ -102,7 +102,9 @@ class TestWidgetCreation:
 
     def test_initial_status_options(self, widget):
         """Initial status combo has READY and SUSPENDED."""
-        items = [widget.initial_status_box.itemText(i) for i in range(widget.initial_status_box.count())]
+        items = [
+            widget.initial_status_box.itemText(i) for i in range(widget.initial_status_box.count())
+        ]
         assert items == ["READY", "SUSPENDED"]
 
 

@@ -286,7 +286,7 @@ class TestOpenJDParametersWidget:
         widget = OpenJDParametersWidget(parameter_definitions=_grouped_params())
         qtbot.addWidget(widget)
 
-        groups = widget.findChildren(_JobTemplateGroupLayout)
+        groups: list = list(widget.findChildren(_JobTemplateGroupLayout))  # type: ignore[arg-type]
         assert len(groups) == 1
         assert groups[0].title() == "Resolution"
 

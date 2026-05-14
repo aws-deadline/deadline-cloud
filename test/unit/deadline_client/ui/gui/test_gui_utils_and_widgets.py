@@ -7,7 +7,6 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import warnings
-from unittest.mock import MagicMock
 
 import pytest
 

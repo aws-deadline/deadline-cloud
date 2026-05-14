@@ -365,50 +365,6 @@ Example prompts:
 See [MCP Guide](docs/mcp_guide.md) for more information.
 
 
-## Testing
-
-### Unit Tests
-
-The standard unit tests cover the non-GUI library and CLI code. They run with coverage enabled and exclude `deadline.client.ui`:
-
-```sh
-$ hatch run test
-```
-
-### GUI Unit Tests
-
-GUI unit tests validate the Qt-based submitter and settings dialogs using [pytest-qt](https://pytest-qt.readthedocs.io/) with an offscreen Qt platform (no display required). They are tracked under a separate coverage configuration (`pyproject-gui-coverage.toml`) that measures only the `deadline.client.ui` package.
-
-#### When to write a GUI unit test
-
-A GUI unit test is required when:
-
-- Adding or modifying a widget, dialog, or panel in `src/deadline/client/ui/`.
-- Changing user-facing behavior such as form validation, default values, enabled/disabled state, or signal/slot wiring.
-- Fixing a bug in the UI layer — the test should reproduce the bug and verify the fix.
-
-GUI unit tests are *not* required for cosmetic-only changes (stylesheets, spacing, icons) that do not alter functionality.
-
-#### How to run
-
-```sh
-# Run all GUI unit tests with coverage
-$ hatch run gui:test
-
-# Run a specific test file
-$ hatch run gui:test test/unit/deadline_client/ui/gui/test_settings_dialogue.py
-
-# Run a specific test by name
-$ hatch run gui:test -k "test_host_requirements"
-```
-
-#### Expectations
-
-- Tests must pass in offscreen mode (`QT_QPA_PLATFORM=offscreen`) — no real display or user interaction.
-- The GUI coverage threshold is currently **50%** of `deadline.client.ui`. This will increase as coverage improves.
-- Tests should use the `mock_deadline_backend` fixture (see `test/unit/deadline_client/ui/gui/conftest.py`) instead of mocking individual API calls, to ensure realistic service behavior.
-- Coverage reports are written to `build/coverage-gui/`.
-
 ## Code of Conduct
 
 This project has adopted the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct).

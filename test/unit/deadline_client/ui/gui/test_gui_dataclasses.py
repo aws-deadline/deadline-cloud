@@ -379,8 +379,8 @@ class TestCustomRequirements:
     def test_construct_with_dicts_converts_to_dataclasses(self):
         """Construction with dicts should convert them to dataclass instances."""
         req = CustomRequirements(
-            amounts=[{"name": "test_amount", "min": 1, "max": 10}],
-            attributes=[{"name": "test_attr", "option": "allOf", "values": ["v1"]}],
+            amounts=[{"name": "test_amount", "min": 1, "max": 10}],  # type: ignore[list-item]
+            attributes=[{"name": "test_attr", "option": "allOf", "values": ["v1"]}],  # type: ignore[list-item]
         )
         assert isinstance(req.amounts[0], CustomAmountRequirement)
         assert req.amounts[0].name == "test_amount"
@@ -390,12 +390,12 @@ class TestCustomRequirements:
     def test_construct_with_invalid_dict_amount_raises(self):
         """A dict with invalid amount data should raise during conversion."""
         with pytest.raises(ValueError, match="has no name"):
-            CustomRequirements(amounts=[{"name": ""}])
+            CustomRequirements(amounts=[{"name": ""}])  # type: ignore[list-item]
 
     def test_construct_with_invalid_dict_attribute_raises(self):
         """A dict with invalid attribute data should raise during conversion."""
         with pytest.raises(ValueError, match="has no name"):
-            CustomRequirements(attributes=[{"name": ""}])
+            CustomRequirements(attributes=[{"name": ""}])  # type: ignore[list-item]
 
     def test_iter_yields_amounts_and_attributes(self):
         """__iter__ should yield all amounts followed by all attributes."""
@@ -511,7 +511,7 @@ class TestHostRequirements:
     def test_construct_with_dicts_converts_os_requirements(self):
         """A dict for os_requirements should be converted to OsRequirements."""
         req = HostRequirements(
-            os_requirements={"operating_systems": ["linux", "windows"]},
+            os_requirements={"operating_systems": ["linux", "windows"]},  # type: ignore[arg-type]
         )
         assert isinstance(req.os_requirements, OsRequirements)
         assert req.os_requirements.operating_systems == ["linux", "windows"]
@@ -519,7 +519,7 @@ class TestHostRequirements:
     def test_construct_with_dicts_converts_hardware_requirements(self):
         """A dict for hardware_requirements should be converted to HardwareRequirements."""
         req = HostRequirements(
-            hardware_requirements={"cpu_min": 2, "cpu_max": 8},
+            hardware_requirements={"cpu_min": 2, "cpu_max": 8},  # type: ignore[arg-type]
         )
         assert isinstance(req.hardware_requirements, HardwareRequirements)
         assert req.hardware_requirements.cpu_min == 2
@@ -528,7 +528,7 @@ class TestHostRequirements:
     def test_construct_with_dicts_converts_custom_requirements(self):
         """A dict for custom_requirements should be converted to CustomRequirements."""
         req = HostRequirements(
-            custom_requirements={
+            custom_requirements={  # type: ignore[arg-type]
                 "amounts": [{"name": "a", "min": 1, "max": 10}],
                 "attributes": [{"name": "b", "option": "allOf", "values": ["x"]}],
             },
@@ -540,12 +540,12 @@ class TestHostRequirements:
     def test_construct_with_invalid_os_dict_raises(self):
         """A dict with invalid OS should raise ValueError."""
         with pytest.raises(ValueError, match="Operating system"):
-            HostRequirements(os_requirements={"operating_systems": ["bsd"]})
+            HostRequirements(os_requirements={"operating_systems": ["bsd"]})  # type: ignore[arg-type]
 
     def test_construct_with_invalid_hardware_dict_raises(self):
         """A dict with invalid hardware ranges should raise ValueError."""
         with pytest.raises(ValueError, match="Minimum cannot be higher"):
-            HostRequirements(hardware_requirements={"cpu_min": 16, "cpu_max": 4})
+            HostRequirements(hardware_requirements={"cpu_min": 16, "cpu_max": 4})  # type: ignore[arg-type]
 
     def test_serialize_with_os_requirements(self):
         """Serializing with OS requirements should produce attributes."""
@@ -555,9 +555,7 @@ class TestHostRequirements:
         )
         result = req.serialize()
         assert "attributes" in result
-        os_entry = next(
-            r for r in result["attributes"] if r["name"] == "attr.worker.os.family"
-        )
+        os_entry = next(r for r in result["attributes"] if r["name"] == "attr.worker.os.family")
         assert os_entry["anyOf"] == ["linux"]
 
     def test_serialize_with_hardware_requirements(self):
@@ -568,9 +566,7 @@ class TestHostRequirements:
         )
         result = req.serialize()
         assert "amounts" in result
-        cpu_entry = next(
-            r for r in result["amounts"] if r["name"] == "amount.worker.vcpu"
-        )
+        cpu_entry = next(r for r in result["amounts"] if r["name"] == "amount.worker.vcpu")
         assert cpu_entry["min"] == 4
         assert cpu_entry["max"] == 16
 
