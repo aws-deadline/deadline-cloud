@@ -425,6 +425,10 @@ pub async fn download_files_from_manifests(
         )
         .await
         .map_err(|e| {
+            // TODO(#31): openjd's download engine returns generic S3 errors.
+            // We previously provided KMS-specific guidance on 403 errors
+            // (e.g., "ensure kms:Decrypt permission"). Consider wrapping
+            // SnapshotError::S3 to detect KMS errors and add guidance.
             JobAttachmentsError::AssetSync(format!("Download failed: {e}"))
         })?;
 

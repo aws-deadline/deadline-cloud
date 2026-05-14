@@ -122,18 +122,20 @@ Deleted ~600 lines. Tests: 314→305.
 
 ---
 
-## Next: Step 11.5 — Collapse Type Bridge
+## Next: Step 11 — Collapse Type Bridge
 
 Use openjd types directly (`Snapshot`, `FileEntry`, `hash::hash_data`)
 instead of our wrapper types (`AssetManifest`, `ManifestPath`, `hash_data`).
-See `specs/crate-restructure.md` § 11.5 for full plan.
+See `specs/crate-restructure.md` § 11 for full plan.
 
-**Final counts (2026-05-14, post-Step 10):**
+**Status:** Planning complete. Awaiting go/no-go.
 
-| Crate | Tests | Delta vs pre-merge |
-|-------|-------|-----|
-| `deadline-lib` | 792 | = 97+154+249+292 (sum of 4 old crates) |
-| `deadline-cli` | 499 | 0 |
+**Baseline (2026-05-14, pre-Step 11):**
+
+| Crate | Tests | Status |
+|-------|-------|--------|
+| `deadline-lib` | 816 | ✅ All pass |
+| `deadline-cli` | 499 | ✅ All pass |
 
 ---
 

@@ -16,7 +16,8 @@ This plan addresses three problems in order:
 1. **Duplicated code** — replace with openjd-rs (Steps 1–8)
 2. **Blurred CLI/library boundary** — separate presentation from logic (Step 9)
 3. **Crate consolidation** — merge small crates (Step 10)
-4. **Non-idiomatic patterns** — adopt Rust conventions (Step 11)
+4. **Type bridge** — use openjd types directly, delete wrappers (Step 11)
+5. **Non-idiomatic patterns** — adopt Rust conventions (Step 12)
 
 ## Constraints
 
@@ -295,54 +296,7 @@ a feature-gated module. Decide after Step 7 when final shape is clear.
 
 ---
 
-## Step 11: Redesign (Idiomatic Patterns)
-
-Applied to remaining code after Steps 1–10.
-
-### 11.1 Options structs with Default
-
-```rust
-// Before: positional params, hard to extend
-pub fn download_files(manifests: &[AssetManifest], root: &str, conflict: FileConflictResolution,
-    s3_client: &S3Client, ...) -> Result<...>
-
-// After: options struct
-pub struct DownloadOptions {
-    pub conflict_resolution: FileConflictResolution,
-    pub max_concurrent: usize,
-    pub on_progress: Option<Box<dyn Fn(&DownloadStats) -> bool + Send>>,
-}
-impl Default for DownloadOptions { ... }
-```
-
-### 11.2 Error propagation (no silent swallowing)
-
-```rust
-// Before
-conn.execute(...).unwrap_or_else(|e| { log::warn!("...{e}"); 0 });
-
-// After
-conn.execute(...).map_err(|e| AttachmentError::Cache(e.to_string()))?;
-```
-
-### 11.3 Typed enums over string matching
-
-```rust
-// Before
-let val = get_setting("defaults.job_attachments_file_system");
-if val == "COPIED" { ... }
-
-// After: already parsed by CLI layer
-pub enum AttachmentFileSystem { Copied, Virtual }
-```
-
-### 11.4 Parallelism
-
-After Step 7, openjd-snapshots handles parallel hashing and upload via tokio.
-Remaining sequential code in our orchestration layer is fine — it's I/O
-coordination, not CPU work.
-
-### 11.5 Collapse type bridge — use openjd types directly
+## Step 11: Collapse Type Bridge — Use openjd Types Directly
 
 **Goal:** Delete `AssetManifest`, `ManifestPath`, `HashAlgorithm`,
 `ManifestVersion`, and all conversion code. Use `openjd_snapshots::Snapshot`,
@@ -391,12 +345,61 @@ Step 7 (upload/download engine)  ← DONE
     ↓
 Step 9 (CLI/library boundary)  ← DONE
     ↓
-Step 10 (crate merge → deadline-lib)  ← NEXT
+Step 10 (crate merge → deadline-lib)  ← DONE
     ↓
-Step 11.5 (collapse type bridge — use openjd types directly)
+Step 11 (collapse type bridge — use openjd types directly)  ← NEXT
     ↓
-Step 11.1–11.4 (idiomatic patterns)  ← ongoing, interleaved
+Step 12 (idiomatic patterns)  ← ongoing, interleaved
 ```
+
+---
+
+## Step 12: Redesign (Idiomatic Patterns)
+
+Applied to remaining code after Steps 1–11.
+
+### 12.1 Options structs with Default
+
+```rust
+// Before: positional params, hard to extend
+pub fn download_files(manifests: &[AssetManifest], root: &str, conflict: FileConflictResolution,
+    s3_client: &S3Client, ...) -> Result<...>
+
+// After: options struct
+pub struct DownloadOptions {
+    pub conflict_resolution: FileConflictResolution,
+    pub max_concurrent: usize,
+    pub on_progress: Option<Box<dyn Fn(&DownloadStats) -> bool + Send>>,
+}
+impl Default for DownloadOptions { ... }
+```
+
+### 12.2 Error propagation (no silent swallowing)
+
+```rust
+// Before
+conn.execute(...).unwrap_or_else(|e| { log::warn!("...{e}"); 0 });
+
+// After
+conn.execute(...).map_err(|e| AttachmentError::Cache(e.to_string()))?;
+```
+
+### 12.3 Typed enums over string matching
+
+```rust
+// Before
+let val = get_setting("defaults.job_attachments_file_system");
+if val == "COPIED" { ... }
+
+// After: already parsed by CLI layer
+pub enum AttachmentFileSystem { Copied, Virtual }
+```
+
+### 12.4 Parallelism
+
+After Step 7, openjd-snapshots handles parallel hashing and upload via tokio.
+Remaining sequential code in our orchestration layer is fine — it's I/O
+coordination, not CPU work.
 
 ---
 

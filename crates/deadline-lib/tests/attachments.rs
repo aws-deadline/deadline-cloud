@@ -14,5 +14,7 @@ mod download_filters;
 mod manifest_ops;
 #[path = "attachments/manifest_s3.rs"]
 mod manifest_s3;
+#[path = "attachments/openjd_contract.rs"]
+mod openjd_contract;
 #[path = "attachments/upload_s3.rs"]
 mod upload_s3;
