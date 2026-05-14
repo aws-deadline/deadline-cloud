@@ -22,6 +22,9 @@ impl SubmissionHandler for CliSubmissionHandler {
     fn should_continue(&self) -> bool {
         crate::common::should_continue()
     }
+    fn on_upload_summary(&self, stats: &deadline_job_attachments::progress_tracker::SummaryStatistics) {
+        println!("{}", stats.format_upload_summary());
+    }
 }
 
 static OPENJD_IDENT_RE: LazyLock<Regex> =

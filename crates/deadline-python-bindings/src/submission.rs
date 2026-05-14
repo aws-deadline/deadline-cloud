@@ -103,6 +103,14 @@ pub fn create_job_from_job_bundle(
                 None => true,
             }
         }
+        fn on_upload_summary(&self, stats: &deadline_job_attachments::progress_tracker::SummaryStatistics) {
+            if let Some(ref cb) = self.on_print {
+                let msg = stats.format_upload_summary();
+                Python::with_gil(|py| {
+                    let _ = cb.call1(py, (msg,));
+                });
+            }
+        }
     }
 
     let handler = PySubmissionHandler {

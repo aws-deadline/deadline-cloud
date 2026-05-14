@@ -1,38 +1,7 @@
-/// Path utilities: file size formatting, path summarization, sequence detection.
+/// Path summarization and sequence detection for CLI output formatting.
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Convert a byte count to a human-readable string (e.g., "1.5 GB").
-///
-/// Uses SI prefixes (1 KB = 1000 bytes). Values close to a threshold are
-/// rounded up (e.g., 999999 bytes → "1.0 MB", not "1000.0 KB").
-pub fn human_readable_file_size(size_in_bytes: u64) -> String {
-    let postfixes = ["B", "KB", "MB", "GB", "TB", "PB"];
-    let mut converted: f64 = size_in_bytes as f64;
-    let mut rounded: f64;
-
-    for postfix in &postfixes {
-        // Round to 2 decimal places
-        rounded = (converted * 100.0).round() / 100.0;
-
-        if rounded < 1000.0 {
-            // For bytes, show as integer; for larger units, match Python's
-            // display: round to 2 decimals, strip trailing zeros
-            if *postfix == "B" {
-                return format!("{} {postfix}", rounded as u64);
-            }
-            let s = format!("{rounded:.2}");
-            let s = s.trim_end_matches('0').trim_end_matches('.');
-            return format!("{s} {postfix}");
-        }
-        converted /= 1000.0;
-    }
-
-    // Exceeded PB — show as large PB value
-    let rounded = (converted * 100.0).round() / 100.0;
-    let s = format!("{rounded:.2}");
-    let s = s.trim_end_matches('0').trim_end_matches('.');
-    format!("{s} {}", postfixes.last().expect("non-empty"))
-}
+use deadline_job_attachments::progress_tracker::human_readable_file_size;
 
 // ---------------------------------------------------------------------------
 // Numbered path detection and sequence grouping
@@ -56,8 +25,6 @@ struct NumberedPath {
 
 impl NumberedPath {
     fn new(path: &str) -> Self {
-        // Regex: optional non-digit prefix, then digits, then optional .extension
-        // We do this without the regex crate for simplicity.
         if let Some((prefix, num_str, ext)) = parse_numbered_path(path) {
             let padding_min = if num_str.starts_with('0') {
                 num_str.len() as i32
@@ -89,12 +56,9 @@ impl NumberedPath {
 }
 
 /// Parse a path into (prefix, `number_string`, extension) if it contains a trailing number.
-/// Matches the regex: `^(.*\D|)(\d+)(\.[^/\\]+)?$`
 fn parse_numbered_path(path: &str) -> Option<(String, String, String)> {
-    // Find the extension: last '.' that isn't preceded by '/' or '\'
     let (base, ext) = if let Some(dot_pos) = path.rfind('.') {
         let after_dot = &path[dot_pos..];
-        // Extension must not contain path separators
         if after_dot.contains('/') || after_dot.contains('\\') {
             (path, "")
         } else {
@@ -104,14 +68,12 @@ fn parse_numbered_path(path: &str) -> Option<(String, String, String)> {
         (path, "")
     };
 
-    // Find trailing digits in the base
     let digit_start = base
         .bytes()
         .rposition(|b| !b.is_ascii_digit())
         .map_or(0, |pos| pos + 1);
 
     if digit_start >= base.len() {
-        // No digits found
         return None;
     }
 
@@ -126,13 +88,11 @@ fn parse_numbered_path(path: &str) -> Option<(String, String, String)> {
 }
 
 /// Divide a group of numbered paths with the same grouping key into
-/// sub-groups with consistent padding. Groups of size ≤ 2 are treated
-/// as individual paths (not sequences).
+/// sub-groups with consistent padding.
 fn divide_numbered_path_group(group: &mut Vec<NumberedPath>) -> BTreeMap<String, BTreeSet<i64>> {
     let mut result = BTreeMap::new();
 
     while !group.is_empty() {
-        // Groups of 1 or 2 → treat as individual paths
         if group.len() <= 2 {
             for np in group.drain(..) {
                 result.insert(np.path.clone(), BTreeSet::new());
@@ -140,7 +100,6 @@ fn divide_numbered_path_group(group: &mut Vec<NumberedPath>) -> BTreeMap<String,
             break;
         }
 
-        // The largest minimum padding is likely the right padding for the group
         let padding = group
             .iter()
             .map(|np| np.padding_min)
@@ -212,28 +171,22 @@ impl PathSummary {
 }
 
 /// Identify numbered sequences within a list of paths.
-///
-/// Returns a sorted list of `PathSummary` objects. Numbered files with
-/// consistent padding are grouped into sequences; others are listed individually.
 pub fn summarize_paths_by_sequence(paths: &[&str]) -> Vec<PathSummary> {
     if paths.is_empty() {
         return vec![];
     }
 
-    // Group by the NumberedPath grouping key
     let mut raw_groups: BTreeMap<String, Vec<NumberedPath>> = BTreeMap::new();
     for path in paths {
         let np = NumberedPath::new(path);
         raw_groups.entry(np.grouping.clone()).or_default().push(np);
     }
 
-    // Divide groups with inconsistent padding, then collect results
     let mut grouped: BTreeMap<String, BTreeSet<i64>> = BTreeMap::new();
     for (_key, mut group) in raw_groups {
         grouped.extend(divide_numbered_path_group(&mut group));
     }
 
-    // Convert to PathSummary, sorted by path
     grouped
         .into_iter()
         .map(|(path, index_set)| {
@@ -249,10 +202,7 @@ pub fn summarize_paths_by_sequence(paths: &[&str]) -> Vec<PathSummary> {
 /// Create a human-readable summary of a list of file paths.
 ///
 /// Groups files by common directory prefix and limits output to
-/// `max_entries` lines. Matches Python's `summarize_path_list`.
-///
-/// If `total_size_by_path` is provided, sizes are shown per entry and
-/// entries are sorted by size descending (matching Python).
+/// `max_entries` lines.
 #[allow(clippy::implicit_hasher, reason = "only used with default HashMap")]
 pub fn summarize_path_list(
     paths: &[&str],
@@ -263,7 +213,6 @@ pub fn summarize_path_list(
         return String::new();
     }
 
-    // Group paths by parent directory, tracking sizes per directory and per file
     let mut by_dir: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut dir_sizes: BTreeMap<String, u64> = BTreeMap::new();
     let mut file_sizes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
@@ -285,7 +234,6 @@ pub fn summarize_path_list(
         }
     }
 
-    // Sort directories: by size descending if sizes provided, otherwise by file count descending
     let mut dir_order: Vec<String> = by_dir.keys().cloned().collect();
     if total_size_by_path.is_some() {
         dir_order.sort_by(|a, b| {
@@ -311,7 +259,6 @@ pub fn summarize_path_list(
         let total = files.len();
         let file_word = if total == 1 { "file" } else { "files" };
 
-        // Summarize the files within this directory by sequence
         let file_refs: Vec<&str> = files.iter().map(String::as_str).collect();
         let summaries = summarize_paths_by_sequence(&file_refs);
 
@@ -401,18 +348,6 @@ pub fn int_set_to_range_expr(int_set: &BTreeSet<i64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_case::test_case;
-
-    #[test_case(0, "0 B" ; "zero bytes")]
-    #[test_case(999, "999 B" ; "sub-kilobyte")]
-    #[test_case(1000, "1 KB" ; "exactly 1 KB")]
-    #[test_case(999_999, "1 MB" ; "rounds up to 1 MB")]
-    #[test_case(1_000_000, "1 MB" ; "exactly 1 MB")]
-    #[test_case(1_500_000_000, "1.5 GB" ; "fractional GB")]
-    #[test_case(2_500_000_000_000_000, "2.5 PB" ; "petabytes")]
-    fn human_readable_file_size_formats(input: u64, expected: &str) {
-        assert_eq!(human_readable_file_size(input), expected);
-    }
 
     #[test]
     fn sequence_of_numbered_files() {
@@ -445,7 +380,6 @@ mod tests {
             "readme.txt",
         ];
         let result = summarize_paths_by_sequence(&paths);
-        // Should have 2 entries: one sequence + one individual file
         assert_eq!(result.len(), 2);
         let sequence = result.iter().find(|s| !s.index_set.is_empty()).unwrap();
         let individual = result.iter().find(|s| s.index_set.is_empty()).unwrap();
@@ -459,7 +393,6 @@ mod tests {
         let paths = vec!["frame_001.png", "frame_002.png", "frame_010.png"];
         let result = summarize_paths_by_sequence(&paths);
         assert_eq!(result.len(), 1);
-        // The pattern should use %03d padding
         assert!(
             result[0].path.contains("%03d"),
             "expected %03d padding in pattern, got: {}",
@@ -472,7 +405,6 @@ mod tests {
         let paths = vec!["sequence_v1", "sequence_v2", "sequence_v907"];
         let result = summarize_paths_by_sequence(&paths);
         assert_eq!(result.len(), 1);
-        // Non-padded numbers use %d
         assert!(
             result[0].path.contains("%d"),
             "expected %d in pattern, got: {}",
@@ -491,7 +423,6 @@ mod tests {
         assert_eq!(result[0].file_count, 1);
     }
 
-    // Helper function: int_set_to_range_expr
     #[test]
     fn range_expr_consecutive() {
         let set: BTreeSet<i64> = (1..=5).collect();

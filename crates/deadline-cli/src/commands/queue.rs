@@ -1498,7 +1498,7 @@ async fn incremental_output_download(
                 .map(|p| (p.path.clone(), p.size))
                 .collect();
             let summary =
-                deadline_api::path_utils::summarize_path_list(&path_refs, 30, Some(&size_by_path));
+                crate::path_utils::summarize_path_list(&path_refs, 30, Some(&size_by_path));
             eprint!("{summary}");
         }
         eprintln!();

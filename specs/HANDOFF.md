@@ -50,6 +50,15 @@ Reverted `FileSystemLocation.path` to `String` (remote machine path, not local).
 Eliminated `bundle_dir_str` shim — all internal functions now take `&Path`.
 Tests: 294/249/168/492 unchanged.
 
+**Step 9.5 — Presentation utilities (commit `be667f9`):**
+Removed `impl Display for SummaryStatistics` from library. Added
+`on_upload_summary(&SummaryStatistics)` to `SubmissionHandler` trait — CLI
+formats the summary. Deleted duplicate `human_readable_file_size` from
+`deadline-api::path_utils`. Moved `summarize_path_list`, sequence detection,
+`PathSummary` to `deadline-cli::path_utils`. Deleted `deadline-api::path_utils`
+module entirely. -170 lines, +60 lines.
+Tests: 292/249/154/499.
+
 **Step 9.2 — Progress reporting boundary (commit `2a68161`):**
 Removed `ProgressReportMetadata` struct and pre-formatted `progress_message`
 from library API. Simplified callback type from `Fn(ProgressReportMetadata) -> bool`
@@ -105,7 +114,7 @@ Deleted ~600 lines. Tests: 314→305.
 
 ---
 
-## Next: Step 9 continued — Progress & Interaction
+## Next: Step 9.5 — Presentation Utilities
 
 Step 9 (CLI/Library Boundary) sub-step order and status:
 
@@ -115,37 +124,27 @@ Step 9 (CLI/Library Boundary) sub-step order and status:
 | 9.2 | Progress reporting (library returns raw stats) | ✅ Done |
 | 9.3 | User interaction (remove callbacks, return decision points) | ✅ Done |
 | 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | ✅ Done |
-| 9.5 | Presentation utilities (move formatting to CLI) | **Next** |
+| 9.5 | Presentation utilities (move formatting to CLI) | ✅ Done |
 
-**9.4** is next: convert `&str`/`String` path parameters to `&Path`/`PathBuf`
-across all library crates.
+**9.5** ✅ Complete (commit `be667f9`): deduplicated `human_readable_file_size`,
+moved CLI-only presentation code out of library crates, removed `Display`
+impl from `SummaryStatistics`, added `on_upload_summary` to `SubmissionHandler`.
 
-**Baseline (2026-05-14, pre-9.4):**
+**Final counts (2026-05-14, post-9.5):**
 
-| Crate | Tests | Status |
-|-------|-------|--------|
-| `deadline-job-attachments` | 294 | ✅ All pass |
-| `deadline-job-bundle` | 249 | ✅ All pass |
-| `deadline-api` | 168 | ✅ All pass |
-| `deadline-cli` | 492 | ✅ All pass |
+| Crate | Tests | Delta |
+|-------|-------|-------|
+| `deadline-job-attachments` | 292 | -2 (Display tests removed) |
+| `deadline-job-bundle` | 249 | 0 |
+| `deadline-api` | 154 | -14 (path_utils moved to CLI) |
+| `deadline-cli` | 499 | +7 (path summarization tests) |
 
-**9.4 Plan (assessed: HIGH complexity, ~138 call sites, mechanical):**
+**9.5 Plan:** ✅ Complete — see commit `be667f9`.
 
-Phased direct swap (no strangler fig — changes are purely type-level):
-
-- **Phase A:** `deadline-job-attachments` — struct fields (`AssetRootGroup.root_path`,
-  `AssetRootManifest.root_path`, `ManifestSnapshot`, `ManifestMergeResult`,
-  `ManifestDownloadEntry`, `FileSystemLocation.path`) + functions (`glob_files`,
-  `set_root_path`, `matches_any_filter` stays `&str`)
-- **Phase B:** `deadline-job-bundle` — `SubmitJobParams.job_bundle_dir/.debug_snapshot_dir/.known_asset_paths`,
-  `HookManager`, `HookMetadata.job_bundle_dir`, `validate_directory_symlink_containment`,
-  `generate_hooks_confirmation_message`
-- **Phase C:** `deadline-cli` + `deadline-python-bindings` callers
-
-Keep as `String`: `ManifestPath.path` (codec), `PathMappingRule` fields (cross-platform),
-`UploadManifestInfo.output_manifest_path` (S3 key), `PathSummary.path` (display).
-
-**Status:** ✅ Complete (commit `18155ae`).
+**Callers updated:** 7 sites
+**Tests deleted:** 2 (Display impl tests)
+**Tests moved:** 7 (path_utils → deadline-cli)
+**Blockers:** None
 
 ---
 
@@ -167,6 +166,7 @@ Keep as `String`: `ManifestPath.path` (codec), `PathMappingRule` fields (cross-p
 | 9.2 | Progress reporting (simplify callback API) | `2a68161` |
 | 9.3 | User interaction (SubmissionHandler trait) | `ef6b13e` |
 | 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | `18155ae` |
+| 9.5 | Presentation utilities (move to CLI) | `be667f9` |
 
 ---
 

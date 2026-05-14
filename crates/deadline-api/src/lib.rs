@@ -4,7 +4,6 @@ pub mod client;
 pub mod errors;
 pub mod job_monitoring;
 pub mod log_retrieval;
-pub mod path_utils;
 pub mod queue_parameters;
 pub mod responses;
 pub mod session;

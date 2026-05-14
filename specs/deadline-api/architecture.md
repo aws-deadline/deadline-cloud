@@ -51,7 +51,6 @@ src/
 ├── queue_parameters.rs # Queue environment parameter extraction
 ├── errors.rs           # DeadlineError enum
 ├── submitter_info.rs   # Submitter metadata (name, version, DCC info)
-├── path_utils.rs       # File size formatting, path summarization
 ├── telemetry.rs        # Background telemetry client
 ├── type_conversions.rs # Nested SDK type → Value helpers (shared by response structs)
 ├── responses.rs        # Serializable response structs (From<Output> impls)

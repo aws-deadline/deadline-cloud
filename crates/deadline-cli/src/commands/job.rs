@@ -1595,7 +1595,8 @@ async fn download_input_impl(
     include_patterns: Option<&[String]>,
     match_paths_by: &str,
 ) -> Result<(), CliError> {
-    use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
+    use deadline_job_attachments::progress_tracker::human_readable_file_size;
+    use crate::path_utils::summarize_path_list;
     use deadline_job_attachments::download::InputDownloader;
     use deadline_job_attachments::models::{
         Attachments, FileConflictResolution, JobAttachmentS3Settings, ManifestProperties,
@@ -2541,7 +2542,8 @@ pub(crate) async fn download_output_impl(
     include_patterns: Option<&[String]>,
     match_paths_by: &str,
 ) -> Result<(), CliError> {
-    use deadline_api::path_utils::{human_readable_file_size, summarize_path_list};
+    use deadline_job_attachments::progress_tracker::human_readable_file_size;
+    use crate::path_utils::summarize_path_list;
     use deadline_job_attachments::download::OutputDownloader;
     use deadline_job_attachments::models::{
         FileConflictResolution, JobAttachmentS3Settings, PathFormat,

@@ -206,7 +206,7 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                     serde_json::to_string(&stats.stats).unwrap_or_default()
                 );
             } else {
-                println!("{}", stats.stats);
+                println!("{}", stats.stats.format_upload_summary());
             }
             Ok(())
         }

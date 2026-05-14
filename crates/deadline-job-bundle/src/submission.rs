@@ -257,6 +257,8 @@ pub trait SubmissionHandler: Send + Sync {
     fn confirm(&self, msg: &str, default: bool) -> bool;
     /// Check whether the operation should continue (cancellation signal).
     fn should_continue(&self) -> bool;
+    /// Called with raw upload statistics. Implementors format as needed.
+    fn on_upload_summary(&self, _stats: &deadline_job_attachments::progress_tracker::SummaryStatistics) {}
 }
 
 /// Parameters for job submission.
@@ -708,7 +710,7 @@ pub async fn create_job_from_job_bundle(
                 } else {
                     "s"
                 },
-                deadline_api::path_utils::human_readable_file_size(upload_group.total_input_bytes),
+                deadline_job_attachments::progress_tracker::human_readable_file_size(upload_group.total_input_bytes),
             ));
 
             let cache_dir = config_file::get_cache_directory();
@@ -836,10 +838,7 @@ pub async fn create_job_from_job_bundle(
             let (upload_summary, attachments) = upload_result?;
 
             if upload_summary.processed_files > 0 {
-                handler.on_message("Upload Summary:");
-                for line in upload_summary.to_string().lines() {
-                    handler.on_message(&format!("    {line}"));
-                }
+                handler.on_upload_summary(&upload_summary);
             }
 
             // F5: Emit upload summary telemetry

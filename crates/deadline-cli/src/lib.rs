@@ -7,6 +7,7 @@
 
 pub mod commands;
 pub mod common;
+pub mod path_utils;
 
 use clap::Parser;
 use log::debug;

@@ -1,4 +1,3 @@
-use std::fmt;
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -106,34 +105,24 @@ impl SummaryStatistics {
             0.0
         };
     }
-}
 
-impl fmt::Display for SummaryStatistics {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let file_word = if self.processed_files == 1 {
-            "file"
-        } else {
-            "files"
-        };
-        write!(
-            f,
-            "Processed {} {} totaling {}.\n\
-             Skipped re-processing {} files totaling {}.\n\
-             Total processing time of {} seconds at {}/s.\n",
-            self.processed_files,
-            file_word,
-            human_readable_file_size(self.processed_bytes),
-            self.skipped_files,
-            human_readable_file_size(self.skipped_bytes),
-            round_to_5(self.total_time),
-            human_readable_file_size(self.transfer_rate as u64),
+    /// Format as a multi-line upload summary string for user display.
+    pub fn format_upload_summary(&self) -> String {
+        let file_word = if self.processed_files == 1 { "file" } else { "files" };
+        let total_time = (self.total_time * 100_000.0).round() / 100_000.0;
+        format!(
+            "Upload Summary:\n\
+             \x20   Processed {} {} totaling {}.\n\
+             \x20   Skipped re-processing {} files totaling {}.\n\
+             \x20   Total processing time of {} seconds at {}/s.",
+            self.processed_files, file_word, human_readable_file_size(self.processed_bytes),
+            self.skipped_files, human_readable_file_size(self.skipped_bytes),
+            total_time, human_readable_file_size(self.transfer_rate as u64),
         )
     }
 }
 
-fn round_to_5(v: f64) -> f64 {
-    (v * 100_000.0).round() / 100_000.0
-}
+
 
 // --- DownloadSummaryStatistics ---
 
@@ -522,46 +511,6 @@ mod tests {
         assert!((s1.transfer_rate - 2000.0 / 3.0).abs() < 0.01);
     }
 
-    #[test]
-    fn summary_statistics_display_multiple_files() {
-        let stats = SummaryStatistics {
-            total_time: 1.23456,
-            total_files: 10,
-            total_bytes: 5000,
-            processed_files: 7,
-            processed_bytes: 3500,
-            skipped_files: 3,
-            skipped_bytes: 1500,
-            transfer_rate: 2845.52,
-        };
-        let output = stats.to_string();
-        assert!(output.contains("Processed 7 files totaling"));
-        assert!(output.contains("Skipped re-processing 3 files totaling"));
-        assert!(output.contains("Total processing time of 1.23456 seconds"));
-    }
-
-    #[test]
-    fn summary_statistics_display_singular_file() {
-        let stats = SummaryStatistics {
-            total_time: 0.5,
-            total_files: 1,
-            total_bytes: 100,
-            processed_files: 1,
-            processed_bytes: 100,
-            skipped_files: 0,
-            skipped_bytes: 0,
-            transfer_rate: 200.0,
-        };
-        let output = stats.to_string();
-        assert!(
-            output.contains("Processed 1 file totaling"),
-            "expected singular 'file', got: {output}"
-        );
-        assert!(
-            !output.contains("1 files"),
-            "should not have plural 'files' for count 1"
-        );
-    }
 
     #[test]
     fn track_progress_file_done_increments_files_and_bytes() {
