@@ -1,11 +1,27 @@
 use clap::Subcommand;
 use deadline_config::config_file;
-use deadline_job_bundle::{SubmitJobParams, create_job_from_job_bundle};
+use deadline_job_bundle::{SubmissionHandler, SubmitJobParams, create_job_from_job_bundle};
 use regex::Regex;
 use std::sync::LazyLock;
 
 use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
+
+/// CLI handler: prints messages to stdout, confirms via stdout + sigint check.
+struct CliSubmissionHandler;
+
+impl SubmissionHandler for CliSubmissionHandler {
+    fn on_message(&self, msg: &str) {
+        println!("{msg}");
+    }
+    fn confirm(&self, msg: &str, _default: bool) -> bool {
+        println!("{msg}");
+        crate::common::should_continue()
+    }
+    fn should_continue(&self) -> bool {
+        crate::common::should_continue()
+    }
+}
 
 static OPENJD_IDENT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").expect("valid regex"));
@@ -278,7 +294,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 force_s3_check: resolved_force_s3_check,
                 debug_snapshot_dir: effective_snapshot_dir,
                 config: &config,
-                print_callback: Box::new(|msg| println!("{msg}")),
+                handler: &CliSubmissionHandler,
                 hashing_progress_callback: Some(Box::new(move |processed, total| {
                     let pct = if total > 0 { processed * 100 / total } else { 100 };
                     hash_progress
@@ -294,11 +310,6 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                         .expect("lock poisoned")
                         .callback(pct);
                     true
-                })),
-                continue_callback: Some(Box::new(crate::common::should_continue)),
-                interactive_confirmation_callback: Some(Box::new(|msg, _default| {
-                    println!("{msg}");
-                    crate::common::should_continue()
                 })),
                 telemetry: Some(&telemetry),
             };

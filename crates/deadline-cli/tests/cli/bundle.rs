@@ -1063,8 +1063,7 @@ async fn bundle_submit_failure_still_records_submission_event() {
 
 /// When --yes is NOT passed and there are attachments, the CLI should show
 /// an upload summary and prompt for confirmation. Since stdin is not a TTY
-/// in tests, the CLI should cancel (matching Python's behavior when
-/// `interactive_confirmation_callback` is None).
+/// in tests, the handler's `confirm` returns false (no interactive input).
 #[tokio::test]
 async fn bundle_submit_shows_upload_confirmation_prompt() {
     let harness = TestHarness::new().await;

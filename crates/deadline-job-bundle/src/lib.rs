@@ -6,4 +6,4 @@ pub mod submission;
 
 // Re-export key types for convenience
 pub use submission::AssetReferences;
-pub use submission::{SubmitJobParams, create_job_from_job_bundle};
+pub use submission::{SubmissionHandler, SubmitJobParams, create_job_from_job_bundle};

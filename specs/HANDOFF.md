@@ -10,7 +10,7 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## Current Status
 
-**Step 9a (Config Resolution):** ✅ Complete. No library crate reads config from disk.
+**Step 9.1 (Config Resolution):** ✅ Complete. No library crate reads config from disk.
 
 **Baseline (2026-05-13):**
 
@@ -25,7 +25,15 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## What's Done (this session, 2026-05-14)
 
-**Step 9b — Progress reporting boundary (commit `2a68161`):**
+**Step 9.3 — User interaction boundary (commit `ef6b13e`):**
+Replaced `print_callback`, `continue_callback`, and
+`interactive_confirmation_callback` in `SubmitJobParams` with a
+`SubmissionHandler` trait (`on_message`, `confirm`, `should_continue`).
+`HookManager` now takes `&dyn SubmissionHandler`. Deleted `ConfirmFn` type.
+Hook messages moved from stderr to stdout (6 snapshots updated).
+Tests: 294/249/168/492 unchanged.
+
+**Step 9.2 — Progress reporting boundary (commit `2a68161`):**
 Removed `ProgressReportMetadata` struct and pre-formatted `progress_message`
 from library API. Simplified callback type from `Fn(ProgressReportMetadata) -> bool`
 to `Fn(u64, u64) -> bool` (processed_bytes, total_bytes). Removed 6 dead
@@ -36,12 +44,12 @@ to `Fn(u64, u64) -> bool` (processed_bytes, total_bytes). Removed 6 dead
 
 ## What's Done (previous session, 2026-05-13)
 
-**Step 9a Phase C — Config resolution for deadline-api (commit `7ba0287`):**
+**Step 9.1 Phase C — Config resolution for deadline-api (commit `7ba0287`):**
 Removed `Option<&IniConfig>` from all 39 deadline-api function signatures.
 Deleted 5 `get_setting_from_disk` fallback calls. All library crates now
 require callers to provide config — no library crate reads config from disk.
 
-**Step 9a Phase A+B — Config resolution (commit `7e0ca66`):**
+**Step 9.1 Phase A+B — Config resolution (commit `7e0ca66`):**
 Removed `Option<&IniConfig>` from `deadline-job-attachments` and
 `deadline-job-bundle` library APIs. Functions now require `&IniConfig`
 (caller must provide). Deleted `get_setting_from_disk` fallback from
@@ -86,23 +94,22 @@ Step 9 (CLI/Library Boundary) sub-step order and status:
 
 | Sub-step | What | Status |
 |----------|------|--------|
-| 9a | Config resolution (no disk reads in library) | ✅ Done |
-| 9b | Progress reporting (library returns raw stats) | ✅ Done |
-| 9c | User interaction (remove callbacks, return decision points) | **Next** |
-| 9d | Path types (`&str` → `&Path`/`PathBuf`) | Not started |
-| 9e | Presentation utilities (move formatting to CLI) | Not started |
+| 9.1 | Config resolution (no disk reads in library) | ✅ Done |
+| 9.2 | Progress reporting (library returns raw stats) | ✅ Done |
+| 9.3 | User interaction (remove callbacks, return decision points) | ✅ Done |
+| 9.4 | Path types (`&str` → `&Path`/`PathBuf`) | **Next** |
+| 9.5 | Presentation utilities (move formatting to CLI) | Not started |
 
-**9c** is next: library functions currently accept `print_callback`,
-`continue_callback`, and `interactive_confirmation_callback`. Change to
-return decision points (e.g. `SubmitAction::NeedsConfirmation`) so the
-CLI owns all user interaction. See `specs/crate-restructure.md` Step 9.2.
+**9.4** is next: convert `&str`/`String` path parameters to `&Path`/`PathBuf`
+across all library crates. ~80 signatures to update.
 
-**Baseline (2026-05-14, post-9b):**
+**Baseline (2026-05-14, pre-9.4):**
 
 | Crate | Tests | Status |
 |-------|-------|--------|
 | `deadline-job-attachments` | 294 | ✅ All pass |
 | `deadline-job-bundle` | 249 | ✅ All pass |
+| `deadline-api` | 168 | ✅ All pass |
 | `deadline-cli` | 492 | ✅ All pass |
 
 ---
@@ -121,8 +128,9 @@ CLI owns all user interaction. See `specs/crate-restructure.md` Step 9.2.
 | 7b | Download engine → openjd | `0998fd1` |
 | 7c | Cleanup (dead S3 helpers) | `29424d2` |
 | 8 | Cleanup (HashAlgorithm param) | `751dfc4` |
-| 9a | Config resolution (all library crates) | `7e0ca66`, `7ba0287` |
-| 9b | Progress reporting (simplify callback API) | `2a68161` |
+| 9.1 | Config resolution (all library crates) | `7e0ca66`, `7ba0287` |
+| 9.2 | Progress reporting (simplify callback API) | `2a68161` |
+| 9.3 | User interaction (SubmissionHandler trait) | `ef6b13e` |
 
 ---
 

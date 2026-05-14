@@ -165,9 +165,32 @@ stdout/stderr, never reads config files, never resolves default paths.
 **CLI:** parses args, reads config, resolves defaults, drives user interaction,
 formats output.
 
-### Violations to Fix
+### Violations to Fix (ordered by execution sequence)
 
-#### 9.1 Progress reporting in library functions
+#### 9.1 Config resolution in library ✅ Done
+
+**Before:**
+```rust
+pub fn get_s3_max_pool_connections(config: Option<&IniConfig>) -> usize {
+    let val = match config {
+        Some(c) => get_setting("settings.s3_max_pool_connections", c),
+        None => get_setting_from_disk("settings.s3_max_pool_connections"),
+    };
+    val.parse().unwrap_or(50)
+}
+```
+
+**After:**
+```rust
+pub struct S3TransferConfig {
+    pub max_pool_connections: usize,  // default: 50
+    pub small_file_threshold_multiplier: usize,  // default: 20
+}
+
+impl Default for S3TransferConfig { ... }
+```
+
+#### 9.2 Progress reporting in library functions ✅ Done
 
 **Before:**
 ```rust
@@ -200,7 +223,7 @@ pub struct HashAssetsResult {
 
 CLI owns the progress bar and `human_readable_file_size` formatting.
 
-#### 9.2 User interaction in submission
+#### 9.3 User interaction in submission ← Next
 
 **Before:**
 ```rust
@@ -231,30 +254,7 @@ impl PreparedJob {
 }
 ```
 
-#### 9.3 Config resolution in library
-
-**Before:**
-```rust
-pub fn get_s3_max_pool_connections(config: Option<&IniConfig>) -> usize {
-    let val = match config {
-        Some(c) => get_setting("settings.s3_max_pool_connections", c),
-        None => get_setting_from_disk("settings.s3_max_pool_connections"),
-    };
-    val.parse().unwrap_or(50)
-}
-```
-
-**After:**
-```rust
-pub struct S3TransferConfig {
-    pub max_pool_connections: usize,  // default: 50
-    pub small_file_threshold_multiplier: usize,  // default: 20
-}
-
-impl Default for S3TransferConfig { ... }
-```
-
-#### 9.4 Path types
+#### 9.4 Path types (`&str` → `&Path`/`PathBuf`)
 
 **Before:** `cache_dir: &str`, `file_path: String`
 **After:** `cache_dir: &Path`, `file_path: PathBuf`

@@ -241,6 +241,23 @@ use deadline_job_attachments::upload;
 
 use serde_json::{Value, json};
 
+/// Trait for handling user interaction during job submission.
+/// Library code calls these methods instead of doing I/O directly.
+///
+/// Non-interactive callers (MCP, batch tools) should set `auto_accept: true`
+/// in `SubmitJobParams` to skip confirmation prompts entirely. The `confirm`
+/// method is only called when `auto_accept` is false, so interactive handlers
+/// must provide a real user prompt and non-interactive handlers should return
+/// `default` if they ever reach this path unexpectedly.
+pub trait SubmissionHandler: Send + Sync {
+    /// Display an informational message to the user.
+    fn on_message(&self, msg: &str);
+    /// Ask the user for confirmation. Returns `true` to proceed.
+    fn confirm(&self, msg: &str, default: bool) -> bool;
+    /// Check whether the operation should continue (cancellation signal).
+    fn should_continue(&self) -> bool;
+}
+
 /// Parameters for job submission.
 pub struct SubmitJobParams<'a> {
     pub job_bundle_dir: String,
@@ -259,16 +276,11 @@ pub struct SubmitJobParams<'a> {
     pub force_s3_check: Option<bool>,
     pub debug_snapshot_dir: Option<String>,
     pub config: &'a IniConfig,
-    pub print_callback: Box<dyn Fn(&str) + Send + 'a>,
+    pub handler: &'a dyn SubmissionHandler,
     pub hashing_progress_callback: Option<ProgressFn>,
     pub upload_progress_callback: Option<ProgressFn>,
-    pub continue_callback: Option<Box<dyn Fn() -> bool + Send>>,
-    pub interactive_confirmation_callback: Option<ConfirmFn>,
     pub telemetry: Option<&'a deadline_api::telemetry::TelemetryClient>,
 }
-
-/// Callback for interactive confirmation prompts: `(message, default) -> should_continue`.
-pub type ConfirmFn = Box<dyn Fn(&str, bool) -> bool + Send>;
 
 fn get_setting(name: &str, config: &IniConfig) -> String {
     config_file::get_setting(name, config).unwrap_or_default()
@@ -282,7 +294,7 @@ fn get_setting(name: &str, config: &IniConfig) -> String {
 pub async fn create_job_from_job_bundle(
     params: SubmitJobParams<'_>,
 ) -> Result<Option<String>, DeadlineError> {
-    let print = &params.print_callback;
+    let handler = params.handler;
     let submitter_name = params.submitter_name.as_deref().unwrap_or("Custom");
 
     session::set_submitter_info(submitter_name, None).await;
@@ -307,24 +319,24 @@ pub async fn create_job_from_job_bundle(
     if let Some(ref ehd) = env_hooks_dir {
         if allow_env_hooks {
             if Path::new(ehd).is_dir() {
-                let mut env_mgr = HookManager::new(ehd, Box::new(|_| {}));
+                let mut env_mgr = HookManager::new(ehd, handler);
                 if let Some(eh) = env_mgr.load_hooks()? {
                     merged_hooks = Some(eh.clone());
                 }
             } else {
-                print(&format!(
+                handler.on_message(&format!(
                     "Warning: DEADLINE_HOOKS_DIR '{ehd}' is not a valid directory"
                 ));
             }
         } else {
-            print(
+            handler.on_message(
                 "Warning: DEADLINE_HOOKS_DIR is set but environment hooks are disabled.\nEnable with: deadline config set settings.allow_environment_hooks true",
             );
         }
     }
 
     // Check bundle hooks
-    let mut bundle_mgr = HookManager::new(&params.job_bundle_dir, Box::new(|_| {}));
+    let mut bundle_mgr = HookManager::new(&params.job_bundle_dir, handler);
     let bundle_hooks = bundle_mgr.load_hooks()?;
     if let Some(bh) = bundle_hooks
         && (!bh.pre_submission.is_empty() || !bh.post_submission.is_empty())
@@ -338,23 +350,14 @@ pub async fn create_job_from_job_bundle(
                 None => merged_hooks = Some(bh.clone()),
             }
         } else {
-            print(
+            handler.on_message(
                 "Note: Job bundle contains hooks.yaml but bundle hooks are disabled.\nEnable with: deadline config set settings.allow_bundle_hooks true",
             );
         }
     }
 
     // Show confirmation and build the hook manager we'll actually use
-    #[allow(
-        clippy::print_stderr,
-        reason = "hook manager output goes to stderr by design, matching Python CLI behavior"
-    )]
-    let mut hook_manager = HookManager::new(
-        &params.job_bundle_dir,
-        Box::new(|s| {
-            eprintln!("{s}");
-        }),
-    );
+    let mut hook_manager = HookManager::new(&params.job_bundle_dir, handler);
     hook_manager.hooks = merged_hooks.clone();
 
     if let Some(ref mh) = merged_hooks
@@ -362,21 +365,10 @@ pub async fn create_job_from_job_bundle(
         && !params.auto_accept
     {
         let msg = hooks::generate_hooks_confirmation_message(mh, &params.job_bundle_dir);
-        match &params.interactive_confirmation_callback {
-            None => {
-                print(&msg);
-                print(
-                    "Job submission canceled (hooks present but user confirmation not available).",
-                );
-                return Err(op_err("Job submission canceled.".into()));
-            }
-            Some(cb) => {
-                if !cb(&format!("{msg}Do you want to run these hooks?"), true) {
-                    return Err(op_err(
-                        "Job submission canceled (user declined hooks).".into(),
-                    ));
-                }
-            }
+        if !handler.confirm(&format!("{msg}Do you want to run these hooks?"), true) {
+            return Err(op_err(
+                "Job submission canceled (user declined hooks).".into(),
+            ));
         }
     }
 
@@ -416,7 +408,7 @@ pub async fn create_job_from_job_bundle(
         .await
         .map_err(client::deadline_error)?;
     let queue_display_name = queue.display_name();
-    print(&format!("Submitting to Queue: {queue_display_name}\n"));
+    handler.on_message(&format!("Submitting to Queue: {queue_display_name}\n"));
 
     // 4. Get storage profile (conditional)
     let storage_profile_id = get_setting("settings.storage_profile_id", params.config);
@@ -642,18 +634,18 @@ pub async fn create_job_from_job_bundle(
                 })
                 .collect();
             if !outside.is_empty() {
-                print(&format!(
+                handler.on_message(&format!(
                     "Warning: {} file(s) found outside of known asset paths:",
                     outside.len()
                 ));
                 for f in outside.iter().take(10) {
-                    print(&format!("  {f}"));
+                    handler.on_message(&format!("  {f}"));
                 }
                 if outside.len() > 10 {
-                    print(&format!("  ... and {} more", outside.len() - 10));
+                    handler.on_message(&format!("  ... and {} more", outside.len() - 10));
                 }
                 if params.auto_accept {
-                    print(
+                    handler.on_message(
                         "Job submission canceled (settings.auto_accept enabled and there were unknown paths).",
                     );
                     return Err(op_err("Job submission canceled (settings.auto_accept enabled and there were unknown paths).".into()));
@@ -662,11 +654,7 @@ pub async fn create_job_from_job_bundle(
                     "WARNING: {} file(s) found outside of known asset paths.\nDo you wish to proceed?",
                     outside.len()
                 );
-                let should_continue = params
-                    .interactive_confirmation_callback
-                    .as_ref()
-                    .is_none_or(|cb| cb(&msg, false));
-                if !should_continue {
+                if !handler.confirm(&msg, false) {
                     return Err(op_err("Submission canceled by user.".into()));
                 }
             }
@@ -710,7 +698,7 @@ pub async fn create_job_from_job_bundle(
 
         if !upload_group.asset_groups.is_empty() {
             // Print upload summary (matches Python's _generate_message_for_asset_paths)
-            print(&format!(
+            handler.on_message(&format!(
                 "Job submission contains {} input file{} totaling {}. \
                  All input files will be uploaded to S3 if they are not already present in the job attachments bucket.\n",
                 upload_group.total_input_files,
@@ -847,9 +835,9 @@ pub async fn create_job_from_job_bundle(
             let (upload_summary, attachments) = upload_result?;
 
             if upload_summary.processed_files > 0 {
-                print("Upload Summary:");
+                handler.on_message("Upload Summary:");
                 for line in upload_summary.to_string().lines() {
-                    print(&format!("    {line}"));
+                    handler.on_message(&format!("    {line}"));
                 }
             }
 
@@ -966,18 +954,14 @@ pub async fn create_job_from_job_bundle(
     let job_id = response.job_id().to_owned();
 
     // 10. Poll for completion
-    print("Waiting for Job to be created...");
-
-    let continue_cb = params
-        .continue_callback
-        .unwrap_or_else(|| Box::new(|| true));
+    handler.on_message("Waiting for Job to be created...");
 
     let (success, status_message) = api::wait_for_create_job_to_complete(
         &farm_id,
         &queue_id,
         &job_id,
         params.config,
-        &*continue_cb,
+        || handler.should_continue(),
     )
     .await?;
 
@@ -994,11 +978,11 @@ pub async fn create_job_from_job_bundle(
         )));
     }
 
-    print(&format!(
+    handler.on_message(&format!(
         "Submitted job bundle:\n   {}",
         params.job_bundle_dir
     ));
-    print(&format!("{status_message}\n{job_id}"));
+    handler.on_message(&format!("{status_message}\n{job_id}"));
 
     // 11. Execute post-submission hooks
     if hook_manager

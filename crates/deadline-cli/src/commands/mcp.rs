@@ -8,6 +8,15 @@ use serde_json::{Value, json};
 
 use super::config::CliError;
 
+/// Silent handler for MCP: discards messages, auto-accepts, never cancels.
+struct McpSubmissionHandler;
+
+impl deadline_job_bundle::SubmissionHandler for McpSubmissionHandler {
+    fn on_message(&self, _msg: &str) {}
+    fn confirm(&self, _msg: &str, _default: bool) -> bool { true }
+    fn should_continue(&self) -> bool { true }
+}
+
 const INSTRUCTIONS: &str = r#"
 # AWS Deadline Cloud MCP Server
 
@@ -765,11 +774,9 @@ impl DeadlineServer {
                         force_s3_check: None,
                         debug_snapshot_dir: None,
                         config: &config,
-                        print_callback: Box::new(|_| {}),
+                        handler: &McpSubmissionHandler,
                         hashing_progress_callback: None,
                         upload_progress_callback: None,
-                        continue_callback: None,
-                        interactive_confirmation_callback: None,
                         telemetry: None,
                     };
                     deadline_job_bundle::submission::create_job_from_job_bundle(submit_params).await

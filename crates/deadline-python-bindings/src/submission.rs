@@ -63,14 +63,51 @@ pub fn create_job_from_job_bundle(
             .unwrap_or_else(|_| deadline_config::ini::IniConfig::new()),
     };
 
-    // Build callbacks
-    let print_cb: Box<dyn Fn(&str) + Send> = match on_print {
-        Some(cb) => Box::new(move |msg: &str| {
-            Python::with_gil(|py| {
-                let _ = cb.call1(py, (msg,));
-            });
-        }),
-        None => Box::new(|_| {}),
+    // Build handler
+    struct PySubmissionHandler {
+        on_print: Option<PyObject>,
+        on_confirm: Option<PyObject>,
+        on_continue: Option<PyObject>,
+    }
+
+    // SAFETY: PyObjects are Send when accessed only via Python::with_gil
+    unsafe impl Send for PySubmissionHandler {}
+    unsafe impl Sync for PySubmissionHandler {}
+
+    impl deadline_job_bundle::SubmissionHandler for PySubmissionHandler {
+        fn on_message(&self, msg: &str) {
+            if let Some(ref cb) = self.on_print {
+                Python::with_gil(|py| {
+                    let _ = cb.call1(py, (msg,));
+                });
+            }
+        }
+        fn confirm(&self, msg: &str, default: bool) -> bool {
+            match &self.on_confirm {
+                Some(cb) => Python::with_gil(|py| {
+                    cb.call1(py, (msg, default))
+                        .map(|r| r.is_truthy(py).unwrap_or(default))
+                        .unwrap_or(default)
+                }),
+                None => default,
+            }
+        }
+        fn should_continue(&self) -> bool {
+            match &self.on_continue {
+                Some(cb) => Python::with_gil(|py| {
+                    cb.call0(py)
+                        .map(|r| r.is_truthy(py).unwrap_or(true))
+                        .unwrap_or(true)
+                }),
+                None => true,
+            }
+        }
+    }
+
+    let handler = PySubmissionHandler {
+        on_print,
+        on_confirm,
+        on_continue,
     };
 
     let hashing_cb = on_hashing_progress.map(
@@ -121,26 +158,6 @@ pub fn create_job_from_job_bundle(
         },
     );
 
-    let confirm_cb = on_confirm.map(|cb| -> deadline_job_bundle::submission::ConfirmFn {
-        Box::new(move |msg: &str, default: bool| {
-            Python::with_gil(|py| {
-                cb.call1(py, (msg, default))
-                    .map(|r| r.is_truthy(py).unwrap_or(default))
-                    .unwrap_or(default)
-            })
-        })
-    });
-
-    let continue_cb = on_continue.map(|cb| -> Box<dyn Fn() -> bool + Send> {
-        Box::new(move || {
-            Python::with_gil(|py| {
-                cb.call0(py)
-                    .map(|r| r.is_truthy(py).unwrap_or(true))
-                    .unwrap_or(true)
-            })
-        })
-    });
-
     let submit_params = deadline_job_bundle::SubmitJobParams {
         job_bundle_dir,
         job_parameters,
@@ -158,11 +175,9 @@ pub fn create_job_from_job_bundle(
         force_s3_check,
         debug_snapshot_dir,
         config: &config,
-        print_callback: print_cb,
+        handler: &handler,
         hashing_progress_callback: hashing_cb,
         upload_progress_callback: upload_cb,
-        continue_callback: continue_cb,
-        interactive_confirmation_callback: confirm_cb,
         telemetry: None,
     };
 
