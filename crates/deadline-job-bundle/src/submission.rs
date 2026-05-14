@@ -236,7 +236,7 @@ use deadline_config::ini::IniConfig;
 use deadline_job_attachments::models::{
     FileSystemLocationType, JobAttachmentS3Settings, StorageProfile,
 };
-use deadline_job_attachments::progress_tracker::ProgressReportMetadata;
+use deadline_job_attachments::progress_tracker::ProgressFn;
 use deadline_job_attachments::upload;
 
 use serde_json::{Value, json};
@@ -260,8 +260,8 @@ pub struct SubmitJobParams<'a> {
     pub debug_snapshot_dir: Option<String>,
     pub config: &'a IniConfig,
     pub print_callback: Box<dyn Fn(&str) + Send + 'a>,
-    pub hashing_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
-    pub upload_progress_callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    pub hashing_progress_callback: Option<ProgressFn>,
+    pub upload_progress_callback: Option<ProgressFn>,
     pub continue_callback: Option<Box<dyn Fn() -> bool + Send>>,
     pub interactive_confirmation_callback: Option<ConfirmFn>,
     pub telemetry: Option<&'a deadline_api::telemetry::TelemetryClient>,
@@ -891,24 +891,10 @@ pub async fn create_job_from_job_bundle(
     } else {
         // No files to process — call callbacks once at 100% to close progress bars
         if let Some(ref cb) = params.hashing_progress_callback {
-            cb(ProgressReportMetadata {
-                status:
-                    deadline_job_attachments::progress_tracker::ProgressStatus::PreparingInProgress,
-                progress: 100.0,
-                transfer_rate: 0.0,
-                progress_message: "No files to hash".into(),
-                processed_files: 0,
-            });
+            cb(0, 0);
         }
         if let Some(ref cb) = params.upload_progress_callback {
-            cb(ProgressReportMetadata {
-                status:
-                    deadline_job_attachments::progress_tracker::ProgressStatus::UploadInProgress,
-                progress: 100.0,
-                transfer_rate: 0.0,
-                progress_message: "No files to upload".into(),
-                processed_files: 0,
-            });
+            cb(0, 0);
         }
     }
 

@@ -14,7 +14,7 @@ use crate::download::download_files_from_manifests;
 use crate::models::{
     FileConflictResolution, JobAttachmentS3Settings, PathMappingRule, UploadManifestInfo,
 };
-use crate::progress_tracker::{DownloadSummaryStatistics, ProgressReportMetadata};
+use crate::progress_tracker::DownloadSummaryStatistics;
 use crate::upload::S3UploadContext;
 
 /// Read and decode manifest files from disk.
@@ -143,7 +143,7 @@ pub async fn attachment_download(
     s3_client: &aws_sdk_s3::Client,
     account_id: &str,
     path_mapping_rules: Option<&str>,
-    on_progress: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    on_progress: Option<Box<dyn Fn(u64, u64) -> bool + Send>>,
     conflict_resolution: FileConflictResolution,
 ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
     let file_name_manifest_dict = read_manifests(manifests)?;
@@ -203,7 +203,6 @@ pub async fn attachment_upload(
     root_dirs: &[String],
     path_mapping_rules: Option<&str>,
     upload_manifest_path: Option<&str>,
-    _on_progress: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<Vec<UploadManifestInfo>, JobAttachmentsError> {
     let file_name_manifest_dict = read_manifests(manifests)?;
 

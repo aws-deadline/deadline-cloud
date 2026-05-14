@@ -210,7 +210,6 @@ fn manifest_snapshot_creates_manifest_from_files() {
         &config,
         None,
         false,
-        None,
     )
     .unwrap();
     assert!(result.is_some());
@@ -232,7 +231,6 @@ fn manifest_snapshot_empty_dir_returns_none() {
         &config,
         None,
         false,
-        None,
     )
     .unwrap();
     assert!(result.is_none());
@@ -260,7 +258,6 @@ fn manifest_diff_detects_new_file() {
         &config,
         None,
         false,
-        None,
     )
     .unwrap()
     .unwrap();
@@ -273,7 +270,6 @@ fn manifest_diff_detects_new_file() {
         dir.path().to_str().unwrap(),
         &config,
         false,
-        None,
     )
     .unwrap();
     assert!(diff.new.iter().any(|p| p.contains("added")));
@@ -307,7 +303,6 @@ fn manifest_merge_two_files_produces_result() {
         ],
         dest.to_str().unwrap(),
         Some("merged"),
-        None,
     )
     .unwrap();
     assert!(result.is_some());
@@ -322,7 +317,6 @@ fn manifest_merge_nonexistent_file_returns_error() {
         "/root",
         &["/nonexistent/path.manifest".into()],
         dir.path().to_str().unwrap(),
-        None,
         None,
     );
     assert!(result.is_err());

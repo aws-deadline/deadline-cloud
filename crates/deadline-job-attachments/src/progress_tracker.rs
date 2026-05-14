@@ -62,17 +62,6 @@ impl ProgressStatus {
     }
 }
 
-// --- ProgressReportMetadata ---
-
-#[derive(Debug)]
-pub struct ProgressReportMetadata {
-    pub status: ProgressStatus,
-    pub progress: f64,
-    pub transfer_rate: f64,
-    pub progress_message: String,
-    pub processed_files: u64,
-}
-
 // --- SummaryStatistics ---
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -172,6 +161,9 @@ impl DownloadSummaryStatistics {
 const CALLBACK_INTERVAL_SECS: f64 = 1.0;
 const MAX_FILES_IN_CHUNK: u64 = 50;
 
+/// Progress callback type: `(processed_bytes, total_bytes) -> should_continue`.
+pub type ProgressFn = Box<dyn Fn(u64, u64) -> bool + Send>;
+
 struct TrackerInner {
     continue_reporting: bool,
     processed_files: u64,
@@ -180,15 +172,14 @@ struct TrackerInner {
     skipped_bytes: u64,
     completed_files_in_chunk: u64,
     last_report_time: Option<Instant>,
-    last_report_processed_bytes: u64,
 }
 
 pub struct ProgressTracker {
-    status: ProgressStatus,
+    _status: ProgressStatus,
     total_files: u64,
     total_bytes: u64,
     reporting_files_per_chunk: u64,
-    callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    callback: Option<ProgressFn>,
     inner: Mutex<TrackerInner>,
     total_time: Mutex<f64>,
 }
@@ -198,7 +189,7 @@ impl ProgressTracker {
         status: ProgressStatus,
         total_files: u64,
         total_bytes: u64,
-        callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+        callback: Option<ProgressFn>,
     ) -> Self {
         let reporting_files_per_chunk = if total_files >= MAX_FILES_IN_CHUNK {
             MAX_FILES_IN_CHUNK
@@ -206,7 +197,7 @@ impl ProgressTracker {
             1
         };
         Self {
-            status,
+            _status: status,
             total_files,
             total_bytes,
             reporting_files_per_chunk,
@@ -219,7 +210,6 @@ impl ProgressTracker {
                 skipped_bytes: 0,
                 completed_files_in_chunk: 0,
                 last_report_time: None,
-                last_report_processed_bytes: 0,
             }),
             total_time: Mutex::new(0.0),
         }
@@ -310,59 +300,17 @@ impl ProgressTracker {
         let chunk_trigger = inner.completed_files_in_chunk >= self.reporting_files_per_chunk;
 
         if time_trigger || chunk_trigger || all_done {
-            let metadata = self.build_metadata(inner, elapsed);
+            let processed_bytes = inner.processed_bytes + inner.skipped_bytes;
             let should_continue = match &self.callback {
-                Some(cb) => cb(metadata),
+                Some(cb) => cb(processed_bytes, self.total_bytes),
                 None => true,
             };
             inner.continue_reporting = should_continue;
-            inner.last_report_processed_bytes = inner.processed_bytes;
             inner.last_report_time = Some(now);
             inner.completed_files_in_chunk = 0;
         }
 
         inner.continue_reporting
-    }
-
-    fn build_metadata(&self, inner: &TrackerInner, elapsed: f64) -> ProgressReportMetadata {
-        let completed_bytes = inner.processed_bytes + inner.skipped_bytes;
-        let progress = if self.total_bytes > 0 {
-            ((completed_bytes as f64 / self.total_bytes as f64) * 1000.0).round() / 10.0
-        } else {
-            0.0
-        };
-        let transfer_rate = if elapsed > 0.0 {
-            (inner.processed_bytes - inner.last_report_processed_bytes) as f64 / elapsed
-        } else {
-            0.0
-        };
-        let rate_label = if self.status == ProgressStatus::PreparingInProgress {
-            "Hashing speed"
-        } else {
-            "Transfer rate"
-        };
-        let file_word = if self.total_files == 1 {
-            "file"
-        } else {
-            "files"
-        };
-        let progress_message = format!(
-            "{} {} / {} of {} {} ({}: {}/s)",
-            self.status.verb_in_message(),
-            human_readable_file_size(completed_bytes),
-            human_readable_file_size(self.total_bytes),
-            self.total_files,
-            file_word,
-            rate_label,
-            human_readable_file_size(transfer_rate as u64),
-        );
-        ProgressReportMetadata {
-            status: self.status,
-            progress,
-            transfer_rate,
-            progress_message,
-            processed_files: inner.processed_files,
-        }
     }
 }
 
@@ -376,13 +324,11 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    // === Create with callback ===
-
     #[test]
     fn progress_tracker_new_with_callback_stores_it() {
         let called = Arc::new(AtomicBool::new(false));
         let called_clone = called;
-        let callback = move |_: ProgressReportMetadata| -> bool {
+        let callback = move |_: u64, _: u64| -> bool {
             called_clone.store(true, Ordering::SeqCst);
             true
         };
@@ -395,16 +341,11 @@ mod tests {
         assert!(tracker.continue_reporting());
     }
 
-    // === Create without callback ===
-
     #[test]
     fn progress_tracker_new_without_callback_defaults_to_noop() {
         let tracker = ProgressTracker::new(ProgressStatus::UploadInProgress, 5, 500, None);
-        // Should not panic, report_progress returns true (no cancellation)
         assert!(tracker.report_progress());
     }
-
-    // === increase_processed increments counters ===
 
     #[test]
     fn increase_processed_increments_files_and_bytes() {
@@ -415,8 +356,6 @@ mod tests {
         assert_eq!(stats.processed_bytes, 1000);
     }
 
-    // === increase_skipped increments counters ===
-
     #[test]
     fn increase_skipped_increments_files_and_bytes() {
         let tracker = ProgressTracker::new(ProgressStatus::PreparingInProgress, 10, 10000, None);
@@ -426,13 +365,11 @@ mod tests {
         assert_eq!(stats.skipped_bytes, 500);
     }
 
-    // === report_progress fires callback when time elapsed ===
-
     #[test]
     fn report_progress_fires_callback_after_time_interval() {
         let call_count = Arc::new(AtomicU32::new(0));
         let count_clone = call_count.clone();
-        let callback = move |_: ProgressReportMetadata| -> bool {
+        let callback = move |_: u64, _: u64| -> bool {
             count_clone.fetch_add(1, Ordering::SeqCst);
             true
         };
@@ -442,7 +379,6 @@ mod tests {
             10000,
             Some(Box::new(callback)),
         );
-        // First call initializes timestamps; sleep past the 1s interval
         tracker.increase_processed(1, 100);
         thread::sleep(Duration::from_millis(1100));
         tracker.increase_processed(1, 100);
@@ -450,24 +386,20 @@ mod tests {
         assert!(call_count.load(Ordering::SeqCst) >= 1);
     }
 
-    // === report_progress fires callback when chunk complete ===
-
     #[test]
     fn report_progress_fires_callback_on_chunk_complete() {
         let call_count = Arc::new(AtomicU32::new(0));
         let count_clone = call_count.clone();
-        let callback = move |_: ProgressReportMetadata| -> bool {
+        let callback = move |_: u64, _: u64| -> bool {
             count_clone.fetch_add(1, Ordering::SeqCst);
             true
         };
-        // total_files >= 50, so reporting_files_per_chunk = 50
         let tracker = ProgressTracker::new(
             ProgressStatus::PreparingInProgress,
             100,
             10000,
             Some(Box::new(callback)),
         );
-        // Process 50 files to complete a chunk
         for _ in 0..50 {
             tracker.increase_processed(1, 100);
         }
@@ -475,13 +407,11 @@ mod tests {
         assert!(call_count.load(Ordering::SeqCst) >= 1);
     }
 
-    // === report_progress fires callback at 100% ===
-
     #[test]
     fn report_progress_fires_callback_at_100_percent() {
         let call_count = Arc::new(AtomicU32::new(0));
         let count_clone = call_count.clone();
-        let callback = move |_: ProgressReportMetadata| -> bool {
+        let callback = move |_: u64, _: u64| -> bool {
             count_clone.fetch_add(1, Ordering::SeqCst);
             true
         };
@@ -496,31 +426,26 @@ mod tests {
         assert!(call_count.load(Ordering::SeqCst) >= 1);
     }
 
-    // === callback returns false sets continue_reporting to false ===
-
     #[test]
     fn report_progress_callback_returns_false_cancels() {
-        let callback = |_: ProgressReportMetadata| -> bool { false };
+        let callback = |_: u64, _: u64| -> bool { false };
         let tracker = ProgressTracker::new(
             ProgressStatus::PreparingInProgress,
             2,
             200,
             Some(Box::new(callback)),
         );
-        // Process all files to trigger 100% report
         tracker.increase_processed(2, 200);
         let result = tracker.report_progress();
         assert!(!result);
         assert!(!tracker.continue_reporting());
     }
 
-    // === continue_reporting already false returns false without callback ===
-
     #[test]
     fn report_progress_already_cancelled_returns_false_without_callback() {
         let call_count = Arc::new(AtomicU32::new(0));
         let count_clone = call_count.clone();
-        let callback = move |_: ProgressReportMetadata| -> bool {
+        let callback = move |_: u64, _: u64| -> bool {
             count_clone.fetch_add(1, Ordering::SeqCst);
             false
         };
@@ -530,18 +455,14 @@ mod tests {
             200,
             Some(Box::new(callback)),
         );
-        // First: trigger cancellation
         tracker.increase_processed(2, 200);
         tracker.report_progress();
         let count_after_cancel = call_count.load(Ordering::SeqCst);
 
-        // Second: should return false without invoking callback again
         let result = tracker.report_progress();
         assert!(!result);
         assert_eq!(call_count.load(Ordering::SeqCst), count_after_cancel);
     }
-
-    // === get_summary_statistics returns correct values ===
 
     #[test]
     fn get_summary_statistics_returns_correct_totals() {
@@ -560,18 +481,13 @@ mod tests {
         assert!((stats.transfer_rate - 1000.0).abs() < f64::EPSILON);
     }
 
-    // === total_time is 0 means transfer_rate is 0 ===
-
     #[test]
     fn get_summary_statistics_zero_time_zero_rate() {
         let tracker = ProgressTracker::new(ProgressStatus::PreparingInProgress, 10, 5000, None);
         tracker.increase_processed(3, 2000);
-        // total_time defaults to 0.0
         let stats = tracker.get_summary_statistics();
         assert!((stats.transfer_rate - 0.0).abs() < f64::EPSILON);
     }
-
-    // === SummaryStatistics aggregate sums fields ===
 
     #[test]
     fn summary_statistics_aggregate_sums_all_fields() {
@@ -603,11 +519,8 @@ mod tests {
         assert_eq!(s1.processed_bytes, 2000);
         assert_eq!(s1.skipped_files, 5);
         assert_eq!(s1.skipped_bytes, 1000);
-        // transfer_rate recalculated: 2000 / 3.0
         assert!((s1.transfer_rate - 2000.0 / 3.0).abs() < 0.01);
     }
-
-    // === SummaryStatistics Display ===
 
     #[test]
     fn summary_statistics_display_multiple_files() {
@@ -626,8 +539,6 @@ mod tests {
         assert!(output.contains("Skipped re-processing 3 files totaling"));
         assert!(output.contains("Total processing time of 1.23456 seconds"));
     }
-
-    // === SummaryStatistics Display singular file ===
 
     #[test]
     fn summary_statistics_display_singular_file() {
@@ -652,8 +563,6 @@ mod tests {
         );
     }
 
-    // === track_progress with file_done=true increments both ===
-
     #[test]
     fn track_progress_file_done_increments_files_and_bytes() {
         let tracker = ProgressTracker::new(ProgressStatus::UploadInProgress, 10, 10000, None);
@@ -662,8 +571,6 @@ mod tests {
         assert_eq!(stats.processed_bytes, 500);
         assert_eq!(stats.processed_files, 1);
     }
-
-    // === track_progress with file_done=false only increments bytes ===
 
     #[test]
     fn track_progress_not_file_done_only_increments_bytes() {

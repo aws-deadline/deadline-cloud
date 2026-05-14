@@ -133,7 +133,6 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
                 &config,
                 diff.as_deref(),
                 force_rehash,
-                None,
             )
             .map_err(|e| CliError::Operation(e.to_string()))?;
 
@@ -176,7 +175,7 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
             let config = resolve_glob_config(&include, &exclude, include_exclude_config.as_deref())
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 
-            let differences = manifest_diff(&manifest, &root, &config, force_rehash, None)
+            let differences = manifest_diff(&manifest, &root, &config, force_rehash)
                 .map_err(|e| CliError::Operation(e.to_string()))?;
 
             if json {
@@ -466,7 +465,6 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 &s3_client,
                 &account_id,
                 s3_manifest_prefix.as_deref(),
-                None,
             )
             .await
             .map_err(|e| CliError::Operation(e.to_string()))?;

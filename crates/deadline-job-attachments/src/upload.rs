@@ -14,7 +14,7 @@ use crate::models::{
     JobAttachmentS3Settings, ManifestProperties, StorageProfile, join_s3_paths,
 };
 use crate::progress_tracker::{
-    ProgressReportMetadata, ProgressStatus, ProgressTracker, SummaryStatistics,
+    ProgressFn, ProgressStatus, ProgressTracker, SummaryStatistics,
 };
 
 fn is_relative_to(path: &Path, base: &str) -> bool {
@@ -454,7 +454,7 @@ pub async fn upload_assets(
     job_attachment_settings: &JobAttachmentS3Settings,
     asset_groups: &[AssetRootGroup],
     ctx: &S3UploadContext,
-    on_uploading_assets: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    on_uploading_assets: Option<ProgressFn>,
     s3_check_cache_dir: Option<&str>,
     force_s3_check: Option<bool>,
 ) -> Result<(SummaryStatistics, Attachments), JobAttachmentsError> {
@@ -671,7 +671,7 @@ pub fn snapshot_assets(
     job_attachment_settings: &JobAttachmentS3Settings,
     snapshot_dir: &Path,
     manifests: &[AssetRootManifest],
-    on_snapshotting_assets: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    on_snapshotting_assets: Option<ProgressFn>,
 ) -> Result<(SummaryStatistics, Attachments), JobAttachmentsError> {
     if farm_id.is_empty() || queue_id.is_empty() {
         return Err(JobAttachmentsError::AssetSync(
@@ -792,7 +792,6 @@ mod tests {
     use crate::models::{
         AssetRootGroup, FileSystemLocation, FileSystemLocationType, StorageProfile,
     };
-    use crate::progress_tracker::ProgressReportMetadata;
     use std::fs;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU32, Ordering};

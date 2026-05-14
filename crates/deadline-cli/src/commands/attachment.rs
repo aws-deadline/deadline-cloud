@@ -251,7 +251,6 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                 &root_dirs,
                 path_mapping_rules.as_deref(),
                 upload_manifest_path.as_deref(),
-                None,
             )
             .await
             .map_err(|e| CliError::Operation(e.to_string()))?;

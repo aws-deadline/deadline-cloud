@@ -1971,12 +1971,12 @@ async fn download_input_impl(
     let download_summary = downloader
         .download(
             resolution,
-            Some(Box::new(move |meta| {
-                let new_progress = meta.progress as u64;
+            Some(Box::new(move |processed, total| {
+                let pct = if total > 0 { processed * 100 / total } else { 100 };
                 progress_mgr
                     .lock()
                     .expect("lock poisoned")
-                    .callback(new_progress);
+                    .callback(pct);
                 crate::common::should_continue()
             })),
         )
@@ -2924,12 +2924,12 @@ pub(crate) async fn download_output_impl(
     let download_summary = downloader
         .download_job_output(
             resolution,
-            Some(Box::new(move |meta| {
-                let new_progress = meta.progress as u64;
+            Some(Box::new(move |processed, total| {
+                let pct = if total > 0 { processed * 100 / total } else { 100 };
                 progress_mgr
                     .lock()
                     .expect("lock poisoned")
-                    .callback(new_progress);
+                    .callback(pct);
                 crate::common::should_continue()
             })),
         )

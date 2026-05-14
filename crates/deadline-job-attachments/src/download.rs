@@ -18,7 +18,7 @@ use crate::asset_manifests::{
 use crate::asset_manifests::HashAlgorithm;
 use crate::models::{Attachments, FileConflictResolution, JobAttachmentS3Settings};
 use crate::progress_tracker::{
-    DownloadSummaryStatistics, ProgressReportMetadata, ProgressStatus, ProgressTracker,
+    DownloadSummaryStatistics, ProgressStatus, ProgressTracker,
 };
 
 // Shared state for `CreateCopy` collision tracking across concurrent downloads.
@@ -339,7 +339,7 @@ pub async fn download_files_from_manifests(
     cas_prefix: Option<&str>,
     s3_client: &S3Client,
     account_id: &str,
-    on_downloading_files: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+    on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send>>,
     conflict_resolution: FileConflictResolution,
 ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
     use openjd_snapshots::{
@@ -974,7 +974,7 @@ impl OutputDownloader {
     pub async fn download_job_output(
         &self,
         file_conflict_resolution: FileConflictResolution,
-        on_downloading_files: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+        on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send>>,
     ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
         let mut manifests_by_root = HashMap::new();
         for (root, manifest_list) in &self.outputs_by_root {
@@ -1124,7 +1124,7 @@ impl InputDownloader {
     pub async fn download(
         &self,
         file_conflict_resolution: FileConflictResolution,
-        on_downloading_files: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
+        on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send>>,
     ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
         let mut manifests_by_root = HashMap::new();
         for (root, manifest_list) in &self.inputs_by_root {

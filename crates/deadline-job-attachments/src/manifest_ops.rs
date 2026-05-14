@@ -14,7 +14,6 @@ use crate::download::{
     download_manifest_from_s3, get_output_manifests_by_asset_root, merge_asset_manifests,
 };
 use crate::models::JobAttachmentS3Settings;
-use crate::progress_tracker::ProgressReportMetadata;
 use crate::upload::S3UploadContext;
 
 // --- Types ---
@@ -222,7 +221,6 @@ pub fn manifest_snapshot(
     config: &GlobConfig,
     diff: Option<&str>,
     force_rehash: bool,
-    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<Option<ManifestSnapshot>, JobAttachmentsError> {
     let current_files = glob_files(root, config)?;
     if current_files.is_empty() && diff.is_none() {
@@ -287,7 +285,6 @@ pub fn manifest_diff(
     root: &str,
     config: &GlobConfig,
     force_rehash: bool,
-    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<ManifestDiffResult, JobAttachmentsError> {
     let contents = std::fs::read_to_string(manifest_path)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to read manifest: {e}")))?;
@@ -331,7 +328,6 @@ pub fn manifest_merge(
     manifest_files: &[String],
     destination: &str,
     name: Option<&str>,
-    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<Option<ManifestMergeResult>, JobAttachmentsError> {
     let manifest_map = read_manifests(manifest_files)?;
     let manifests: Vec<AssetManifest> = manifest_map.into_values().collect();
@@ -416,7 +412,6 @@ pub async fn manifest_upload(
     s3_client: &aws_sdk_s3::Client,
     account_id: &str,
     s3_key_prefix: Option<&str>,
-    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<(), JobAttachmentsError> {
     let file_path = Path::new(manifest_file);
     let filename = file_path.file_name().unwrap_or_default().to_string_lossy();
@@ -462,7 +457,6 @@ pub async fn manifest_download(
     job_attachments: &HashMap<String, serde_json::Value>,
     step_id: Option<&str>,
     asset_type: AssetType,
-    _callback: Option<Box<dyn Fn(ProgressReportMetadata) -> bool + Send>>,
 ) -> Result<ManifestDownloadResponse, JobAttachmentsError> {
     let download_input = matches!(asset_type, AssetType::Input | AssetType::All);
     let download_output = matches!(asset_type, AssetType::Output | AssetType::All);

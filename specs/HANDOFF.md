@@ -23,7 +23,18 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ---
 
-## What's Done (this session, 2026-05-13)
+## What's Done (this session, 2026-05-14)
+
+**Step 9b — Progress reporting boundary (commit `2a68161`):**
+Removed `ProgressReportMetadata` struct and pre-formatted `progress_message`
+from library API. Simplified callback type from `Fn(ProgressReportMetadata) -> bool`
+to `Fn(u64, u64) -> bool` (processed_bytes, total_bytes). Removed 6 dead
+`_callback` params. CLI now computes percentage from raw bytes. Added
+`ProgressFn` type alias. -210 lines, +77 lines. Tests: 294/249/492 unchanged.
+
+---
+
+## What's Done (previous session, 2026-05-13)
 
 **Step 9a Phase C — Config resolution for deadline-api (commit `7ba0287`):**
 Removed `Option<&IniConfig>` from all 39 deadline-api function signatures.
@@ -76,14 +87,23 @@ Step 9 (CLI/Library Boundary) sub-step order and status:
 | Sub-step | What | Status |
 |----------|------|--------|
 | 9a | Config resolution (no disk reads in library) | ✅ Done |
-| 9b | Progress reporting (library returns raw stats) | **Next** |
-| 9c | User interaction (remove callbacks, return decision points) | Not started |
+| 9b | Progress reporting (library returns raw stats) | ✅ Done |
+| 9c | User interaction (remove callbacks, return decision points) | **Next** |
 | 9d | Path types (`&str` → `&Path`/`PathBuf`) | Not started |
 | 9e | Presentation utilities (move formatting to CLI) | Not started |
 
-**9b** is next: library functions currently accept `Fn(ProgressReportMetadata) -> bool`
-callbacks with pre-formatted strings. Change to return raw `u64` stats; CLI owns
-progress bar rendering. See `specs/crate-restructure.md` Step 9.1 for details.
+**9c** is next: library functions currently accept `print_callback`,
+`continue_callback`, and `interactive_confirmation_callback`. Change to
+return decision points (e.g. `SubmitAction::NeedsConfirmation`) so the
+CLI owns all user interaction. See `specs/crate-restructure.md` Step 9.2.
+
+**Baseline (2026-05-14, post-9b):**
+
+| Crate | Tests | Status |
+|-------|-------|--------|
+| `deadline-job-attachments` | 294 | ✅ All pass |
+| `deadline-job-bundle` | 249 | ✅ All pass |
+| `deadline-cli` | 492 | ✅ All pass |
 
 ---
 
@@ -102,6 +122,7 @@ progress bar rendering. See `specs/crate-restructure.md` Step 9.1 for details.
 | 7c | Cleanup (dead S3 helpers) | `29424d2` |
 | 8 | Cleanup (HashAlgorithm param) | `751dfc4` |
 | 9a | Config resolution (all library crates) | `7e0ca66`, `7ba0287` |
+| 9b | Progress reporting (simplify callback API) | `2a68161` |
 
 ---
 

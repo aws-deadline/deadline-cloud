@@ -261,7 +261,7 @@ async fn download_files_from_manifests_callback_cancel_returns_error() {
         Some("root-prefix/Data"),
         &s3_client,
         "123456789012",
-        Some(Box::new(|_| false)),
+        Some(Box::new(|_, _| false)),
         FileConflictResolution::CreateCopy,
     )
     .await

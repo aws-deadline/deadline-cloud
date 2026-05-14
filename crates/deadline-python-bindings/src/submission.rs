@@ -74,17 +74,21 @@ pub fn create_job_from_job_bundle(
     };
 
     let hashing_cb = on_hashing_progress.map(
-        |cb| -> Box<
-            dyn Fn(deadline_job_attachments::progress_tracker::ProgressReportMetadata) -> bool
-                + Send,
-        > {
-            Box::new(move |meta| {
+        |cb| -> deadline_job_attachments::progress_tracker::ProgressFn {
+            Box::new(move |processed, total| {
                 Python::with_gil(|py| {
                     let dict = PyDict::new(py);
-                    let _ = dict.set_item("progress", meta.progress);
-                    let _ = dict.set_item("transferRate", meta.transfer_rate);
-                    let _ = dict.set_item("progressMessage", &meta.progress_message);
-                    let _ = dict.set_item("processedFiles", meta.processed_files);
+                    let pct = if total > 0 { (processed as f64 / total as f64) * 100.0 } else { 100.0 };
+                    let _ = dict.set_item("progress", pct);
+                    let _ = dict.set_item("transferRate", 0.0);
+                    let _ = dict.set_item("progressMessage", format!(
+                        "Processed {} / {}",
+                        deadline_job_attachments::progress_tracker::human_readable_file_size(processed),
+                        deadline_job_attachments::progress_tracker::human_readable_file_size(total),
+                    ));
+                    let _ = dict.set_item("processedFiles", 0u64);
+                    let _ = dict.set_item("processedBytes", processed);
+                    let _ = dict.set_item("totalBytes", total);
                     cb.call1(py, (dict,))
                         .map(|r| r.is_truthy(py).unwrap_or(true))
                         .unwrap_or(true)
@@ -94,17 +98,21 @@ pub fn create_job_from_job_bundle(
     );
 
     let upload_cb = on_upload_progress.map(
-        |cb| -> Box<
-            dyn Fn(deadline_job_attachments::progress_tracker::ProgressReportMetadata) -> bool
-                + Send,
-        > {
-            Box::new(move |meta| {
+        |cb| -> deadline_job_attachments::progress_tracker::ProgressFn {
+            Box::new(move |processed, total| {
                 Python::with_gil(|py| {
                     let dict = PyDict::new(py);
-                    let _ = dict.set_item("progress", meta.progress);
-                    let _ = dict.set_item("transferRate", meta.transfer_rate);
-                    let _ = dict.set_item("progressMessage", &meta.progress_message);
-                    let _ = dict.set_item("processedFiles", meta.processed_files);
+                    let pct = if total > 0 { (processed as f64 / total as f64) * 100.0 } else { 100.0 };
+                    let _ = dict.set_item("progress", pct);
+                    let _ = dict.set_item("transferRate", 0.0);
+                    let _ = dict.set_item("progressMessage", format!(
+                        "Uploaded {} / {}",
+                        deadline_job_attachments::progress_tracker::human_readable_file_size(processed),
+                        deadline_job_attachments::progress_tracker::human_readable_file_size(total),
+                    ));
+                    let _ = dict.set_item("processedFiles", 0u64);
+                    let _ = dict.set_item("processedBytes", processed);
+                    let _ = dict.set_item("totalBytes", total);
                     cb.call1(py, (dict,))
                         .map(|r| r.is_truthy(py).unwrap_or(true))
                         .unwrap_or(true)

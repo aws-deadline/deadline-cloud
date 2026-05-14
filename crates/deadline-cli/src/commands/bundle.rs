@@ -279,17 +279,21 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 debug_snapshot_dir: effective_snapshot_dir,
                 config: &config,
                 print_callback: Box::new(|msg| println!("{msg}")),
-                hashing_progress_callback: Some(Box::new(move |meta| {
+                hashing_progress_callback: Some(Box::new(move |processed, total| {
+                    let pct = if total > 0 { processed * 100 / total } else { 100 };
                     hash_progress
                         .lock()
                         .expect("lock poisoned")
-                        .callback(meta.progress as u64)
+                        .callback(pct);
+                    true
                 })),
-                upload_progress_callback: Some(Box::new(move |meta| {
+                upload_progress_callback: Some(Box::new(move |processed, total| {
+                    let pct = if total > 0 { processed * 100 / total } else { 100 };
                     upload_progress
                         .lock()
                         .expect("lock poisoned")
-                        .callback(meta.progress as u64)
+                        .callback(pct);
+                    true
                 })),
                 continue_callback: Some(Box::new(crate::common::should_continue)),
                 interactive_confirmation_callback: Some(Box::new(|msg, _default| {

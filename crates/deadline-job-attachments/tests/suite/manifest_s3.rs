@@ -69,7 +69,6 @@ async fn manifest_upload_with_prefix_uploads_to_correct_key() {
         &s3_client,
         "123456789012",
         Some("my-prefix"),
-        None,
     )
     .await
     .unwrap();
@@ -100,7 +99,6 @@ async fn manifest_upload_without_prefix_uploads_to_manifests_root() {
         "root-prefix",
         &s3_client,
         "123456789012",
-        None,
         None,
     )
     .await
@@ -137,7 +135,6 @@ async fn manifest_upload_sets_file_system_location_name_metadata() {
         &s3_client,
         "123456789012",
         Some("prefix"),
-        None,
     )
     .await
     .unwrap();
@@ -168,7 +165,6 @@ async fn manifest_download_no_attachments_returns_empty() {
         &job_attachments,
         None,
         AssetType::All,
-        None,
     )
     .await
     .unwrap();
@@ -221,7 +217,6 @@ async fn manifest_download_input_manifests_downloaded_and_written() {
         &job_attachments,
         None,
         AssetType::Input,
-        None,
     )
     .await
     .unwrap();
@@ -272,7 +267,6 @@ async fn manifest_download_input_only_skips_output_manifests() {
         &job_attachments,
         None,
         AssetType::Input,
-        None,
     )
     .await
     .unwrap();

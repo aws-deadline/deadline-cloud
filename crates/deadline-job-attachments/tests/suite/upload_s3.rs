@@ -10,9 +10,6 @@ use deadline_job_attachments::asset_manifests::{
 };
 use deadline_job_attachments::caches::S3CheckCache;
 use deadline_job_attachments::models::{AssetRootGroup, AssetRootManifest, JobAttachmentS3Settings};
-use deadline_job_attachments::progress_tracker::{
-    ProgressReportMetadata, ProgressStatus, ProgressTracker,
-};
 use deadline_job_attachments::upload::{S3UploadContext, snapshot_assets, upload_assets};
 use tempfile::TempDir;
 use wiremock::matchers::{header_exists, method, path_regex};
@@ -300,7 +297,7 @@ async fn upload_assets_callback_cancel_returns_error() {
     let s3_settings = test_s3_settings();
     let cache_dir = TempDir::new().unwrap();
 
-    let cancel_cb = |_: ProgressReportMetadata| -> bool { false };
+    let cancel_cb = |_: u64, _: u64| -> bool { false };
 
     let result = upload_assets(
         "farm-1",
@@ -496,7 +493,7 @@ async fn snapshot_assets_callback_cancel_returns_error() {
         outputs: vec![],
     }];
 
-    let cancel_cb = |_: ProgressReportMetadata| -> bool { false };
+    let cancel_cb = |_: u64, _: u64| -> bool { false };
 
     let result = snapshot_assets(
         "farm-1",
