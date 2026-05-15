@@ -387,7 +387,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            let tc = create_telemetry(&deadline_lib::config::config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
+            let tc = create_telemetry(&config_file::read_config().unwrap_or_else(|_| IniConfig::new()));
             let result = run_download_output(
                 profile,
                 farm_id,
@@ -417,7 +417,7 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            let tc = create_telemetry(&deadline_lib::config::config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
+            let tc = create_telemetry(&config_file::read_config().unwrap_or_else(|_| IniConfig::new()));
             let result = run_download_input(
                 profile,
                 farm_id,

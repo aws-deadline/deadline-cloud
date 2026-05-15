@@ -470,7 +470,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             conflict_resolution,
             dry_run,
         } => {
-            let tc = create_telemetry(&deadline_lib::config::config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
+            let tc = create_telemetry(&config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
             let result = run_sync_output(
                 profile,
                 farm_id,
@@ -702,7 +702,7 @@ async fn run_sync_output(
         .map_err(|e: String| CliError::Operation(e))?;
 
     // Run the incremental output download orchestration
-    let tc = create_telemetry(&deadline_lib::config::config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
+    let tc = create_telemetry(&config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
     let updated_checkpoint = incremental_output_download(
         &farm,
         &queue_id_str,
@@ -1537,7 +1537,7 @@ async fn incremental_output_download(
                     .file_name()
                     .map_or_else(|| mp.path.clone(), |f| f.to_string_lossy().to_string());
                 let mut fe = openjd_snapshots::FileEntry::file(&filename, mp.size.unwrap_or(0), mp.mtime.unwrap_or(0));
-                fe.hash = mp.hash.clone();
+                fe.hash.clone_from(&mp.hash);
                 entry.files.push(fe);
                 entry.total_size += mp.size.unwrap_or(0);
             }

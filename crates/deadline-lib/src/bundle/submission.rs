@@ -741,17 +741,14 @@ pub async fn create_job_from_job_bundle(
                         let asset_manifest = if group.inputs.is_empty() {
                             None
                         } else {
-                            let file_paths: Vec<std::path::PathBuf> = group.inputs.iter().cloned().collect();
+                            let file_paths: Vec<PathBuf> = group.inputs.iter().cloned().collect();
                             let abs_snapshot = collect_abs_snapshot(
-                                &[] as &[std::path::PathBuf], &file_paths, CollectOptions::default(),
+                                &[] as &[PathBuf], &file_paths, CollectOptions::default(),
                             ).map_err(|e| op_err(e.to_string()))?;
                             let hash_result = hash_abs_manifest(
                                 &AbsManifest::Snapshot(abs_snapshot), HashOptions::default(),
                             ).map_err(|e| op_err(e.to_string()))?;
-                            let hashed = match &hash_result.manifest {
-                                AbsManifest::Snapshot(s) => s,
-                                _ => unreachable!(),
-                            };
+                            let AbsManifest::Snapshot(hashed) = &hash_result.manifest else { unreachable!() };
                             let root_str = group.root_path.to_string_lossy();
                             let files: Vec<FileEntry> = hashed.files.iter()
                                 .filter(|f| !f.deleted && f.symlink_target.is_none())
@@ -761,7 +758,7 @@ pub async fn create_job_from_job_bundle(
                                         .unwrap_or(&f.path)
                                         .trim_start_matches('/');
                                     let mut entry = FileEntry::file(rel, f.size.unwrap_or(0), f.mtime.unwrap_or(0));
-                                    entry.hash = f.hash.clone();
+                                    entry.hash.clone_from(&f.hash);
                                     entry
                                 }).collect();
                             let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();

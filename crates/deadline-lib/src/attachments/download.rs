@@ -11,7 +11,7 @@ use crate::attachments::errors::JobAttachmentsError;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023, encode_snapshot_v2023};
+use openjd_snapshots::{FileEntry, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023};
 use crate::attachments::models::{Attachments, FileConflictResolution, JobAttachmentS3Settings};
 use crate::attachments::progress_tracker::{
     DownloadSummaryStatistics, ProgressStatus, ProgressTracker,
@@ -391,7 +391,7 @@ pub async fn download_files_from_manifests(
         // Build AbsSnapshot with absolute paths (root + relative)
         let mut abs_snapshot = openjd_snapshots::Manifest::new(
             openjd_snapshots::HashAlgorithm::Xxh128,
-            openjd_snapshots::WHOLE_FILE_CHUNK_SIZE,
+            WHOLE_FILE_CHUNK_SIZE,
         );
         for p in &manifest.files {
             let abs_path = if local_root.ends_with('/') {
@@ -400,7 +400,7 @@ pub async fn download_files_from_manifests(
                 format!("{}/{}", local_root, p.path)
             };
             let mut entry = FileEntry::file(&abs_path, p.size.unwrap_or(0), p.mtime.unwrap_or(0));
-            entry.hash = p.hash.clone();
+            entry.hash.clone_from(&p.hash);
             abs_snapshot.files.push(entry);
         }
         abs_snapshot.total_size = manifest.total_size;
@@ -1144,6 +1144,7 @@ impl InputDownloader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openjd_snapshots::HashAlgorithm;
 
     // --- Helper to build test manifests ---
 

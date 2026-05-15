@@ -139,7 +139,7 @@ const WINDOWS_MAX_PATH_LENGTH: usize = 260;
 /// and the registry long-path setting is not enabled.
 /// On non-Windows, returns the path unchanged.
 #[cfg(not(windows))]
-pub fn get_long_path_compatible_path(path: &std::path::Path) -> std::path::PathBuf {
+pub fn get_long_path_compatible_path(path: &std::path::Path) -> PathBuf {
     path.to_path_buf()
 }
 
@@ -542,9 +542,9 @@ impl StorageProfile {
 pub struct AssetRootGroup {
     pub file_system_location_name: Option<String>,
     pub root_path: PathBuf,
-    pub inputs: std::collections::BTreeSet<std::path::PathBuf>,
-    pub outputs: std::collections::BTreeSet<std::path::PathBuf>,
-    pub references: std::collections::BTreeSet<std::path::PathBuf>,
+    pub inputs: std::collections::BTreeSet<PathBuf>,
+    pub outputs: std::collections::BTreeSet<PathBuf>,
+    pub references: std::collections::BTreeSet<PathBuf>,
 }
 
 // --- AssetUploadGroup ---
@@ -563,7 +563,7 @@ pub struct AssetRootManifest {
     pub file_system_location_name: Option<String>,
     pub root_path: PathBuf,
     pub asset_manifest: Option<openjd_snapshots::Snapshot>,
-    pub outputs: Vec<std::path::PathBuf>,
+    pub outputs: Vec<PathBuf>,
 }
 
 #[cfg(test)]

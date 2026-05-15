@@ -104,14 +104,14 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
             force_rehash,
             json,
         } => {
-            if !std::path::Path::new(&root).is_dir() {
+            if !Path::new(&root).is_dir() {
                 return Err(CliError::Operation(format!(
                     "Specified root directory {root} does not exist."
                 )));
             }
 
             let dest = if let Some(ref d) = destination {
-                if !std::path::Path::new(d).is_dir() {
+                if !Path::new(d).is_dir() {
                     return Err(CliError::Operation(format!(
                         "Specified destination directory {d} does not exist."
                     )));
@@ -156,18 +156,18 @@ fn run_sync(action: ManifestAction) -> Result<(), CliError> {
             force_rehash,
             json,
         } => {
-            if !std::path::Path::new(&manifest).is_file() {
+            if !Path::new(&manifest).is_file() {
                 return Err(CliError::Operation(format!(
                     "Specified manifest file {manifest} does not exist. "
                 )));
             }
             // Derive root from manifest's parent directory when not specified
             let root = root.unwrap_or_else(|| {
-                std::path::Path::new(&manifest)
+                Path::new(&manifest)
                     .parent()
                     .map_or_else(|| ".".to_owned(), |p| p.to_string_lossy().to_string())
             });
-            if !std::path::Path::new(&root).is_dir() {
+            if !Path::new(&root).is_dir() {
                 return Err(CliError::Operation(format!(
                     "Specified root directory {root} does not exist. "
                 )));
@@ -233,7 +233,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             asset_type,
             json: _,
         } => {
-            if !std::path::Path::new(&download_dir).is_dir() {
+            if !Path::new(&download_dir).is_dir() {
                 return Err(CliError::Operation(format!(
                     "Specified destination directory {download_dir} does not exist. "
                 )));
@@ -331,8 +331,8 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 if let Some(manifest_path) = manifest_entry.input_manifest_path() {
                     // Filter by step if specified (ManifestProperties doesn't have stepId — skip filter)
                     let key = format!("{prefix}/Manifests/{manifest_path}");
-                    let dest_path = std::path::Path::new(&download_dir).join(
-                        std::path::Path::new(manifest_path)
+                    let dest_path = Path::new(&download_dir).join(
+                        Path::new(manifest_path)
                             .file_name()
                             .unwrap_or_default(),
                     );
@@ -380,7 +380,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             profile,
             json: _,
         } => {
-            if !std::path::Path::new(&manifest_file).is_file() {
+            if !Path::new(&manifest_file).is_file() {
                 return Err(CliError::Operation(format!(
                     "Specified manifest {manifest_file} does not exist. "
                 )));

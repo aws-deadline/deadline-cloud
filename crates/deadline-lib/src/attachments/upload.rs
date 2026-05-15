@@ -600,7 +600,7 @@ pub async fn upload_assets(
                         .unwrap_or(&f.path)
                         .trim_start_matches('/');
                     let mut entry = FileEntry::file(rel, f.size.unwrap_or(0), f.mtime.unwrap_or(0));
-                    entry.hash = f.hash.clone();
+                    entry.hash.clone_from(&f.hash);
                     entry
                 })
                 .collect();

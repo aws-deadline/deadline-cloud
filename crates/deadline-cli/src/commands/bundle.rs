@@ -245,7 +245,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             let telemetry = deadline_lib::api::telemetry::create_telemetry(&config);
 
             // F8: If snapshot path ends in .zip, use a temp dir then zip after
-            let snapshot_tmpdir: Option<std::path::PathBuf> = if save_debug_snapshot
+            let snapshot_tmpdir: Option<PathBuf> = if save_debug_snapshot
                 .as_ref()
                 .is_some_and(|p| {
                     std::path::Path::new(p.as_str())
