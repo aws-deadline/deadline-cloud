@@ -382,7 +382,10 @@ fn hash_files_to_manifest(
 
     let AbsManifest::Snapshot(hashed) = &hash_result.manifest else { unreachable!() };
 
-    let root_prefix = root.to_owned();
+    let root_prefix = std::path::absolute(std::path::Path::new(root))
+        .unwrap_or_else(|_| PathBuf::from(root))
+        .to_string_lossy()
+        .into_owned();
     let files: Vec<FileEntry> = hashed
         .files
         .iter()

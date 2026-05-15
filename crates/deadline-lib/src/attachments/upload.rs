@@ -496,9 +496,10 @@ pub async fn upload_assets(
             .outputs
             .iter()
             .filter_map(|p| {
-                p.strip_prefix(&group.root_path)
-                    .ok()
-                    .map(|r| r.to_string_lossy().into_owned())
+                p.strip_prefix(&group.root_path).ok().map(|r| {
+                    let s = r.to_string_lossy().into_owned();
+                    if s.is_empty() { ".".to_owned() } else { s }
+                })
             })
             .collect();
 
@@ -701,9 +702,10 @@ pub fn snapshot_assets(
             .outputs
             .iter()
             .filter_map(|p| {
-                p.strip_prefix(&arm.root_path)
-                    .ok()
-                    .map(|r| r.to_string_lossy().into_owned())
+                p.strip_prefix(&arm.root_path).ok().map(|r| {
+                    let s = r.to_string_lossy().into_owned();
+                    if s.is_empty() { ".".to_owned() } else { s }
+                })
             })
             .collect();
 

@@ -5,7 +5,7 @@ info:
   args:
     - bundle
     - submit
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmppsGN6d/env_hooks_enabled
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmprGLcsi/env_hooks_enabled
     - "--yes"
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
@@ -13,18 +13,18 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:57990"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:57990"
-    AWS_ENDPOINT_URL_S3: "http://localhost:57990"
-    AWS_ENDPOINT_URL_STS: "http://localhost:57990"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:65024"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:65024"
+    AWS_ENDPOINT_URL_S3: "http://localhost:65024"
+    AWS_ENDPOINT_URL_STS: "http://localhost:65024"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmppsGN6d/config
-    DEADLINE_HOOKS_DIR: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmppsGN6d/env_hooks
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmppsGN6d
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmprGLcsi/config
+    DEADLINE_HOOKS_DIR: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmprGLcsi/env_hooks
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmprGLcsi
 ---
 success: true
 exit_code: 0
@@ -32,6 +32,8 @@ exit_code: 0
 Submitting to Queue: Test Queue
 
 Running pre-submission hook [1]: sh -c exit 0
+Hashing Attachments
+Uploading Attachments
 Waiting for Job to be created...
 Submitted job bundle:
    [TEMP_PATH]

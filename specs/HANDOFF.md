@@ -10,16 +10,34 @@ See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
 
 ## Current Status
 
-**Step 9.1 (Config Resolution):** ✅ Complete. No library crate reads config from disk.
+**Step 12 (CLI Behavioral Audit):** Study complete. Two bugs found.
 
-**Baseline (2026-05-13):**
+**Baseline (2026-05-14):**
 
 | Crate | Tests | Status |
 |-------|-------|--------|
-| `deadline-job-attachments` | 294 | ✅ All pass |
-| `deadline-job-bundle` | 249 | ✅ All pass |
-| `deadline-api` | 168 | ✅ All pass |
-| `deadline-cli` | 492 | ✅ All pass |
+| `deadline-lib` (unit) | 488 | ✅ All pass |
+| `deadline-lib` (integration/attachments) | 129 | ✅ All pass |
+| `deadline-lib` (integration/bundle) | 179 | ✅ All pass |
+| `deadline-cli` (unit) | 58 | ✅ All pass |
+| `deadline-cli` (integration) | 441 | ✅ All pass |
+| **Total** | **1,295** | ✅ All pass |
+
+**Audit report:** `audit_reports/2026-05-14-cli-behavioral-audit.md`
+
+**Bugs to fix:**
+
+1. **BUG-1 (High):** `outputRelativeDirectories` sends `""` instead of `"."`
+   when output dir equals root path. Blocks INOUT PATH job submission.
+   - Location: `crates/deadline-lib/src/attachments/upload.rs` lines ~497, ~705
+   - Fix: Map empty `strip_prefix` result to `"."`
+
+2. **BUG-2 (Low):** `manifest snapshot` with relative `--root` produces
+   absolute paths in manifest. Only affects standalone CLI command.
+   - Location: `crates/deadline-lib/src/attachments/manifest_ops.rs::hash_files_to_manifest`
+   - Fix: Use `std::path::absolute(root)` for the strip prefix
+
+**Status: Step 1 complete (study), awaiting review before fixing bugs.**
 
 ---
 
@@ -122,13 +140,22 @@ Deleted ~600 lines. Tests: 314→305.
 
 ---
 
-## Next: Step 11 — Collapse Type Bridge
+## Next: Step 12 — Full CLI Behavioral Audit
 
-Use openjd types directly (`Snapshot`, `FileEntry`, `hash::hash_data`)
-instead of our wrapper types (`AssetManifest`, `ManifestPath`, `hash_data`).
-See `specs/crate-restructure.md` § 11 for full plan.
+Verify every CLI command produces correct output and matches the Python
+client's behavior. Run each command against real services, compare output
+format, error messages, and exit codes.
 
-**Status:** ✅ Complete (commit `cf24fe3`).
+**Status:** Study complete. Audit report written. Two bugs found (BUG-1 high,
+BUG-2 low). Ready to implement fixes.
+
+**Implementation plan:**
+1. Fix BUG-1 in `upload.rs` (two sites) — map empty strip_prefix to `"."`
+2. Add test case for INOUT PATH submission with output dir = root
+3. Fix BUG-2 in `manifest_ops.rs` — use absolute root for strip_prefix
+4. Add test case for manifest snapshot with relative root
+5. Verify all 1,295 tests still pass
+6. Re-run the failing `bundle submit` with INOUT PATH to confirm fix
 
 **Baseline (2026-05-14, pre-Step 11):**
 
@@ -167,7 +194,7 @@ See `specs/crate-restructure.md` § 11 for full plan.
 | 9.5 | Presentation utilities (move to CLI) | `be667f9` |
 | 10 | Crate consolidation (4 crates → deadline-lib) | `b9133e4` |
 | 11 | Collapse type bridge (openjd types directly) | `cf24fe3` |
-| 12 | Full CLI behavioral audit | — (next) |
+| 12 | Full CLI behavioral audit | In progress |
 
 ---
 

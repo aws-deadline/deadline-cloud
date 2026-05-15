@@ -26,6 +26,17 @@ use aws_sdk_deadline::operation::get_worker::GetWorkerOutput;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
+/// Sort task run status counts in lifecycle progression order (matching Python CLI).
+fn sort_status_counts(pairs: &mut Vec<(String, Value)>) {
+    const ORDER: &[&str] = &[
+        "PENDING", "READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED",
+        "INTERRUPTING", "SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE",
+    ];
+    pairs.sort_by_key(|(k, _)| {
+        ORDER.iter().position(|s| s == k).unwrap_or(ORDER.len())
+    });
+}
+
 /// Format an AWS SDK `DateTime` to match Python's display format.
 /// Input: ISO 8601 (e.g. "2024-12-18T00:37:38Z" or "2024-12-18T00:37:38.624Z")
 /// Output: "2024-12-18 00:37:38+00:00" or "2024-12-18 00:37:38.624+00:00"
@@ -296,7 +307,7 @@ impl From<GetJobOutput> for JobResponse {
                 .iter()
                 .map(|(k, v)| (k.as_str().to_owned(), json!(v)))
                 .collect();
-            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            sort_status_counts(&mut pairs);
             let obj: Map<String, Value> = pairs.into_iter().collect();
             Value::Object(obj)
         });
@@ -386,7 +397,7 @@ impl From<GetStepOutput> for StepResponse {
                 .iter()
                 .map(|(k, v)| (k.as_str().to_owned(), json!(v)))
                 .collect();
-            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            sort_status_counts(&mut pairs);
             let obj: Map<String, Value> = pairs.into_iter().collect();
             Value::Object(obj)
         };

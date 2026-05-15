@@ -871,10 +871,12 @@ pub async fn create_job_from_job_bundle(
             create_job_args.insert("attachments".into(), att_json);
         }
     } else {
-        // No files to process — call callbacks once at 100% to close progress bars
+        // No files to process — emit stage headers and call callbacks to match Python output
+        handler.on_message("Hashing Attachments");
         if let Some(ref cb) = params.hashing_progress_callback {
             cb(0, 0);
         }
+        handler.on_message("Uploading Attachments");
         if let Some(ref cb) = params.upload_progress_callback {
             cb(0, 0);
         }

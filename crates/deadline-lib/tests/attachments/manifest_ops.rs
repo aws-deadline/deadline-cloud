@@ -227,6 +227,40 @@ fn manifest_snapshot_empty_dir_returns_none() {
     assert!(result.is_none());
 }
 
+#[test]
+fn manifest_snapshot_relative_root_produces_relative_paths() {
+    use std::path::PathBuf;
+    let dir = TempDir::new().unwrap();
+    create_file(&dir, "a.txt", b"hello");
+    let config = GlobConfig {
+        include: vec!["**/*".into()],
+        exclude: vec![],
+    };
+    // Simulate what the CLI does: pass a relative root path
+    // glob_files will absolutize it, but hash_files_to_manifest gets the relative string
+    let saved_cwd = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let result = manifest_snapshot(
+        &PathBuf::from("."),
+        dir.path(),
+        None,
+        &config,
+        None,
+        false,
+    );
+
+    std::env::set_current_dir(&saved_cwd).unwrap();
+
+    let result = result.unwrap();
+    assert!(result.is_some());
+    let snap = result.unwrap();
+    let content = fs::read_to_string(&snap.manifest).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+    let path = parsed["paths"][0]["path"].as_str().unwrap();
+    assert_eq!(path, "a.txt", "manifest path should be relative to root, got: {path}");
+}
+
 // =====================================================================
 // manifest_diff
 // =====================================================================

@@ -5,7 +5,7 @@ info:
   args:
     - bundle
     - submit
-    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpv3bZUW/hooks_disabled
+    - /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp6sbTac/hooks_disabled
     - "--yes"
   env:
     AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
@@ -13,17 +13,17 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:62858"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:62858"
-    AWS_ENDPOINT_URL_S3: "http://localhost:62858"
-    AWS_ENDPOINT_URL_STS: "http://localhost:62858"
+    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:65035"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:65035"
+    AWS_ENDPOINT_URL_S3: "http://localhost:65035"
+    AWS_ENDPOINT_URL_STS: "http://localhost:65035"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpv3bZUW/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpv3bZUW
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp6sbTac/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmp6sbTac
 ---
 success: true
 exit_code: 0
@@ -32,6 +32,8 @@ Note: Job bundle contains hooks.yaml but bundle hooks are disabled.
 Enable with: deadline config set settings.allow_bundle_hooks true
 Submitting to Queue: Test Queue
 
+Hashing Attachments
+Uploading Attachments
 Waiting for Job to be created...
 Submitted job bundle:
    [TEMP_PATH]

@@ -246,6 +246,47 @@ async fn upload_assets_output_only_manifest_has_no_input_path() {
 }
 
 // =====================================================================
+// upload_assets — output dir equals root produces "." not ""
+// =====================================================================
+#[tokio::test]
+async fn upload_assets_output_dir_equals_root_uses_dot() {
+    let server = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    std::fs::write(dir.path().join("file.txt"), b"data").unwrap();
+
+    let uploader = build_uploader(&server).await;
+    let s3_settings = test_s3_settings();
+
+    // Output dir is the same as root_path
+    let groups = vec![AssetRootGroup {
+        root_path: dir.path().to_path_buf(),
+        file_system_location_name: None,
+        inputs: std::collections::BTreeSet::new(),
+        outputs: [dir.path().to_path_buf()].into_iter().collect(),
+        references: std::collections::BTreeSet::new(),
+    }];
+
+    let (_, attachments) = upload_assets(
+        "farm-1",
+        "queue-1",
+        &s3_settings,
+        &groups,
+        &uploader,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let dirs = attachments.manifests[0]
+        .output_relative_directories
+        .as_ref()
+        .unwrap();
+    assert_eq!(dirs, &vec![".".to_string()]);
+}
+
+// =====================================================================
 // upload_assets — missing farm_id errors
 // =====================================================================
 #[tokio::test]
