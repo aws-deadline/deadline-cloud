@@ -167,6 +167,7 @@ See `specs/crate-restructure.md` § 11 for full plan.
 | 9.5 | Presentation utilities (move to CLI) | `be667f9` |
 | 10 | Crate consolidation (4 crates → deadline-lib) | `b9133e4` |
 | 11 | Collapse type bridge (openjd types directly) | `cf24fe3` |
+| 12 | Full CLI behavioral audit | — (next) |
 
 ---
 

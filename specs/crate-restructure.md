@@ -347,22 +347,52 @@ Step 9 (CLI/library boundary)  ← DONE
     ↓
 Step 10 (crate merge → deadline-lib)  ← DONE
     ↓
-Step 11 (collapse type bridge — use openjd types directly)  ← NEXT
+Step 11 (collapse type bridge — use openjd types directly)  ← DONE
     ↓
-Step 12 (idiomatic patterns)  ← ongoing, interleaved
+Step 12 (full CLI behavioral audit — verify all commands match Python)  ← NEXT
+    ↓
+Step 13 (idiomatic patterns)  ← ongoing, interleaved
 ```
 
 ---
 
-## Step 12: Redesign (Idiomatic Patterns)
+## Step 12: Full CLI Behavioral Audit
 
-Applied to remaining code after Steps 1–11.
+Verify every CLI command produces correct output and matches the Python
+client's behavior. Run each command against real or stubbed services,
+compare output format, error messages, and exit codes.
 
-### 12.1 Options structs with Default
+**Scope:**
+- All commands listed in `specs/deadline-cli/reference.md`
+- `--help` output for every command and subcommand
+- Auth flow (login/logout/status)
+- Resource commands (farm, fleet, worker, queue, job)
+- Bundle submit (with and without attachments)
+- Attachment/manifest commands
+- Error paths (missing args, bad credentials, not found)
+- Python parity: compare with `deadline` Python CLI where applicable
+
+**Process:**
+1. Build the Rust binary
+2. Run each command with `--help`, verify flags match spec
+3. Run behavioral tests against stub server or real service
+4. Document any differences from Python CLI
+5. Fix bugs found; note acceptable divergences
+
+**Output:** A report at `audit_reports/cli-behavioral-audit-{date}.md`
+listing pass/fail per command and any divergences.
+
+---
+
+## Step 13: Redesign (Idiomatic Patterns)
+
+Applied to remaining code after Steps 1–12.
+
+### 13.1 Options structs with Default
 
 ```rust
 // Before: positional params, hard to extend
-pub fn download_files(manifests: &[AssetManifest], root: &str, conflict: FileConflictResolution,
+pub fn download_files(manifests: &[Snapshot], root: &str, conflict: FileConflictResolution,
     s3_client: &S3Client, ...) -> Result<...>
 
 // After: options struct
@@ -374,7 +404,7 @@ pub struct DownloadOptions {
 impl Default for DownloadOptions { ... }
 ```
 
-### 12.2 Error propagation (no silent swallowing)
+### 13.2 Error propagation (no silent swallowing)
 
 ```rust
 // Before
@@ -384,7 +414,7 @@ conn.execute(...).unwrap_or_else(|e| { log::warn!("...{e}"); 0 });
 conn.execute(...).map_err(|e| AttachmentError::Cache(e.to_string()))?;
 ```
 
-### 12.3 Typed enums over string matching
+### 13.3 Typed enums over string matching
 
 ```rust
 // Before
@@ -395,7 +425,7 @@ if val == "COPIED" { ... }
 pub enum AttachmentFileSystem { Copied, Virtual }
 ```
 
-### 12.4 Parallelism
+### 13.4 Parallelism
 
 After Step 7, openjd-snapshots handles parallel hashing and upload via tokio.
 Remaining sequential code in our orchestration layer is fine — it's I/O
