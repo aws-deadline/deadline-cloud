@@ -88,9 +88,7 @@ fn read_aws_config_section(content: &str, section_header: &str, key: &str) -> Op
 /// Determine where credentials come from.
 /// DCM profiles have `monitor_id` in the AWS profile's scoped config.
 /// Returns `NotValid` if the specified profile does not exist.
-pub fn get_credentials_source(
-    config: &crate::config::ini::IniConfig,
-) -> AwsCredentialsSource {
+pub fn get_credentials_source(config: &crate::config::ini::IniConfig) -> AwsCredentialsSource {
     let profile_name = session::resolve_profile_name(config);
     match &profile_name {
         Some(name) => {
@@ -478,10 +476,7 @@ mod tests {
         let _f = with_aws_config("[profile other]\nregion = us-west-2\n");
         let mut ini = crate::config::ini::IniConfig::new();
         ini.set("defaults", "aws_profile_name", "nonexistent");
-        assert_eq!(
-            get_credentials_source(&ini),
-            AwsCredentialsSource::NotValid
-        );
+        assert_eq!(get_credentials_source(&ini), AwsCredentialsSource::NotValid);
     }
 
     #[test]

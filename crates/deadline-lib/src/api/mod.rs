@@ -1,3 +1,4 @@
+#[allow(clippy::module_inception, reason = "api::api matches Python's api/_api.py structure")]
 pub mod api;
 pub mod auth;
 pub mod client;

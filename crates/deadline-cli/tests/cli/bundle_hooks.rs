@@ -322,3 +322,29 @@ async fn bundle_submit_hooks_confirmation_prompt() {
     // Since stdin is not a TTY, submission should be canceled.
     assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &bundle_dir]));
 }
+
+// =====================================================================
+// Pre-hook timeout — submission canceled with timeout message (Batch B)
+// =====================================================================
+
+#[tokio::test]
+async fn bundle_submit_pre_hook_timeout_cancels() {
+    let harness = TestHarness::new().await;
+    setup_config(&harness);
+    harness
+        .cli(&["config", "set", "settings.allow_bundle_hooks", "true"])
+        .assert()
+        .success();
+    mock_submit_no_attachments(&harness).await;
+
+    // Create bundle with a hook that sleeps longer than its timeout
+    let dir = create_bundle(&harness, "hook_timeout");
+    fs::write(
+        std::path::Path::new(&dir).join("hooks.yaml"),
+        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"sleep 60\"]\n    timeout: 1\n",
+    )
+    .unwrap();
+
+    let _guard = bundle_hooks_settings().bind_to_scope();
+    assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &dir, "--yes"]));
+}

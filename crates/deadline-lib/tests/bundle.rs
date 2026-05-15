@@ -4,6 +4,8 @@
 #![allow(clippy::unwrap_used)]
 #[path = "bundle/history.rs"]
 mod history;
+#[path = "bundle/hooks.rs"]
+mod hooks;
 #[path = "bundle/loader.rs"]
 mod loader;
 #[path = "bundle/param_apply_merge.rs"]

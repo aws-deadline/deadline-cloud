@@ -1,5 +1,5 @@
-use chrono::{DateTime, TimeZone, Utc};
 use crate::config::ini::IniConfig;
+use chrono::{DateTime, TimeZone, Utc};
 
 use crate::api::errors::DeadlineError;
 use crate::api::{auth, session};

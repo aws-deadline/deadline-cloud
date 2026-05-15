@@ -108,21 +108,27 @@ impl SummaryStatistics {
 
     /// Format as a multi-line upload summary string for user display.
     pub fn format_upload_summary(&self) -> String {
-        let file_word = if self.processed_files == 1 { "file" } else { "files" };
+        let file_word = if self.processed_files == 1 {
+            "file"
+        } else {
+            "files"
+        };
         let total_time = (self.total_time * 100_000.0).round() / 100_000.0;
         format!(
             "Upload Summary:\n\
              \x20   Processed {} {} totaling {}.\n\
              \x20   Skipped re-processing {} files totaling {}.\n\
              \x20   Total processing time of {} seconds at {}/s.",
-            self.processed_files, file_word, human_readable_file_size(self.processed_bytes),
-            self.skipped_files, human_readable_file_size(self.skipped_bytes),
-            total_time, human_readable_file_size(self.transfer_rate as u64),
+            self.processed_files,
+            file_word,
+            human_readable_file_size(self.processed_bytes),
+            self.skipped_files,
+            human_readable_file_size(self.skipped_bytes),
+            total_time,
+            human_readable_file_size(self.transfer_rate as u64),
         )
     }
 }
-
-
 
 // --- DownloadSummaryStatistics ---
 
@@ -510,7 +516,6 @@ mod tests {
         assert_eq!(s1.skipped_bytes, 1000);
         assert!((s1.transfer_rate - 2000.0 / 3.0).abs() < 0.01);
     }
-
 
     #[test]
     fn track_progress_file_done_increments_files_and_bytes() {

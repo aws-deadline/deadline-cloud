@@ -1,10 +1,7 @@
 use crate::api::errors::DeadlineError;
+use crate::util::op_err;
 use std::fs;
 use std::path::Path;
-
-fn op_err(msg: String) -> DeadlineError {
-    DeadlineError::OperationError(msg)
-}
 
 pub fn create_job_history_bundle_dir(
     submitter_name: &str,

@@ -5,10 +5,10 @@ use chrono::{Duration, Local, Utc};
 use clap::Subcommand;
 use deadline_lib::api::telemetry::{create_telemetry, record_success_fail};
 use deadline_lib::api::{api, client, session};
-use deadline_lib::config::config_file;
 use deadline_lib::attachments::incremental_download::IncrementalDownloadJob;
 use deadline_lib::attachments::incremental_download::IncrementalDownloadState;
 use deadline_lib::attachments::models::FileConflictResolution;
+use deadline_lib::config::config_file;
 
 use super::config::CliError;
 use super::helpers::suggest_resources_on_client_error;
@@ -259,8 +259,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, None, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let dl = session::deadline_client(&config).await;
-            let builder =
-                client::apply_dcm_principal(dl.list_queues().farm_id(&farm), &config);
+            let builder = client::apply_dcm_principal(dl.list_queues().farm_id(&farm), &config);
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
@@ -428,9 +427,7 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
             match deadline_lib::api::queue_parameters::get_queue_parameter_definitions(
-                &farm,
-                &queue,
-                &config,
+                &farm, &queue, &config,
             )
             .await
             {
@@ -470,7 +467,10 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             conflict_resolution,
             dry_run,
         } => {
-            let tc = create_telemetry(&config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
+            let tc = create_telemetry(
+                &config_file::read_config()
+                    .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
+            );
             let result = run_sync_output(
                 profile,
                 farm_id,
@@ -702,7 +702,9 @@ async fn run_sync_output(
         .map_err(|e: String| CliError::Operation(e))?;
 
     // Run the incremental output download orchestration
-    let tc = create_telemetry(&config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()));
+    let tc = create_telemetry(
+        &config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
+    );
     let updated_checkpoint = incremental_output_download(
         &farm,
         &queue_id_str,
@@ -827,10 +829,9 @@ async fn incremental_output_download(
         }],
         "operator": "AND"
     });
-    let ended_jobs =
-        api::list_jobs_by_filter_expression(farm_id, queue_id, &ended_filter, config)
-            .await
-            .map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
+    let ended_jobs = api::list_jobs_by_filter_expression(farm_id, queue_id, &ended_filter, config)
+        .await
+        .map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
 
     for job in &ended_jobs {
         if let Some(counts) = job.get("taskRunStatusCounts")
@@ -1192,8 +1193,9 @@ async fn incremental_output_download(
             let source_sp = StorageProfile::from_json(sp);
             let dest_sp = StorageProfile::from_json(local_sp);
             if let (Some(src), Some(dst)) = (source_sp, dest_sp) {
-                let rules =
-                    deadline_lib::attachments::path_mapping::generate_path_mapping_rules(&src, &dst);
+                let rules = deadline_lib::attachments::path_mapping::generate_path_mapping_rules(
+                    &src, &dst,
+                );
                 if rules.is_empty() {
                     eprintln!(
                         "   No rules generated. Storage profiles {local_name} and {sp_name} share no file system location names."
@@ -1361,10 +1363,8 @@ async fn incremental_output_download(
     let bucket = attachment_settings.s3_bucket_name();
     let prefix = attachment_settings.root_prefix();
 
-    let mut downloaded_manifests: Vec<(
-        chrono::DateTime<Utc>,
-        openjd_snapshots::Snapshot,
-    )> = Vec::new();
+    let mut downloaded_manifests: Vec<(chrono::DateTime<Utc>, openjd_snapshots::Snapshot)> =
+        Vec::new();
     let mut downloaded_files_count: usize = 0;
     let mut downloaded_bytes: u64 = 0;
 
@@ -1536,7 +1536,11 @@ async fn incremental_output_download(
                 let filename = Path::new(&mp.path)
                     .file_name()
                     .map_or_else(|| mp.path.clone(), |f| f.to_string_lossy().to_string());
-                let mut fe = openjd_snapshots::FileEntry::file(&filename, mp.size.unwrap_or(0), mp.mtime.unwrap_or(0));
+                let mut fe = openjd_snapshots::FileEntry::file(
+                    &filename,
+                    mp.size.unwrap_or(0),
+                    mp.mtime.unwrap_or(0),
+                );
                 fe.hash.clone_from(&mp.hash);
                 entry.files.push(fe);
                 entry.total_size += mp.size.unwrap_or(0);

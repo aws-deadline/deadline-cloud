@@ -10,6 +10,8 @@ mod diff;
 mod download;
 #[path = "attachments/download_filters.rs"]
 mod download_filters;
+#[path = "attachments/download_perf.rs"]
+mod download_perf;
 #[path = "attachments/manifest_ops.rs"]
 mod manifest_ops;
 #[path = "attachments/manifest_s3.rs"]

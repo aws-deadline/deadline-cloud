@@ -20,7 +20,7 @@ Check for alignment:
 - Are there code paths with no test coverage?
 - Do the CLI comparison results from Step 4 reveal anything the tests missed?
 
-**Produce a written findings list.** For each finding, categorize as:
+**Produce a findings list.** For each finding, categorize as:
 Bug, Missing coverage, or Improvement.
 If no findings, state "Audit clean — no findings."
 

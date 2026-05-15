@@ -434,8 +434,9 @@ mod tests {
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
         // aws_profile_name should still be the default "(default)"
-        let val = deadline_lib::config::config_file::get_setting("defaults.aws_profile_name", &config)
-            .unwrap();
+        let val =
+            deadline_lib::config::config_file::get_setting("defaults.aws_profile_name", &config)
+                .unwrap();
         assert_eq!(val, "(default)");
     }
 
@@ -481,8 +482,8 @@ mod tests {
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
 
-        let val =
-            deadline_lib::config::config_file::get_setting("settings.auto_accept", &config).unwrap();
+        let val = deadline_lib::config::config_file::get_setting("settings.auto_accept", &config)
+            .unwrap();
         assert_eq!(val, "true");
     }
 
@@ -495,8 +496,9 @@ mod tests {
             ..Default::default()
         };
         apply_cli_options_to_config(&mut config, &opts, &[]).unwrap();
-        let val = deadline_lib::config::config_file::get_setting("settings.storage_profile_id", &config)
-            .unwrap();
+        let val =
+            deadline_lib::config::config_file::get_setting("settings.storage_profile_id", &config)
+                .unwrap();
         assert_eq!(val, "sp-abc");
     }
 

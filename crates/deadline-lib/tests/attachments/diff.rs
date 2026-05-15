@@ -1,7 +1,7 @@
 //! Level 1 tests for diff module (batch 9e-1).
 
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use deadline_lib::attachments::diff::{FileStatus, fast_diff, hash_diff};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use std::fs;
 use tempfile::TempDir;
 

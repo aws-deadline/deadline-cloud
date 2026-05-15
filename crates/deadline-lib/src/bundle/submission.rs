@@ -1,5 +1,5 @@
-use crate::bundle::hooks::{self, HookManager, HookMetadata};
 use crate::api::errors::DeadlineError;
+use crate::bundle::hooks::{self, HookManager, HookMetadata};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -76,29 +76,9 @@ impl AssetReferences {
 
 /// Normalize a path: resolve `.` and `..` components without touching the filesystem.
 pub fn normalize_path(s: &str) -> String {
-    let mut parts: Vec<std::path::Component> = Vec::new();
-    for c in Path::new(s).components() {
-        match c {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                if matches!(parts.last(), Some(std::path::Component::Normal(_))) {
-                    parts.pop();
-                } else {
-                    parts.push(c);
-                }
-            }
-            _ => parts.push(c),
-        }
-    }
-    if parts.is_empty() {
-        ".".into()
-    } else {
-        parts
-            .iter()
-            .collect::<PathBuf>()
-            .to_string_lossy()
-            .into_owned()
-    }
+    crate::util::normalize_path(Path::new(s))
+        .to_string_lossy()
+        .into_owned()
 }
 
 const DEFAULT_APP_NAME: &str = "deadline";
@@ -215,9 +195,7 @@ pub fn parse_frame_range(frame_string: &str) -> Result<Vec<i64>, DeadlineError> 
 }
 
 /// Shorthand for the most common error variant.
-fn op_err(msg: String) -> DeadlineError {
-    DeadlineError::OperationError(msg)
-}
+use crate::util::op_err;
 
 // ---------------------------------------------------------------------------
 // Job submission orchestration
@@ -232,13 +210,11 @@ use crate::bundle::parameters::{
 };
 
 use crate::api::{api, client, queue_parameters, session};
-use crate::config::config_file;
-use crate::config::ini::IniConfig;
-use crate::attachments::models::{
-    FileSystemLocationType, JobAttachmentS3Settings, StorageProfile,
-};
+use crate::attachments::models::{FileSystemLocationType, JobAttachmentS3Settings, StorageProfile};
 use crate::attachments::progress_tracker::ProgressFn;
 use crate::attachments::upload;
+use crate::config::config_file;
+use crate::config::ini::IniConfig;
 
 use serde_json::{Value, json};
 
@@ -569,7 +545,9 @@ pub async fn create_job_from_job_bundle(
     if asset_references.is_non_empty() && has_attachment_settings {
         expand_input_directories(&mut asset_references, params.require_paths_exist)?;
 
-        let mut known_paths: Vec<String> = params.known_asset_paths.iter()
+        let mut known_paths: Vec<String> = params
+            .known_asset_paths
+            .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect();
         known_paths.push(
@@ -672,8 +650,7 @@ pub async fn create_job_from_job_bundle(
         )
         .await?;
 
-        let s3_client =
-            crate::attachments::s3::build_s3_client(&queue_sdk_config, params.config);
+        let s3_client = crate::attachments::s3::build_s3_client(&queue_sdk_config, params.config);
         let account_id = crate::attachments::s3::get_account_id(&queue_sdk_config)
             .await
             .map_err(|e| op_err(format!("Failed to get account ID: {e}")))?;
@@ -729,93 +706,110 @@ pub async fn create_job_from_job_bundle(
             let upload_ctx = upload::S3UploadContext::new(s3_client, account_id)
                 .map_err(|e| op_err(e.to_string()))?;
 
-            let upload_result: Result<_, DeadlineError> =
-                if let Some(ref snap_dir) = params.debug_snapshot_dir {
-                    // F8: Snapshot assets locally instead of uploading to S3.
-                    // Hash files first (snapshot needs hashes for CAS key names).
-                    use openjd_snapshots::{AbsManifest, CollectOptions, FileEntry, HashAlgorithm, HashOptions, Snapshot, WHOLE_FILE_CHUNK_SIZE, collect_abs_snapshot, hash_abs_manifest};
-                    use crate::attachments::models::AssetRootManifest;
-
-                    let mut manifests = Vec::new();
-                    for group in &upload_group.asset_groups {
-                        let asset_manifest = if group.inputs.is_empty() {
-                            None
-                        } else {
-                            let file_paths: Vec<PathBuf> = group.inputs.iter().cloned().collect();
-                            let abs_snapshot = collect_abs_snapshot(
-                                &[] as &[PathBuf], &file_paths, CollectOptions::default(),
-                            ).map_err(|e| op_err(e.to_string()))?;
-                            let hash_result = hash_abs_manifest(
-                                &AbsManifest::Snapshot(abs_snapshot), HashOptions::default(),
-                            ).map_err(|e| op_err(e.to_string()))?;
-                            let AbsManifest::Snapshot(hashed) = &hash_result.manifest else { unreachable!() };
-                            let root_str = group.root_path.to_string_lossy();
-                            let files: Vec<FileEntry> = hashed.files.iter()
-                                .filter(|f| !f.deleted && f.symlink_target.is_none())
-                                .map(|f| {
-                                    let rel = f.path.strip_prefix(&*root_str)
-                                        .or_else(|| f.path.strip_prefix("/"))
-                                        .unwrap_or(&f.path)
-                                        .trim_start_matches('/');
-                                    let mut entry = FileEntry::file(rel, f.size.unwrap_or(0), f.mtime.unwrap_or(0));
-                                    entry.hash.clone_from(&f.hash);
-                                    entry
-                                }).collect();
-                            let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
-                            let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
-                            snap.files = files;
-                            snap.total_size = total_size;
-                            Some(snap)
-                        };
-                        manifests.push(AssetRootManifest {
-                            file_system_location_name: group.file_system_location_name.clone(),
-                            root_path: group.root_path.clone(),
-                            asset_manifest,
-                            outputs: group.outputs.iter().cloned().collect(),
-                        });
-                    }
-                    upload::snapshot_assets(
-                        &farm_id,
-                        &queue_id,
-                        &s3_settings,
-                        snap_dir,
-                        &manifests,
-                        params.upload_progress_callback,
-                    )
-                    .map_err(|e| op_err(e.to_string()))
-                } else {
-                    upload::upload_assets(
-                        &farm_id,
-                        &queue_id,
-                        &s3_settings,
-                        &upload_group.asset_groups,
-                        &upload_ctx,
-                        params.upload_progress_callback,
-                        cache_dir_str,
-                        Some(force_s3_check),
-                    )
-                    .await
-                    .map_err(|e| op_err(e.to_string()))
+            let upload_result: Result<_, DeadlineError> = if let Some(ref snap_dir) =
+                params.debug_snapshot_dir
+            {
+                // F8: Snapshot assets locally instead of uploading to S3.
+                // Hash files first (snapshot needs hashes for CAS key names).
+                use crate::attachments::models::AssetRootManifest;
+                use openjd_snapshots::{
+                    AbsManifest, CollectOptions, FileEntry, HashAlgorithm, HashOptions, Snapshot,
+                    WHOLE_FILE_CHUNK_SIZE, collect_abs_snapshot, hash_abs_manifest,
                 };
 
-            // Emit upload summary telemetry (uses hashing_summary event name for backward compat)
-            if let Some(tc) = params.telemetry {
-                if let Ok((ref stats, _)) = upload_result {
-                    let mut details = std::collections::HashMap::new();
-                    details.insert("total_files".into(), json!(stats.total_files));
-                    details.insert("total_bytes".into(), json!(stats.total_bytes));
-                    details.insert("processed_files".into(), json!(stats.processed_files));
-                    details.insert("processed_bytes".into(), json!(stats.processed_bytes));
-                    details.insert("skipped_files".into(), json!(stats.skipped_files));
-                    details.insert("skipped_bytes".into(), json!(stats.skipped_bytes));
-                    details.insert("total_time".into(), json!(stats.total_time));
-                    details.insert("transfer_rate".into(), json!(stats.transfer_rate));
-                    tc.record_event(
-                        "com.amazon.rum.deadline.job_attachments.hashing_summary",
-                        details,
-                        false,
-                    );
+                let mut manifests = Vec::new();
+                for group in &upload_group.asset_groups {
+                    let asset_manifest = if group.inputs.is_empty() {
+                        None
+                    } else {
+                        let file_paths: Vec<PathBuf> = group.inputs.iter().cloned().collect();
+                        let abs_snapshot = collect_abs_snapshot(
+                            &[] as &[PathBuf],
+                            &file_paths,
+                            CollectOptions::default(),
+                        )
+                        .map_err(|e| op_err(e.to_string()))?;
+                        let hash_result = hash_abs_manifest(
+                            &AbsManifest::Snapshot(abs_snapshot),
+                            HashOptions::default(),
+                        )
+                        .map_err(|e| op_err(e.to_string()))?;
+                        let AbsManifest::Snapshot(hashed) = &hash_result.manifest else {
+                            unreachable!()
+                        };
+                        let root_str = group.root_path.to_string_lossy();
+                        let files: Vec<FileEntry> = hashed
+                            .files
+                            .iter()
+                            .filter(|f| !f.deleted && f.symlink_target.is_none())
+                            .map(|f| {
+                                let rel = f
+                                    .path
+                                    .strip_prefix(&*root_str)
+                                    .or_else(|| f.path.strip_prefix("/"))
+                                    .unwrap_or(&f.path)
+                                    .trim_start_matches('/');
+                                let mut entry =
+                                    FileEntry::file(rel, f.size.unwrap_or(0), f.mtime.unwrap_or(0));
+                                entry.hash.clone_from(&f.hash);
+                                entry
+                            })
+                            .collect();
+                        let total_size: u64 = files.iter().map(|f| f.size.unwrap_or(0)).sum();
+                        let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
+                        snap.files = files;
+                        snap.total_size = total_size;
+                        Some(snap)
+                    };
+                    manifests.push(AssetRootManifest {
+                        file_system_location_name: group.file_system_location_name.clone(),
+                        root_path: group.root_path.clone(),
+                        asset_manifest,
+                        outputs: group.outputs.iter().cloned().collect(),
+                    });
                 }
+                upload::snapshot_assets(
+                    &farm_id,
+                    &queue_id,
+                    &s3_settings,
+                    snap_dir,
+                    &manifests,
+                    params.upload_progress_callback,
+                )
+                .map_err(|e| op_err(e.to_string()))
+            } else {
+                upload::upload_assets(
+                    &farm_id,
+                    &queue_id,
+                    &s3_settings,
+                    &upload_group.asset_groups,
+                    &upload_ctx,
+                    params.upload_progress_callback,
+                    cache_dir_str,
+                    Some(force_s3_check),
+                )
+                .await
+                .map_err(|e| op_err(e.to_string()))
+            };
+
+            // Emit upload summary telemetry (uses hashing_summary event name for backward compat)
+            if let Some(tc) = params.telemetry
+                && let Ok((ref stats, _)) = upload_result
+            {
+                let mut details = std::collections::HashMap::new();
+                details.insert("total_files".into(), json!(stats.total_files));
+                details.insert("total_bytes".into(), json!(stats.total_bytes));
+                details.insert("processed_files".into(), json!(stats.processed_files));
+                details.insert("processed_bytes".into(), json!(stats.processed_bytes));
+                details.insert("skipped_files".into(), json!(stats.skipped_files));
+                details.insert("skipped_bytes".into(), json!(stats.skipped_bytes));
+                details.insert("total_time".into(), json!(stats.total_time));
+                details.insert("transfer_rate".into(), json!(stats.transfer_rate));
+                tc.record_event(
+                    "com.amazon.rum.deadline.job_attachments.hashing_summary",
+                    details,
+                    false,
+                );
             }
 
             // Emit asset_upload or asset_snapshot success/fail telemetry
@@ -952,14 +946,11 @@ pub async fn create_job_from_job_bundle(
     // 10. Poll for completion
     handler.on_message("Waiting for Job to be created...");
 
-    let (success, status_message) = api::wait_for_create_job_to_complete(
-        &farm_id,
-        &queue_id,
-        &job_id,
-        params.config,
-        || handler.should_continue(),
-    )
-    .await?;
+    let (success, status_message) =
+        api::wait_for_create_job_to_complete(&farm_id, &queue_id, &job_id, params.config, || {
+            handler.should_continue()
+        })
+        .await?;
 
     // Record create_job telemetry
     if let Some(tc) = params.telemetry {
@@ -1037,11 +1028,8 @@ fn save_debug_snapshot(
     // 1. create_job_args.json
     let args_json = serde_json::to_string_pretty(&Value::Object(create_job_args.clone()))
         .map_err(|e| op_err(format!("Failed to serialize create_job_args: {e}")))?;
-    fs::write(
-        snapshot_dir.join("create_job_args.json"),
-        &args_json,
-    )
-    .map_err(|e| op_err(format!("Failed to write create_job_args.json: {e}")))?;
+    fs::write(snapshot_dir.join("create_job_args.json"), &args_json)
+        .map_err(|e| op_err(format!("Failed to write create_job_args.json: {e}")))?;
 
     // 2. Per-parameter files + CLI args list
     let mut cli_args: Vec<(String, String)> = Vec::new();
@@ -1122,11 +1110,8 @@ fn save_debug_snapshot(
     // 6. storage_profile.json — when storage profile is configured
     if let Some(sp) = storage_profile_json {
         let sp_str = serde_json::to_string_pretty(sp).unwrap_or_else(|_| "{}".to_owned());
-        fs::write(
-            snapshot_dir.join("storage_profile.json"),
-            &sp_str,
-        )
-        .map_err(|e| op_err(format!("Failed to write storage_profile.json: {e}")))?;
+        fs::write(snapshot_dir.join("storage_profile.json"), &sp_str)
+            .map_err(|e| op_err(format!("Failed to write storage_profile.json: {e}")))?;
     }
 
     Ok(())

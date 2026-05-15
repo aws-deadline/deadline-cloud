@@ -6,6 +6,7 @@
 //! (failures only warn).
 
 use crate::api::errors::DeadlineError;
+use crate::util::op_err;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -13,10 +14,6 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
-
-fn op_err(msg: String) -> DeadlineError {
-    DeadlineError::OperationError(msg)
-}
 
 // ---------------------------------------------------------------------------
 // Models
@@ -359,19 +356,23 @@ impl<'a> HookManager<'a> {
             let result = execute_hook(hook, metadata, &self.script_resolve_dir)?;
             if result.timed_out {
                 report_failure(hook, &result, i + 1, "pre-submission", self.handler);
-                return Err(op_err(format!(
-                    "Pre-submission hook [{}] timed out after {}s: {hook_name}",
-                    i + 1,
-                    hook.timeout
-                )));
+                return Err(DeadlineError::HookFailed {
+                    index: i + 1,
+                    name: hook_name,
+                    exit_code: result.exit_code,
+                    timed_out: true,
+                    timeout_seconds: hook.timeout,
+                });
             }
             if !result.is_success() {
                 report_failure(hook, &result, i + 1, "pre-submission", self.handler);
-                return Err(op_err(format!(
-                    "Pre-submission hook [{}] failed with exit code {}: {hook_name}",
-                    i + 1,
-                    result.exit_code
-                )));
+                return Err(DeadlineError::HookFailed {
+                    index: i + 1,
+                    name: hook_name,
+                    exit_code: result.exit_code,
+                    timed_out: false,
+                    timeout_seconds: hook.timeout,
+                });
             }
             if !result.stdout.trim().is_empty() {
                 let modified: Value = serde_json::from_str(result.stdout.trim()).map_err(|e| {
@@ -547,23 +548,29 @@ fn execute_hook(
     let timeout = std::time::Duration::from_secs(hook.timeout);
     let pid = child.id();
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
+    let handle = std::thread::spawn(move || {
         let output = child.wait_with_output();
         let _ = tx.send(output);
     });
 
     match rx.recv_timeout(timeout) {
-        Ok(Ok(output)) => Ok(HookResult {
-            exit_code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            execution_time: start.elapsed().as_secs_f64(),
-            timed_out: false,
-        }),
-        Ok(Err(e)) => Err(op_err(format!(
-            "Failed to execute hook: {}\n{e}",
-            hook.command
-        ))),
+        Ok(Ok(output)) => {
+            let _ = handle.join();
+            Ok(HookResult {
+                exit_code: output.status.code().unwrap_or(-1),
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                execution_time: start.elapsed().as_secs_f64(),
+                timed_out: false,
+            })
+        }
+        Ok(Err(e)) => {
+            let _ = handle.join();
+            Err(op_err(format!(
+                "Failed to execute hook: {}\n{e}",
+                hook.command
+            )))
+        }
         Err(_) => {
             // Timed out — force-kill the child process via its PID.
             #[cfg(unix)]
@@ -580,6 +587,12 @@ fn execute_hook(
             }
             #[cfg(not(unix))]
             { /* On non-unix, the thread's Child will be dropped eventually */ }
+            // Wait briefly for the killed process to exit, then join the
+            // thread. If the process doesn't die within 2s (shouldn't happen
+            // after SIGKILL), detach the thread to avoid blocking.
+            if rx.recv_timeout(std::time::Duration::from_secs(2)).is_ok() {
+                let _ = handle.join();
+            }
             Ok(HookResult {
                 exit_code: -1,
                 stdout: String::new(),
@@ -634,8 +647,12 @@ mod tests {
     struct NullHandler;
     impl SubmissionHandler for NullHandler {
         fn on_message(&self, _msg: &str) {}
-        fn confirm(&self, _msg: &str, _default: bool) -> bool { true }
-        fn should_continue(&self) -> bool { true }
+        fn confirm(&self, _msg: &str, _default: bool) -> bool {
+            true
+        }
+        fn should_continue(&self) -> bool {
+            true
+        }
     }
 
     /// Test handler that captures messages.
@@ -644,7 +661,9 @@ mod tests {
     }
     impl CapturingHandler {
         fn new() -> Self {
-            Self { messages: std::sync::Mutex::new(Vec::new()) }
+            Self {
+                messages: std::sync::Mutex::new(Vec::new()),
+            }
         }
         fn messages(&self) -> Vec<String> {
             self.messages.lock().unwrap().clone()
@@ -654,8 +673,12 @@ mod tests {
         fn on_message(&self, msg: &str) {
             self.messages.lock().unwrap().push(msg.to_owned());
         }
-        fn confirm(&self, _msg: &str, _default: bool) -> bool { true }
-        fn should_continue(&self) -> bool { true }
+        fn confirm(&self, _msg: &str, _default: bool) -> bool {
+            true
+        }
+        fn should_continue(&self) -> bool {
+            true
+        }
     }
 
     // ---------------------------------------------------------------

@@ -62,15 +62,12 @@ pub fn build_s3_client(
 
 /// Reads `settings.s3_max_pool_connections` from config. Returns error if
 /// the value is not a positive integer.
-pub fn get_s3_max_pool_connections(
-    config: &IniConfig,
-) -> Result<usize, JobAttachmentsError> {
-    let value_str = get_setting("settings.s3_max_pool_connections", config)
-        .map_err(|e| {
-            JobAttachmentsError::AssetSync(format!(
-                "Failed to read s3_max_pool_connections setting: {e}"
-            ))
-        })?;
+pub fn get_s3_max_pool_connections(config: &IniConfig) -> Result<usize, JobAttachmentsError> {
+    let value_str = get_setting("settings.s3_max_pool_connections", config).map_err(|e| {
+        JobAttachmentsError::AssetSync(format!(
+            "Failed to read s3_max_pool_connections setting: {e}"
+        ))
+    })?;
 
     let value: usize = value_str.parse().map_err(|_| {
         JobAttachmentsError::AssetSync(

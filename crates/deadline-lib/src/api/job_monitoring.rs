@@ -1,6 +1,6 @@
 use crate::api::errors::DeadlineError;
-use aws_sdk_deadline::operation::get_job::GetJobOutput;
 use crate::config::ini::IniConfig;
+use aws_sdk_deadline::operation::get_job::GetJobOutput;
 use serde_json::Value;
 use std::time::Instant;
 

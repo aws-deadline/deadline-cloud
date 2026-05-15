@@ -1,9 +1,11 @@
 //! Level 1 tests for `manifest_ops` module (batch 9e-1).
 
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023};
 use deadline_lib::attachments::manifest_ops::{
     GlobConfig, glob_files, manifest_diff, manifest_merge, manifest_snapshot, resolve_glob_config,
     write_manifest,
+};
+use openjd_snapshots::{
+    FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023,
 };
 use std::fs;
 use std::path::Path;
@@ -194,15 +196,7 @@ fn manifest_snapshot_creates_manifest_from_files() {
         include: vec!["**/*".into()],
         exclude: vec![],
     };
-    let result = manifest_snapshot(
-        dir.path(),
-        dir.path(),
-        None,
-        &config,
-        None,
-        false,
-    )
-    .unwrap();
+    let result = manifest_snapshot(dir.path(), dir.path(), None, &config, None, false).unwrap();
     assert!(result.is_some());
     let snap = result.unwrap();
     assert!(snap.manifest.is_file());
@@ -215,15 +209,7 @@ fn manifest_snapshot_empty_dir_returns_none() {
         include: vec!["**/*".into()],
         exclude: vec![],
     };
-    let result = manifest_snapshot(
-        dir.path(),
-        dir.path(),
-        None,
-        &config,
-        None,
-        false,
-    )
-    .unwrap();
+    let result = manifest_snapshot(dir.path(), dir.path(), None, &config, None, false).unwrap();
     assert!(result.is_none());
 }
 
@@ -241,14 +227,7 @@ fn manifest_snapshot_relative_root_produces_relative_paths() {
     let saved_cwd = std::env::current_dir().unwrap();
     std::env::set_current_dir(dir.path()).unwrap();
 
-    let result = manifest_snapshot(
-        &PathBuf::from("."),
-        dir.path(),
-        None,
-        &config,
-        None,
-        false,
-    );
+    let result = manifest_snapshot(&PathBuf::from("."), dir.path(), None, &config, None, false);
 
     std::env::set_current_dir(&saved_cwd).unwrap();
 
@@ -258,7 +237,10 @@ fn manifest_snapshot_relative_root_produces_relative_paths() {
     let content = fs::read_to_string(&snap.manifest).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
     let path = parsed["paths"][0]["path"].as_str().unwrap();
-    assert_eq!(path, "a.txt", "manifest path should be relative to root, got: {path}");
+    assert_eq!(
+        path, "a.txt",
+        "manifest path should be relative to root, got: {path}"
+    );
 }
 
 // =====================================================================
@@ -276,27 +258,14 @@ fn manifest_diff_detects_new_file() {
         include: vec!["**/*".into()],
         exclude: vec![],
     };
-    let snap = manifest_snapshot(
-        dir.path(),
-        dir.path(),
-        None,
-        &config,
-        None,
-        false,
-    )
-    .unwrap()
-    .unwrap();
+    let snap = manifest_snapshot(dir.path(), dir.path(), None, &config, None, false)
+        .unwrap()
+        .unwrap();
 
     // Add another file
     create_file(&dir, "added.txt", b"added");
 
-    let diff = manifest_diff(
-        &snap.manifest.to_string_lossy(),
-        dir.path(),
-        &config,
-        false,
-    )
-    .unwrap();
+    let diff = manifest_diff(&snap.manifest.to_string_lossy(), dir.path(), &config, false).unwrap();
     assert!(diff.new.iter().any(|p| p.contains("added")));
 }
 

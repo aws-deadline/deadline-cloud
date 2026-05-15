@@ -17,6 +17,15 @@ pub enum DeadlineError {
     CreateJobWaiterCanceled(String),
     /// User explicitly requested cancellation (default: "Operation canceled by user").
     UserInitiatedCancel(String),
+    /// A submission hook failed (non-zero exit or timeout).
+    /// Structured variant for programmatic error handling by DCC submitters.
+    HookFailed {
+        index: usize,
+        name: String,
+        exit_code: i32,
+        timed_out: bool,
+        timeout_seconds: u64,
+    },
 }
 
 impl DeadlineError {
@@ -47,6 +56,26 @@ impl fmt::Display for DeadlineError {
             | Self::OperationTimedOut(msg)
             | Self::CreateJobWaiterCanceled(msg)
             | Self::UserInitiatedCancel(msg) => write!(f, "{msg}"),
+            Self::HookFailed {
+                index,
+                name,
+                exit_code: _,
+                timed_out: true,
+                timeout_seconds,
+            } => write!(
+                f,
+                "Pre-submission hook [{index}] timed out after {timeout_seconds}s: {name}"
+            ),
+            Self::HookFailed {
+                index,
+                name,
+                exit_code,
+                timed_out: false,
+                ..
+            } => write!(
+                f,
+                "Pre-submission hook [{index}] failed with exit code {exit_code}: {name}"
+            ),
         }
     }
 }

@@ -125,9 +125,10 @@ fn resolve_log_level(cli_level: Option<&str>) -> String {
     }
 
     // Read from config
-    let config_level = deadline_lib::config::config_file::get_setting_from_disk("settings.log_level")
-        .unwrap_or_default()
-        .to_uppercase();
+    let config_level =
+        deadline_lib::config::config_file::get_setting_from_disk("settings.log_level")
+            .unwrap_or_default()
+            .to_uppercase();
 
     if VALID_LOG_LEVELS.contains(&config_level.as_str()) {
         config_level

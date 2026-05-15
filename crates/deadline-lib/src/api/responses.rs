@@ -27,14 +27,22 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 /// Sort task run status counts in lifecycle progression order (matching Python CLI).
-fn sort_status_counts(pairs: &mut Vec<(String, Value)>) {
+fn sort_status_counts(pairs: &mut [(String, Value)]) {
     const ORDER: &[&str] = &[
-        "PENDING", "READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED",
-        "INTERRUPTING", "SUSPENDED", "CANCELED", "FAILED", "SUCCEEDED", "NOT_COMPATIBLE",
+        "PENDING",
+        "READY",
+        "RUNNING",
+        "ASSIGNED",
+        "STARTING",
+        "SCHEDULED",
+        "INTERRUPTING",
+        "SUSPENDED",
+        "CANCELED",
+        "FAILED",
+        "SUCCEEDED",
+        "NOT_COMPATIBLE",
     ];
-    pairs.sort_by_key(|(k, _)| {
-        ORDER.iter().position(|s| s == k).unwrap_or(ORDER.len())
-    });
+    pairs.sort_by_key(|(k, _)| ORDER.iter().position(|s| s == k).unwrap_or(ORDER.len()));
 }
 
 /// Format an AWS SDK `DateTime` to match Python's display format.

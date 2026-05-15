@@ -1,6 +1,6 @@
 use clap::Subcommand;
-use deadline_lib::config::config_file;
 use deadline_lib::bundle::{SubmissionHandler, SubmitJobParams, create_job_from_job_bundle};
+use deadline_lib::config::config_file;
 use regex::Regex;
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -22,7 +22,10 @@ impl SubmissionHandler for CliSubmissionHandler {
     fn should_continue(&self) -> bool {
         crate::common::should_continue()
     }
-    fn on_upload_summary(&self, stats: &deadline_lib::attachments::progress_tracker::SummaryStatistics) {
+    fn on_upload_summary(
+        &self,
+        stats: &deadline_lib::attachments::progress_tracker::SummaryStatistics,
+    ) {
         println!("{}", stats.format_upload_summary());
     }
 }
@@ -245,21 +248,21 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             let telemetry = deadline_lib::api::telemetry::create_telemetry(&config);
 
             // F8: If snapshot path ends in .zip, use a temp dir then zip after
-            let snapshot_tmpdir: Option<PathBuf> = if save_debug_snapshot
-                .as_ref()
-                .is_some_and(|p| {
+            let snapshot_tmpdir: Option<PathBuf> =
+                if save_debug_snapshot.as_ref().is_some_and(|p| {
                     std::path::Path::new(p.as_str())
                         .extension()
                         .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
                 }) {
-                let tmp =
-                    std::env::temp_dir().join(format!("deadline-snapshot-{}", std::process::id()));
-                std::fs::create_dir_all(&tmp)
-                    .map_err(|e| CliError::Operation(format!("Failed to create temp dir: {e}")))?;
-                Some(tmp)
-            } else {
-                None
-            };
+                    let tmp = std::env::temp_dir()
+                        .join(format!("deadline-snapshot-{}", std::process::id()));
+                    std::fs::create_dir_all(&tmp).map_err(|e| {
+                        CliError::Operation(format!("Failed to create temp dir: {e}"))
+                    })?;
+                    Some(tmp)
+                } else {
+                    None
+                };
             let effective_snapshot_dir = match (&save_debug_snapshot, &snapshot_tmpdir) {
                 (Some(_), Some(tmp)) => Some(tmp.to_string_lossy().to_string()),
                 (Some(p), None) => Some(p.clone()),
@@ -300,19 +303,21 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 config: &config,
                 handler: &CliSubmissionHandler,
                 hashing_progress_callback: Some(Box::new(move |processed, total| {
-                    let pct = if total > 0 { processed * 100 / total } else { 100 };
-                    hash_progress
-                        .lock()
-                        .expect("lock poisoned")
-                        .callback(pct);
+                    let pct = if total > 0 {
+                        processed * 100 / total
+                    } else {
+                        100
+                    };
+                    hash_progress.lock().expect("lock poisoned").callback(pct);
                     true
                 })),
                 upload_progress_callback: Some(Box::new(move |processed, total| {
-                    let pct = if total > 0 { processed * 100 / total } else { 100 };
-                    upload_progress
-                        .lock()
-                        .expect("lock poisoned")
-                        .callback(pct);
+                    let pct = if total > 0 {
+                        processed * 100 / total
+                    } else {
+                        100
+                    };
+                    upload_progress.lock().expect("lock poisoned").callback(pct);
                     true
                 })),
                 telemetry: Some(&telemetry),

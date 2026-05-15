@@ -1,9 +1,9 @@
 use clap::Subcommand;
-use deadline_lib::config::config_file;
-use deadline_lib::config::ini::IniConfig;
 use deadline_lib::attachments::api::{attachment_download, attachment_upload};
 use deadline_lib::attachments::models::FileConflictResolution;
 use deadline_lib::attachments::s3;
+use deadline_lib::config::config_file;
+use deadline_lib::config::ini::IniConfig;
 
 use super::config::CliError;
 
@@ -104,7 +104,9 @@ async fn resolve_s3_context(
                 .queue_id(&queue_id)
                 .send()
                 .await
-                .map_err(|e| CliError::Operation(deadline_lib::api::client::format_sdk_error(&e)))?;
+                .map_err(|e| {
+                    CliError::Operation(deadline_lib::api::client::format_sdk_error(&e))
+                })?;
             match queue.job_attachment_settings() {
                 Some(s) if !s.s3_bucket_name().is_empty() => {
                     let bucket = s.s3_bucket_name();

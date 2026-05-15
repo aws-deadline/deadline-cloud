@@ -5,10 +5,12 @@
 
 use std::path::Path;
 
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use deadline_lib::attachments::caches::S3CheckCache;
-use deadline_lib::attachments::models::{AssetRootGroup, AssetRootManifest, JobAttachmentS3Settings};
+use deadline_lib::attachments::models::{
+    AssetRootGroup, AssetRootManifest, JobAttachmentS3Settings,
+};
 use deadline_lib::attachments::upload::{S3UploadContext, snapshot_assets, upload_assets};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use tempfile::TempDir;
 use wiremock::matchers::{header_exists, method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -182,7 +184,10 @@ async fn upload_assets_returns_stats_and_attachments_with_manifest_paths() {
         .await;
 
     let dir = TempDir::new().unwrap();
-    let groups = vec![test_group(dir.path(), &[("a.txt", b"hello"), ("b.txt", b"world")])];
+    let groups = vec![test_group(
+        dir.path(),
+        &[("a.txt", b"hello"), ("b.txt", b"world")],
+    )];
 
     let uploader = build_uploader(&server).await;
     let s3_settings = test_s3_settings();
@@ -371,10 +376,7 @@ async fn upload_assets_multiple_manifests_each_gets_properties() {
     let s3_settings = test_s3_settings();
     let cache_dir = TempDir::new().unwrap();
 
-    let groups = vec![
-        test_group(dir1.path(), &[("a.txt", b"aaa")]),
-        g2,
-    ];
+    let groups = vec![test_group(dir1.path(), &[("a.txt", b"aaa")]), g2];
 
     let (_, attachments) = upload_assets(
         "farm-1",

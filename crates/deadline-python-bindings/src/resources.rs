@@ -37,7 +37,9 @@ pub fn get_farm<'py>(
     let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
     let output = rt
         .block_on(dl.get_farm().farm_id(farm_id).send())
-        .map_err(|e| DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e)))?;
+        .map_err(|e| {
+            DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e))
+        })?;
     let resp = deadline_lib::api::responses::FarmResponse::from(output);
     let result =
         serde_json::to_value(&resp).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
@@ -84,7 +86,9 @@ pub fn get_queue<'py>(
     let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
     let output = rt
         .block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id).send())
-        .map_err(|e| DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e)))?;
+        .map_err(|e| {
+            DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e))
+        })?;
     let resp = deadline_lib::api::responses::QueueResponse::from(output);
     let result =
         serde_json::to_value(&resp).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
@@ -149,9 +153,7 @@ pub fn get_queue_parameter_definitions<'py>(
     let result = rt
         .block_on(
             deadline_lib::api::queue_parameters::get_queue_parameter_definitions(
-                farm_id,
-                queue_id,
-                &config,
+                farm_id, queue_id, &config,
             ),
         )
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;

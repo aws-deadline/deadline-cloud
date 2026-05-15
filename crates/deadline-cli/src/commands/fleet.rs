@@ -60,8 +60,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let dl = session::deadline_client(&config).await;
-            let builder =
-                client::apply_dcm_principal(dl.list_fleets().farm_id(&farm), &config);
+            let builder = client::apply_dcm_principal(dl.list_fleets().farm_id(&farm), &config);
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages

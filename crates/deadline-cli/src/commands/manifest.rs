@@ -256,8 +256,9 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
 
             let farm = deadline_lib::config::config_file::get_setting("defaults.farm_id", &config)
                 .unwrap_or_default();
-            let queue = deadline_lib::config::config_file::get_setting("defaults.queue_id", &config)
-                .unwrap_or_default();
+            let queue =
+                deadline_lib::config::config_file::get_setting("defaults.queue_id", &config)
+                    .unwrap_or_default();
 
             let _asset = match asset_type.to_lowercase().as_str() {
                 "input" => deadline_lib::attachments::manifest_ops::AssetType::Input,
@@ -319,8 +320,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     .await
                     .map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
 
-            let s3_client =
-                deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);
+            let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);
             let account_id = deadline_lib::attachments::s3::get_account_id(&sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
@@ -331,11 +331,8 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 if let Some(manifest_path) = manifest_entry.input_manifest_path() {
                     // Filter by step if specified (ManifestProperties doesn't have stepId — skip filter)
                     let key = format!("{prefix}/Manifests/{manifest_path}");
-                    let dest_path = Path::new(&download_dir).join(
-                        Path::new(manifest_path)
-                            .file_name()
-                            .unwrap_or_default(),
-                    );
+                    let dest_path = Path::new(&download_dir)
+                        .join(Path::new(manifest_path).file_name().unwrap_or_default());
                     let result = s3_client
                         .get_object()
                         .bucket(bucket)
@@ -414,10 +411,12 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     },
                     &["farm_id", "queue_id"],
                 )?;
-                let farm = deadline_lib::config::config_file::get_setting("defaults.farm_id", &config)
-                    .unwrap_or_default();
-                let queue = deadline_lib::config::config_file::get_setting("defaults.queue_id", &config)
-                    .unwrap_or_default();
+                let farm =
+                    deadline_lib::config::config_file::get_setting("defaults.farm_id", &config)
+                        .unwrap_or_default();
+                let queue =
+                    deadline_lib::config::config_file::get_setting("defaults.queue_id", &config)
+                        .unwrap_or_default();
 
                 let queue_resp = deadline_lib::api::session::deadline_client(&config)
                     .await

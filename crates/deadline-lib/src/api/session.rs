@@ -1,10 +1,10 @@
+use crate::config::config_file;
+use crate::config::ini::IniConfig;
 use aws_config::SdkConfig;
 use aws_credential_types::Credentials;
 use aws_credential_types::provider::{self, ProvideCredentials, SharedCredentialsProvider, future};
 use aws_sdk_deadline::Client as DeadlineClient;
 use aws_sdk_sts::Client as StsClient;
-use crate::config::config_file;
-use crate::config::ini::IniConfig;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
@@ -374,6 +374,10 @@ pub async fn invalidate_session_cache_async() {
 }
 
 /// Build a Deadline Cloud client using the cached SDK config.
+///
+/// Note: On the first call, this holds the session lock across config
+/// resolution (which may do network I/O for credential discovery).
+/// Subsequent calls return from cache without network I/O.
 pub async fn deadline_client(config: &IniConfig) -> DeadlineClient {
     SESSION.lock().await.build_deadline_client(config).await
 }

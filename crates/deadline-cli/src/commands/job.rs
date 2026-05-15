@@ -387,7 +387,8 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            let tc = create_telemetry(&config_file::read_config().unwrap_or_else(|_| IniConfig::new()));
+            let tc =
+                create_telemetry(&config_file::read_config().unwrap_or_else(|_| IniConfig::new()));
             let result = run_download_output(
                 profile,
                 farm_id,
@@ -417,7 +418,8 @@ async fn run_async(action: JobAction) -> Result<(), CliError> {
             yes,
             output,
         } => {
-            let tc = create_telemetry(&config_file::read_config().unwrap_or_else(|_| IniConfig::new()));
+            let tc =
+                create_telemetry(&config_file::read_config().unwrap_or_else(|_| IniConfig::new()));
             let result = run_download_input(
                 profile,
                 farm_id,
@@ -679,7 +681,10 @@ async fn run_wait(
             }
         }
         Err(e) => {
-            let is_timeout = matches!(e, deadline_lib::api::errors::DeadlineError::OperationTimedOut(_));
+            let is_timeout = matches!(
+                e,
+                deadline_lib::api::errors::DeadlineError::OperationTimedOut(_)
+            );
             if is_json {
                 println!(
                     "{}",
@@ -1583,7 +1588,10 @@ async fn run_download_input(
     }
 }
 
-#[allow(clippy::too_many_lines, reason = "mirrors download_output_impl structure")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "mirrors download_output_impl structure"
+)]
 async fn download_input_impl(
     config: &IniConfig,
     farm_id: &str,
@@ -1595,13 +1603,13 @@ async fn download_input_impl(
     include_patterns: Option<&[String]>,
     match_paths_by: &str,
 ) -> Result<(), CliError> {
-    use deadline_lib::attachments::progress_tracker::human_readable_file_size;
     use crate::path_utils::summarize_path_list;
     use deadline_lib::attachments::download::InputDownloader;
     use deadline_lib::attachments::models::{
         Attachments, FileConflictResolution, JobAttachmentS3Settings, ManifestProperties,
         PathFormat,
     };
+    use deadline_lib::attachments::progress_tracker::human_readable_file_size;
     use deadline_lib::attachments::s3;
 
     // Get job
@@ -1642,9 +1650,7 @@ async fn download_input_impl(
                         "windows" => PathFormat::Windows,
                         _ => PathFormat::Posix,
                     },
-                    file_system_location_name: m
-                        .file_system_location_name()
-                        .map(ToOwned::to_owned),
+                    file_system_location_name: m.file_system_location_name().map(ToOwned::to_owned),
                     input_manifest_path: m.input_manifest_path().map(ToOwned::to_owned),
                     input_manifest_hash: m.input_manifest_hash().map(ToOwned::to_owned),
                     output_relative_directories: if m.output_relative_directories().is_empty() {
@@ -1973,11 +1979,12 @@ async fn download_input_impl(
         .download(
             resolution,
             Some(Box::new(move |processed, total| {
-                let pct = if total > 0 { processed * 100 / total } else { 100 };
-                progress_mgr
-                    .lock()
-                    .expect("lock poisoned")
-                    .callback(pct);
+                let pct = if total > 0 {
+                    processed * 100 / total
+                } else {
+                    100
+                };
+                progress_mgr.lock().expect("lock poisoned").callback(pct);
                 crate::common::should_continue()
             })),
         )
@@ -2178,8 +2185,7 @@ async fn resolve_job_search(
         }],
         "operator": "AND"
     });
-    let resp = match search_jobs_call(farm, &[queue], 0, 5, Some(&filter), None, config).await
-    {
+    let resp = match search_jobs_call(farm, &[queue], 0, 5, Some(&filter), None, config).await {
         Ok(r) => r,
         Err(e) => {
             return Err(CliError::Operation(format!("Failed to search jobs:\n{e}")));
@@ -2542,12 +2548,12 @@ pub(crate) async fn download_output_impl(
     include_patterns: Option<&[String]>,
     match_paths_by: &str,
 ) -> Result<(), CliError> {
-    use deadline_lib::attachments::progress_tracker::human_readable_file_size;
     use crate::path_utils::summarize_path_list;
     use deadline_lib::attachments::download::OutputDownloader;
     use deadline_lib::attachments::models::{
         FileConflictResolution, JobAttachmentS3Settings, PathFormat,
     };
+    use deadline_lib::attachments::progress_tracker::human_readable_file_size;
     use deadline_lib::attachments::s3;
 
     // Get job
@@ -2927,11 +2933,12 @@ pub(crate) async fn download_output_impl(
         .download_job_output(
             resolution,
             Some(Box::new(move |processed, total| {
-                let pct = if total > 0 { processed * 100 / total } else { 100 };
-                progress_mgr
-                    .lock()
-                    .expect("lock poisoned")
-                    .callback(pct);
+                let pct = if total > 0 {
+                    processed * 100 / total
+                } else {
+                    100
+                };
+                progress_mgr.lock().expect("lock poisoned").callback(pct);
                 crate::common::should_continue()
             })),
         )

@@ -1,8 +1,8 @@
 use crate::api::client::deadline_error;
 use crate::api::errors::DeadlineError;
 use crate::api::session;
-use aws_sdk_deadline::operation::create_job::CreateJobOutput;
 use crate::config::ini::IniConfig;
+use aws_sdk_deadline::operation::create_job::CreateJobOutput;
 use serde_json::Value;
 
 // ---------------------------------------------------------------------------
@@ -694,9 +694,14 @@ mod tests {
             .await;
 
         // Pass a callback that always returns false (simulates SIGINT)
-        let result =
-            wait_for_create_job_to_complete("farm-abc", "queue-abc", "job-abc", &IniConfig::new(), || false)
-                .await;
+        let result = wait_for_create_job_to_complete(
+            "farm-abc",
+            "queue-abc",
+            "job-abc",
+            &IniConfig::new(),
+            || false,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();

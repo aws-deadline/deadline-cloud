@@ -9,13 +9,13 @@ use std::path::Path;
 
 use crate::attachments::errors::JobAttachmentsError;
 
-use openjd_snapshots::{Snapshot, decode_v2023, encode_snapshot_v2023};
 use crate::attachments::download::download_files_from_manifests;
 use crate::attachments::models::{
     FileConflictResolution, JobAttachmentS3Settings, PathMappingRule, UploadManifestInfo,
 };
 use crate::attachments::progress_tracker::DownloadSummaryStatistics;
 use crate::attachments::upload::S3UploadContext;
+use openjd_snapshots::{Snapshot, decode_v2023, encode_snapshot_v2023};
 
 /// Read and decode manifest files from disk.
 ///
@@ -302,9 +302,7 @@ pub async fn attachment_upload(
                 HashUploadOptions::default(),
             )
             .await
-            .map_err(|e| {
-                JobAttachmentsError::AssetSync(format!("Upload failed: {e}"))
-            })?;
+            .map_err(|e| JobAttachmentsError::AssetSync(format!("Upload failed: {e}")))?;
         }
 
         // Upload manifest file itself if upload_manifest_path provided

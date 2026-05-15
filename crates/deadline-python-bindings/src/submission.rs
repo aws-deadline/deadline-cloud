@@ -103,7 +103,10 @@ pub fn create_job_from_job_bundle(
                 None => true,
             }
         }
-        fn on_upload_summary(&self, stats: &deadline_lib::attachments::progress_tracker::SummaryStatistics) {
+        fn on_upload_summary(
+            &self,
+            stats: &deadline_lib::attachments::progress_tracker::SummaryStatistics,
+        ) {
             if let Some(ref cb) = self.on_print {
                 let msg = stats.format_upload_summary();
                 Python::with_gil(|py| {
@@ -124,14 +127,25 @@ pub fn create_job_from_job_bundle(
             Box::new(move |processed, total| {
                 Python::with_gil(|py| {
                     let dict = PyDict::new(py);
-                    let pct = if total > 0 { (processed as f64 / total as f64) * 100.0 } else { 100.0 };
+                    let pct = if total > 0 {
+                        (processed as f64 / total as f64) * 100.0
+                    } else {
+                        100.0
+                    };
                     let _ = dict.set_item("progress", pct);
                     let _ = dict.set_item("transferRate", 0.0);
-                    let _ = dict.set_item("progressMessage", format!(
-                        "Processed {} / {}",
-                        deadline_lib::attachments::progress_tracker::human_readable_file_size(processed),
-                        deadline_lib::attachments::progress_tracker::human_readable_file_size(total),
-                    ));
+                    let _ = dict.set_item(
+                        "progressMessage",
+                        format!(
+                            "Processed {} / {}",
+                            deadline_lib::attachments::progress_tracker::human_readable_file_size(
+                                processed
+                            ),
+                            deadline_lib::attachments::progress_tracker::human_readable_file_size(
+                                total
+                            ),
+                        ),
+                    );
                     let _ = dict.set_item("processedFiles", 0u64);
                     let _ = dict.set_item("processedBytes", processed);
                     let _ = dict.set_item("totalBytes", total);
@@ -148,14 +162,25 @@ pub fn create_job_from_job_bundle(
             Box::new(move |processed, total| {
                 Python::with_gil(|py| {
                     let dict = PyDict::new(py);
-                    let pct = if total > 0 { (processed as f64 / total as f64) * 100.0 } else { 100.0 };
+                    let pct = if total > 0 {
+                        (processed as f64 / total as f64) * 100.0
+                    } else {
+                        100.0
+                    };
                     let _ = dict.set_item("progress", pct);
                     let _ = dict.set_item("transferRate", 0.0);
-                    let _ = dict.set_item("progressMessage", format!(
-                        "Uploaded {} / {}",
-                        deadline_lib::attachments::progress_tracker::human_readable_file_size(processed),
-                        deadline_lib::attachments::progress_tracker::human_readable_file_size(total),
-                    ));
+                    let _ = dict.set_item(
+                        "progressMessage",
+                        format!(
+                            "Uploaded {} / {}",
+                            deadline_lib::attachments::progress_tracker::human_readable_file_size(
+                                processed
+                            ),
+                            deadline_lib::attachments::progress_tracker::human_readable_file_size(
+                                total
+                            ),
+                        ),
+                    );
                     let _ = dict.set_item("processedFiles", 0u64);
                     let _ = dict.set_item("processedBytes", processed);
                     let _ = dict.set_item("totalBytes", total);

@@ -8,13 +8,15 @@ use crate::attachments::errors::JobAttachmentsError;
 use serde::Serialize;
 
 use crate::attachments::api::read_manifests;
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023, encode_snapshot_v2023};
 use crate::attachments::diff::{FileStatus, fast_diff, hash_diff};
 use crate::attachments::download::{
     download_manifest_from_s3, get_output_manifests_by_asset_root, merge_asset_manifests,
 };
 use crate::attachments::models::JobAttachmentS3Settings;
 use crate::attachments::upload::S3UploadContext;
+use openjd_snapshots::{
+    FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023, encode_snapshot_v2023,
+};
 
 // --- Types ---
 
@@ -207,8 +209,7 @@ pub fn write_manifest(
         })?;
     }
 
-    let encoded = encode_snapshot_v2023(manifest)
-        .expect("valid snapshot encodes successfully");
+    let encoded = encode_snapshot_v2023(manifest).expect("valid snapshot encodes successfully");
     std::fs::write(&dest_path, encoded)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}")))?;
 
@@ -292,8 +293,8 @@ pub fn manifest_diff(
 ) -> Result<ManifestDiffResult, JobAttachmentsError> {
     let contents = std::fs::read_to_string(manifest_path)
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to read manifest: {e}")))?;
-    let reference = decode_v2023(&contents)
-        .map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
+    let reference =
+        decode_v2023(&contents).map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
     let root_str = root.to_string_lossy();
     let current_files = glob_files(root, config)?;
 
@@ -359,7 +360,9 @@ fn hash_files_to_manifest(
     root: &str,
     files: &[String],
 ) -> Result<Option<Snapshot>, JobAttachmentsError> {
-    use openjd_snapshots::{AbsManifest, CollectOptions, HashOptions, collect_abs_snapshot, hash_abs_manifest};
+    use openjd_snapshots::{
+        AbsManifest, CollectOptions, HashOptions, collect_abs_snapshot, hash_abs_manifest,
+    };
     use std::path::PathBuf;
 
     if files.is_empty() {
@@ -367,22 +370,20 @@ fn hash_files_to_manifest(
     }
 
     let file_paths: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
-    let abs_snapshot = collect_abs_snapshot(
-        &[] as &[PathBuf],
-        &file_paths,
-        CollectOptions::default(),
-    )
-    .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to collect snapshot: {e}")))?;
+    let abs_snapshot =
+        collect_abs_snapshot(&[] as &[PathBuf], &file_paths, CollectOptions::default()).map_err(
+            |e| JobAttachmentsError::AssetSync(format!("Failed to collect snapshot: {e}")),
+        )?;
 
-    let hash_result = hash_abs_manifest(
-        &AbsManifest::Snapshot(abs_snapshot),
-        HashOptions::default(),
-    )
-    .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to hash files: {e}")))?;
+    let hash_result =
+        hash_abs_manifest(&AbsManifest::Snapshot(abs_snapshot), HashOptions::default())
+            .map_err(|e| JobAttachmentsError::AssetSync(format!("Failed to hash files: {e}")))?;
 
-    let AbsManifest::Snapshot(hashed) = &hash_result.manifest else { unreachable!() };
+    let AbsManifest::Snapshot(hashed) = &hash_result.manifest else {
+        unreachable!()
+    };
 
-    let root_prefix = std::path::absolute(std::path::Path::new(root))
+    let root_prefix = std::path::absolute(Path::new(root))
         .unwrap_or_else(|_| PathBuf::from(root))
         .to_string_lossy()
         .into_owned();
@@ -391,7 +392,9 @@ fn hash_files_to_manifest(
         .iter()
         .filter(|f| !f.deleted && f.symlink_target.is_none())
         .map(|f| {
-            let rel = f.path.strip_prefix(&root_prefix)
+            let rel = f
+                .path
+                .strip_prefix(&root_prefix)
                 .or_else(|| f.path.strip_prefix("/"))
                 .unwrap_or(&f.path)
                 .trim_start_matches('/');
@@ -544,8 +547,8 @@ pub async fn manifest_download(
             let filename = format!("{manifest_name}-{root_hash}-{timestamp}.manifest");
             let local_path = download_dir.join(&filename);
 
-            let encoded = encode_snapshot_v2023(&manifest)
-                .expect("valid snapshot encodes successfully");
+            let encoded =
+                encode_snapshot_v2023(&manifest).expect("valid snapshot encodes successfully");
             std::fs::write(&local_path, encoded).map_err(|e| {
                 JobAttachmentsError::AssetSync(format!("Failed to write manifest: {e}"))
             })?;

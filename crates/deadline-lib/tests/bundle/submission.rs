@@ -199,8 +199,13 @@ fn split_params_empty_list() {
 fn split_params_custom_app_name() {
     let params =
         vec![serde_json::json!({"name": "maya:renderLayer", "value": "default", "type": "STRING"})];
-    let (app, _) =
-        split_parameter_args(&params, Path::new("/bundle"), Some("maya"), Some(&["renderLayer"])).unwrap();
+    let (app, _) = split_parameter_args(
+        &params,
+        Path::new("/bundle"),
+        Some("maya"),
+        Some(&["renderLayer"]),
+    )
+    .unwrap();
     assert_eq!(app["renderLayer"], "default");
 }
 

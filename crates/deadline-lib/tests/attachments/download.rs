@@ -7,12 +7,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use deadline_lib::attachments::download::{
-    download_files_from_manifests, get_output_manifests_by_asset_root,
-    merge_asset_manifests,
+    download_files_from_manifests, get_output_manifests_by_asset_root, merge_asset_manifests,
 };
 use deadline_lib::attachments::models::{FileConflictResolution, JobAttachmentS3Settings};
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use tempfile::TempDir;
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -30,7 +29,10 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
         .test_credentials()
         .load()
         .await;
-    deadline_lib::attachments::s3::build_s3_client(&sdk_config, &deadline_lib::config::ini::IniConfig::new())
+    deadline_lib::attachments::s3::build_s3_client(
+        &sdk_config,
+        &deadline_lib::config::ini::IniConfig::new(),
+    )
 }
 
 fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> Snapshot {
@@ -110,7 +112,10 @@ fn merge_two_manifests_overlapping_paths_later_wins() {
     let result = merge_asset_manifests(&[m1, m2]).unwrap().unwrap();
     assert_eq!(result.files.len(), 1);
     // Later manifest's entry wins
-    assert_eq!(result.files[0].hash.as_deref().unwrap_or(""), "bbbb000000000000bbbb000000000000");
+    assert_eq!(
+        result.files[0].hash.as_deref().unwrap_or(""),
+        "bbbb000000000000bbbb000000000000"
+    );
     assert_eq!(result.total_size, 200);
 }
 
@@ -523,7 +528,8 @@ async fn get_output_manifests_merges_by_last_modified_order() {
     // The merged manifest should have the newer hash (newer LastModified wins)
     let merged = &manifests[0];
     assert_eq!(merged.files.len(), 1);
-    assert_eq!(merged.files[0].hash.as_deref().unwrap_or(""), "fff666eee555ddd444ccc333bbb22211");
+    assert_eq!(
+        merged.files[0].hash.as_deref().unwrap_or(""),
+        "fff666eee555ddd444ccc333bbb22211"
+    );
 }
-
-

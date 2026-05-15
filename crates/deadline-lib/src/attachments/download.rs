@@ -5,17 +5,18 @@
 //! retrieval grouped by asset root.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::attachments::errors::JobAttachmentsError;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 
-use openjd_snapshots::{FileEntry, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023};
 use crate::attachments::models::{Attachments, FileConflictResolution, JobAttachmentS3Settings};
 use crate::attachments::progress_tracker::{
     DownloadSummaryStatistics, ProgressStatus, ProgressTracker,
 };
+use openjd_snapshots::{FileEntry, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023};
 
 // Shared state for `CreateCopy` collision tracking across concurrent downloads.
 // Maps local file path string → highest copy number used.
@@ -35,11 +36,11 @@ fn ensure_paths_within_directory(
             "The provided root path is not an absolute path: {root_path}"
         )));
     }
-    let normalized_root = normalize_path(root);
+    let normalized_root = crate::util::normalize_path(root);
 
     for p in paths {
         let joined = root.join(&p.path);
-        let normalized = normalize_path(&joined);
+        let normalized = crate::util::normalize_path(&joined);
         if !normalized.starts_with(&normalized_root) {
             return Err(JobAttachmentsError::PathOutsideDirectory(format!(
                 "The provided path is not under the root directory: {}",
@@ -50,25 +51,9 @@ fn ensure_paths_within_directory(
     Ok(())
 }
 
-/// Lexically normalize a path (resolve `.` and `..` without filesystem access).
-fn normalize_path(path: &Path) -> PathBuf {
-    let mut components = Vec::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::ParentDir => {
-                components.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => components.push(other),
-        }
-    }
-    components.iter().collect()
-}
-
 // ---------------------------------------------------------------------------
 // Helper: S3 error handling (matches upload patterns exactly)
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Helper: extract asset root from S3 object metadata
@@ -162,27 +147,8 @@ pub fn normalize_filters(patterns: &[String]) -> Vec<String> {
 /// - A filter ending with `/` matches all files under that directory
 /// - A relative filter (not starting with `/`, `*`, or drive letter) is auto-prepended with `*/`
 pub fn matches_any_filter(file_path: &str, filters: &[String]) -> bool {
-    fn is_absolute(p: &str) -> bool {
-        p.starts_with('/') || p.starts_with('*') || (p.len() >= 2 && p.as_bytes()[1] == b':')
-    }
-
-    for f in filters {
-        let pattern = if f.ends_with('/') {
-            if is_absolute(f) {
-                format!("{f}*")
-            } else {
-                format!("*/{f}*")
-            }
-        } else if is_absolute(f) {
-            f.clone()
-        } else {
-            format!("*/{f}")
-        };
-        if fnmatch(&pattern, file_path) {
-            return true;
-        }
-    }
-    false
+    let filter_set = FilterSet::new(filters);
+    filter_set.matches(file_path)
 }
 
 /// Filter manifests by root, keeping only paths that match any filter.
@@ -190,6 +156,7 @@ pub fn filter_manifests<S: std::hash::BuildHasher + Clone>(
     manifests_by_root: &HashMap<String, Vec<Snapshot>, S>,
     filters: &[String],
 ) -> HashMap<String, Vec<Snapshot>, S> {
+    let filter_set = FilterSet::new(filters);
     let mut filtered = HashMap::with_capacity_and_hasher(
         manifests_by_root.len(),
         manifests_by_root.hasher().clone(),
@@ -200,7 +167,7 @@ pub fn filter_manifests<S: std::hash::BuildHasher + Clone>(
             let matching: Vec<FileEntry> = manifest
                 .files
                 .iter()
-                .filter(|p| matches_any_filter(&full_path(root, &p.path), filters))
+                .filter(|p| filter_set.matches(&full_path(root, &p.path)))
                 .cloned()
                 .collect();
             if !matching.is_empty() {
@@ -228,9 +195,8 @@ fn full_path(root: &str, relative: &str) -> String {
     }
 }
 
-/// fnmatch-style matching where `*` matches everything including `/`.
-fn fnmatch(pattern: &str, text: &str) -> bool {
-    // Convert fnmatch pattern to regex
+/// Compile an fnmatch pattern into a regex.
+fn compile_fnmatch(pattern: &str) -> Option<regex::Regex> {
     let mut regex = String::with_capacity(pattern.len() * 2 + 2);
     regex.push('^');
     let mut chars = pattern.chars().peekable();
@@ -268,7 +234,43 @@ fn fnmatch(pattern: &str, text: &str) -> bool {
         }
     }
     regex.push('$');
-    regex::Regex::new(&regex).is_ok_and(|re| re.is_match(text))
+    regex::Regex::new(&regex).ok()
+}
+
+/// Pre-compiled set of filter patterns for efficient repeated matching.
+struct FilterSet {
+    patterns: Vec<(String, regex::Regex)>,
+}
+
+impl FilterSet {
+    fn new(filters: &[String]) -> Self {
+        fn is_absolute(p: &str) -> bool {
+            p.starts_with('/') || p.starts_with('*') || (p.len() >= 2 && p.as_bytes()[1] == b':')
+        }
+
+        let patterns = filters
+            .iter()
+            .filter_map(|f| {
+                let pattern = if f.ends_with('/') {
+                    if is_absolute(f) {
+                        format!("{f}*")
+                    } else {
+                        format!("*/{f}*")
+                    }
+                } else if is_absolute(f) {
+                    f.clone()
+                } else {
+                    format!("*/{f}")
+                };
+                compile_fnmatch(&pattern).map(|re| (pattern, re))
+            })
+            .collect();
+        Self { patterns }
+    }
+
+    fn matches(&self, file_path: &str) -> bool {
+        self.patterns.iter().any(|(_, re)| re.is_match(file_path))
+    }
 }
 
 // =========================================================================
@@ -300,8 +302,7 @@ pub fn merge_asset_manifests(
             return Err(JobAttachmentsError::AssetSync(format!(
                 "Merging manifests with different hash algorithms is not supported: \
                  {} vs {}",
-                hash_alg,
-                manifest.hash_alg,
+                hash_alg, manifest.hash_alg,
             )));
         }
         for file in &manifest.files {
@@ -334,8 +335,7 @@ pub async fn download_files_from_manifests(
 ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
     use openjd_snapshots::{
         AbsManifest, AsyncDataCache, DownloadOptions as OpenjdDownloadOptions,
-        FileEntry, S3DataCache, download_abs_manifest,
-        FileConflictResolution as OpenjdConflict,
+        FileConflictResolution as OpenjdConflict, FileEntry, S3DataCache, download_abs_manifest,
     };
     use std::sync::Arc;
 
@@ -370,12 +370,8 @@ pub async fn download_files_from_manifests(
 
     // Build S3DataCache
     let prefix = cas_prefix.unwrap_or_default().to_owned();
-    let s3_cache = S3DataCache::new(
-        s3_bucket.to_owned(),
-        prefix,
-        s3_client.clone(),
-    )
-    .with_expected_bucket_owner(Some(account_id.to_owned()));
+    let s3_cache = S3DataCache::new(s3_bucket.to_owned(), prefix, s3_client.clone())
+        .with_expected_bucket_owner(Some(account_id.to_owned()));
     let data_cache: Arc<dyn AsyncDataCache> = Arc::new(s3_cache);
 
     // Map our conflict resolution to openjd's
@@ -439,14 +435,8 @@ pub async fn download_files_from_manifests(
             .or_default()
             .extend(downloaded);
 
-        progress_tracker.increase_processed(
-            stats.downloaded_files as u64,
-            stats.downloaded_bytes,
-        );
-        progress_tracker.increase_skipped(
-            stats.skipped_files as u64,
-            stats.skipped_bytes,
-        );
+        progress_tracker.increase_processed(stats.downloaded_files as u64, stats.downloaded_bytes);
+        progress_tracker.increase_skipped(stats.skipped_files as u64, stats.skipped_bytes);
     }
 
     progress_tracker.report_progress();
@@ -647,6 +637,10 @@ async fn list_manifest_keys_from_s3(
     Ok(all_keys)
 }
 
+/// Compiled regex for matching step output manifest keys.
+static STEP_OUTPUT_PATTERN: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"step-.*/.*/.*output.*").expect("valid regex"));
+
 /// Select latest manifest per task from a list of S3 keys.
 ///
 /// For task-based paths (containing "task-"), selects only the latest
@@ -654,10 +648,7 @@ async fn list_manifest_keys_from_s3(
 /// `timestamp_sessionaction_id`). For chunked steps (no task ID),
 /// all manifests are included.
 fn select_latest_manifests_per_task(keys: &[String]) -> Vec<String> {
-    let step_pattern = regex::Regex::new(r"step-.*/.*/.*output.*").unwrap_or_else(|_| {
-        // Fallback: accept all keys if regex fails
-        regex::Regex::new(r".*").expect("valid regex")
-    });
+    let step_pattern = &*STEP_OUTPUT_PATTERN;
 
     let mut direct_keys = Vec::new();
     let mut task_prefixes: HashMap<String, Vec<String>> = HashMap::new();
@@ -759,7 +750,8 @@ pub async fn download_manifest_from_s3(
         .into_bytes();
     let contents = String::from_utf8(body_bytes.to_vec())
         .map_err(|e| JobAttachmentsError::AssetSync(format!("Manifest is not valid UTF-8: {e}")))?;
-    let manifest = decode_v2023(&contents).map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
+    let manifest =
+        decode_v2023(&contents).map_err(|e| JobAttachmentsError::ManifestDecode(e.to_string()))?;
 
     Ok((asset_root, last_modified, manifest))
 }

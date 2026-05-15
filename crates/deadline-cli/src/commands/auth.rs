@@ -54,8 +54,7 @@ async fn run_async(action: AuthAction) -> Result<(), CliError> {
 }
 
 async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
-    let mut config =
-        config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
+    let mut config = config_file::read_config().map_err(|e| CliError::Operation(e.to_string()))?;
     if let Some(p) = profile {
         config_file::set_setting("defaults.aws_profile_name", &p, &mut config)
             .map_err(|e| CliError::Operation(e.to_string()))?;

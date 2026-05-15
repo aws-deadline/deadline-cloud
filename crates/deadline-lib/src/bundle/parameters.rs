@@ -1,6 +1,7 @@
+use crate::api::errors::DeadlineError;
 use crate::bundle::loader::read_yaml_or_json_object;
 use crate::bundle::submission::AssetReferences;
-use crate::api::errors::DeadlineError;
+use crate::util::op_err;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
@@ -17,11 +18,6 @@ const VALID_UI_CONTROLS: &[&str] = &[
     "HIDDEN",
 ];
 const VALID_DATA_FLOWS: &[&str] = &["NONE", "IN", "OUT", "INOUT"];
-
-/// Shorthand for the most common error variant.
-fn op_err(msg: String) -> DeadlineError {
-    DeadlineError::OperationError(msg)
-}
 
 fn json_type_name(v: &serde_json::Value) -> &'static str {
     match v {
@@ -506,8 +502,8 @@ pub fn read_job_bundle_parameters(
                     "Job Template for job bundle {bundle_dir_display}:\nDefault PATH '{default}' for parameter '{name}' is absolute.\nPATH values must be relative, and must resolve within the Job Bundle directory."
                 )));
             }
-            let bundle_real = std::fs::canonicalize(bundle_dir)
-                .unwrap_or_else(|_| bundle_dir.to_path_buf());
+            let bundle_real =
+                std::fs::canonicalize(bundle_dir).unwrap_or_else(|_| bundle_dir.to_path_buf());
             let joined = bundle_real.join(&default);
             // Use canonicalize if path exists, otherwise normalize manually
             let default_real = std::fs::canonicalize(&joined).unwrap_or_else(|_| {

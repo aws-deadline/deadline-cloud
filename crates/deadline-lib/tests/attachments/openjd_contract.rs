@@ -4,8 +4,8 @@
 //! openjd's behavior changes in ways that break service compatibility.
 
 use openjd_snapshots::{
-    FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023,
-    encode_snapshot_v2023, hash,
+    FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, decode_v2023, encode_snapshot_v2023,
+    hash,
 };
 
 // =========================================================================

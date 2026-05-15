@@ -6,9 +6,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023};
 use deadline_lib::attachments::manifest_ops::{AssetType, manifest_download, manifest_upload};
 use deadline_lib::attachments::models::JobAttachmentS3Settings;
+use openjd_snapshots::{
+    FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023,
+};
 use tempfile::TempDir;
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -20,7 +22,10 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
         .test_credentials()
         .load()
         .await;
-    deadline_lib::attachments::s3::build_s3_client(&sdk_config, &deadline_lib::config::ini::IniConfig::new())
+    deadline_lib::attachments::s3::build_s3_client(
+        &sdk_config,
+        &deadline_lib::config::ini::IniConfig::new(),
+    )
 }
 
 fn make_test_manifest() -> Snapshot {
@@ -215,7 +220,10 @@ async fn manifest_download_input_manifests_downloaded_and_written() {
     .unwrap();
 
     assert_eq!(result.downloaded.len(), 1);
-    assert_eq!(result.downloaded[0].manifest_root, PathBuf::from("/tmp/assets"));
+    assert_eq!(
+        result.downloaded[0].manifest_root,
+        PathBuf::from("/tmp/assets")
+    );
     assert!(std::path::Path::new(&result.downloaded[0].local_manifest_path).is_file());
 }
 
@@ -230,7 +238,9 @@ async fn manifest_download_input_only_skips_output_manifests() {
 
     let manifest = make_test_manifest();
     Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(encode_snapshot_v2023(&manifest).unwrap()))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(encode_snapshot_v2023(&manifest).unwrap()),
+        )
         .mount(&server)
         .await;
 

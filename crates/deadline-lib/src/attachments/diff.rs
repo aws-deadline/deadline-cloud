@@ -101,10 +101,7 @@ pub fn fast_diff(
 /// in either manifest.
 ///
 /// Delegates to `openjd_snapshots::diff_snapshots`.
-pub fn hash_diff(
-    reference: &Snapshot,
-    compare: &Snapshot,
-) -> Vec<(FileStatus, FileEntry)> {
+pub fn hash_diff(reference: &Snapshot, compare: &Snapshot) -> Vec<(FileStatus, FileEntry)> {
     let opts = DiffOptions {
         ignore_hashes: false,
         ..Default::default()

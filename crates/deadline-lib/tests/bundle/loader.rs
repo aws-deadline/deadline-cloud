@@ -8,9 +8,9 @@ use deadline_lib::bundle::loader::{
     save_yaml_or_json_to_file, validate_directory_symlink_containment,
 };
 use std::fs;
-use std::path::Path;
 #[cfg(unix)]
 use std::os::unix::fs as unix_fs;
+use std::path::Path;
 use tempfile::TempDir;
 
 // ── validate_directory_symlink_containment ──────────────────────────
@@ -82,8 +82,7 @@ fn validate_symlinks_nested_dirs_succeeds() {
 fn read_yaml_or_json_only_json_returns_json() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("template.json"), r#"{"key": "value"}"#).unwrap();
-    let (contents, file_type) =
-        read_yaml_or_json(dir.path(), "template", true).unwrap();
+    let (contents, file_type) = read_yaml_or_json(dir.path(), "template", true).unwrap();
     assert_eq!(file_type, "JSON");
     assert_eq!(contents, r#"{"key": "value"}"#);
 }
@@ -92,8 +91,7 @@ fn read_yaml_or_json_only_json_returns_json() {
 fn read_yaml_or_json_only_yaml_returns_yaml() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("template.yaml"), "key: value").unwrap();
-    let (contents, file_type) =
-        read_yaml_or_json(dir.path(), "template", true).unwrap();
+    let (contents, file_type) = read_yaml_or_json(dir.path(), "template", true).unwrap();
     assert_eq!(file_type, "YAML");
     assert_eq!(contents, "key: value");
 }
@@ -124,8 +122,7 @@ fn read_yaml_or_json_neither_exists_required_returns_error() {
 #[test]
 fn read_yaml_or_json_neither_exists_optional_returns_empty() {
     let dir = TempDir::new().unwrap();
-    let (contents, file_type) =
-        read_yaml_or_json(dir.path(), "params", false).unwrap();
+    let (contents, file_type) = read_yaml_or_json(dir.path(), "params", false).unwrap();
     assert_eq!(contents, "");
     assert_eq!(file_type, "");
 }
@@ -163,7 +160,8 @@ fn parse_invalid_json_returns_error() {
 
 #[test]
 fn parse_invalid_yaml_returns_error() {
-    let err = parse_yaml_or_json_content(":\n  :\n    - :", "YAML", Path::new("/tmp"), "test").unwrap_err();
+    let err = parse_yaml_or_json_content(":\n  :\n    - :", "YAML", Path::new("/tmp"), "test")
+        .unwrap_err();
     assert!(
         err.to_string().contains("Error loading 'test.yaml'"),
         "got: {err}"
@@ -231,13 +229,8 @@ fn save_json_writes_pretty_printed() {
 #[test]
 fn save_unknown_type_returns_error() {
     let dir = TempDir::new().unwrap();
-    let err = save_yaml_or_json_to_file(
-        dir.path(),
-        "out",
-        "XML",
-        &serde_json::json!({}),
-    )
-    .unwrap_err();
+    let err =
+        save_yaml_or_json_to_file(dir.path(), "out", "XML", &serde_json::json!({})).unwrap_err();
     assert!(
         err.to_string().contains("Unexpected file type"),
         "got: {err}"

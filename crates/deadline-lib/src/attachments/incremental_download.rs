@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
 use regex::Regex;
@@ -14,10 +15,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tempfile::NamedTempFile;
 
-#[allow(unused_imports, reason = "HashAlgorithm used conditionally in tests")]
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use crate::attachments::errors::JobAttachmentsError;
 use crate::attachments::path_mapping::PathMappingRuleApplier;
+#[allow(unused_imports, reason = "HashAlgorithm used conditionally in tests")]
+use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 
 /// Upper bound for `SearchJobs` eventual consistency, in seconds.
 pub const EVENTUAL_CONSISTENCY_MAX_SECONDS: i64 = 120;
@@ -123,11 +124,9 @@ impl IncrementalDownloadState {
 // Manifest S3 download pipeline (C2)
 // =========================================================================
 
-/// Regex to extract session action ID from an S3 manifest key.
-/// Matches `sessionaction-{id}-{index}` segments in the key path.
-fn session_action_id_regex() -> Regex {
-    Regex::new(r"(sessionaction-[^/-]+-[^/-]+)/").expect("valid regex")
-}
+/// Compiled regex to extract session action ID from an S3 manifest key.
+static SESSION_ACTION_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(sessionaction-[^/-]+-[^/-]+)/").expect("valid regex"));
 
 /// Populate session actions with output manifest S3 keys by matching
 /// manifest keys from S3 to session actions by session action ID and
@@ -203,7 +202,7 @@ pub fn add_output_manifests_from_s3(
         })
         .collect();
 
-    let re = session_action_id_regex();
+    let re = &*SESSION_ACTION_RE;
     let job_name = job
         .get("name")
         .and_then(|v| v.as_str())

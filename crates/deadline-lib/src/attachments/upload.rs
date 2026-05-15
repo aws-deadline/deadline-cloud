@@ -5,7 +5,6 @@ use crate::attachments::errors::JobAttachmentsError;
 use crate::attachments::models::PathFormat;
 use aws_sdk_s3::primitives::ByteStream;
 
-use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023};
 use crate::attachments::caches::{HashCache, S3CheckCache};
 use crate::attachments::models::{
     AssetRootGroup, AssetRootManifest, AssetUploadGroup, Attachments, FileSystemLocationType,
@@ -13,6 +12,9 @@ use crate::attachments::models::{
 };
 use crate::attachments::progress_tracker::{
     ProgressFn, ProgressStatus, ProgressTracker, SummaryStatistics,
+};
+use openjd_snapshots::{
+    FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE, encode_snapshot_v2023,
 };
 
 fn is_relative_to(path: &Path, base: &str) -> bool {
@@ -457,8 +459,8 @@ pub async fn upload_assets(
     force_s3_check: Option<bool>,
 ) -> Result<(SummaryStatistics, Attachments), JobAttachmentsError> {
     use openjd_snapshots::{
-        AbsManifest, AsyncDataCache, HashUploadOptions, S3DataCache,
-        collect_abs_snapshot, hash_upload_abs_manifest, CollectOptions,
+        AbsManifest, AsyncDataCache, CollectOptions, HashUploadOptions, S3DataCache,
+        collect_abs_snapshot, hash_upload_abs_manifest,
     };
     use std::sync::Arc;
 
@@ -526,14 +528,11 @@ pub async fn upload_assets(
 
             // Collect unhashed AbsSnapshot from files on disk
             let file_paths: Vec<PathBuf> = group.inputs.iter().cloned().collect();
-            let abs_snapshot = collect_abs_snapshot(
-                &[] as &[PathBuf],
-                &file_paths,
-                CollectOptions::default(),
-            )
-            .map_err(|e| {
-                JobAttachmentsError::AssetSync(format!("Failed to collect snapshot: {e}"))
-            })?;
+            let abs_snapshot =
+                collect_abs_snapshot(&[] as &[PathBuf], &file_paths, CollectOptions::default())
+                    .map_err(|e| {
+                        JobAttachmentsError::AssetSync(format!("Failed to collect snapshot: {e}"))
+                    })?;
 
             // Build S3DataCache
             let s3_cache = S3DataCache::new(
@@ -583,12 +582,12 @@ pub async fn upload_assets(
                 },
             )
             .await
-            .map_err(|e| {
-                JobAttachmentsError::AssetSync(format!("Upload failed: {e}"))
-            })?;
+            .map_err(|e| JobAttachmentsError::AssetSync(format!("Upload failed: {e}")))?;
 
             // Build Snapshot from the hashed result for manifest JSON encoding
-            let AbsManifest::Snapshot(hashed_snapshot) = &upload_result.manifest else { unreachable!("input was Snapshot") };
+            let AbsManifest::Snapshot(hashed_snapshot) = &upload_result.manifest else {
+                unreachable!("input was Snapshot")
+            };
             let root_str = group.root_path.to_string_lossy();
             let files: Vec<FileEntry> = hashed_snapshot
                 .files
@@ -596,7 +595,9 @@ pub async fn upload_assets(
                 .filter(|f| !f.deleted && f.symlink_target.is_none())
                 .map(|f| {
                     // Convert absolute path back to relative
-                    let rel = f.path.strip_prefix(&*root_str)
+                    let rel = f
+                        .path
+                        .strip_prefix(&*root_str)
                         .or_else(|| f.path.strip_prefix("/"))
                         .unwrap_or(&f.path)
                         .trim_start_matches('/');
@@ -614,7 +615,8 @@ pub async fn upload_assets(
             let manifest_bytes = encode_snapshot_v2023(&manifest)
                 .expect("valid snapshot encodes successfully")
                 .into_bytes();
-            let manifest_name_prefix = openjd_snapshots::hash::hash_data(group.root_path.to_string_lossy().as_bytes());
+            let manifest_name_prefix =
+                openjd_snapshots::hash::hash_data(group.root_path.to_string_lossy().as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
             let full_key =
@@ -633,14 +635,8 @@ pub async fn upload_assets(
 
             // Update progress tracker
             let stats = &upload_result.statistics;
-            progress_tracker.increase_processed(
-                stats.hashed_files as u64,
-                stats.hashed_bytes,
-            );
-            progress_tracker.increase_skipped(
-                stats.skipped_files as u64,
-                stats.skipped_bytes,
-            );
+            progress_tracker.increase_processed(stats.hashed_files as u64, stats.hashed_bytes);
+            progress_tracker.increase_skipped(stats.skipped_files as u64, stats.skipped_bytes);
         }
 
         manifest_properties_list.push(props);
@@ -751,7 +747,8 @@ pub fn snapshot_assets(
             let manifest_bytes = encode_snapshot_v2023(manifest)
                 .expect("valid snapshot encodes successfully")
                 .into_bytes();
-            let manifest_name_prefix = openjd_snapshots::hash::hash_data(arm.root_path.to_string_lossy().as_bytes());
+            let manifest_name_prefix =
+                openjd_snapshots::hash::hash_data(arm.root_path.to_string_lossy().as_bytes());
             let manifest_name = format!("{manifest_name_prefix}_input");
             let partial_key = join_s3_paths(&[&partial_prefix, &manifest_name]);
 
@@ -916,7 +913,8 @@ mod tests {
         let root = &result.asset_groups[0].root_path;
         assert!(
             root.to_string_lossy().contains("sub"),
-            "root should contain 'sub' directory, got: {}", root.display()
+            "root should contain 'sub' directory, got: {}",
+            root.display()
         );
     }
 
