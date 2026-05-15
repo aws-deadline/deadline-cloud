@@ -97,8 +97,8 @@ pick and execute work items.
 | 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |
-| 31 | Crate restructure (openjd-rs integration + boundary cleanup) | In progress | `crate-restructure.md` | — |
-| 32 | Worker agent Python bindings (attachment operations) | Not started | `deadline-python-bindings/worker-agent-bindings.md` | 31 (Step 9) |
+| 31 | Crate restructure (openjd-rs integration + boundary cleanup) | ✅ Done | — | — |
+| 32 | Worker agent Python bindings (attachment operations) | Not started | `deadline-python-bindings/worker-agent-bindings.md` | — |
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Deferred
 
@@ -110,10 +110,10 @@ No items remain as ⚠️ Gaps. #16f is blocked on #24.
 **In-progress details:** See `HANDOFF.md` for current state of any
 active work items.
 
-**Audit status:** See `audit_reports/2026-04-17-behavioral-parity.md`
-(all findings resolved) and `audit_reports/2026-05-01-cli-feature-parity.md`
+**Audit status:** See `audit_reports/archive/2026-04-17-behavioral-parity.md`
+(all findings resolved) and `audit_reports/archive/2026-05-01-cli-feature-parity.md`
 (all findings resolved). Codebase health audit
-complete — see `audit_reports/2026-05-01-codebase-health.md`.
+complete — see `audit_reports/archive/2026-05-01-codebase-health.md`.
 
 **GUI FFI migration plan (#16a-16f):**
 
@@ -197,6 +197,9 @@ story. See `specs/HANDOFF.md` for detailed analysis.
     (e.g. different uninstall behavior).
 
 **Technical debt:**
+- **KMS error guidance on download**: Wrap openjd's generic S3 403 errors
+  during download to detect KMS issues and suggest "ensure kms:Decrypt
+  permission". See `download.rs:418`.
 - **Spec docs audit**: Review `specs/` docs to ensure they reflect
   current implementation.
 - **#15d**: Audit Level 1 tests for conversion to Level 2.

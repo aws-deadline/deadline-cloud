@@ -36,7 +36,7 @@ deadline-cloud-rs/
 │   ├── deadline-lib/tests/         # Integration tests
 │   ├── deadline-cli/src/           # CLI binary
 │   └── deadline-python-bindings/   # PyO3 layer
-└── audit_reports/                  # Previous audit outputs
+└── audit_reports/                  # Audit outputs (archive/ for resolved)
 ```
 
 ### Three Artifacts
@@ -67,6 +67,7 @@ Review against these 7 criteria, in priority order:
 - Are types appropriate? (`&Path` not `&str` for filesystem paths)
 - Is the API hard to misuse? (builder pattern, type states where appropriate)
 - Are defaults sensible?
+- Typed enums instead of string comparisons for known value sets?
 
 #### 4. Naming & Consistency
 - Do names match Rust conventions? (`snake_case` fns, `CamelCase` types)
@@ -79,6 +80,7 @@ Review against these 7 criteria, in priority order:
 - No unnecessary allocations in loops?
 - No blocking I/O in async contexts?
 - Appropriate use of iterators vs collecting into Vec?
+- Sequential loops over CPU-bound work where rayon/parallelism fits?
 
 #### 6. Test Coverage
 - Happy path covered?

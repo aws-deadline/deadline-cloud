@@ -4,7 +4,7 @@ Expose job attachment operations through `deadline._native` so the Python
 worker agent (`deadline-cloud-worker-agent`) can consume our Rust
 implementation without code changes.
 
-**Status:** Planned. Blocked on #31 Step 9 (clean library API surface).
+**Status:** Planned. Ready to start (#31 prerequisites complete).
 
 **Goal:** `pip install deadline` (our maturin-built package) provides
 everything the worker agent imports from `deadline.job_attachments.*`.
@@ -188,13 +188,13 @@ underscore names.
 
 ## Prerequisites
 
-1. **#31 Step 9 (CLI/Library Boundary)** — removes callbacks and
-   config-from-disk from library functions, making the binding surface
-   clean typed inputs/outputs.
-2. **#31 Step 10 (Crate Merge)** — consolidates into `deadline-lib`,
-   simplifying the bindings crate's dependency list.
+All prerequisites are met:
 
-After Step 9, the library API looks like:
+1. ~~**#31 Step 9 (CLI/Library Boundary)**~~ ✅ Done — library functions
+   take clean typed inputs/outputs, no callbacks or config-from-disk.
+2. ~~**#31 Step 10 (Crate Merge)**~~ ✅ Done — consolidated into `deadline-lib`.
+
+The library API now looks like:
 ```rust
 pub fn download_files(
     manifests_by_root: &HashMap<String, AssetManifest>,

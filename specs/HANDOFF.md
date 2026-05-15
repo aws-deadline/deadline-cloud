@@ -3,41 +3,30 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **#31 — Crate Restructure**
-See [`specs/crate-restructure.md`](crate-restructure.md) for the full plan.
+Active work item: **#31 — Crate Restructure** ✅ Complete
+All 12 steps done. See `audit_reports/archive/2026-05-14-cli-behavioral-audit.md`
+for the final audit.
 
 ---
 
 ## Current Status
 
-**Step 12 (CLI Behavioral Audit):** Study complete. Two bugs found.
+**Step 12 (CLI Behavioral Audit):** ✅ Complete (commit `da799d8`).
 
-**Baseline (2026-05-14):**
+**Baseline (2026-05-14, post-Step 12):**
 
 | Crate | Tests | Status |
 |-------|-------|--------|
 | `deadline-lib` (unit) | 488 | ✅ All pass |
-| `deadline-lib` (integration/attachments) | 129 | ✅ All pass |
+| `deadline-lib` (integration/attachments) | 131 | ✅ All pass |
 | `deadline-lib` (integration/bundle) | 179 | ✅ All pass |
 | `deadline-cli` (unit) | 58 | ✅ All pass |
 | `deadline-cli` (integration) | 441 | ✅ All pass |
-| **Total** | **1,295** | ✅ All pass |
+| **Total** | **1,297** | ✅ All pass |
 
-**Audit report:** `audit_reports/2026-05-14-cli-behavioral-audit.md`
+**Audit report:** `audit_reports/archive/2026-05-14-cli-behavioral-audit.md`
 
-**Bugs to fix:**
-
-1. **BUG-1 (High):** `outputRelativeDirectories` sends `""` instead of `"."`
-   when output dir equals root path. Blocks INOUT PATH job submission.
-   - Location: `crates/deadline-lib/src/attachments/upload.rs` lines ~497, ~705
-   - Fix: Map empty `strip_prefix` result to `"."`
-
-2. **BUG-2 (Low):** `manifest snapshot` with relative `--root` produces
-   absolute paths in manifest. Only affects standalone CLI command.
-   - Location: `crates/deadline-lib/src/attachments/manifest_ops.rs::hash_files_to_manifest`
-   - Fix: Use `std::path::absolute(root)` for the strip prefix
-
-**Status: Step 1 complete (study), awaiting review before fixing bugs.**
+**Work item #31 is now complete.** All 12 steps done.
 
 ---
 
@@ -146,16 +135,15 @@ Verify every CLI command produces correct output and matches the Python
 client's behavior. Run each command against real services, compare output
 format, error messages, and exit codes.
 
-**Status:** Study complete. Audit report written. Two bugs found (BUG-1 high,
-BUG-2 low). Ready to implement fixes.
+**Status:** ✅ Complete (commit `da799d8`).
 
-**Implementation plan:**
-1. Fix BUG-1 in `upload.rs` (two sites) — map empty strip_prefix to `"."`
-2. Add test case for INOUT PATH submission with output dir = root
-3. Fix BUG-2 in `manifest_ops.rs` — use absolute root for strip_prefix
-4. Add test case for manifest snapshot with relative root
-5. Verify all 1,295 tests still pass
-6. Re-run the failing `bundle submit` with INOUT PATH to confirm fix
+Audit report: `audit_reports/archive/2026-05-14-cli-behavioral-audit.md`
+
+Findings fixed:
+- BUG-1: `outputRelativeDirectories` empty string → `"."`
+- BUG-2: `manifest snapshot` relative root path handling
+- COSM-2: `taskRunStatusCounts` lifecycle ordering
+- COSM-4: Print Hashing/Uploading stage headers for 0-file jobs
 
 **Baseline (2026-05-14, pre-Step 11):**
 
@@ -194,7 +182,7 @@ BUG-2 low). Ready to implement fixes.
 | 9.5 | Presentation utilities (move to CLI) | `be667f9` |
 | 10 | Crate consolidation (4 crates → deadline-lib) | `b9133e4` |
 | 11 | Collapse type bridge (openjd types directly) | `cf24fe3` |
-| 12 | Full CLI behavioral audit | In progress |
+| 12 | Full CLI behavioral audit | `da799d8` |
 
 ---
 
@@ -228,4 +216,4 @@ Batch C blocked on #24 (production distribution).
 - **CLI feature parity audit (AUDIT-108, AUDIT-109)** — Removed
   Rust-only subcommands and `--json` flag.
 - **Codebase health audit** — Report:
-  `audit_reports/2026-05-01-codebase-health.md`
+  `audit_reports/archive/2026-05-01-codebase-health.md`
