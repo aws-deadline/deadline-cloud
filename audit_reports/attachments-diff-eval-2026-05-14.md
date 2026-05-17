@@ -14,7 +14,7 @@ Manifest comparison module (5KB) with two diff strategies: `fast_diff` (size+mti
 
 ### Important (should fix)
 
-1. **`fast_diff` uses `Vec::contains` for deleted file detection** (`diff.rs:~90`): `seen_relative.contains(&normalized)` is O(N) per manifest entry, making the deleted-file detection O(N×M) where N=manifest entries and M=current files. For large manifests (10K+ files), use a `HashSet<String>` instead.
+1. **`fast_diff` uses `Vec::contains` for deleted file detection** (`diff.rs:~90`): ✅ **RESOLVED (Batch F, 2026-05-16)** — Replaced with `HashSet<String>` for O(1) lookup.
 
 ### Minor (nice to have)
 
@@ -33,4 +33,4 @@ Good test coverage for the size of the module.
 
 ## Recommended Changes
 
-1. [S] Replace `Vec::contains` with `HashSet` for O(1) lookup in deleted-file detection
+1. [S] Replace `Vec::contains` with `HashSet` for O(1) lookup in deleted-file detection — **DONE (Batch F, 2026-05-16)**

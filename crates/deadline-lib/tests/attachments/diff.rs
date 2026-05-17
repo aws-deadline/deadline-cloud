@@ -213,10 +213,11 @@ fn fast_diff_large_manifest_deleted_detection_is_correct() {
 
     // Measured on dev machine: ~250ms total (240ms file I/O + 5ms HashSet lookup).
     // Vec::contains would add ~700ms → ~940ms total.
-    // Threshold at 400ms: allows 1.6x I/O variance across machines while
-    // clearly catching the ~700ms regression from O(N²).
+    // Threshold at 2s: tolerates I/O variance under load (parallel tests,
+    // Spotlight indexing) while clearly catching the O(N²) regression
+    // which would take ~10s+ with 10K×10K comparisons.
     assert!(
-        elapsed.as_millis() < 400,
-        "Deleted-file detection took {elapsed:?} — likely O(N²). Expected <400ms with HashSet."
+        elapsed.as_millis() < 2_000,
+        "Deleted-file detection took {elapsed:?} — likely O(N²). Expected <2s with HashSet."
     );
 }

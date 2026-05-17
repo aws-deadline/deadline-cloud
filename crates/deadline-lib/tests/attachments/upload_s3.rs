@@ -351,6 +351,114 @@ async fn upload_assets_callback_cancel_returns_error() {
 }
 
 // =====================================================================
+// upload_assets — per-file progress reporting
+// =====================================================================
+#[tokio::test]
+async fn upload_assets_progress_callback_fires_per_file() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    let server = MockServer::start().await;
+    mock_s3_head_object_not_found(&server).await;
+    mock_s3_put_object_success(&server).await;
+
+    let dir = TempDir::new().unwrap();
+    // 3 files in one group — callback should fire at least 3 times
+    let groups = vec![test_group(
+        dir.path(),
+        &[("a.txt", b"aaa"), ("b.txt", b"bbb"), ("c.txt", b"ccc")],
+    )];
+
+    let uploader = build_uploader(&server).await;
+    let s3_settings = test_s3_settings();
+    let cache_dir = TempDir::new().unwrap();
+
+    let call_count = Arc::new(AtomicU32::new(0));
+    let count_clone = call_count.clone();
+    let progress_cb = move |_processed: u64, _total: u64| -> bool {
+        count_clone.fetch_add(1, Ordering::Relaxed);
+        true
+    };
+
+    let (stats, _) = upload_assets(
+        "farm-1",
+        "queue-1",
+        &s3_settings,
+        &groups,
+        &uploader,
+        Some(Box::new(progress_cb)),
+        Some(cache_dir.path().to_str().unwrap()),
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(stats.total_files, 3);
+    // With per-file progress, callback should fire at least once per file
+    let calls = call_count.load(Ordering::Relaxed);
+    assert!(
+        calls >= 3,
+        "Expected progress callback to fire at least 3 times (once per file), got {calls}"
+    );
+}
+
+// =====================================================================
+// upload_assets — cancellation mid-group via progress callback
+// =====================================================================
+#[tokio::test]
+async fn upload_assets_cancel_mid_group_stops_early() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    let server = MockServer::start().await;
+    mock_s3_head_object_not_found(&server).await;
+    mock_s3_put_object_success(&server).await;
+
+    let dir = TempDir::new().unwrap();
+    // 5 files — cancel after 2nd callback
+    let groups = vec![test_group(
+        dir.path(),
+        &[
+            ("a.txt", b"aaa"),
+            ("b.txt", b"bbb"),
+            ("c.txt", b"ccc"),
+            ("d.txt", b"ddd"),
+            ("e.txt", b"eee"),
+        ],
+    )];
+
+    let uploader = build_uploader(&server).await;
+    let s3_settings = test_s3_settings();
+    let cache_dir = TempDir::new().unwrap();
+
+    let call_count = Arc::new(AtomicU32::new(0));
+    let count_clone = call_count.clone();
+    let cancel_after_2 = move |_processed: u64, _total: u64| -> bool {
+        let n = count_clone.fetch_add(1, Ordering::Relaxed);
+        n < 2 // return false on 3rd call (index 2)
+    };
+
+    let result = upload_assets(
+        "farm-1",
+        "queue-1",
+        &s3_settings,
+        &groups,
+        &uploader,
+        Some(Box::new(cancel_after_2)),
+        Some(cache_dir.path().to_str().unwrap()),
+        None,
+    )
+    .await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.to_lowercase().contains("cancel"),
+        "Expected cancellation error, got: {err}"
+    );
+}
+
+// =====================================================================
 // upload_assets — multiple manifests with different roots
 // =====================================================================
 #[tokio::test]

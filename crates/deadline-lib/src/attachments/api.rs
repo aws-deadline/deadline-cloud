@@ -144,7 +144,7 @@ pub async fn attachment_download(
     s3_client: &aws_sdk_s3::Client,
     account_id: &str,
     path_mapping_rules: Option<&str>,
-    on_progress: Option<Box<dyn Fn(u64, u64) -> bool + Send>>,
+    on_progress: Option<Box<dyn Fn(u64, u64) -> bool + Send + Sync>>,
     conflict_resolution: FileConflictResolution,
 ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
     let file_name_manifest_dict = read_manifests(manifests)?;

@@ -47,4 +47,4 @@ Excellent inline test coverage. This is the best-tested module in the library.
 
 1. [S] Document that comments are not preserved on write-back — **ALREADY DOCUMENTED** (doc comment on `write_config_to`)
 2. [S] Document `expand_tilde` limitation (no `~user/` support) — **ALREADY DOCUMENTED** (doc comment on `expand_tilde`)
-3. [S] Consider using `tempfile::NamedTempFile` in `write_config_to` for robustness
+3. [S] Consider using `tempfile::NamedTempFile` in `write_config_to` for robustness — **NO ACTION NEEDED** (PID reuse scenario is practically impossible)

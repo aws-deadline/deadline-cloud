@@ -157,7 +157,7 @@ const CALLBACK_INTERVAL_SECS: f64 = 1.0;
 const MAX_FILES_IN_CHUNK: u64 = 50;
 
 /// Progress callback type: `(processed_bytes, total_bytes) -> should_continue`.
-pub type ProgressFn = Box<dyn Fn(u64, u64) -> bool + Send>;
+pub type ProgressFn = Box<dyn Fn(u64, u64) -> bool + Send + Sync>;
 
 struct TrackerInner {
     continue_reporting: bool,
@@ -236,6 +236,21 @@ impl ProgressTracker {
     pub fn report_progress(&self) -> bool {
         let mut inner = self.inner.lock().expect("lock poisoned");
         self.report_progress_inner(&mut inner)
+    }
+
+    /// Signal per-file progress from an external source (e.g. openjd `on_progress`).
+    /// Always fires the callback with the given cumulative bytes — no throttling.
+    /// Returns `false` if the operation should be cancelled.
+    pub fn signal_file_done(&self, cumulative_bytes: u64) -> bool {
+        let inner = self.inner.lock().expect("lock poisoned");
+        if !inner.continue_reporting {
+            return false;
+        }
+        drop(inner);
+        match &self.callback {
+            Some(cb) => cb(cumulative_bytes, self.total_bytes),
+            None => true,
+        }
     }
 
     pub fn track_progress(&self, bytes_amount: u64, current_file_done: bool) -> bool {

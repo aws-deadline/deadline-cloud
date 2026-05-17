@@ -480,12 +480,12 @@ pub async fn upload_assets(
         }
     }
 
-    let progress_tracker = ProgressTracker::new(
+    let progress_tracker = Arc::new(ProgressTracker::new(
         ProgressStatus::UploadInProgress,
         total_files,
         total_bytes,
         on_uploading_assets,
-    );
+    ));
 
     let start = std::time::Instant::now();
     let mut manifest_properties_list = Vec::new();
@@ -572,17 +572,40 @@ pub async fn upload_assets(
 
             let data_cache: Arc<dyn AsyncDataCache> = Arc::new(s3_cache);
 
-            // Hash + upload in one pipelined pass
+            // Hash + upload in one pipelined pass, with per-file progress
+            let tracker = Arc::clone(&progress_tracker);
+            let last_reported_files = Arc::new(std::sync::atomic::AtomicU64::new(0));
+            let last_files = Arc::clone(&last_reported_files);
             let upload_result = hash_upload_abs_manifest(
                 &AbsManifest::Snapshot(abs_snapshot),
                 data_cache,
                 HashUploadOptions {
                     hash_cache,
+                    on_progress: Some(Box::new(
+                        move |stats: &openjd_snapshots::ops::hash_upload::UploadStatistics| {
+                            let total_files_now = (stats.hashed_files + stats.skipped_files) as u64;
+                            let prev = last_files
+                                .swap(total_files_now, std::sync::atomic::Ordering::Relaxed);
+                            let new_files = total_files_now.saturating_sub(prev);
+                            let cumulative_bytes = stats.hashed_bytes + stats.skipped_bytes;
+                            for _ in 0..new_files {
+                                if !tracker.signal_file_done(cumulative_bytes) {
+                                    return false;
+                                }
+                            }
+                            true
+                        },
+                    )),
                     ..Default::default()
                 },
             )
             .await
-            .map_err(|e| JobAttachmentsError::AssetSync(format!("Upload failed: {e}")))?;
+            .map_err(|e| match e {
+                openjd_snapshots::SnapshotError::Cancelled => JobAttachmentsError::Cancelled {
+                    message: "File upload cancelled.".into(),
+                },
+                other => JobAttachmentsError::AssetSync(format!("Upload failed: {other}")),
+            })?;
 
             // Build Snapshot from the hashed result for manifest JSON encoding
             let AbsManifest::Snapshot(hashed_snapshot) = &upload_result.manifest else {

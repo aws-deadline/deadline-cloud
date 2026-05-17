@@ -143,8 +143,23 @@ Implementation delegates to `openjd_expr::apply_rules()`.
 - Chunk completion (≥50 files processed), OR
 - 100% completion
 
-Callback type: `ProgressFn = Box<dyn Fn(u64, u64) -> bool + Send>` where
-args are `(processed_bytes, total_bytes)`. Returning `false` cancels.
+Callback type: `ProgressFn = Box<dyn Fn(u64, u64) -> bool + Send + Sync>`
+where args are `(processed_bytes, total_bytes)`. Returning `false` cancels.
+
+### Per-file progress during upload
+
+The upload engine wires openjd-snapshots' `on_progress` callback to report
+progress after each file is hashed/uploaded (not just after each group).
+This uses `signal_file_done(cumulative_bytes)` which fires the callback
+immediately without throttling. The result: progress bars update smoothly
+per-file rather than jumping per-group.
+
+Cancellation propagates: callback returns `false` → openjd stops →
+`SnapshotError::Cancelled` → `JobAttachmentsError::Cancelled`.
+
+**Difference from Python:** Python reports progress per-group (same as
+Rust did before this change). The Rust CLI now provides smoother progress
+feedback during large uploads.
 
 `SummaryStatistics` tracks total files, bytes, skipped files, elapsed time,
 and transfer rate.

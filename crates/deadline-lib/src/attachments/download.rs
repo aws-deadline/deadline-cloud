@@ -331,7 +331,7 @@ pub async fn download_files_from_manifests(
     cas_prefix: Option<&str>,
     s3_client: &S3Client,
     account_id: &str,
-    on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send>>,
+    on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send + Sync>>,
     conflict_resolution: FileConflictResolution,
 ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
     use openjd_snapshots::{
@@ -961,7 +961,7 @@ impl OutputDownloader {
     pub async fn download_job_output(
         &self,
         file_conflict_resolution: FileConflictResolution,
-        on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send>>,
+        on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send + Sync>>,
     ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
         let mut manifests_by_root = HashMap::new();
         for (root, manifest_list) in &self.outputs_by_root {
@@ -1111,7 +1111,7 @@ impl InputDownloader {
     pub async fn download(
         &self,
         file_conflict_resolution: FileConflictResolution,
-        on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send>>,
+        on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send + Sync>>,
     ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
         let mut manifests_by_root = HashMap::new();
         for (root, manifest_list) in &self.inputs_by_root {

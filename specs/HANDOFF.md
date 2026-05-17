@@ -9,6 +9,11 @@ Active work item: **None**
 
 ## Completed items (older)
 
+- **Per-file upload progress (2026-05-16)** — Wired openjd-snapshots
+  `on_progress` callback for per-file progress during upload. Progress
+  bar now fills incrementally instead of jumping per-group. Added
+  `signal_file_done` to ProgressTracker, `ProgressFn` → `Send + Sync`.
+  +2 tests (1,348→1,350). Bumped flaky perf test budget.
 - **Audit findings — Batches G+I+J (2026-05-16)** — Test coverage gaps
   (+17 tests), session mutex minimization (lock no longer held across
   network I/O), submission function extraction (`load_and_confirm_hooks`),
