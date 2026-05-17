@@ -46,5 +46,5 @@ Good coverage of the user-agent and caching logic. The credential provider and q
 
 1. [M] Minimize lock hold duration: load config outside the lock, then store result — **DONE (Batch I, 2026-05-16)**
 2. [S] Document `invalidate_session_cache` requires a tokio runtime — **ALREADY DOCUMENTED**
-3. [M] Add credential caching in `QueueUserCredentialProvider` with expiry check
+3. ~~[M] Add credential caching in `QueueUserCredentialProvider` with expiry check~~ — REMOVED (CLI is short-lived; SDK caches internally)
 4. [S] Add unit test for `resolve_profile` edge cases — **DONE (Batch G2, 2026-05-16)**

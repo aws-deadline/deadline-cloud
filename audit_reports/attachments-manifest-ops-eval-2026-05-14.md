@@ -36,5 +36,5 @@ High-level manifest lifecycle operations (19KB): glob, snapshot, diff, merge, up
 ## Recommended Changes
 
 1. [S] Improve error message in `resolve_glob_config` when file doesn't exist — **DONE (Batch F, 2026-05-16)**
-2. [M] Consider options structs for functions with 6+ parameters
+2. ~~[M] Consider options structs for functions with 6+ parameters~~ — REMOVED (few callers, no ergonomic benefit)
 3. [S] Add error case tests for manifest operations — **DONE (Batch G2, 2026-05-16)**

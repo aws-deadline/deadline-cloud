@@ -51,6 +51,6 @@ Upload engine (37KB) for hashing and uploading job attachment files to S3 CAS. C
 
 1. [S] Extract guidance strings in `s3_upload_error` to named constants — **NO ACTION NEEDED** (unique messages, no real repetition)
 2. [M] Add unit tests for `common_path` and `find_group_key` edge cases — **DONE (Batch G, 2026-05-16)**
-3. [M] Investigate per-file progress callbacks from openjd-snapshots
+3. [M] Investigate per-file progress callbacks from openjd-snapshots — **INVESTIGATED (2026-05-16):** openjd-snapshots supports `on_progress: Option<Box<ProgressFn<UploadStatistics>>>` on `HashUploadOptions`. However, wiring it requires making `ProgressTracker` `Sync`-compatible (its callback is `Send` only). Would need atomic counters or a redesign of the progress reporting layer. Low priority since Python also reports per-group, not per-file.
 4. ✅ [S] Document that `snapshot_assets` is blocking — **DONE (2026-05-16)**
 5. [L] Separate path validation from grouping logic in `prepare_paths_for_upload`
