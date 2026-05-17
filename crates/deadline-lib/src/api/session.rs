@@ -102,6 +102,8 @@ impl SessionCache {
     }
 
     /// Get or load the SDK config for the current profile.
+    /// Used by tests to verify caching behavior directly.
+    #[cfg_attr(not(test), allow(dead_code, reason = "used only in tests"))]
     async fn get_config(&mut self, config: &IniConfig) -> &SdkConfig {
         let profile = resolve_profile(config);
         if self.cached_profile.as_ref() != Some(&profile) {
@@ -116,101 +118,6 @@ impl SessionCache {
             self.cached_profile = Some(profile);
         }
         self.cached_config.as_ref().expect("value set above")
-    }
-
-    async fn build_deadline_client(&mut self, config: &IniConfig) -> DeadlineClient {
-        let sdk_config = self.get_config(config).await.clone();
-        let mut builder = aws_sdk_deadline::config::Builder::from(&sdk_config);
-        if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
-            builder = builder.endpoint_url(url);
-        }
-        let ua = self.context.build_user_agent();
-        if let Ok(app_name) = aws_sdk_deadline::config::AppName::new(ua) {
-            builder = builder.app_name(app_name);
-        }
-        // Resolve account_id best-effort from STS
-        let account_id = crate::api::telemetry::resolve_account_id(&sdk_config).await;
-        let telemetry = crate::api::telemetry::create_telemetry_with_metadata(
-            config,
-            None,
-            None,
-            account_id.as_deref(),
-        );
-        builder = builder.interceptor(TelemetryInterceptor::new(Some(telemetry)));
-        DeadlineClient::from_conf(builder.build())
-    }
-
-    async fn build_sts_client(&mut self, config: &IniConfig) -> StsClient {
-        let sdk_config = self.get_config(config).await;
-        let mut builder = aws_sdk_sts::config::Builder::from(sdk_config);
-        if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_STS") {
-            builder = builder.endpoint_url(url);
-        }
-        let ua = self.context.build_user_agent();
-        if let Ok(app_name) = aws_sdk_sts::config::AppName::new(ua) {
-            builder = builder.app_name(app_name);
-        }
-        StsClient::from_conf(builder.build())
-    }
-
-    /// Build an `SdkConfig` with queue user credentials for the given farm/queue.
-    /// Cached by (`farm_id`, `queue_id`). The credential provider calls
-    /// `AssumeQueueRoleForUser` and auto-refreshes when credentials expire.
-    pub async fn get_queue_user_config(
-        &mut self,
-        farm_id: &str,
-        queue_id: &str,
-        queue_display_name: Option<String>,
-        config: &IniConfig,
-    ) -> Result<SdkConfig, crate::api::errors::DeadlineError> {
-        let key = (farm_id.to_owned(), queue_id.to_owned());
-        if let Some(cached) = self.cached_queue_configs.get(&key) {
-            return Ok(cached.clone());
-        }
-
-        let base_config = self.get_config(config).await;
-        let region = base_config.region().cloned();
-
-        // Build a deadline client for the credential provider to call AssumeQueueRoleForUser
-        let mut dl_builder = aws_sdk_deadline::config::Builder::from(base_config);
-        if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
-            dl_builder = dl_builder.endpoint_url(url);
-        }
-        let dl_client = DeadlineClient::from_conf(dl_builder.build());
-
-        let provider = QueueUserCredentialProvider::new(
-            dl_client,
-            farm_id.to_owned(),
-            queue_id.to_owned(),
-            queue_display_name,
-        );
-
-        let mut builder = SdkConfig::builder()
-            .behavior_version(aws_config::BehaviorVersion::latest())
-            .credentials_provider(SharedCredentialsProvider::new(provider));
-        if let Some(r) = region {
-            builder = builder.region(r);
-        }
-        // Propagate the global endpoint URL override if set. This is
-        // needed for tests (stub server) and custom endpoint configs.
-        // The AWS SDK reads per-service env vars (AWS_ENDPOINT_URL_STS,
-        // AWS_ENDPOINT_URL_S3) when building service clients from an
-        // SdkConfig loaded via aws_config::load_defaults(), but NOT
-        // from a manually-built SdkConfig. So we set the global
-        // endpoint_url which applies to all services built from this
-        // config.
-        if let Some(url) = base_config.endpoint_url() {
-            builder = builder.endpoint_url(url);
-        } else if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_STS") {
-            // Fallback: if per-service STS endpoint is set but no global
-            // endpoint, use it as the global endpoint for this config.
-            // This ensures STS and S3 clients built from queue-scoped
-            // configs reach the stub server in tests.
-            builder = builder.endpoint_url(url);
-        }
-        let sdk_config = builder.build();
-        self.cached_queue_configs.insert(key, sdk_config.clone());
-        Ok(sdk_config)
     }
 }
 
@@ -377,21 +284,80 @@ pub async fn invalidate_session_cache_async() {
 
 /// Build a Deadline Cloud client using the cached SDK config.
 ///
-/// Note: On the first call, this holds the session lock across config
-/// resolution (which may do network I/O for credential discovery).
-/// Subsequent calls return from cache without network I/O.
+/// Minimizes lock hold duration: checks cache under lock, loads config
+/// outside the lock on cache miss, then re-acquires to store and build.
 pub async fn deadline_client(config: &IniConfig) -> DeadlineClient {
-    SESSION.lock().await.build_deadline_client(config).await
+    let sdk_config = get_or_load_config(config).await;
+    let cache = SESSION.lock().await;
+    let ua = cache.context.build_user_agent();
+    drop(cache);
+
+    let mut builder = aws_sdk_deadline::config::Builder::from(&sdk_config);
+    if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
+        builder = builder.endpoint_url(url);
+    }
+    if let Ok(app_name) = aws_sdk_deadline::config::AppName::new(ua) {
+        builder = builder.app_name(app_name);
+    }
+    let account_id = crate::api::telemetry::resolve_account_id(&sdk_config).await;
+    let telemetry = crate::api::telemetry::create_telemetry_with_metadata(
+        config,
+        None,
+        None,
+        account_id.as_deref(),
+    );
+    builder = builder.interceptor(TelemetryInterceptor::new(Some(telemetry)));
+    DeadlineClient::from_conf(builder.build())
 }
 
 /// Get the cached `SdkConfig` (for building non-Deadline AWS clients like `CloudWatch` Logs).
 pub async fn get_sdk_config(config: &IniConfig) -> SdkConfig {
-    SESSION.lock().await.get_config(config).await.clone()
+    get_or_load_config(config).await
 }
 
 /// Build an STS client using the cached SDK config.
 pub async fn sts_client(config: &IniConfig) -> StsClient {
-    SESSION.lock().await.build_sts_client(config).await
+    let sdk_config = get_or_load_config(config).await;
+    let ua = SESSION.lock().await.context.build_user_agent();
+
+    let mut builder = aws_sdk_sts::config::Builder::from(&sdk_config);
+    if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_STS") {
+        builder = builder.endpoint_url(url);
+    }
+    if let Ok(app_name) = aws_sdk_sts::config::AppName::new(ua) {
+        builder = builder.app_name(app_name);
+    }
+    StsClient::from_conf(builder.build())
+}
+
+/// Get or load the SDK config, minimizing lock hold duration.
+/// On cache hit: brief lock to clone the config.
+/// On cache miss: drop lock → load config → re-acquire → store.
+async fn get_or_load_config(config: &IniConfig) -> SdkConfig {
+    let profile = resolve_profile(config);
+
+    // Fast path: check cache under lock
+    {
+        let cache = SESSION.lock().await;
+        if cache.cached_profile.as_ref() == Some(&profile)
+            && let Some(ref cfg) = cache.cached_config
+        {
+            return cfg.clone();
+        }
+    }
+
+    // Slow path: load config outside the lock
+    let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
+    if let Some(ref p) = profile {
+        loader = loader.profile_name(p);
+    }
+    let loaded = loader.load().await;
+
+    // Store in cache
+    let mut cache = SESSION.lock().await;
+    cache.cached_config = Some(loaded.clone());
+    cache.cached_profile = Some(profile);
+    loaded
 }
 
 /// Get an `SdkConfig` with queue user credentials.
@@ -409,11 +375,46 @@ pub async fn get_queue_user_config(
     }
     let farm = farm_id.map_or_else(|| get_setting("defaults.farm_id", config), String::from);
     let queue = queue_id.map_or_else(|| get_setting("defaults.queue_id", config), String::from);
-    SESSION
-        .lock()
-        .await
-        .get_queue_user_config(&farm, &queue, queue_display_name, config)
-        .await
+
+    // Check queue config cache under lock
+    let key = (farm.clone(), queue.clone());
+    {
+        let cache = SESSION.lock().await;
+        if let Some(cached) = cache.cached_queue_configs.get(&key) {
+            return Ok(cached.clone());
+        }
+    }
+
+    // Load base config outside the lock
+    let base_config = get_or_load_config(config).await;
+    let region = base_config.region().cloned();
+
+    // Build credential provider
+    let mut dl_builder = aws_sdk_deadline::config::Builder::from(&base_config);
+    if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
+        dl_builder = dl_builder.endpoint_url(url);
+    }
+    let dl_client = DeadlineClient::from_conf(dl_builder.build());
+
+    let provider = QueueUserCredentialProvider::new(dl_client, farm, queue, queue_display_name);
+
+    let mut builder = SdkConfig::builder()
+        .behavior_version(aws_config::BehaviorVersion::latest())
+        .credentials_provider(SharedCredentialsProvider::new(provider));
+    if let Some(r) = region {
+        builder = builder.region(r);
+    }
+    if let Some(url) = base_config.endpoint_url() {
+        builder = builder.endpoint_url(url);
+    } else if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_STS") {
+        builder = builder.endpoint_url(url);
+    }
+    let sdk_config = builder.build();
+
+    // Store in cache
+    let mut cache = SESSION.lock().await;
+    cache.cached_queue_configs.insert(key, sdk_config.clone());
+    Ok(sdk_config)
 }
 
 /// Get an `SdkConfig` appropriate for non-Deadline AWS services (`CloudWatch`, S3)
@@ -874,13 +875,18 @@ mod tests {
     // caching — calling get_queue_user_config twice returns cached config
     #[tokio::test]
     async fn get_queue_user_config_caches_by_farm_and_queue() {
-        let mut cache = SessionCache::new();
-        // First call creates a config
-        let cfg1 = cache
-            .get_queue_user_config("farm-abc", "queue-123", None, &IniConfig::new())
-            .await;
+        // First call creates a config and caches it
+        let cfg1 = get_queue_user_config(
+            Some("farm-abc"),
+            Some("queue-123"),
+            None,
+            false,
+            &IniConfig::new(),
+        )
+        .await;
         assert!(cfg1.is_ok());
-        // Second call should return cached (same key)
+        // Verify it's in the global cache
+        let cache = SESSION.lock().await;
         assert!(
             cache
                 .cached_queue_configs
@@ -891,12 +897,41 @@ mod tests {
     // force_refresh clears base session and queue configs
     #[tokio::test]
     async fn invalidate_clears_queue_config_cache() {
-        let mut cache = SessionCache::new();
-        let _ = cache
-            .get_queue_user_config("farm-abc", "queue-123", None, &IniConfig::new())
-            .await;
-        assert!(!cache.cached_queue_configs.is_empty());
-        cache.invalidate();
+        let _ = get_queue_user_config(
+            Some("farm-abc"),
+            Some("queue-123"),
+            None,
+            false,
+            &IniConfig::new(),
+        )
+        .await;
+        {
+            let cache = SESSION.lock().await;
+            assert!(!cache.cached_queue_configs.is_empty());
+        }
+        invalidate_session_cache_async().await;
+        let cache = SESSION.lock().await;
         assert!(cache.cached_queue_configs.is_empty());
+    }
+
+    // concurrent access — multiple tasks can call deadline_client without deadlock
+    #[tokio::test]
+    async fn concurrent_deadline_client_calls_do_not_deadlock() {
+        let config = IniConfig::new();
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let cfg = config.clone();
+                tokio::spawn(async move {
+                    let _client = deadline_client(&cfg).await;
+                })
+            })
+            .collect();
+        // All should complete within a reasonable time (no deadlock)
+        for h in handles {
+            tokio::time::timeout(std::time::Duration::from_secs(10), h)
+                .await
+                .expect("should not timeout (deadlock)")
+                .expect("task should not panic");
+        }
     }
 }

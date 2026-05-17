@@ -61,5 +61,5 @@ Good coverage of the pure filtering/merging functions. The S3 interaction paths 
 1. ✅ [M] Cache compiled regex patterns in `matches_any_filter` — **DONE (Batch C, FilterSet)**
 2. ✅ [S] Use `LazyLock` for the step pattern regex — **DONE (Batch A)**
 3. ✅ [S] Extract shared `normalize_path` to `crate::util` — **DONE (Batch A)**
-4. [M] Add unit tests for `select_latest_manifests_per_task` with various S3 key patterns
+4. [M] Add unit tests for `select_latest_manifests_per_task` with various S3 key patterns — **DONE (Batch G, 2026-05-16)**
 5. [L] Unify `OutputDownloader`/`InputDownloader` into a generic downloader struct

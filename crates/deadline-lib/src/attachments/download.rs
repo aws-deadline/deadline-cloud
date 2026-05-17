@@ -1333,6 +1333,59 @@ mod tests {
     }
 
     #[test]
+    fn select_latest_manifests_per_task_empty_input() {
+        let keys: Vec<String> = vec![];
+        let selected = select_latest_manifests_per_task(&keys);
+        assert!(selected.is_empty());
+    }
+
+    #[test]
+    fn select_latest_manifests_per_task_non_matching_keys_excluded() {
+        // Keys that don't match the step output pattern are excluded
+        let keys = vec![
+            "rp/Manifests/f/q/j/not-a-step/output.manifest".into(),
+            "rp/other/random/key".into(),
+        ];
+        let selected = select_latest_manifests_per_task(&keys);
+        assert!(selected.is_empty());
+    }
+
+    #[test]
+    fn select_latest_manifests_per_task_no_task_keys_pass_through() {
+        // Step-level keys without "task-" are included directly
+        let keys = vec![
+            "rp/Manifests/f/q/j/step-1/2024-01-01T00:00:00Z_sa-1/output.manifest".into(),
+            "rp/Manifests/f/q/j/step-1/2024-01-02T00:00:00Z_sa-2/output.manifest".into(),
+        ];
+        let selected = select_latest_manifests_per_task(&keys);
+        assert_eq!(selected.len(), 2);
+    }
+
+    #[test]
+    fn select_latest_manifests_per_task_multiple_tasks_each_picks_latest() {
+        let keys = vec![
+            "rp/Manifests/f/q/j/step-1/task-1/2024-01-01T00:00:00Z_sa-1/output.manifest".into(),
+            "rp/Manifests/f/q/j/step-1/task-1/2024-01-02T00:00:00Z_sa-2/output.manifest".into(),
+            "rp/Manifests/f/q/j/step-1/task-2/2024-01-01T00:00:00Z_sa-3/output.manifest".into(),
+            "rp/Manifests/f/q/j/step-1/task-2/2024-01-03T00:00:00Z_sa-4/output.manifest".into(),
+        ];
+        let selected = select_latest_manifests_per_task(&keys);
+        assert_eq!(selected.len(), 2);
+        assert!(selected.iter().any(|k| k.contains("sa-2")));
+        assert!(selected.iter().any(|k| k.contains("sa-4")));
+    }
+
+    #[test]
+    fn select_latest_manifests_per_task_single_entry_per_task() {
+        let keys = vec![
+            "rp/Manifests/f/q/j/step-1/task-1/2024-01-01T00:00:00Z_sa-1/output.manifest".into(),
+        ];
+        let selected = select_latest_manifests_per_task(&keys);
+        assert_eq!(selected.len(), 1);
+        assert!(selected[0].contains("sa-1"));
+    }
+
+    #[test]
     fn output_manifest_prefix_job_level() {
         let s = JobAttachmentS3Settings::from_root_path("b/rp").unwrap();
         let prefix = get_output_manifest_prefix(&s, "f", "q", "j", None, None).unwrap();

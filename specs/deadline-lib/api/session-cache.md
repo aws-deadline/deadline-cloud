@@ -50,3 +50,19 @@ per RFC 6761.
 
 The cache is cleared on logout and on explicit refresh. The next API call
 triggers a full credential re-resolution.
+
+## Concurrency
+
+The session cache uses a `tokio::sync::Mutex`. Public functions minimize
+lock hold duration to avoid blocking concurrent callers during network I/O:
+
+- **Cache hit:** Lock acquired briefly to clone the cached config.
+- **Cache miss:** Lock acquired to check → released → config loaded
+  (network I/O) → lock re-acquired to store.
+
+This means concurrent callers on cache miss may both load the config
+independently. The last writer wins, which is safe because both load
+the same profile and produce identical configs.
+
+Client construction (building `DeadlineClient`, `StsClient`) happens
+entirely outside the lock. Only the raw `SdkConfig` is cached.

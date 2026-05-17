@@ -9,6 +9,10 @@ Active work item: **None**
 
 ## Completed items (older)
 
+- **Audit findings — Batches G+I+J (2026-05-16)** — Test coverage gaps
+  (+17 tests), session mutex minimization (lock no longer held across
+  network I/O), submission function extraction (`load_and_confirm_hooks`),
+  HookManager constructor cleanup. 1,324→1,341 tests.
 - **Audit findings — Batch F quick wins (2026-05-16)** — 13 findings
   addressed: HashSet perf fix in diff (O(N²)→O(N)), platform-aware
   normcase in incremental_download, clear error for missing glob config

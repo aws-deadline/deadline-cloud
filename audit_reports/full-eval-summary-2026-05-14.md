@@ -30,8 +30,8 @@ Thread now joined after SIGKILL. Tests verify no leak.
 ### ✅ 3. Cache regex compilations in `attachments/download` (Important) — DONE (Batch C, 2026-05-15)
 `FilterSet` struct caches compiled patterns. 1000x speedup for large file sets.
 
-### 4. Reduce mutex hold duration in `api/session` (Important) — OPEN
-The global `SESSION` mutex is held across `.await` points during initial config load, blocking all concurrent API callers.
+### ✅ 4. Reduce mutex hold duration in `api/session` (Important) — DONE (Batch I, 2026-05-16)
+Lock no longer held across `.await` network I/O. `get_or_load_config()` checks cache under lock, loads outside, re-acquires to store.
 
 ### ✅ 5. Extract duplicated utilities (Quick wins) — DONE (Batch A, 2026-05-15)
 - `normalize_path` extracted to `crate::util`

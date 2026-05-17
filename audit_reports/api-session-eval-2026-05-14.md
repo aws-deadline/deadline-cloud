@@ -14,7 +14,7 @@ Session management module (35KB) providing cached AWS SDK configs, credential pr
 
 ### Important (should fix)
 
-1. **Global `SESSION` mutex held across async `.await` points** (`session.rs:~390`): `SESSION.lock().await.build_deadline_client(config).await` holds the mutex lock while awaiting the SDK config load (which does network I/O on first call). This blocks all other callers of `deadline_client()`, `sts_client()`, etc. during the initial config resolution. Consider loading config, dropping the lock, then re-acquiring to store.
+1. **Global `SESSION` mutex held across async `.await` points** (`session.rs:~390`): ✅ **RESOLVED (Batch I, 2026-05-16)** — `get_or_load_config()` checks cache under lock, loads outside, re-acquires to store. `deadline_client()`, `sts_client()`, `get_queue_user_config()` no longer hold the lock across network I/O.
 
 2. **`invalidate_session_cache` uses `block_in_place`** (`session.rs:~360`): This is correct for sync-to-async bridging but will panic if called outside a tokio runtime (e.g., in a unit test without `#[tokio::test]`). Document this requirement or add a fallback.
 
@@ -44,7 +44,7 @@ Good coverage of the user-agent and caching logic. The credential provider and q
 
 ## Recommended Changes
 
-1. [M] Minimize lock hold duration: load config outside the lock, then store result
+1. [M] Minimize lock hold duration: load config outside the lock, then store result — **DONE (Batch I, 2026-05-16)**
 2. [S] Document `invalidate_session_cache` requires a tokio runtime
 3. [M] Add credential caching in `QueueUserCredentialProvider` with expiry check
 4. [S] Add unit test for `resolve_profile` edge cases

@@ -268,23 +268,12 @@ fn get_setting(name: &str, config: &IniConfig) -> String {
     config_file::get_setting(name, config).unwrap_or_default()
 }
 
-/// Submit a job bundle to Deadline Cloud. Returns the job ID on success.
-#[allow(
-    clippy::too_many_lines,
-    reason = "end-to-end job submission pipeline with 11 sequential phases"
-)]
-pub async fn create_job_from_job_bundle(
-    params: SubmitJobParams<'_>,
-) -> Result<Option<String>, DeadlineError> {
+/// Load hooks from environment and bundle, merge them, and confirm with user.
+/// Returns the merged hook configuration (if any).
+fn load_and_confirm_hooks(
+    params: &SubmitJobParams<'_>,
+) -> Result<Option<hooks::HookConfiguration>, DeadlineError> {
     let handler = params.handler;
-    let submitter_name = params.submitter_name.as_deref().unwrap_or("Custom");
-
-    session::set_submitter_info(submitter_name, None).await;
-
-    // 1. Validate symlink containment
-    validate_directory_symlink_containment(&params.job_bundle_dir)?;
-
-    // 1b. Load hooks from bundle and/or environment
     let allow_bundle_hooks =
         config_file::str2bool(&get_setting("settings.allow_bundle_hooks", params.config))
             .unwrap_or(false);
@@ -301,7 +290,7 @@ pub async fn create_job_from_job_bundle(
     if let Some(ref ehd) = env_hooks_dir {
         if allow_env_hooks {
             if Path::new(ehd).is_dir() {
-                let mut env_mgr = HookManager::new(Path::new(ehd), handler);
+                let mut env_mgr = HookManager::new(Path::new(ehd), handler, None);
                 if let Some(eh) = env_mgr.load_hooks()? {
                     merged_hooks = Some(eh.clone());
                 }
@@ -318,7 +307,7 @@ pub async fn create_job_from_job_bundle(
     }
 
     // Check bundle hooks
-    let mut bundle_mgr = HookManager::new(&params.job_bundle_dir, handler);
+    let mut bundle_mgr = HookManager::new(&params.job_bundle_dir, handler, None);
     let bundle_hooks = bundle_mgr.load_hooks()?;
     if let Some(bh) = bundle_hooks
         && (!bh.pre_submission.is_empty() || !bh.post_submission.is_empty())
@@ -338,10 +327,7 @@ pub async fn create_job_from_job_bundle(
         }
     }
 
-    // Show confirmation and build the hook manager we'll actually use
-    let mut hook_manager = HookManager::new(&params.job_bundle_dir, handler);
-    hook_manager.hooks = merged_hooks.clone();
-
+    // Show confirmation
     if let Some(ref mh) = merged_hooks
         && (!mh.pre_submission.is_empty() || !mh.post_submission.is_empty())
         && !params.auto_accept
@@ -353,6 +339,33 @@ pub async fn create_job_from_job_bundle(
             ));
         }
     }
+
+    Ok(merged_hooks)
+}
+
+/// Submit a job bundle to Deadline Cloud. Returns the job ID on success.
+///
+/// Phases: validate symlinks, load hooks, load template, get queue,
+/// get storage profile, merge parameters, run pre-hooks, handle
+/// attachments, build `CreateJob` args, submit, poll, run post-hooks.
+#[allow(
+    clippy::too_many_lines,
+    reason = "end-to-end job submission pipeline — phases are tightly coupled"
+)]
+pub async fn create_job_from_job_bundle(
+    params: SubmitJobParams<'_>,
+) -> Result<Option<String>, DeadlineError> {
+    let handler = params.handler;
+    let submitter_name = params.submitter_name.as_deref().unwrap_or("Custom");
+
+    session::set_submitter_info(submitter_name, None).await;
+
+    // 1. Validate symlink containment
+    validate_directory_symlink_containment(&params.job_bundle_dir)?;
+
+    // 1b. Load hooks from bundle and/or environment
+    let merged_hooks = load_and_confirm_hooks(&params)?;
+    let hook_manager = HookManager::new(&params.job_bundle_dir, handler, merged_hooks);
 
     // 2. Load template
     let (mut file_contents, file_type) =

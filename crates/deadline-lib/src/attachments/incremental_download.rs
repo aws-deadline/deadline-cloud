@@ -932,4 +932,80 @@ mod tests {
             "On Unix, 'File.txt' and 'file.txt' are different files — both must be preserved"
         );
     }
+
+    // ===================================================================
+    // add_output_manifests_from_s3 — multiple root paths
+    // ===================================================================
+
+    #[test]
+    fn add_manifests_multiple_root_paths_matched_by_hash() {
+        // Job has two manifests with different root paths; keys match by hash
+        let job = json!({
+            "jobId": "job-multi",
+            "name": "Multi Root",
+            "attachments": {
+                "manifests": [
+                    {"rootPath": "/mnt/input", "rootPathFormat": "posix", "fileSystemLocationName": ""},
+                    {"rootPath": "/mnt/output", "rootPathFormat": "posix", "fileSystemLocationName": "Out"}
+                ]
+            }
+        });
+        // Hash is computed from "{fileSystemLocationName}{rootPath}"
+        let hash_input = openjd_snapshots::hash::hash_data("/mnt/input".as_bytes());
+        let hash_output = openjd_snapshots::hash::hash_data("Out/mnt/output".as_bytes());
+        let keys = vec![
+            format!("prefix/Manifests/sessionaction-abc-0/{hash_input}/manifest.json"),
+            format!("prefix/Manifests/sessionaction-abc-0/{hash_output}/manifest.json"),
+        ];
+        let mut actions = vec![json!({"sessionActionId": "sessionaction-abc-0"})];
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        add_output_manifests_from_s3("farm-1", &queue, &job, &keys, &mut actions).unwrap();
+
+        let manifests = actions[0]["manifests"].as_array().unwrap();
+        assert_eq!(manifests.len(), 2);
+        assert!(manifests[0].get("outputManifestPath").is_some());
+        assert!(manifests[1].get("outputManifestPath").is_some());
+    }
+
+    #[test]
+    fn add_manifests_unmatched_session_action_id_ignored() {
+        // Key references a session action ID not in our list — silently ignored
+        let job = sample_job_with_attachments();
+        let root_path_hash = openjd_snapshots::hash::hash_data("/mnt/shared".as_bytes());
+        let keys = vec![format!(
+            "prefix/Manifests/sessionaction-xyz-9/{root_path_hash}/manifest.json"
+        )];
+        let mut actions = vec![sample_session_action("sessionaction-abc-0", false)];
+        let queue =
+            json!({"jobAttachmentSettings": {"rootPrefix": "prefix", "s3BucketName": "bucket"}});
+        // Should not error — just doesn't match any action
+        add_output_manifests_from_s3("farm-1", &queue, &job, &keys, &mut actions).unwrap();
+    }
+
+    // ===================================================================
+    // merge_absolute_path_manifest_list — many files
+    // ===================================================================
+
+    #[test]
+    fn merge_many_files_across_manifests() {
+        // Three manifests with overlapping and unique files
+        let ts1 = utc(2024, 1, 1, 0, 0, 0);
+        let ts2 = utc(2024, 1, 2, 0, 0, 0);
+        let ts3 = utc(2024, 1, 3, 0, 0, 0);
+        let m1 = make_manifest(vec![
+            ("/a/shared.txt", "h1", 100),
+            ("/a/only_in_m1.txt", "h2", 50),
+        ]);
+        let m2 = make_manifest(vec![
+            ("/a/shared.txt", "h3", 200),
+            ("/b/only_in_m2.txt", "h4", 75),
+        ]);
+        let m3 = make_manifest(vec![("/a/shared.txt", "h5_final", 300)]);
+        let mut manifests = vec![(ts1, m1), (ts2, m2), (ts3, m3)];
+        let result = merge_absolute_path_manifest_list(&mut manifests);
+        assert_eq!(result.len(), 3); // shared + only_in_m1 + only_in_m2
+        let shared = result.iter().find(|f| f.path.contains("shared")).unwrap();
+        assert_eq!(shared.hash.as_deref(), Some("h5_final")); // latest wins
+    }
 }

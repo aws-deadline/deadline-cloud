@@ -42,6 +42,6 @@ The checkpoint state has good inline tests. The manifest processing functions la
 ## Recommended Changes
 
 1. ✅ [S] Use `LazyLock` for `session_action_id_regex()` — **DONE (Batch A)**
-2. [M] Make path dedup case-sensitivity platform-aware in `merge_absolute_path_manifest_list`
-3. [M] Add unit tests for `add_output_manifests_from_s3` and `merge_absolute_path_manifest_list`
+2. [M] Make path dedup case-sensitivity platform-aware in `merge_absolute_path_manifest_list` — **DONE (Batch F, 2026-05-16)**
+3. [M] Add unit tests for `add_output_manifests_from_s3` and `merge_absolute_path_manifest_list` — **DONE (Batch G, 2026-05-16)**
 4. [S] Add test for `make_manifest_paths_absolute` with path mapping

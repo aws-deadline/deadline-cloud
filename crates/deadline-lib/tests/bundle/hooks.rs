@@ -253,7 +253,7 @@ fn execute_hook_timeout_returns_timed_out_result() {
     }
 
     let handler = TestHandler::new();
-    let mut manager = HookManager::new(tmp.path(), &handler);
+    let mut manager = HookManager::new(tmp.path(), &handler, None);
 
     // Manually set hooks with a 1-second timeout
     let config = json!({
@@ -311,7 +311,7 @@ fn execute_hook_success_returns_stdout() {
     }
 
     let handler = TestHandler::new();
-    let mut manager = HookManager::new(tmp.path(), &handler);
+    let mut manager = HookManager::new(tmp.path(), &handler, None);
 
     let config = json!({
         "version": "1.0",
@@ -357,7 +357,7 @@ fn execute_hook_nonzero_exit_reports_failure() {
     }
 
     let handler = TestHandler::new();
-    let mut manager = HookManager::new(tmp.path(), &handler);
+    let mut manager = HookManager::new(tmp.path(), &handler, None);
 
     let config = json!({
         "version": "1.0",
@@ -408,7 +408,7 @@ fn execute_hook_receives_metadata_on_stdin() {
     }
 
     let handler = TestHandler::new();
-    let mut manager = HookManager::new(tmp.path(), &handler);
+    let mut manager = HookManager::new(tmp.path(), &handler, None);
 
     let config = json!({
         "version": "1.0",
@@ -465,7 +465,7 @@ fn execute_hook_failure_returns_hook_failed_variant() {
     }
 
     let handler = TestHandler::new();
-    let mut manager = HookManager::new(tmp.path(), &handler);
+    let mut manager = HookManager::new(tmp.path(), &handler, None);
 
     let config = json!({
         "version": "1.0",
@@ -524,7 +524,7 @@ fn execute_hook_timeout_returns_hook_failed_with_timed_out_flag() {
     }
 
     let handler = TestHandler::new();
-    let mut manager = HookManager::new(tmp.path(), &handler);
+    let mut manager = HookManager::new(tmp.path(), &handler, None);
 
     let config = json!({
         "version": "1.0",

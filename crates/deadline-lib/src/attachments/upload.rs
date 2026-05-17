@@ -986,6 +986,110 @@ mod tests {
         assert_eq!(result.total_input_bytes, 0);
     }
 
+    // === common_path tests ===
+
+    #[test]
+    fn common_path_empty_input_returns_empty() {
+        let paths: Vec<&PathBuf> = vec![];
+        assert_eq!(common_path(&paths), PathBuf::new());
+    }
+
+    #[test]
+    fn common_path_single_path_returns_itself() {
+        let p = PathBuf::from("/usr/local/bin");
+        let paths = vec![&p];
+        assert_eq!(common_path(&paths), PathBuf::from("/usr/local/bin"));
+    }
+
+    #[test]
+    fn common_path_shared_prefix() {
+        let p1 = PathBuf::from("/usr/local/bin/a");
+        let p2 = PathBuf::from("/usr/local/lib/b");
+        let paths = vec![&p1, &p2];
+        assert_eq!(common_path(&paths), PathBuf::from("/usr/local"));
+    }
+
+    #[test]
+    fn common_path_no_common_prefix() {
+        let p1 = PathBuf::from("/home/user/a");
+        let p2 = PathBuf::from("/opt/data/b");
+        let paths = vec![&p1, &p2];
+        // Only "/" is common
+        assert_eq!(common_path(&paths), PathBuf::from("/"));
+    }
+
+    #[test]
+    fn common_path_identical_paths() {
+        let p1 = PathBuf::from("/a/b/c");
+        let p2 = PathBuf::from("/a/b/c");
+        let paths = vec![&p1, &p2];
+        assert_eq!(common_path(&paths), PathBuf::from("/a/b/c"));
+    }
+
+    // === find_group_key tests ===
+
+    #[test]
+    fn find_group_key_matches_most_specific_local_location() {
+        let dir = TempDir::new().unwrap();
+        let parent = dir.path().join("projects");
+        let child = dir.path().join("projects/maya");
+        fs::create_dir_all(&child).unwrap();
+        let file = child.join("scene.ma");
+        fs::write(&file, b"data").unwrap();
+
+        let parent_str = parent.to_string_lossy().into_owned();
+        let child_str = child.to_string_lossy().into_owned();
+        let locations: Vec<(&str, &str)> = vec![(&parent_str, "Projects"), (&child_str, "Maya")];
+        let mut groupings: Vec<(String, AssetRootGroup)> = vec![];
+
+        let key = find_group_key(&file, &locations, &mut groupings);
+        assert_eq!(
+            key, child_str,
+            "should match most specific (deepest) location"
+        );
+        assert_eq!(groupings.len(), 1);
+        assert_eq!(
+            groupings[0].1.file_system_location_name.as_deref(),
+            Some("Maya")
+        );
+    }
+
+    #[test]
+    fn find_group_key_no_location_uses_top_directory() {
+        let file = PathBuf::from("/mnt/data/renders/frame001.exr");
+        let locations: Vec<(&str, &str)> = vec![];
+        let mut groupings: Vec<(String, AssetRootGroup)> = vec![];
+
+        let key = find_group_key(&file, &locations, &mut groupings);
+        // Top directory component of an absolute path is "/"
+        assert!(!key.is_empty());
+        assert_eq!(groupings.len(), 1);
+        assert!(groupings[0].1.file_system_location_name.is_none());
+    }
+
+    #[test]
+    fn find_group_key_reuses_existing_group() {
+        let dir = TempDir::new().unwrap();
+        let loc = dir.path().join("loc");
+        fs::create_dir_all(&loc).unwrap();
+        let f1 = loc.join("a.txt");
+        let f2 = loc.join("b.txt");
+        fs::write(&f1, b"a").unwrap();
+        fs::write(&f2, b"b").unwrap();
+
+        let loc_str = loc.to_string_lossy().into_owned();
+        let locations: Vec<(&str, &str)> = vec![(&loc_str, "Loc")];
+        let mut groupings: Vec<(String, AssetRootGroup)> = vec![];
+
+        find_group_key(&f1, &locations, &mut groupings);
+        find_group_key(&f2, &locations, &mut groupings);
+        assert_eq!(
+            groupings.len(),
+            1,
+            "should reuse existing group, not create duplicate"
+        );
+    }
+
     // === Empty strings in input paths are filtered out ===
 
     #[test]
