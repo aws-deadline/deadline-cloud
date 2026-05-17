@@ -18,7 +18,7 @@ Job parameter validation, reading, merging, and application (32KB). Thorough val
 
 ### Minor (nice to have)
 
-2. **`op_err` helper defined again**: Same pattern as other modules. Could be a crate-level utility.
+2. ✅ **RESOLVED (2026-05-15, Batch A)** — **`op_err` helper defined again**: Extracted to `crate::util::op_err`. All modules now import from there.
 
 3. **`json_type_name` returns Python type names** (`"NoneType"`, `"str"`, `"dict"`): This is intentional for Python-parity error messages but could confuse Rust developers reading the code. A comment explaining this would help.
 

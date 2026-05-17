@@ -9,6 +9,11 @@ Active work item: **None**
 
 ## Completed items (older)
 
+- **Audit findings — Batch F quick wins (2026-05-16)** — 13 findings
+  addressed: HashSet perf fix in diff (O(N²)→O(N)), platform-aware
+  normcase in incremental_download, clear error for missing glob config
+  file, 10 doc comments. +2 tests (1,322→1,324). Added #33 (error type
+  parity audit) to progress.md.
 - **Audit findings — Idiomatic Rust cleanup (2026-05-15)** — Batches A-C+E:
   shared `util.rs` (op_err + normalize_path), thread leak fix in hooks,
   FilterSet regex caching (1000x speedup), HookFailed error variant.

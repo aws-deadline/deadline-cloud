@@ -315,3 +315,20 @@ fn manifest_merge_nonexistent_file_returns_error() {
     );
     assert!(result.is_err());
 }
+
+// =====================================================================
+// Batch F: F3 — resolve_glob_config missing file gives clear error
+// =====================================================================
+
+#[test]
+fn resolve_glob_config_missing_file_gives_clear_error() {
+    // When a path that looks like a file (contains / or ends in .json) doesn't exist,
+    // the error should say "not found" rather than a confusing JSON parse error.
+    let result = resolve_glob_config(&[], &[], Some("/nonexistent/path/glob_config.json"));
+    let err = result.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("not found") || msg.contains("No such file"),
+        "Expected 'not found' error for missing file path, got: {msg}"
+    );
+}

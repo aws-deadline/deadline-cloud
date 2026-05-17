@@ -19,6 +19,8 @@ const VALID_UI_CONTROLS: &[&str] = &[
 ];
 const VALID_DATA_FLOWS: &[&str] = &["NONE", "IN", "OUT", "INOUT"];
 
+/// Returns Python type names for error messages (Python parity).
+/// Error messages must match the Python CLI exactly for user-facing consistency.
 fn json_type_name(v: &serde_json::Value) -> &'static str {
     match v {
         serde_json::Value::Null => "NoneType",

@@ -251,6 +251,9 @@ pub struct SubmitJobParams<'a> {
     pub require_paths_exist: bool,
     pub submitter_name: Option<String>,
     pub known_asset_paths: Vec<PathBuf>,
+    /// When true, skips interactive confirmations — but *cancels* submission
+    /// if files are outside known asset paths (Python parity: `auto_accept`
+    /// means "don't prompt" not "always proceed").
     pub auto_accept: bool,
     pub force_s3_check: Option<bool>,
     pub debug_snapshot_dir: Option<PathBuf>,

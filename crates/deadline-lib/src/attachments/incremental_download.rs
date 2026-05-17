@@ -298,19 +298,30 @@ pub fn make_manifest_paths_absolute(
     Ok(())
 }
 
+/// Normalize path case for dedup, matching Python's `os.path.normcase`:
+/// lowercase on Windows, unchanged on Unix/macOS.
+fn normcase_path(p: &str) -> String {
+    if cfg!(windows) {
+        p.to_lowercase()
+    } else {
+        p.to_owned()
+    }
+}
+
 /// Merge manifests ordered by last-modified timestamp. Later manifests'
-/// files overwrite earlier ones. Uses case-insensitive path keys for dedup.
+/// files overwrite earlier ones. Uses platform-aware case normalization
+/// for dedup keys (case-insensitive on Windows, case-sensitive elsewhere).
 pub fn merge_absolute_path_manifest_list(
     downloaded_manifests: &mut [(DateTime<Utc>, Snapshot)],
 ) -> Vec<FileEntry> {
     // Sort by timestamp so earlier manifests are processed first
     downloaded_manifests.sort_by_key(|(ts, _)| *ts);
 
-    // Insert into map keyed by lowercased path; later entries overwrite earlier
+    // Insert into map keyed by normcased path; later entries overwrite earlier
     let mut merged: HashMap<String, FileEntry> = HashMap::new();
     for (_, manifest) in downloaded_manifests.iter() {
         for mp in &manifest.files {
-            merged.insert(mp.path.to_lowercase(), mp.clone());
+            merged.insert(normcase_path(&mp.path), mp.clone());
         }
     }
     merged.into_values().collect()
@@ -866,9 +877,10 @@ mod tests {
         assert_eq!(result[0].hash.as_deref(), Some("new_hash"));
     }
 
+    #[cfg(windows)]
     #[test]
-    fn merge_case_insensitive_keys() {
-        // paths differing only in case treated as same file
+    fn merge_case_insensitive_keys_on_windows() {
+        // On Windows, paths differing only in case are the same file
         let ts1 = utc(2024, 6, 15, 10, 0, 0);
         let ts2 = utc(2024, 6, 15, 11, 0, 0);
         let m1 = make_manifest(vec![("/a/File.txt", "hash1", 100)]);
@@ -899,5 +911,25 @@ mod tests {
         let result = merge_absolute_path_manifest_list(&mut manifests);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].hash.as_deref(), Some("late_hash")); // later timestamp wins even if provided first
+    }
+
+    // Batch F: F2 — Platform-aware case sensitivity (matches Python's os.path.normcase)
+    #[cfg(not(windows))]
+    #[test]
+    fn merge_manifest_list_preserves_case_on_unix() {
+        // On Unix/macOS, paths differing only in case are DIFFERENT files.
+        // Python uses os.path.normcase() which is a no-op on non-Windows.
+        // Both entries must be preserved.
+        let ts1 = utc(2024, 6, 15, 10, 0, 0);
+        let ts2 = utc(2024, 6, 15, 11, 0, 0);
+        let m1 = make_manifest(vec![("/a/File.txt", "hash1", 100)]);
+        let m2 = make_manifest(vec![("/a/file.txt", "hash2", 200)]);
+        let mut manifests = vec![(ts1, m1), (ts2, m2)];
+        let result = merge_absolute_path_manifest_list(&mut manifests);
+        assert_eq!(
+            result.len(),
+            2,
+            "On Unix, 'File.txt' and 'file.txt' are different files — both must be preserved"
+        );
     }
 }

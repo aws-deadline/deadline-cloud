@@ -14,7 +14,7 @@ Large orchestration module (55KB, ~1200 lines) handling end-to-end job submissio
 
 ### Important (should fix)
 
-1. **Duplicate telemetry emission** (`submission.rs:800-830`): The `hashing_summary` telemetry event is emitted twice — once immediately after `upload_result` succeeds and again as `upload_summary`. Both contain identical fields. This double-counts in metrics dashboards.
+1. ✅ **NOT A BUG (verified 2026-05-15)** — **Duplicate telemetry emission**: Both `hashing_summary` and `upload_summary` events are intentional. Python emits both too (`record_hashing_summary` + `record_upload_summary`). They are different event types consumed by different telemetry dashboard panels. In Rust, both use the same stats because hashing+upload are combined into one operation, but both events must exist for backward compatibility.
 
 2. **`auto_accept` logic inverted for unknown paths** (`submission.rs:~640`): When `auto_accept` is true and files are outside known paths, the code *cancels* submission. This is counterintuitive — `auto_accept` typically means "proceed without prompting." The Python client has the same behavior, so this is a parity issue, but it's a confusing API contract that should be documented.
 
@@ -24,9 +24,9 @@ Large orchestration module (55KB, ~1200 lines) handling end-to-end job submissio
 
 ### Minor (nice to have)
 
-5. **`normalize_path` duplicated**: The same `normalize_path` function exists in both `submission.rs` and `download.rs` with identical logic. Extract to a shared utility.
+5. ✅ **RESOLVED (2026-05-15, Batch A)** — **`normalize_path` duplicated**: Extracted to shared `crate::util::normalize_path`. `submission.rs` now delegates to it.
 
-6. **`op_err` helper defined twice**: Once at module level and once inside the function scope (shadowed). Consolidate.
+6. ✅ **RESOLVED (2026-05-15, Batch A)** — **`op_err` helper defined twice**: Extracted to shared `crate::util::op_err`. All modules now import from there.
 
 7. **`parse_frame_range` uses regex for simple integer parsing**: The regex is fine but could be replaced with a simpler split-based parser for clarity. Low priority since it works correctly.
 

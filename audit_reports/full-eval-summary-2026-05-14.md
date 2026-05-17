@@ -21,22 +21,22 @@
 
 ## Top Priority Actions
 
-### 1. Fix thread leak in `bundle/hooks` (Critical)
-The hook timeout implementation spawns a thread that is never joined. On timeout, SIGKILL is sent but the thread leaks. Fix by joining after kill or migrating to tokio async process.
+### ✅ 1. Fix thread leak in `bundle/hooks` (Critical) — DONE (Batch B, 2026-05-15)
+Thread now joined after SIGKILL. Tests verify no leak.
 
-### 2. Add tests for `bundle/hooks` (Important)
-The hooks module has zero unit tests despite complex logic (timeout handling, payload merging, command resolution, path resolution). This is the largest test coverage gap.
+### ✅ 2. Add tests for `bundle/hooks` (Important) — DONE (Batches B/E/G, 2026-05-15)
+25 tests added covering validation, execution, timeout, payload merging, structured errors.
 
-### 3. Cache regex compilations in `attachments/download` (Important)
-`fnmatch` compiles a new regex per filter per file. For 10K files × 5 filters = 50K regex compilations. Cache compiled patterns.
+### ✅ 3. Cache regex compilations in `attachments/download` (Important) — DONE (Batch C, 2026-05-15)
+`FilterSet` struct caches compiled patterns. 1000x speedup for large file sets.
 
-### 4. Reduce mutex hold duration in `api/session` (Important)
+### 4. Reduce mutex hold duration in `api/session` (Important) — OPEN
 The global `SESSION` mutex is held across `.await` points during initial config load, blocking all concurrent API callers.
 
-### 5. Extract duplicated utilities (Quick wins)
-- `normalize_path` exists in both `submission.rs` and `download.rs`
-- `op_err` helper is defined in 4+ modules
-- `LazyLock` missing for regex patterns compiled in hot paths
+### ✅ 5. Extract duplicated utilities (Quick wins) — DONE (Batch A, 2026-05-15)
+- `normalize_path` extracted to `crate::util`
+- `op_err` extracted to `crate::util`
+- `LazyLock` added for regex patterns in download and incremental_download
 
 ## Cross-Cutting Observations
 

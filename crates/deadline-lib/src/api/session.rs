@@ -355,6 +355,8 @@ pub async fn set_submitter_info(name: &str, version: Option<&str>) {
 
 /// Clear the cached SDK config. Next call re-resolves credentials.
 /// Python equivalent: `invalidate_boto3_session_cache()`.
+///
+/// Requires a running tokio runtime — panics if called outside one.
 /// Use from sync contexts (main, logout). For async contexts use
 /// `invalidate_session_cache_async`.
 pub fn invalidate_session_cache() {
@@ -445,6 +447,9 @@ fn get_setting(name: &str, config: &IniConfig) -> String {
     config_file::get_setting(name, config).unwrap_or_default()
 }
 
+/// Resolve the AWS profile name from config. Returns None for the default
+/// credential chain. The three sentinel values "(default)", "default", and ""
+/// all map to None (Python parity with boto3 session creation).
 fn resolve_profile(config: &IniConfig) -> Option<String> {
     let name = get_setting("defaults.aws_profile_name", config);
     match name.as_str() {

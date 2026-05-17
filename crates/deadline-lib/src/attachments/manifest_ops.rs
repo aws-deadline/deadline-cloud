@@ -105,7 +105,21 @@ pub fn resolve_glob_config(
     if let Some(config_input) = include_exclude_config {
         let json_str = match std::fs::read_to_string(config_input) {
             Ok(contents) => contents,
-            Err(_) => config_input.to_owned(),
+            Err(e) => {
+                // If it looks like a file path (not inline JSON) but doesn't exist, give a clear error
+                let looks_like_path = !config_input.trim_start().starts_with('{')
+                    && (config_input.contains('/')
+                        || config_input.contains('\\')
+                        || Path::new(config_input)
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("json")));
+                if looks_like_path {
+                    return Err(JobAttachmentsError::AssetSync(format!(
+                        "Glob config file not found: {config_input} ({e})"
+                    )));
+                }
+                config_input.to_owned()
+            }
         };
 
         let parsed: serde_json::Value = serde_json::from_str(&json_str).map_err(|_| {

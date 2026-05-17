@@ -3,7 +3,7 @@
 //! `hash_diff` delegates to `openjd_snapshots::diff_snapshots`.
 //! `fast_diff` is filesystem-based (no openjd equivalent) and stays here.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use openjd_snapshots::{DiffOptions, FileEntry, Snapshot, diff_snapshots};
@@ -38,7 +38,7 @@ pub fn fast_diff(
     }
 
     let mut results = Vec::new();
-    let mut seen_relative: Vec<String> = Vec::new();
+    let mut seen_relative: HashSet<String> = HashSet::new();
 
     for file in current_files {
         let file_path = Path::new(file);
@@ -47,7 +47,7 @@ pub fn fast_diff(
             .unwrap_or(file_path)
             .to_string_lossy()
             .replace('\\', "/");
-        seen_relative.push(relative.clone());
+        seen_relative.insert(relative.clone());
 
         let Ok(meta) = std::fs::metadata(file_path) else {
             continue;

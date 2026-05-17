@@ -655,6 +655,9 @@ pub async fn upload_assets(
 
 /// Snapshot assets to a local directory instead of S3.
 /// Copies files to `snapshot_dir/Data/` and manifests to `snapshot_dir/Manifests/`.
+///
+/// Note: This function performs blocking file I/O. If called from an async
+/// context, wrap in `tokio::task::spawn_blocking`.
 pub fn snapshot_assets(
     farm_id: &str,
     queue_id: &str,

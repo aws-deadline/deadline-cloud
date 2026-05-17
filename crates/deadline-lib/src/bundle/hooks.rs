@@ -582,6 +582,8 @@ fn execute_hook(
             // is from Child::id() (a u32 cast to i32, safe for valid PIDs).
             // SIGKILL cannot be caught or ignored, so this is a last-resort
             // cleanup after the hook exceeded its timeout.
+            // SAFETY: pid is a valid process ID from Child::id(). The u32→i32
+            // cast is safe because real PIDs never exceed i32::MAX.
             unsafe {
                 libc::kill(pid as i32, libc::SIGKILL);
             }

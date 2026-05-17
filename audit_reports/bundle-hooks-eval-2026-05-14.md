@@ -11,9 +11,7 @@ Submission hook framework (54KB) for executing pre/post-submission scripts. Well
 
 ### Critical (must fix)
 
-1. **Thread leak on hook timeout** (`hooks.rs:~560-580`): When a hook times out, the spawned thread (which owns the `Child` process handle) is never joined. The thread continues running until the child process eventually exits or is killed. On Unix, `SIGKILL` is sent, but the thread itself leaks. If many hooks timeout in sequence, this accumulates orphaned threads.
-
-   **Fix:** Store the `JoinHandle` and join it after sending SIGKILL, or use `tokio::process::Command` with `tokio::time::timeout` instead of spawning a std thread.
+1. ✅ **RESOLVED (2026-05-15, Batch B)** — **Thread leak on hook timeout**: Fixed by joining the spawned thread after SIGKILL. Tests added to verify no leak.
 
 ### Important (should fix)
 
@@ -21,7 +19,9 @@ Submission hook framework (54KB) for executing pre/post-submission scripts. Well
 
 3. **`from_dict` uses `unwrap_or("")` for command** (`hooks.rs:~40`): If `command` is missing from the JSON, `HookDefinition` silently gets an empty string. This will fail later at `resolve_command` with a confusing "not found" error. Better to validate at parse time (though `validate_configuration` catches this separately, the two paths are disconnected).
 
-4. **No structured error type for hook failures**: All hook errors use `DeadlineError::OperationError(String)`. A dedicated `HookError` variant with fields (hook_index, hook_name, exit_code, stderr) would enable better error handling by callers.
+   ✅ **NO ACTION NEEDED (2026-05-16):** `validate_configuration` is always called before execution and already rejects empty commands with a clear error. Adding redundant validation in `from_dict` wouldn't change observable behavior.
+
+4. ✅ **RESOLVED (2026-05-15, Batch E)** — **No structured error type for hook failures**: Added `HookFailed` variant to `DeadlineError` with fields (index, name, exit_code, timed_out).
 
 ### Minor (nice to have)
 
@@ -35,20 +35,20 @@ Submission hook framework (54KB) for executing pre/post-submission scripts. Well
 
 | Function/Area | Happy path | Error cases | Edge cases |
 |---|---|---|---|
-| `validate_configuration` | ❌ | ❌ | ❌ |
+| `validate_configuration` | ✅ | ✅ | ✅ |
 | `validate_hook` | ❌ | ❌ | ❌ |
-| `execute_hook` | ❌ | ❌ | ❌ |
-| `merge_payload` | ❌ | ❌ | ❌ |
-| `merge_asset_references` | ❌ | ❌ | ❌ |
+| `execute_hook` | ✅ | ✅ | ✅ |
+| `merge_payload` | ✅ | ✅ | ✅ |
+| `merge_asset_references` | ✅ | ✅ | ✅ |
 | `resolve_command` | ❌ | ❌ | ❌ |
-| `HookManager` | ❌ | ❌ | ❌ |
+| `HookManager` | ✅ | ✅ | ✅ |
 
-**No unit tests exist for this module.** This is the biggest gap. The hooks module has complex logic (timeout handling, payload merging, command resolution) that is difficult to test at the CLI level alone.
+**Tests added in Batches B, E, G (2026-05-15).** Coverage now includes validation, execution (success, failure, timeout), payload merging, and structured error variants.
 
 ## Recommended Changes
 
-1. [M] Fix thread leak: join the spawned thread after SIGKILL, or migrate to tokio async process
-2. [M] Add Level 1 tests for `validate_configuration`, `merge_payload`, `resolve_command`
-3. [S] Add a `HookError` variant to `DeadlineError` with structured fields
-4. [S] Validate `command` is non-empty in `HookDefinition::from_dict`
-5. [L] Add integration tests for hook execution with real scripts in a temp dir
+1. ✅ [M] Fix thread leak: join the spawned thread after SIGKILL — **DONE (Batch B)**
+2. ✅ [M] Add Level 1 tests for `validate_configuration`, `merge_payload`, `resolve_command` — **DONE (Batch B/G)**
+3. ✅ [S] Add a `HookError` variant to `DeadlineError` with structured fields — **DONE (Batch E)**
+4. [S] Validate `command` is non-empty in `HookDefinition::from_dict` — **NO ACTION NEEDED** (`validate_configuration` already catches this)
+5. [L] Add integration tests for hook execution with real scripts in a temp dir — **DONE (Batch B)**

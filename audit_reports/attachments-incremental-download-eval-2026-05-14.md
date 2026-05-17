@@ -20,7 +20,7 @@ Checkpoint persistence and manifest processing for `queue sync-output`. Clean se
 
 ### Minor (nice to have)
 
-3. **`session_action_id_regex()` compiles regex on every call**: Should use `LazyLock` for the compiled regex.
+3. ✅ **RESOLVED (2026-05-15, Batch A)** — **`session_action_id_regex()` compiles regex on every call**: Fixed with `static SESSION_ACTION_RE: LazyLock<Regex>`.
 
 4. **`IncrementalDownloadState::save_file` uses `tempfile::NamedTempFile`**: Good — atomic writes prevent corruption. Well done.
 
@@ -41,7 +41,7 @@ The checkpoint state has good inline tests. The manifest processing functions la
 
 ## Recommended Changes
 
-1. [S] Use `LazyLock` for `session_action_id_regex()`
+1. ✅ [S] Use `LazyLock` for `session_action_id_regex()` — **DONE (Batch A)**
 2. [M] Make path dedup case-sensitivity platform-aware in `merge_absolute_path_manifest_list`
 3. [M] Add unit tests for `add_output_manifests_from_s3` and `merge_absolute_path_manifest_list`
 4. [S] Add test for `make_manifest_paths_absolute` with path mapping

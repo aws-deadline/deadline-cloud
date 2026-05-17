@@ -143,7 +143,8 @@ pub fn normalize_filters(patterns: &[String]) -> Vec<String> {
 
 /// Check if a file path matches any of the given filters using fnmatch-style matching.
 ///
-/// - `*` matches everything including `/` (like Python's fnmatch)
+/// - `*` matches everything including `/` (like Python's `fnmatch.fnmatch`)
+/// - `**` is NOT treated specially (no globstar) — same as `*` (Python parity)
 /// - A filter ending with `/` matches all files under that directory
 /// - A relative filter (not starting with `/`, `*`, or drive letter) is auto-prepended with `*/`
 pub fn matches_any_filter(file_path: &str, filters: &[String]) -> bool {

@@ -16,6 +16,8 @@ INI config file management with hierarchical section naming, atomic writes, and 
 
 1. **`write_config_to` temp file naming uses PID only** (`config_file.rs:~130`): If two processes with the same PID (reuse after crash) write simultaneously, they'd conflict. Extremely unlikely but could use `tempfile` crate for safety. Low priority.
 
+   ✅ **NO ACTION NEEDED (2026-05-16):** PID reuse requires: process crash + OS reuses exact same PID + both write same config simultaneously. Practically impossible; not worth adding a dependency for.
+
 2. **`expand_tilde` only handles `~/` prefix**: Doesn't handle `~user/` syntax. This matches Python's behavior and is intentional, but worth documenting.
 
 ### Minor (nice to have)

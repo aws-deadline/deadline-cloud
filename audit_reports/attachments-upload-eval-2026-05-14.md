@@ -20,13 +20,19 @@ Upload engine (37KB) for hashing and uploading job attachment files to S3 CAS. C
 
 3. **`s3_upload_error` has repetitive match arms**: Each HTTP status code arm constructs a similar `JobAttachmentsError::S3Client` with different guidance text. Consider a table-driven approach or at minimum extract the guidance strings as constants.
 
+   ✅ **NO ACTION NEEDED (2026-05-16):** Each arm has a unique message used exactly once. Extracting to constants just moves strings elsewhere without reducing repetition or improving readability.
+
 4. **`upload_assets` doesn't report per-file progress**: The progress tracker is updated in bulk after each group completes. For large groups with many files, the progress bar appears stuck. The `openjd-snapshots` engine likely supports per-file callbacks.
 
 ### Minor (nice to have)
 
 5. **`common_path` doesn't handle empty path components gracefully**: If any path in the input is empty, the function returns an empty `PathBuf`. This is handled upstream (empty strings are filtered), but the function itself isn't defensive.
 
+   ✅ **NO ACTION NEEDED (2026-05-16):** Already has `if paths.is_empty() { return PathBuf::new(); }` guard.
+
 6. **`top_directory` returns empty string for empty paths**: Edge case that shouldn't occur in practice but could cause confusing group keys.
+
+   ✅ **NO ACTION NEEDED (2026-05-16):** Already returns `unwrap_or_default()` which gives empty string — graceful handling already present.
 
 7. **`snapshot_assets` is synchronous**: Unlike `upload_assets` which is async, `snapshot_assets` does blocking file I/O. This is fine since it's only used for debug snapshots, but it blocks the tokio runtime if called from an async context without `spawn_blocking`.
 
@@ -43,8 +49,8 @@ Upload engine (37KB) for hashing and uploading job attachment files to S3 CAS. C
 
 ## Recommended Changes
 
-1. [S] Extract guidance strings in `s3_upload_error` to named constants
+1. [S] Extract guidance strings in `s3_upload_error` to named constants — **NO ACTION NEEDED** (unique messages, no real repetition)
 2. [M] Add unit tests for `common_path` and `find_group_key` edge cases
 3. [M] Investigate per-file progress callbacks from openjd-snapshots
-4. [S] Document that `snapshot_assets` is blocking and should not be called from async without `spawn_blocking`
+4. ✅ [S] Document that `snapshot_assets` is blocking — **DONE (2026-05-16)**
 5. [L] Separate path validation from grouping logic in `prepare_paths_for_upload`

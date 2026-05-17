@@ -69,6 +69,9 @@ const DEFAULT_CONFIG_PATH: &str = "~/.deadline/config";
 const DEFAULT_CACHE_DIR: &str = "~/.deadline/cache";
 
 /// Expand `~` at the start of a path to the user's home directory.
+/// Expand `~/` prefix to the user's home directory.
+/// Does NOT handle `~user/` syntax (Python parity — os.path.expanduser
+/// supports it but the Python CLI never uses it).
 fn expand_tilde(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         if let Some(home) = home_dir() {
@@ -123,6 +126,9 @@ pub fn read_config() -> Result<IniConfig, ConfigError> {
 
 /// Write the config atomically to a specific path: write to a temp file, then rename.
 /// Creates parent directories if needed. On POSIX, sets file permissions to 0o600.
+/// Write config to a file atomically (temp file + rename).
+/// Note: comments in the original file are not preserved — they are stripped
+/// during parsing (matches Python's `ConfigParser` behavior).
 pub fn write_config_to(config: &IniConfig, path: &Path) -> Result<(), ConfigError> {
     if let Some(parent) = path.parent()
         && !parent.exists()

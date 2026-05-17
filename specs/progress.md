@@ -99,6 +99,7 @@ pick and execute work items.
 | 26 | Installer pipeline update | Not started | — | 24 |
 | 31 | Crate restructure (openjd-rs integration + boundary cleanup) | ✅ Done | — | — |
 | 32 | Worker agent Python bindings (attachment operations) | Not started | `deadline-python-bindings/worker-agent-bindings.md` | — |
+| 33 | Error type parity audit and resolution | Not started | — | — |
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Deferred
 
@@ -197,6 +198,18 @@ story. See `specs/HANDOFF.md` for detailed analysis.
     (e.g. different uninstall behavior).
 
 **Technical debt:**
+- **#33 — Error type parity audit**: Python exceptions surface their
+  type name to customers (in tracebacks and via `except` clauses in
+  PyO3 bindings). Several Python exception types are flattened into
+  generic `OperationError(String)` or `AssetSync(String)` in Rust:
+  - `NonValidInputError` → currently `AssetSync` (should be distinct)
+  - `VFSLaunchScriptMissingError`, `VFSRunPathNotSetError` → missing
+  - `UnsupportedProfileTypeForLoginLogout` → `OperationError`
+  - `PidLockAlreadyHeld` → `OperationError`
+  - `JobFetchFailure` → `OperationError`
+  Also audit how openjd-rs `SnapshotError` variants map to
+  `JobAttachmentsError` — currently all wrapped as strings via
+  `.to_string()`. Consider preserving error structure for PyO3.
 - **KMS error guidance on download**: Wrap openjd's generic S3 403 errors
   during download to detect KMS issues and suggest "ensure kms:Decrypt
   permission". See `download.rs:418`.
