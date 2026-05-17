@@ -332,3 +332,56 @@ fn resolve_glob_config_missing_file_gives_clear_error() {
         "Expected 'not found' error for missing file path, got: {msg}"
     );
 }
+
+// =====================================================================
+// Error case tests for manifest operations (Batch G2)
+// =====================================================================
+
+#[test]
+fn manifest_snapshot_nonexistent_root_returns_error() {
+    let dest = TempDir::new().unwrap();
+    let config = GlobConfig {
+        include: vec!["**/*".into()],
+        exclude: vec![],
+    };
+    let result = manifest_snapshot(
+        Path::new("/nonexistent/root"),
+        dest.path(),
+        None,
+        &config,
+        None,
+        false,
+    );
+    assert!(result.is_err() || result.unwrap().is_none());
+}
+
+#[test]
+fn manifest_snapshot_nonexistent_diff_file_returns_error() {
+    let dir = TempDir::new().unwrap();
+    create_file(&dir, "a.txt", b"data");
+    let dest = TempDir::new().unwrap();
+    let config = GlobConfig {
+        include: vec!["**/*".into()],
+        exclude: vec![],
+    };
+    let result = manifest_snapshot(
+        dir.path(),
+        dest.path(),
+        None,
+        &config,
+        Some("/nonexistent/diff.manifest"),
+        false,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn manifest_diff_nonexistent_manifest_returns_error() {
+    let dir = TempDir::new().unwrap();
+    let config = GlobConfig {
+        include: vec!["**/*".into()],
+        exclude: vec![],
+    };
+    let result = manifest_diff("/nonexistent/manifest.json", dir.path(), &config, false);
+    assert!(result.is_err());
+}

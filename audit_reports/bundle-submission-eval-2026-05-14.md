@@ -48,8 +48,8 @@ The unit tests cover the pure functions well, but the orchestration function its
 
 ## Recommended Changes
 
-1. [S] Remove duplicate telemetry emission (lines ~800-830)
-2. [S] Extract `normalize_path` to a shared `crate::util` module
-3. [M] Break `create_job_from_job_bundle` into phase helper functions
+1. [S] Remove duplicate telemetry emission (lines ~800-830) — **NOT A BUG** (verified: both events are intentional, see finding #1 above)
+2. [S] Extract `normalize_path` to a shared `crate::util` module — **DONE (Batch A, 2026-05-15)**
+3. [M] Break `create_job_from_job_bundle` into phase helper functions — **PARTIAL (Batch J, 2026-05-16)** (`load_and_confirm_hooks` extracted; remaining phases too coupled)
 4. [M] Group `SubmitJobParams` fields into sub-structs
 5. [L] Add Level 1 integration tests for `create_job_from_job_bundle` using a stub server

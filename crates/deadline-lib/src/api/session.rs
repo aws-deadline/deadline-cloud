@@ -934,4 +934,33 @@ mod tests {
                 .expect("task should not panic");
         }
     }
+
+    // ── resolve_profile edge cases ──────────────
+
+    #[test]
+    fn resolve_profile_default_sentinel_returns_none() {
+        let config = IniConfig::new();
+        assert_eq!(resolve_profile(&config), None); // empty string → None
+    }
+
+    #[test]
+    fn resolve_profile_parenthesized_default_returns_none() {
+        let mut config = IniConfig::new();
+        config.set("defaults", "aws_profile_name", "(default)");
+        assert_eq!(resolve_profile(&config), None);
+    }
+
+    #[test]
+    fn resolve_profile_literal_default_returns_none() {
+        let mut config = IniConfig::new();
+        config.set("defaults", "aws_profile_name", "default");
+        assert_eq!(resolve_profile(&config), None);
+    }
+
+    #[test]
+    fn resolve_profile_named_profile_returns_some() {
+        let mut config = IniConfig::new();
+        config.set("defaults", "aws_profile_name", "my-profile");
+        assert_eq!(resolve_profile(&config), Some("my-profile".to_owned()));
+    }
 }

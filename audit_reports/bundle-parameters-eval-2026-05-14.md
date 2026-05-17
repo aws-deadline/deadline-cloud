@@ -36,5 +36,5 @@ Excellent test coverage — the most thoroughly tested module alongside `config`
 
 ## Recommended Changes
 
-1. [S] Add comment explaining Python type names in `json_type_name`
-2. [S] Extract `op_err` to a crate-level utility
+1. [S] Add comment explaining Python type names in `json_type_name` — **ALREADY DOCUMENTED** (doc comment on function)
+2. [S] Extract `op_err` to a crate-level utility — **DONE (Batch A, 2026-05-15)**
