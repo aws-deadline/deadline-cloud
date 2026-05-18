@@ -505,6 +505,10 @@ fn find_in_path(command: &str) -> Option<String> {
     None
 }
 
+/// Resolve hook arguments: if a relative arg matches an existing file in
+/// `script_dir`, it's rewritten to an absolute path. This matches Python's
+/// behavior but is surprising — an arg like `"default"` becomes an absolute
+/// path if a file named `default` exists in the bundle directory.
 fn resolve_args(args: &[String], script_dir: &str) -> Vec<String> {
     args.iter()
         .map(|arg| {

@@ -243,13 +243,6 @@ story. See `specs/HANDOFF.md` for detailed analysis.
 - **JSON progress lines in `--output json` mode** — download-output and
   download-input don't emit `{"messageType":"progress",...}` lines during
   download (Python does via click progressbar callback). Low priority.
-- **Unify `OutputDownloader`/`InputDownloader`** — nearly identical structs
-  in `attachments/download.rs`. Consider a generic `ManifestDownloader<T>`.
-- **Separate path validation from grouping in `prepare_paths_for_upload`** —
-  mixes filesystem I/O with classification logic, making it hard to unit test.
-- **Submission integration tests** — `create_job_from_job_bundle` has no
-  Level 1 tests (only tested via CLI Level 2). Add stub-server tests for
-  the orchestration function directly.
 
 **Dependency upgrades needed:**
 - **rusqlite** 0.32 → 0.39 (major, breaking changes likely)

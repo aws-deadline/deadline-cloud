@@ -38,10 +38,9 @@ approve which findings to fix now vs defer.
 - Improvements → implement if low-risk, defer if not
 - If fixes were significant, re-audit the changed areas. Loop until clean.
 
-If any fix resolves an existing audit finding (AUDIT-NNN), update the
-finding's entry in `audit_reports/archive/<date>-behavioral-parity.md`:
-mark it as Fixed, update the Rust behavior description, and update the
-summary table at the top of the report.
+If any fix resolves an existing finding in `audit_reports/`, update the
+relevant report: mark the finding as Fixed, Deferred, or Accepted with
+rationale, and update any summary table at the top of the report.
 
 **Update `specs/HANDOFF.md` with:**
 - Findings list (fixed and deferred)

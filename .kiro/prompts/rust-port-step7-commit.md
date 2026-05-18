@@ -21,8 +21,8 @@ If `make fmt` fails, run `cargo fmt` and include the fixes in your commit.
 
 **Verify docs are updated:**
 - `specs/progress.md` — update work item status to ✅ Done
-- If audit findings were resolved, verify they are updated in
-  `audit_reports/archive/2026-04-17-behavioral-parity.md`
+- If audit findings were resolved, verify they are marked as Fixed,
+  Deferred, or Accepted in the relevant report under `audit_reports/`
 
 **Clean up `specs/HANDOFF.md`:**
 - Remove all intermediate step notes for this work item (plans, test

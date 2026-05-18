@@ -89,27 +89,7 @@ pub fn get_s3_max_pool_connections(config: &IniConfig) -> Result<usize, JobAttac
 
 // --- Account identity ---
 
-/// Format an STS SDK error using the common smithy trait.
-fn format_sts_sdk_err<E>(err: &aws_sdk_sts::error::SdkError<E>) -> String
-where
-    E: std::fmt::Display
-        + aws_smithy_types::error::metadata::ProvideErrorMetadata
-        + std::error::Error
-        + 'static,
-{
-    match err {
-        aws_sdk_sts::error::SdkError::ServiceError(e) => {
-            let inner = e.err();
-            let code = inner.code().unwrap_or("Unknown");
-            let msg = inner.message().unwrap_or("No message");
-            format!("{code}: {msg}")
-        }
-        other => format!(
-            "{}",
-            aws_smithy_types::error::display::DisplayErrorContext(other)
-        ),
-    }
-}
+use crate::api::client::format_sdk_error;
 
 /// Retrieves the AWS account ID by calling STS `GetCallerIdentity`.
 ///
@@ -123,7 +103,7 @@ pub async fn get_account_id(
     let identity = sts.get_caller_identity().send().await.map_err(|e| {
         JobAttachmentsError::AssetSync(format!(
             "Failed to get caller identity: {}",
-            format_sts_sdk_err(&e)
+            format_sdk_error(&e)
         ))
     })?;
     identity.account().map(ToOwned::to_owned).ok_or_else(|| {

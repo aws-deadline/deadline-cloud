@@ -847,25 +847,24 @@ async fn get_manifests_by_session_action_id(
 }
 
 // =========================================================================
-// OutputDownloader — orchestrates job output download
+// ManifestDownloader — shared orchestration for output and input downloads
 // =========================================================================
 
-/// Handler for downloading output files from a job, with optional step/task
-/// granularity. Wraps `get_output_manifests_by_asset_root` and
-/// `download_files_from_manifests`.
-pub struct OutputDownloader {
+/// Unified handler for downloading files from S3 manifests, with root
+/// remapping and glob filtering. Used by both output and input download paths.
+pub struct ManifestDownloader {
     s3_settings: JobAttachmentS3Settings,
-    initial_outputs_by_root: HashMap<String, Vec<Snapshot>>,
+    initial_manifests_by_root: HashMap<String, Vec<Snapshot>>,
     include_filter_groups: Vec<Vec<String>>,
     root_mappings: HashMap<String, String>,
-    outputs_by_root: HashMap<String, Vec<Snapshot>>,
+    manifests_by_root: HashMap<String, Vec<Snapshot>>,
     s3_client: S3Client,
     account_id: String,
 }
 
-impl OutputDownloader {
+impl ManifestDownloader {
     /// Create a new downloader by fetching output manifests from S3.
-    pub async fn new(
+    pub async fn for_output(
         s3_settings: JobAttachmentS3Settings,
         farm_id: &str,
         queue_id: &str,
@@ -877,7 +876,7 @@ impl OutputDownloader {
         account_id: String,
         include_filters: Option<&[String]>,
     ) -> Result<Self, JobAttachmentsError> {
-        let initial_outputs_by_root = get_output_manifests_by_asset_root(
+        let initial_manifests_by_root = get_output_manifests_by_asset_root(
             &s3_settings,
             farm_id,
             queue_id,
@@ -889,6 +888,42 @@ impl OutputDownloader {
             &account_id,
         )
         .await?;
+        Ok(Self::from_manifests(
+            s3_settings,
+            initial_manifests_by_root,
+            s3_client,
+            account_id,
+            include_filters,
+        ))
+    }
+
+    /// Create a new downloader by fetching input manifests from S3.
+    pub async fn for_input(
+        s3_settings: JobAttachmentS3Settings,
+        attachments: &Attachments,
+        s3_client: S3Client,
+        account_id: String,
+        include_filters: Option<&[String]>,
+    ) -> Result<Self, JobAttachmentsError> {
+        let initial_manifests_by_root =
+            get_input_manifests_by_asset_root(&s3_settings, attachments, &s3_client, &account_id)
+                .await?;
+        Ok(Self::from_manifests(
+            s3_settings,
+            initial_manifests_by_root,
+            s3_client,
+            account_id,
+            include_filters,
+        ))
+    }
+
+    fn from_manifests(
+        s3_settings: JobAttachmentS3Settings,
+        initial_manifests_by_root: HashMap<String, Vec<Snapshot>>,
+        s3_client: S3Client,
+        account_id: String,
+        include_filters: Option<&[String]>,
+    ) -> Self {
         let mut include_filter_groups = Vec::new();
         if let Some(filters) = include_filters
             && !filters.is_empty()
@@ -897,30 +932,30 @@ impl OutputDownloader {
         }
         let mut dl = Self {
             s3_settings,
-            initial_outputs_by_root,
+            initial_manifests_by_root,
             include_filter_groups,
             root_mappings: HashMap::new(),
-            outputs_by_root: HashMap::new(),
+            manifests_by_root: HashMap::new(),
             s3_client,
             account_id,
         };
         dl.rebuild();
-        Ok(dl)
+        dl
     }
 
-    /// Recompute `outputs_by_root` from initial state applying root mappings then filters.
+    /// Recompute `manifests_by_root` from initial state applying root mappings then filters.
     fn rebuild(&mut self) {
-        self.outputs_by_root = rebuild_manifests(
-            &self.initial_outputs_by_root,
+        self.manifests_by_root = rebuild_manifests(
+            &self.initial_manifests_by_root,
             &self.root_mappings,
             &self.include_filter_groups,
         );
     }
 
-    /// Get output file paths grouped by asset root.
-    pub fn get_output_paths_by_root(&self) -> HashMap<String, Vec<String>> {
+    /// Get file paths grouped by asset root.
+    pub fn get_paths_by_root(&self) -> HashMap<String, Vec<String>> {
         let mut result = HashMap::new();
-        for (root, manifests) in &self.outputs_by_root {
+        for (root, manifests) in &self.manifests_by_root {
             let paths: Vec<String> = manifests
                 .iter()
                 .flat_map(|m| m.files.iter().map(|p| p.path.clone()))
@@ -932,14 +967,13 @@ impl OutputDownloader {
         result
     }
 
-    /// Change the root path for a set of output files.
+    /// Change the root path for a set of files.
     pub fn set_root_path(&mut self, original_root: &str, new_root: &str) {
         if original_root == new_root {
             return;
         }
-        // Find the initial root that maps to original_root
         let initial_root = self
-            .initial_outputs_by_root
+            .initial_manifests_by_root
             .keys()
             .find(|k| self.root_mappings.get(*k).unwrap_or(k).as_str() == original_root)
             .cloned();
@@ -957,14 +991,14 @@ impl OutputDownloader {
         }
     }
 
-    /// Download all output files to their respective root directories.
-    pub async fn download_job_output(
+    /// Download all files to their respective root directories.
+    pub async fn download(
         &self,
         file_conflict_resolution: FileConflictResolution,
         on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send + Sync>>,
     ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
         let mut manifests_by_root = HashMap::new();
-        for (root, manifest_list) in &self.outputs_by_root {
+        for (root, manifest_list) in &self.manifests_by_root {
             if let Some(merged) = merge_asset_manifests(manifest_list)? {
                 manifests_by_root.insert(root.clone(), merged);
             }
@@ -1015,123 +1049,6 @@ pub async fn get_input_manifests_by_asset_root(
     }
 
     Ok(inputs)
-}
-
-/// Handler for downloading input files from a job, with optional include filtering.
-/// Inputs are job-level only (no step/task scoping).
-pub struct InputDownloader {
-    s3_settings: JobAttachmentS3Settings,
-    initial_inputs_by_root: HashMap<String, Vec<Snapshot>>,
-    include_filter_groups: Vec<Vec<String>>,
-    root_mappings: HashMap<String, String>,
-    inputs_by_root: HashMap<String, Vec<Snapshot>>,
-    s3_client: S3Client,
-    account_id: String,
-}
-
-impl InputDownloader {
-    /// Create a new downloader by fetching input manifests from S3.
-    pub async fn new(
-        s3_settings: JobAttachmentS3Settings,
-        attachments: &Attachments,
-        s3_client: S3Client,
-        account_id: String,
-        include_filters: Option<&[String]>,
-    ) -> Result<Self, JobAttachmentsError> {
-        let initial_inputs_by_root =
-            get_input_manifests_by_asset_root(&s3_settings, attachments, &s3_client, &account_id)
-                .await?;
-        let mut include_filter_groups = Vec::new();
-        if let Some(filters) = include_filters
-            && !filters.is_empty()
-        {
-            include_filter_groups.push(filters.to_vec());
-        }
-        let mut dl = Self {
-            s3_settings,
-            initial_inputs_by_root,
-            include_filter_groups,
-            root_mappings: HashMap::new(),
-            inputs_by_root: HashMap::new(),
-            s3_client,
-            account_id,
-        };
-        dl.rebuild();
-        Ok(dl)
-    }
-
-    fn rebuild(&mut self) {
-        self.inputs_by_root = rebuild_manifests(
-            &self.initial_inputs_by_root,
-            &self.root_mappings,
-            &self.include_filter_groups,
-        );
-    }
-
-    /// Get input file paths grouped by asset root.
-    pub fn get_paths_by_root(&self) -> HashMap<String, Vec<String>> {
-        let mut result = HashMap::new();
-        for (root, manifests) in &self.inputs_by_root {
-            let paths: Vec<String> = manifests
-                .iter()
-                .flat_map(|m| m.files.iter().map(|p| p.path.clone()))
-                .collect();
-            if !paths.is_empty() {
-                result.insert(root.clone(), paths);
-            }
-        }
-        result
-    }
-
-    /// Change the root path for a set of input files.
-    pub fn set_root_path(&mut self, original_root: &str, new_root: &str) {
-        if original_root == new_root {
-            return;
-        }
-        let initial_root = self
-            .initial_inputs_by_root
-            .keys()
-            .find(|k| self.root_mappings.get(*k).unwrap_or(k).as_str() == original_root)
-            .cloned();
-        if let Some(init_root) = initial_root {
-            self.root_mappings.insert(init_root, new_root.to_owned());
-            self.rebuild();
-        }
-    }
-
-    /// Apply glob-style include filters against the current paths.
-    pub fn apply_include_filters(&mut self, filters: &[String]) {
-        if !filters.is_empty() {
-            self.include_filter_groups.push(filters.to_vec());
-            self.rebuild();
-        }
-    }
-
-    /// Download all input files to their respective root directories.
-    pub async fn download(
-        &self,
-        file_conflict_resolution: FileConflictResolution,
-        on_downloading_files: Option<Box<dyn Fn(u64, u64) -> bool + Send + Sync>>,
-    ) -> Result<DownloadSummaryStatistics, JobAttachmentsError> {
-        let mut manifests_by_root = HashMap::new();
-        for (root, manifest_list) in &self.inputs_by_root {
-            if let Some(merged) = merge_asset_manifests(manifest_list)? {
-                manifests_by_root.insert(root.clone(), merged);
-            }
-        }
-
-        let cas_prefix = self.s3_settings.full_cas_prefix()?;
-        download_files_from_manifests(
-            &self.s3_settings.s3_bucket_name,
-            &manifests_by_root,
-            Some(&cas_prefix),
-            &self.s3_client,
-            &self.account_id,
-            on_downloading_files,
-            file_conflict_resolution,
-        )
-        .await
-    }
 }
 
 #[cfg(test)]

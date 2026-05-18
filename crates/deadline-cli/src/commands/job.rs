@@ -1604,7 +1604,7 @@ async fn download_input_impl(
     match_paths_by: &str,
 ) -> Result<(), CliError> {
     use crate::path_utils::summarize_path_list;
-    use deadline_lib::attachments::download::InputDownloader;
+    use deadline_lib::attachments::download::ManifestDownloader;
     use deadline_lib::attachments::models::{
         Attachments, FileConflictResolution, JobAttachmentS3Settings, ManifestProperties,
         PathFormat,
@@ -1733,7 +1733,7 @@ async fn download_input_impl(
     } else {
         None
     };
-    let mut downloader = InputDownloader::new(
+    let mut downloader = ManifestDownloader::for_input(
         s3_settings,
         &attachments,
         s3_client,
@@ -2549,7 +2549,7 @@ pub(crate) async fn download_output_impl(
     match_paths_by: &str,
 ) -> Result<(), CliError> {
     use crate::path_utils::summarize_path_list;
-    use deadline_lib::attachments::download::OutputDownloader;
+    use deadline_lib::attachments::download::ManifestDownloader;
     use deadline_lib::attachments::models::{
         FileConflictResolution, JobAttachmentS3Settings, PathFormat,
     };
@@ -2692,7 +2692,7 @@ pub(crate) async fn download_output_impl(
     } else {
         None
     };
-    let mut downloader = OutputDownloader::new(
+    let mut downloader = ManifestDownloader::for_output(
         s3_settings,
         farm_id,
         queue_id,
@@ -2707,7 +2707,7 @@ pub(crate) async fn download_output_impl(
     .await
     .map_err(|e| CliError::Operation(format!("Failed to download output:\n{e}")))?;
 
-    let output_paths = downloader.get_output_paths_by_root();
+    let output_paths = downloader.get_paths_by_root();
 
     // No output available
     if output_paths.is_empty() {
@@ -2772,7 +2772,7 @@ pub(crate) async fn download_output_impl(
         }
     }
 
-    let mut output_paths = downloader.get_output_paths_by_root();
+    let mut output_paths = downloader.get_paths_by_root();
 
     // F7: Root editing loop — skipped when auto_accept
     if !auto_accept && !output_paths.is_empty() {
@@ -2796,7 +2796,7 @@ pub(crate) async fn download_output_impl(
                         downloader.set_root_path(&roots[i], new_root);
                     }
                 }
-                output_paths = downloader.get_output_paths_by_root();
+                output_paths = downloader.get_paths_by_root();
             }
         } else {
             loop {
@@ -2850,7 +2850,7 @@ pub(crate) async fn download_output_impl(
                     let new_root = new_root.trim();
                     if !new_root.is_empty() && new_root != roots[idx] {
                         downloader.set_root_path(&roots[idx], new_root);
-                        output_paths = downloader.get_output_paths_by_root();
+                        output_paths = downloader.get_paths_by_root();
                     }
                 }
             }
@@ -2864,7 +2864,7 @@ pub(crate) async fn download_output_impl(
         && let Some(patterns) = include_patterns
     {
         downloader.apply_include_filters(patterns);
-        output_paths = downloader.get_output_paths_by_root();
+        output_paths = downloader.get_paths_by_root();
         if output_paths.is_empty() {
             println!("{}", no_output_message(is_json));
             return Ok(());
@@ -2930,7 +2930,7 @@ pub(crate) async fn download_output_impl(
     ));
 
     let download_summary = downloader
-        .download_job_output(
+        .download(
             resolution,
             Some(Box::new(move |processed, total| {
                 let pct = if total > 0 {

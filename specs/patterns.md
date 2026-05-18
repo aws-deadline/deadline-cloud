@@ -326,3 +326,44 @@ The Rust→Python data boundary for widget state (how `read_config()`
 returns should look, how widgets consume API responses from `_native`)
 is still being resolved. Patterns for that will be added after the
 GUI widget rendering fixes (#16d3).
+
+
+## Porting a CLI Command: Parity Checklist
+
+When porting a Python CLI command to Rust, verify these categories to
+avoid the most common parity gaps (sourced from 4 behavioral audits):
+
+1. **All flags in `--help`** — compare Python's `--help` output flag-by-flag.
+   Missing flags (`--ignore-storage-profiles`, `--include`,
+   `--match-paths-by`) were the #1 source of parity bugs.
+2. **Config settings it reads** — check which `get_setting()` calls the
+   Python command makes. Missing config fallbacks (`max_retries_per_task`,
+   `max_failed_tasks_count`) caused silent behavior differences.
+3. **Which AWS APIs it calls** — verify the exact API operations and their
+   parameters. Different API strategies (STS vs ListFarms for auth check)
+   caused permission failures in restricted environments.
+4. **Platform-conditional code** — search for `sys.platform`, `os.name`,
+   `os.path.normcase` in the Python source. Case sensitivity, Windows UNC
+   paths, and `~user/` expansion are recurring platform gaps.
+
+## Accepted Cosmetic Differences from Python
+
+These output differences have been explicitly evaluated and accepted
+across multiple audits. Do not re-raise them as bugs:
+
+- **Error format:** `Code: message` (Rust) vs
+  `An error occurred (Code) when calling Op: message` (Python/boto3).
+  Rust's format is intentionally shorter. Both convey the same information.
+- **DateTime trailing zeros:** Rust may format `2024-01-01 00:00:00+00:00`
+  where Python emits `2024-01-01 00:00:00.000000+00:00`. Sub-second
+  precision differences are acceptable.
+- **HashMap key ordering:** Rust sorts map keys alphabetically for
+  deterministic output. Python preserves wire order from the API response.
+  Both are valid; Rust's approach is more predictable.
+- **macOS `/tmp` → `/private/tmp`:** Rust resolves the symlink via
+  `canonicalize()`. Python does not. Both are correct paths to the same
+  location.
+- **Default field inclusion:** Rust includes `maxFailedTasksCount` and
+  `maxRetriesPerTask` in CreateJob requests (from config defaults).
+  Python omits them when unset, letting the server apply its own defaults.
+  The server behavior is identical either way.

@@ -913,7 +913,7 @@ mod tests {
         assert_eq!(result[0].hash.as_deref(), Some("late_hash")); // later timestamp wins even if provided first
     }
 
-    // Batch F: F2 — Platform-aware case sensitivity (matches Python's os.path.normcase)
+    // Platform-aware case sensitivity (matches Python's os.path.normcase)
     #[cfg(not(windows))]
     #[test]
     fn merge_manifest_list_preserves_case_on_unix() {

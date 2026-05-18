@@ -18,3 +18,5 @@ mod param_validation;
 mod param_value;
 #[path = "bundle/submission.rs"]
 mod submission;
+#[path = "bundle/submission_integration.rs"]
+mod submission_integration;

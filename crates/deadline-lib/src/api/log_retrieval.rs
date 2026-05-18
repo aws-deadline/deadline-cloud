@@ -1,6 +1,7 @@
 use crate::config::ini::IniConfig;
 use chrono::{DateTime, TimeZone, Utc};
 
+use crate::api::client::format_sdk_error;
 use crate::api::errors::DeadlineError;
 use crate::api::{auth, session};
 
@@ -79,7 +80,7 @@ async fn get_fleet_scoped_config(
             .map_err(|e| {
                 DeadlineError::OperationError(format!(
                     "Failed to get fleet credentials: {}",
-                    crate::api::client::format_sdk_error(&e)
+                    format_sdk_error(&e)
                 ))
             })?;
         let creds = resp.credentials().ok_or_else(|| {
@@ -110,28 +111,6 @@ async fn get_fleet_scoped_config(
     } else {
         // Non-DCM user — use base credentials
         Ok(session::get_sdk_config(config).await)
-    }
-}
-
-/// Format a `CloudWatch` SDK error using the common smithy trait.
-fn cw_sdk_err<E>(err: &aws_sdk_cloudwatchlogs::error::SdkError<E>) -> String
-where
-    E: std::fmt::Display
-        + aws_smithy_types::error::metadata::ProvideErrorMetadata
-        + std::error::Error
-        + 'static,
-{
-    match err {
-        aws_sdk_cloudwatchlogs::error::SdkError::ServiceError(e) => {
-            let inner = e.err();
-            let code = inner.code().unwrap_or("Unknown");
-            let msg = inner.message().unwrap_or("No message");
-            format!("{code}: {msg}")
-        }
-        other => format!(
-            "{}",
-            aws_smithy_types::error::display::DisplayErrorContext(other)
-        ),
     }
 }
 
@@ -240,7 +219,7 @@ pub async fn get_session_logs(
             } else {
                 Err(DeadlineError::OperationError(format!(
                     "Failed to retrieve logs: {}",
-                    cw_sdk_err(&e)
+                    format_sdk_error(&e)
                 )))
             }
         }
@@ -308,7 +287,7 @@ pub async fn get_worker_logs(
             } else {
                 Err(DeadlineError::OperationError(format!(
                     "Failed to retrieve worker logs: {}",
-                    cw_sdk_err(&e)
+                    format_sdk_error(&e)
                 )))
             }
         }

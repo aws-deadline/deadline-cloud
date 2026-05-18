@@ -88,6 +88,12 @@ Review against these 7 criteria, in priority order:
 - Test names follow `{function}_{scenario}_{outcome}`?
 - No tests of dependency internals (openjd-snapshots behavior)?
 - Are tests testing *our* logic, not just wiring?
+- **Check L2 coverage before flagging gaps**: If a function is exercised
+  by CLI subprocess tests in `crates/deadline-cli/tests/`, it is covered.
+  Only flag as ❌ if *neither* L1 nor L2 tests exercise the behavior.
+  Per `specs/testing.md`, L2 is the default level — L1 is only needed
+  when the CLI can't reach the behavior or can't assert with sufficient
+  precision.
 
 #### 7. Spec Alignment
 - Does `specs/` accurately describe this module?
@@ -128,9 +134,13 @@ One paragraph overall assessment. Grade: A/B/C/D.
 - [Issue]: [location] — [why it matters]
 
 ## Test Coverage Assessment
-| Function/Area | Happy path | Error cases | Edge cases |
-|---|---|---|---|
-| ... | ✅/❌ | ✅/❌ | ✅/❌ |
+| Function/Area | Happy path | Error cases | Edge cases | Notes |
+|---|---|---|---|---|
+| ... | ✅/❌ | ✅/❌ | ✅/❌ | L1/L2 test file(s) |
+
+Mark ✅ if covered by EITHER L1 (direct unit test) or L2 (CLI subprocess test).
+In the Notes column, cite which test file provides coverage.
+Only mark ❌ if no test at any level exercises the behavior.
 
 ## Recommended Changes
 Prioritized list of concrete changes, estimated effort (S/M/L).

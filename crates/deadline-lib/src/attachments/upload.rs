@@ -83,12 +83,38 @@ pub fn prepare_paths_for_upload(
         }
     }
 
-    let mut groupings: Vec<(String, AssetRootGroup)> = Vec::new(); // (key, group)
+    // Validate and resolve input paths
+    let (valid_inputs, extra_referenced) =
+        validate_input_paths(input_paths, &shared_locations, require_paths_exist)?;
+
+    // Group all paths
+    let all_referenced: Vec<String> = referenced_paths
+        .iter()
+        .chain(extra_referenced.iter())
+        .cloned()
+        .collect();
+
+    Ok(classify_and_group_paths(
+        &valid_inputs,
+        output_paths,
+        &all_referenced,
+        &local_locations,
+        &shared_locations,
+    ))
+}
+
+/// Validate input paths: check existence, reject directories, filter shared locations.
+/// Returns (valid absolute paths, paths moved to referenced due to non-existence).
+fn validate_input_paths(
+    input_paths: &[String],
+    shared_locations: &[&str],
+    require_paths_exist: bool,
+) -> Result<(Vec<PathBuf>, Vec<String>), JobAttachmentsError> {
+    let mut valid_inputs: Vec<PathBuf> = Vec::new();
+    let mut extra_referenced: Vec<String> = Vec::new();
     let mut missing_inputs: BTreeSet<PathBuf> = BTreeSet::new();
     let mut misconfigured_dirs: BTreeSet<PathBuf> = BTreeSet::new();
-    let mut extra_referenced: Vec<String> = Vec::new();
 
-    // Process input paths
     for p in input_paths {
         if p.is_empty() {
             continue;
@@ -118,9 +144,7 @@ pub fn prepare_paths_for_upload(
         {
             continue;
         }
-        let key = find_group_key(&abs_path, &local_locations, &mut groupings);
-        let group = get_group_mut(&key, &mut groupings);
-        group.inputs.insert(abs_path);
+        valid_inputs.push(abs_path);
     }
 
     if !missing_inputs.is_empty() || !misconfigured_dirs.is_empty() {
@@ -147,19 +171,38 @@ pub fn prepare_paths_for_upload(
         return Err(JobAttachmentsError::MisconfiguredInputs(msg));
     }
 
+    Ok((valid_inputs, extra_referenced))
+}
+
+/// Classify validated paths into groups by storage location, compute root paths and totals.
+fn classify_and_group_paths(
+    valid_inputs: &[PathBuf],
+    output_paths: &[String],
+    referenced_paths: &[String],
+    local_locations: &[(&str, &str)],
+    shared_locations: &[&str],
+) -> AssetUploadGroup {
+    let mut groupings: Vec<(String, AssetRootGroup)> = Vec::new();
+
+    // Process validated input paths
+    for abs_path in valid_inputs {
+        let key = find_group_key(abs_path, local_locations, &mut groupings);
+        let group = get_group_mut(&key, &mut groupings);
+        group.inputs.insert(abs_path.clone());
+    }
+
     // Process output paths
     for p in output_paths {
-        if let Some(abs_path) = resolve_and_filter(p, &shared_locations) {
-            let key = find_group_key(&abs_path, &local_locations, &mut groupings);
+        if let Some(abs_path) = resolve_and_filter(p, shared_locations) {
+            let key = find_group_key(&abs_path, local_locations, &mut groupings);
             get_group_mut(&key, &mut groupings).outputs.insert(abs_path);
         }
     }
 
-    // Process referenced paths (including extras from missing inputs)
-    let all_referenced = referenced_paths.iter().chain(extra_referenced.iter());
-    for p in all_referenced {
-        if let Some(abs_path) = resolve_and_filter(p, &shared_locations) {
-            let key = find_group_key(&abs_path, &local_locations, &mut groupings);
+    // Process referenced paths
+    for p in referenced_paths {
+        if let Some(abs_path) = resolve_and_filter(p, shared_locations) {
+            let key = find_group_key(&abs_path, local_locations, &mut groupings);
             get_group_mut(&key, &mut groupings)
                 .references
                 .insert(abs_path);
@@ -204,11 +247,11 @@ pub fn prepare_paths_for_upload(
         }
     }
 
-    Ok(AssetUploadGroup {
+    AssetUploadGroup {
         asset_groups,
         total_input_files,
         total_input_bytes,
-    })
+    }
 }
 
 fn find_group_key(

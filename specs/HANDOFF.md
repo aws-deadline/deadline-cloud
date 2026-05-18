@@ -9,6 +9,14 @@ Active work item: **None**
 
 ## Completed items (older)
 
+- **[L] Deferred refactors (2026-05-18)** — Unified `OutputDownloader`/
+  `InputDownloader` into `ManifestDownloader`, separated validation from
+  grouping in `prepare_paths_for_upload`, consolidated duplicate
+  `format_sdk_error` functions, added 5 Level 1 tests for
+  `create_job_from_job_bundle`. 1,350→1,355 tests.
+
+## Completed items (older)
+
 - **Per-file upload progress (2026-05-16)** — Wired openjd-snapshots
   `on_progress` callback for per-file progress during upload. Progress
   bar now fills incrementally instead of jumping per-group. Added

@@ -641,6 +641,9 @@ pub async fn create_job_from_job_bundle(
                 if outside.len() > 10 {
                     handler.on_message(&format!("  ... and {} more", outside.len() - 10));
                 }
+                // Python parity: auto_accept means "don't prompt", NOT "always proceed".
+                // When files are outside known paths, auto_accept cancels rather than
+                // silently uploading potentially sensitive files.
                 if params.auto_accept {
                     handler.on_message(
                         "Job submission canceled (settings.auto_accept enabled and there were unknown paths).",
