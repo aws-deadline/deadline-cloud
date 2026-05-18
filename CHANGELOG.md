@@ -1,3 +1,8 @@
+## 0.57.1 (2026-05-18)
+
+### Bug Fixes
+* Environment hooks now correctly receive the job bundle directory instead of the hooks directory. Previously, `HookManager.execute_pre_submission_hooks()` was overwriting `metadata.job_bundle_dir` with the hooks directory path for environment hooks (DEADLINE_HOOKS_DIR). (#1162)
+* Pre-submission hooks can now modify the `template` and `priority` fields. Previously, only `attachments.assetReferences` changes from hook output were applied. (#1162)
 ## 0.57.0 (2026-05-08)
 
 ### BREAKING CHANGES
