@@ -76,8 +76,39 @@ jobs:
       os: macos
       tag: ${{ needs.TagRelease.outputs.tag }}
 
+  LinuxDCMIntegrationTest:
+    name: Linux DCM Integration Test
+    needs: [TagRelease, UnitTests]
+    uses: ./.github/workflows/dcm_integration_test_linux.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
+  WindowsDCMIntegrationTest:
+    name: Windows DCM Integration Test
+    needs: [TagRelease, UnitTests]
+    uses: ./.github/workflows/dcm_integration_test_windows.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
+  MacOSDCMIntegrationTest:
+    name: MacOS DCM Integration Test
+    needs: [TagRelease, UnitTests]
+    uses: ./.github/workflows/dcm_integration_test_macos.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
   PreRelease:
-    needs: [TagRelease, LinuxIntegrationTests, WindowsIntegrationTests, MacOSIntegrationTests]
+    needs:
+      - TagRelease
+      - LinuxIntegrationTests
+      - WindowsIntegrationTests
+      - MacOSIntegrationTests
+      - LinuxDCMIntegrationTest
+      - WindowsDCMIntegrationTest
+      - MacOSDCMIntegrationTest
     uses: aws-deadline/.github/.github/workflows/reusable_prerelease.yml@mainline
     permissions:
       id-token: write
@@ -98,15 +129,8 @@ jobs:
       tag: ${{ needs.TagRelease.outputs.tag }}
       oses: "['Linux', 'Windows', 'MacOS']"
 
-  ManualTestGate:
-    needs: [TagRelease, BuildAndStageInstallers]
-    runs-on: ubuntu-latest
-    environment: release-gate
-    steps:
-      - run: echo "Manual testing approved for ${{ needs.TagRelease.outputs.tag }}"
-
   Release:
-    needs: [TagRelease, ManualTestGate]
+    needs: [TagRelease, BuildAndStageInstallers]
     uses: aws-deadline/.github/.github/workflows/reusable_release.yml@mainline
     secrets: inherit
     permissions:

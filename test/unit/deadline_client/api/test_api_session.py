@@ -23,9 +23,7 @@ def test_get_boto3_session(fresh_deadline_config):
 
         # Confirm it returned the mocked value, and was called with the correct args
         assert result == mock_session
-        boto3_session.assert_called_once_with(
-            profile_name="SomeRandomProfileName", botocore_session=ANY
-        )
+        boto3_session.assert_called_once_with(profile_name="SomeRandomProfileName")
 
 
 def test_get_boto3_session_caching_behavior(fresh_deadline_config):
@@ -35,7 +33,7 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
     """
 
     # mock boto3.Session to return a fresh object based on the input profile name
-    def mock_create_session(profile_name: Optional[str], botocore_session=None):
+    def mock_create_session(profile_name: Optional[str]):
         session = MagicMock()
         session._profile_name = profile_name
         return session
@@ -67,32 +65,53 @@ def test_get_boto3_session_caching_behavior(fresh_deadline_config):
         # value of AWS profile name that was configured.
         boto3_session.assert_has_calls(
             [
-                call(profile_name=None, botocore_session=ANY),
-                call(profile_name="SomeRandomProfileName", botocore_session=ANY),
+                call(profile_name=None),
+                call(profile_name="SomeRandomProfileName"),
             ]
         )
 
 
 def test_get_check_authentication_status_authenticated(fresh_deadline_config):
-    """Confirm that check_authentication_status returns AUTHENTICATED"""
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        api, "get_boto3_session", new=session_mock
+    """Confirm that check_authentication_status returns AUTHENTICATED (non-DCM profile)."""
+    with patch.object(api._session, "get_boto3_client") as boto3_client_mock, patch.object(
+        api._list_apis, "get_user_and_identity_store_id", return_value=(None, None)
     ):
         config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-        session_mock().client("sts").get_caller_identity.return_value = {}
+        boto3_client_mock.return_value.list_farms.return_value = {"farms": []}
 
         assert api.check_authentication_status() == api.AwsAuthenticationStatus.AUTHENTICATED
+        # Without a DCM-provided user_id, principalId must not be injected.
+        boto3_client_mock.return_value.list_farms.assert_called_once_with(maxResults=1)
+
+
+def test_get_check_authentication_status_authenticated_injects_principal_id(
+    fresh_deadline_config,
+):
+    """For Deadline Cloud monitor profiles, check_authentication_status must pass
+    the IdC user id as principalId so the ListFarms probe is scoped to the
+    caller's user membership (avoids AccessDenied that would otherwise leave
+    the auth-login poll loop stuck in NEEDS_LOGIN)."""
+    with patch.object(api._session, "get_boto3_client") as boto3_client_mock, patch.object(
+        api._list_apis,
+        "get_user_and_identity_store_id",
+        return_value=("user-1234", "d-abcdef0123"),
+    ):
+        config.set_setting("defaults.aws_profile_name", "dcm-profile")
+        boto3_client_mock.return_value.list_farms.return_value = {"farms": []}
+
+        assert api.check_authentication_status() == api.AwsAuthenticationStatus.AUTHENTICATED
+        boto3_client_mock.return_value.list_farms.assert_called_once_with(
+            maxResults=1, principalId="user-1234"
+        )
 
 
 def test_get_check_authentication_status_configuration_error(fresh_deadline_config):
     """Confirm that check_authentication_status returns CONFIGURATION_ERROR"""
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        api, "get_boto3_session", new=session_mock
+    with patch.object(api._session, "get_boto3_client") as boto3_client_mock, patch.object(
+        api._list_apis, "get_user_and_identity_store_id", return_value=(None, None)
     ):
         config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-        session_mock().client("sts").get_caller_identity.side_effect = Exception(
-            "some uncaught exception"
-        )
+        boto3_client_mock.return_value.list_farms.side_effect = Exception("some uncaught exception")
 
         assert api.check_authentication_status() == api.AwsAuthenticationStatus.CONFIGURATION_ERROR
 
@@ -133,6 +152,21 @@ def test_check_deadline_api_available(fresh_deadline_config):
         assert result is True
         # It should have called list_farms to check the API
         session_mock().client("deadline").list_farms.assert_called_once_with(maxResults=1)
+
+
+def test_check_deadline_api_available_injects_principal_id(fresh_deadline_config):
+    """For DCM profiles, check_deadline_api_available must pass principalId."""
+    with patch.object(api._session, "get_boto3_client") as boto3_client_mock, patch.object(
+        api._list_apis,
+        "get_user_and_identity_store_id",
+        return_value=("user-1234", "d-abcdef0123"),
+    ):
+        boto3_client_mock.return_value.list_farms.return_value = {"farms": []}
+
+        assert api.check_deadline_api_available() is True
+        boto3_client_mock.return_value.list_farms.assert_called_once_with(
+            maxResults=1, principalId="user-1234"
+        )
 
 
 def test_check_deadline_api_available_fails(fresh_deadline_config):

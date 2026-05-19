@@ -721,6 +721,22 @@ def create_job_from_job_bundle(
         )
         hook_result = hook_manager.execute_pre_submission_hooks(hook_metadata, {})
 
+        # Apply template modifications from hooks via stdout output
+        if "template" in hook_result:
+            file_contents = hook_result["template"]
+            create_job_args["template"] = file_contents
+        else:
+            # Re-read template in case a hook modified it on disk
+            updated_contents, _ = read_yaml_or_json(job_bundle_dir, "template", required=True)
+            if updated_contents != file_contents:
+                file_contents = updated_contents
+                create_job_args["template"] = file_contents
+
+        # Apply priority modifications from hooks
+        if "priority" in hook_result:
+            priority = hook_result["priority"]
+            create_job_args["priority"] = priority
+
         # Merge any asset references from hooks into asset_references
         if "attachments" in hook_result and "assetReferences" in hook_result["attachments"]:
             hook_refs = hook_result["attachments"]["assetReferences"]
@@ -921,8 +937,16 @@ def create_job_from_job_bundle(
         create_job_args["maxWorkerCount"] = max_worker_count
     if max_failed_tasks_count is not None:
         create_job_args["maxFailedTasksCount"] = max_failed_tasks_count
+    elif "maxFailedTasksCount" not in create_job_args:
+        create_job_args["maxFailedTasksCount"] = int(
+            config_file.get_setting("settings.max_failed_tasks_count", config=config)
+        )
     if max_retries_per_task is not None:
         create_job_args["maxRetriesPerTask"] = max_retries_per_task
+    elif "maxRetriesPerTask" not in create_job_args:
+        create_job_args["maxRetriesPerTask"] = int(
+            config_file.get_setting("settings.max_retries_per_task", config=config)
+        )
     if target_task_run_status is not None:
         create_job_args["targetTaskRunStatus"] = target_task_run_status
 

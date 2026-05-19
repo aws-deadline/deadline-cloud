@@ -40,7 +40,7 @@ dependencies = [
   # Click 8.2 dropped python 3.8/3.9 support
   "click >= 8.1.7",
   "pyyaml >= 6.0",
-  "deadline-job-attachments == 0.0.1",
+  "deadline-job-attachments == 0.1.0",
   "typing_extensions >= 4.8",
   "psutil >= 7.0.0",
   "QtPy == 2.4.*",

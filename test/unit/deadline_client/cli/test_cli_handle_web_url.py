@@ -275,7 +275,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
         boto3_client_mock().get_job.return_value = {
@@ -306,6 +306,7 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
             task_id=None,
             session_action_id=None,
             session=ANY,
+            include_filters=None,
         )
         mock_download.assert_called_once_with(
             file_conflict_resolution=FileConflictResolution.CREATE_COPY,
@@ -332,7 +333,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
             processed_files=3,
             processed_bytes=1024,
         )
-        MockOutputDownloader.return_value.download_job_output = mock_download
+        MockOutputDownloader.return_value.download = mock_download
         mock_host_path_format_name = PathFormat.get_host_path_format_string()
 
         boto3_client_mock().get_job.return_value = {
@@ -371,6 +372,7 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
             task_id=MOCK_TASK_ID,
             session_action_id=MOCK_SESSION_ACTION_ID,
             session=ANY,
+            include_filters=None,
         )
         mock_download.assert_called_once_with(
             file_conflict_resolution=FileConflictResolution.CREATE_COPY,

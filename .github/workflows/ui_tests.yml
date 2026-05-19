@@ -1,0 +1,105 @@
+name: UI Tests
+
+on:
+  push:
+    branches: [mainline, release]
+  pull_request:
+    branches: [mainline, release, 'patch_*', 'feature_*']
+
+jobs:
+  ui-test-linux:
+    name: UI Tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      # AT-SPI2 + Qt/PySide6 runtime libraries. xa11y itself is a manylinux
+      # wheel with no extra system deps; these are required because we launch
+      # the real PySide6 GUI under Xvfb.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb dbus dbus-x11 at-spi2-core \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-image0 libxcb-render-util0 \
+            libxcb-xkb1 libegl1 libglib2.0-0 libfontconfig1 \
+            libdbus-1-3 libx11-xcb1 libxcb-render0 libxcb-shape0 \
+            libxcb-xfixes0
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Run UI tests under Xvfb + AT-SPI
+        run: |
+          dbus-run-session -- bash -c '
+            set -e
+            Xvfb :99 -screen 0 1280x1024x24 -ac &
+            export DISPLAY=:99
+            sleep 1
+
+            export QT_ACCESSIBILITY=1
+            export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+
+            /usr/libexec/at-spi-bus-launcher --launch-immediately &
+            sleep 1
+            /usr/libexec/at-spi2-registryd &
+            sleep 1
+
+            hatch run ui:test --timeout=120
+          '
+
+  ui-test-macos:
+    name: UI Tests (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Create hatch ui environment
+        run: hatch env create ui
+
+      # xa11y requires the process calling its APIs to have the
+      # kTCCServiceAccessibility TCC entitlement. Grant it to the Python
+      # binary inside hatch's ui env (the one pytest actually runs under).
+      - name: Grant accessibility TCC permission
+        run: |
+          HATCH_PYTHON=$(hatch -e ui run python -c "import os,sys; print(os.path.realpath(sys.executable))")
+          SETUP_PYTHON=$(python3 -c "import os,sys; print(os.path.realpath(sys.executable))")
+          for PYTHON_PATH in "$SETUP_PYTHON" "$HATCH_PYTHON"; do
+            sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+              "INSERT OR REPLACE INTO access(service,client,client_type,auth_value,auth_reason,auth_version,csreq,policy_id,indirect_object_identifier_type,indirect_object_identifier,indirect_object_code_identity,flags,last_modified) \
+              VALUES('kTCCServiceAccessibility','${PYTHON_PATH}',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s));"
+          done
+          sudo launchctl stop com.apple.tccd 2>/dev/null || true
+          sleep 2
+
+      - name: Run UI tests
+        env:
+          QT_ACCESSIBILITY: "1"
+        run: hatch run ui:test --timeout=120
+
+  ui-test-windows:
+    name: UI Tests (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Run UI tests
+        env:
+          QT_ACCESSIBILITY: "1"
+        run: hatch run ui:test --timeout=120

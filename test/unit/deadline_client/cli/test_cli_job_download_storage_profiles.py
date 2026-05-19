@@ -118,8 +118,8 @@ def _make_download_mocks(
     mock_download.return_value = DownloadSummaryStatistics(
         total_time=1, processed_files=1, processed_bytes=100
     )
-    mock_output_downloader.return_value.download_job_output = mock_download
-    mock_output_downloader.return_value.get_output_paths_by_root.return_value = root_paths
+    mock_output_downloader.return_value.download = mock_download
+    mock_output_downloader.return_value.get_paths_by_root.return_value = root_paths
 
 
 # ─── Case 1: Both profiles exist, locations match → automatic mapping ────────
@@ -525,7 +525,7 @@ def test_case8e_nested_locations_most_specific_rule_wins(
 
         # Verify mapped manifest download was called (not OutputDownloader)
         mock_download_manifests.assert_called_once()
-        mock_downloader.return_value.download_job_output.assert_not_called()
+        mock_downloader.return_value.download.assert_not_called()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX destination test")
@@ -710,7 +710,7 @@ def test_rules_exist_but_no_files_match_falls_back_to_downloader(
         # No files matched the rules, so mapped manifest download should NOT be called
         mock_download_manifests.assert_not_called()
         # Instead, the OutputDownloader path should have been used
-        mock_downloader.return_value.download_job_output.assert_called_once()
+        mock_downloader.return_value.download.assert_called_once()
 
 
 # ─── Mapped download path: progress callback and conflict resolution ─────────

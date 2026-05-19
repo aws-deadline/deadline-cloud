@@ -263,6 +263,16 @@ def bundle_submit(
             config_file.get_setting("settings.force_s3_check", config=config)
         )
 
+    # Resolve max_retries_per_task and max_failed_tasks_count from config when not specified
+    if max_retries_per_task is None:
+        max_retries_per_task = int(
+            config_file.get_setting("settings.max_retries_per_task", config=config)
+        )
+    if max_failed_tasks_count is None:
+        max_failed_tasks_count = int(
+            config_file.get_setting("settings.max_failed_tasks_count", config=config)
+        )
+
     hash_callback_manager = _ProgressBarCallbackManager(length=100, label="Hashing Attachments")
     upload_callback_manager = _ProgressBarCallbackManager(length=100, label="Uploading Attachments")
 
@@ -297,7 +307,7 @@ def bundle_submit(
             require_paths_exist=require_paths_exist,
             submitter_name=submitter_name or "CLI",
             known_asset_paths=known_asset_path,
-            debug_snapshot_dir=snapshot_tmpdir.name if snapshot_tmpdir else save_debug_snapshot,
+            debug_snapshot_dir=(snapshot_tmpdir.name if snapshot_tmpdir else save_debug_snapshot),
             force_s3_check=force_s3_check,
         )
 

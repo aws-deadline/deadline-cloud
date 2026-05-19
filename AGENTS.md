@@ -80,6 +80,15 @@ Use [conventional commits](https://www.conventionalcommits.org/):
 - `perf:` - Performance improvements
 - `feat!:` or `fix!:` - Breaking changes (Also include `BREAKING CHANGES:` section in message body)
 
+### CHANGELOG.md is auto-generated — do not edit it
+
+`CHANGELOG.md` is generated automatically from conventional commit messages
+during the release process. Do **not** add, remove, or rewrite entries in
+`CHANGELOG.md` as part of normal feature, fix, or refactor work — your commit
+message *is* the changelog entry. Only the release tooling (and humans
+preparing a release) should modify `CHANGELOG.md`. See
+[CHANGELOG_GUIDELINES.md](CHANGELOG_GUIDELINES.md) for entry formatting.
+
 ### Before Committing / Raising a PR
 
 After completing any code changes:
@@ -102,7 +111,7 @@ pick the right one.
 
 - **Unit tests:** `test/unit/` - Run with `hatch run test`
 - **Integration tests:** `test/integ/` - Requires AWS resources
-- **Squish GUI tests:** `test/squish/` - Requires Squish license
+- **UI tests:** `test/ui/` - Run with `hatch run ui:test`
 - **Docker tests:** `scripts/run_sudo_tests.sh` - For permission tests
 
 Tests use pytest with unittest.mock. Coverage target: 80%.

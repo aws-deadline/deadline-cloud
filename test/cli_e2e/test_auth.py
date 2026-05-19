@@ -51,6 +51,10 @@ def test_cli_auth_login_without_monitor_profile_reports_error(deadline_env, run_
     # Login also requires a Deadline Cloud monitor profile; fails cleanly.
     r = run_cli(env, "auth", "login")
     assert r.returncode != 0
+    combined = (r.stdout + r.stderr).lower()
+    # Error text comes from api._loginout and mentions "Deadline Cloud monitor".
+    assert "only supported" in combined
+    assert "monitor" in combined
 
 
 def test_cli_auth_help(deadline_env, run_cli):

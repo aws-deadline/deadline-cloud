@@ -15,8 +15,10 @@ Table of Contents:
       - [Running Docker-based Unit Tests](#running-docker-based-unit-tests)
     - [Integration Tests](#integration-tests)
       - [Running Integration Tests](#running-integration-tests)
-    - [Squish GUI Submitter Tests](#squish-gui-submitter-tests)
-      - [Running Squish GUI Submitter Tests](#running-squish-gui-submitter-tests)
+    - [GUI Tests (pytest-qt)](#gui-tests-pytest-qt)
+      - [Running GUI Tests](#running-gui-tests)
+    - [UI Tests](#ui-tests)
+      - [Running UI Tests](#running-ui-tests)
   - [Changelog Guidelines](#changelog-guidelines)
   - [Things to Know](#things-to-know)
     - [Public Contracts](#public-contracts)
@@ -68,7 +70,7 @@ process along the lines of the following as a starting point:
    Iteratively improve your implementation until all unit tests pass. (See [Unit tests](#unit-tests))
 3. Add integration tests for your changes if applicable. Ensure that all integration tests pass.
    Iteratively improve your implementation until all integration and unit tests pass. (See [Integration tests](#integration-tests))
-4. Add Squish GUI tests for your changes if applicable. Ensure that all Squish GUI tests pass. (See [Squish GUI tests](#squish-tests))
+4. Add pytest-qt GUI unit tests for widget/dialog behavior, or UI tests for full workflow verification. (See [GUI Tests (pytest-qt)](#gui-tests-pytest-qt) and [UI Tests](#ui-tests))
 
 Once you are satisfied with your code, and all relevant tests pass, then run `hatch run fmt` to fix up the formatting of
 your code and post your pull request.
@@ -103,7 +105,9 @@ The tests for this package have three forms:
    without requiring an AWS account.
 2. Integration tests - Tests that ensure that the implementation behaves as expected when run in a real environment.
    Ensuring that code properly interacts as expected with a real Amazon S3 bucket, for instance.
-3. Squish GUI Submitter tests - Tests that verify the Deadline GUI using Squish automated framework. Squish tests require a license.
+3. GUI unit tests - Tests that verify individual Deadline GUI widgets and dialogs using [pytest-qt](https://pytest-qt.readthedocs.io/).
+   These run as part of the unit test suite, use MockDeadlineBackend for API responses, and require no AWS account.
+4. UI tests - Subprocess-based tests that launch the real `deadline` GUI commands and drive them through the OS accessibility tree, verifying the UI renders the right widgets and responds correctly. See [UI Tests](#ui-tests).
 
 ### Writing Tests
 
@@ -188,13 +192,27 @@ Notes:
 define the `AWS_ENDPOINT_URL_DEADLINE` environment variable to the non-production endpoint URL. For example,
 production endpoints look like: `export AWS_ENDPOINT_URL_DEADLINE="https://deadline.$AWS_DEFAULT_REGION.amazonaws.com"`
 
-### Squish GUI Submitter Tests
+### GUI Tests (pytest-qt)
 
-Squish GUI tests are located under the `test/squish` directory of this repository. New tests can be added for the Deadline GUI when necessary (ie: new functionality is introduced and a test can be added for coverage, or existing functionality is modified). When changes are made, Squish automated tests should be run to ensure changes are not breaking Deadline CLI and GUI functionality.
+GUI tests are located under `test/unit/deadline_client/ui/gui/`. They use [pytest-qt](https://pytest-qt.readthedocs.io/) to test Qt widgets and dialogs in-process, with `MockDeadlineBackend` providing fake API responses. No AWS credentials required.
 
-#### Running Squish GUI Submitter Tests
+#### Running GUI Tests
 
-A separate ReadMe for developing/running Squish GUI tests is located in the `test/squish` directory. Please refer to [test/squish/SQUISH_README.md](./test/squish/SQUISH_README.md) on full instructions to use the automated tests. Note that a Squish license is required in order to run the tests. Currently, you may either have your own Squish license or you may file a [pull request](https://help.github.com/articles/creating-a-pull-request/) to the Deadline Cloud team to run or add any tests against any changes to be committed. Please perform any necessary manual tests prior to submitting any changes, in addition to making sure at least a minimal render job test passes.
+```sh
+hatch run test test/unit/deadline_client/ui/gui/
+```
+
+These tests run automatically in CI as part of the standard unit test suite.
+
+### UI Tests
+
+UI tests are located under the `test/ui` directory of this repository. They launch the real `deadline` GUI commands as a subprocess against an in-process mock Deadline backend and drive the GUI through the OS accessibility tree via [xa11y](https://xa11y.dev/). New UI tests can be added for new dialogs/widgets or to cover regressions in existing GUI behavior. See [test/README.md](./test/README.md) for the full testing layer guide.
+
+#### Running UI Tests
+
+```bash
+hatch run ui:test
+```
 
 ## Changelog Guidelines
 
@@ -463,29 +481,3 @@ class MyCustomWidget(QWidget):
 Instead of runnning a deadline command as `deadline ...` run `pyinstrument -r html -m deadline ...`.
 
 This will profile the current `deadline` command and open the results in an interactive window.
-
-# Manual Test Cases
-
-These are the manual test cases for the client software release cycle, covering Deadline CLI and job attachments across Linux, Windows, and macOS.
-
-## Deadline CLI Tests
-
-| Test Case | Test Steps | Notes |
-|---|---|---|
-| Pre-requisite: Uninstall any previous versions of the Deadline Cloud Submitter Installer | Update PATH if necessary. | |
-| Verify Deadline CLI can be successfully installed using the staged individual installer | Run the staged individual installer and verify that it can install. | |
-| Verify correct version of Deadline CLI is being tested | Verify correct version using `deadline --version` command. | |
-| Verify user can modify workstation configuration settings using Deadline GUI (`deadline config gui`) | Run `deadline config gui` and verify dialogue loads as expected. Verify User can authenticate using DCM Profile using Login button. Using a DCM Profile, verify correct farm/queue resources are pulled, and the existing config can be modified. Verify User can Logout of DCM Profile using Logout button. Verify User can authenticate using an AWS Profile. Using an AWS Profile, verify correct farm/queue resources are pulled, and the existing config can be modified. | |
-| Verify user can modify workstation configuration settings using `deadline config set` | Once settings are modified, verify settings were modified correctly using: 1. `deadline config show` 2. `deadline config get <setting_name>` 3. `deadline config gui` (verify modified settings appear correctly in the GUI). Verify settings can be modified back to default using `deadline config clear`. | |
-| Verify user can authenticate/login using DCM Profile: `deadline auth login` | In deadline config gui, you should see the profile name with a green checkmark beside it in the bottom left. | Would need to set using DCM profile first. |
-| Verify user can logout of DCM Profile: `deadline auth logout` | In deadline config gui, you should see the profile name with a red 'X' beside it in the bottom left. There should be a button to log in on the right. | |
-| `deadline auth login` using AWS profile | Run `deadline config gui`, select an AWS profile that uses IAM credentials, and run `deadline auth login`. Confirm that there is an error like "Logging in is only supported for AWS Profiles created by Deadline Cloud monitor". | Verify Login is not supported when using AWS profile. |
-| Verify user can authenticate using AWS profile | In deadline config gui, you should see the profile name with a green checkmark beside it in the bottom left. There should be no option to logout. | Need to set AWS region environment variable in Terminal. |
-| Submit a render job using `deadline bundle gui-submit --browse` | Verify job bundle can be selected and GUI Submitter dialogue loads correctly with correct default settings based on the job bundle, including any job attachments and host requirements. Verify job bundle can be submitted successfully to the farm. Verify job bundle is created upon submission in the users' job history directory. Verify correct job information appears in DCM and job can be completed successfully. | |
-| Submit a render job using `--output json` option (success) | Launch GUI Submitter using `deadline bundle gui-submit --output json <path> > output.txt`. Click submit. When the submission succeeds, click Ok. Close the submitter. Open output.txt and ensure it is JSON structured like: `{"status": "SUBMITTED", "jobId": "<job-id>", "jobHistoryBundleDirectory": "<path>"}` | |
-| Submit a render job using `--output json` option (cancel) | Launch GUI Submitter using `deadline bundle gui-submit --output json <path> > output.txt`. Click submit. Immediately click cancel before the submission completes. Close the submitter. Open output.txt and ensure it is JSON exactly like: `{"status": "CANCELED"}` | |
-| Submit a render job using a submitter name | Launch GUI Submitter using `deadline bundle gui-submit --submitter-name Testing <path>`. Click submit. Wait for the submission to complete. Click Ok. Ensure the submission process exits. | |
-| Verify 'Load a different job bundle' button in GUI Submitter | Launch GUI Submitter using `deadline bundle gui-submit --browse`, select a job bundle. Verify correct defaults/details. Hit 'Load a different job bundle' button and select a second job bundle. Verify correct defaults/details for the second bundle. | |
-| Verify 'Export job bundle' button in GUI Submitter | | |
-| Verify all GUI Submitter dialogue controls work | Verify all dropdown options, menus, input fields, toggles, checkboxes, radio buttons work as expected. Verify all tabs: Shared job settings, Job-specific settings, Job attachments, Host requirements (both 'Run on all worker hosts' and 'Run on worker hosts that meet the following requirements' options). | |
-| Test Deadline Cloud release candidate against currently released DCC Submitter | A Blender manual install might be easiest. Build deadline-cloud from the release candidate branch and pip install it into the submitter dependencies instead of the latest in PyPi. | |

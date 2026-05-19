@@ -77,9 +77,6 @@ class HookManager:
         if not self.hooks or not self.hooks.pre_submission:
             return payload
 
-        # Use original bundle dir for hooks to find files
-        metadata.job_bundle_dir = self._original_bundle_dir
-
         current_payload = payload
         for i, hook in enumerate(self.hooks.pre_submission):
             hook_name = f"{hook.command} {' '.join(hook.args)}".strip()

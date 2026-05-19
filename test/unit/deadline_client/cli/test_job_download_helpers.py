@@ -446,8 +446,8 @@ class TestCliDownloadOutputStorageProfileOptions:
             mock_download.return_value = DownloadSummaryStatistics(
                 total_time=1, processed_files=1, processed_bytes=100
             )
-            MockOutputDownloader.return_value.download_job_output = mock_download
-            MockOutputDownloader.return_value.get_output_paths_by_root.return_value = {
+            MockOutputDownloader.return_value.download = mock_download
+            MockOutputDownloader.return_value.get_paths_by_root.return_value = {
                 mock_root: ["file.txt"]
             }
 

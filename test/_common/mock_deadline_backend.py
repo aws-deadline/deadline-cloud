@@ -9,6 +9,7 @@ See docs/design/deadline-tests-mock-backend.md for design details.
 from __future__ import annotations
 import json as _json
 import re as _re
+import sys as _sys
 import threading as _threading
 import traceback as _traceback
 from datetime import datetime, timedelta, timezone
@@ -83,6 +84,7 @@ class MockDeadlineBackend:
         self.tasks: dict[tuple, dict] = {}
         self.sessions: dict[tuple, dict] = {}
         self.session_actions: dict[tuple, dict] = {}
+        self.storage_profiles: dict[tuple, dict] = {}
         self.call_counts: dict[str, int] = {}
         self.batch_call_sizes: dict[str, list[int]] = {}
         self._job_environments: dict[str, list[str]] = {}  # job_id -> [env_name, ...]
@@ -115,6 +117,7 @@ class MockDeadlineBackend:
             "storage_profiles",
             "queue_read_credentials",
             "_injected_failures",
+            "create_job_delay",
         ):
             if hasattr(self, attr):
                 delattr(self, attr)
@@ -273,8 +276,8 @@ class MockDeadlineBackend:
         return self.farms[farmId]
 
     @route("GET", "/farms", "ListFarms")
-    def list_farms(self, *, nextToken: str | None = None, **kwargs) -> dict:
-        params: dict = {}
+    def list_farms(self, *, maxResults: int = 100, nextToken: str | None = None, **kwargs) -> dict:
+        params: dict = {"maxResults": maxResults}
         if nextToken is not None:
             params["nextToken"] = nextToken
         params.update(kwargs)
@@ -309,8 +312,10 @@ class MockDeadlineBackend:
         return self.queues[key]
 
     @route("GET", "/farms/{farmId}/queues", "ListQueues")
-    def list_queues(self, *, farmId: str, nextToken: str | None = None, **kwargs) -> dict:
-        params: dict = {"farmId": farmId}
+    def list_queues(
+        self, *, farmId: str, maxResults: int = 100, nextToken: str | None = None, **kwargs
+    ) -> dict:
+        params: dict = {"farmId": farmId, "maxResults": maxResults}
         if nextToken is not None:
             params["nextToken"] = nextToken
         params.update(kwargs)
@@ -381,6 +386,18 @@ class MockDeadlineBackend:
                 "storageProfile", storageProfileId, "GetStorageProfileForQueue"
             )
         return sps[key]
+
+    def create_storage_profile(
+        self, *, farmId: str, queueId: str, displayName: str, osFamily: str = "LINUX", **kwargs
+    ) -> dict:
+        sp_id = self._gen_id("sp")
+        self.storage_profiles[(farmId, queueId, sp_id)] = {
+            "storageProfileId": sp_id,
+            "displayName": displayName,
+            "osFamily": osFamily,
+            **kwargs,
+        }
+        return {"storageProfileId": sp_id}
 
     @route("GET", "/farms/{farmId}/queues/{queueId}/read-roles", "AssumeQueueRoleForRead")
     def assume_queue_role_for_read(self, *, farmId: str, queueId: str) -> dict:
@@ -556,6 +573,15 @@ class MockDeadlineBackend:
             **kwargs,
         }
         self._validate("CreateJob", params)
+
+        # Optional delay to make it possible for tests to reliably interact
+        # with the progress dialog (e.g. click Cancel) before CreateJob
+        # returns. Opt-in via ``backend.create_job_delay = <seconds>``.
+        delay = getattr(self, "create_job_delay", 0)
+        if delay:
+            import time as _time
+
+            _time.sleep(delay)
 
         # Parse the job template using openjd-model
         job_template = self._parse_template(template)
@@ -1052,6 +1078,11 @@ class MockDeadlineBackend:
         deadline_mock.create_worker.side_effect = self.create_worker
         deadline_mock.get_worker.side_effect = self.get_worker
         deadline_mock.search_workers.side_effect = self.search_workers
+        deadline_mock.list_farms.side_effect = self.list_farms
+        deadline_mock.list_queues.side_effect = self.list_queues
+        deadline_mock.list_storage_profiles_for_queue.side_effect = (
+            self.list_storage_profiles_for_queue
+        )
 
 
 # ========== HTTP Server ==========
@@ -1194,6 +1225,11 @@ def _make_handler(routes, validator, backend):
                         500, {"message": str(exc)}, error_code="InternalServerException"
                     )
                 return
+            # Log 404s at stderr so a debugging CI run surfaces which path
+            # the client hit without going through the mock's HTTP response
+            # (which BrokenPipes if the client already disconnected).
+            _sys.stderr.write(f"[mock-backend] 404 {method} {parsed.path}\n")
+            _sys.stderr.flush()
             self._send_json(
                 404,
                 {"message": f"No route for {method} {parsed.path}"},

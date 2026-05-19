@@ -15,6 +15,7 @@ import ntpath
 import posixpath
 from configparser import ConfigParser
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Optional
 
 import click
@@ -40,6 +41,13 @@ from ._sigint_handler import SigIntHandler
 
 # JSON message type for progress reporting (defined here to avoid circular import with job_group.py)
 JSON_MSG_TYPE_PROGRESS = "progress"
+
+
+class MatchPathsBy(str, Enum):
+    """Which paths --include filters are matched against."""
+
+    JOB = "JOB"
+    LOCAL = "LOCAL"
 
 
 @dataclass
@@ -305,3 +313,22 @@ def _download_mapped_manifests(
                 return True
 
             return _do_download(on_downloading_files=_on_progress_json)
+
+
+def _normalize_filters(filters: list[str]) -> list[str]:
+    """
+    Normalizes path filter patterns.
+    - Converts backslashes to forward slashes (Windows compatibility)
+    - Strips leading './'
+    - Normalizes '//' to '/'
+    """
+    normalized = []
+    for f in filters:
+        f = f.replace("\\", "/")
+        if f.startswith("./"):
+            f = f[2:]
+        while "//" in f:
+            f = f.replace("//", "/")
+        if f:
+            normalized.append(f)
+    return normalized

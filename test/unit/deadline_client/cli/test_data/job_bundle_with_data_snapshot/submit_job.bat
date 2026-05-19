@@ -18,4 +18,6 @@ aws deadline create-job ^
     --template-type YAML ^
     --priority 50 ^
     --attachments file://attachments_param.json ^
-    --parameters file://parameters_param.json
+    --parameters file://parameters_param.json ^
+    --max-failed-tasks-count 20 ^
+    --max-retries-per-task 5

@@ -924,3 +924,54 @@ class TestHookManager:
             )
             manager.execute_post_submission_hooks(metadata)
             assert os.path.exists(marker)
+
+    def test_pre_submission_hook_preserves_job_bundle_dir(self):
+        """Test that pre-submission hooks receive the metadata's job_bundle_dir, not the hooks dir."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create separate hooks dir and bundle dir
+            hooks_dir = os.path.join(tmpdir, "hooks")
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            os.makedirs(hooks_dir)
+            os.makedirs(bundle_dir)
+
+            output_file = os.path.join(tmpdir, "output.txt")
+            escaped_output = output_file.replace("\\", "\\\\")
+
+            hooks_file = os.path.join(hooks_dir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    f"import sys, json; d = json.load(sys.stdin); open('{escaped_output}', 'w').write(d['jobBundleDir'])",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            # HookManager is created with hooks_dir (simulating environment hooks)
+            manager = HookManager(hooks_dir, lambda x: None)
+            manager.load_hooks()
+
+            # Metadata has the actual bundle dir
+            metadata = HookMetadata(
+                job_name="Test",
+                priority=50,
+                farm_id="farm-123",
+                queue_id="queue-456",
+                job_bundle_dir=bundle_dir,
+                parameters={},
+                submitter_name="Test",
+                asset_references={},
+                submission_payload={},
+            )
+            manager.execute_pre_submission_hooks(metadata, {})
+
+            with open(output_file) as f:
+                # Hook should receive the bundle_dir, not the hooks_dir
+                assert f.read() == bundle_dir
