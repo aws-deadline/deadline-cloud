@@ -15,8 +15,10 @@ Table of Contents:
       - [Running Docker-based Unit Tests](#running-docker-based-unit-tests)
     - [Integration Tests](#integration-tests)
       - [Running Integration Tests](#running-integration-tests)
-    - [Squish GUI Submitter Tests](#squish-gui-submitter-tests)
-      - [Running Squish GUI Submitter Tests](#running-squish-gui-submitter-tests)
+    - [GUI Tests (pytest-qt)](#gui-tests-pytest-qt)
+      - [Running GUI Tests](#running-gui-tests)
+    - [UI Tests](#ui-tests)
+      - [Running UI Tests](#running-ui-tests)
   - [Changelog Guidelines](#changelog-guidelines)
   - [Things to Know](#things-to-know)
     - [Public Contracts](#public-contracts)
@@ -68,7 +70,7 @@ process along the lines of the following as a starting point:
    Iteratively improve your implementation until all unit tests pass. (See [Unit tests](#unit-tests))
 3. Add integration tests for your changes if applicable. Ensure that all integration tests pass.
    Iteratively improve your implementation until all integration and unit tests pass. (See [Integration tests](#integration-tests))
-4. Add pytest-qt GUI unit tests for widget/dialog behavior, or Squish end-to-end GUI tests for full workflow verification. (See [GUI tests](#gui-tests-pytest-qt) and [Squish GUI tests](#squish-tests))
+4. Add pytest-qt GUI unit tests for widget/dialog behavior, or UI tests for full workflow verification. (See [GUI Tests (pytest-qt)](#gui-tests-pytest-qt) and [UI Tests](#ui-tests))
 
 Once you are satisfied with your code, and all relevant tests pass, then run `hatch run fmt` to fix up the formatting of
 your code and post your pull request.
@@ -104,8 +106,8 @@ The tests for this package have three forms:
 2. Integration tests - Tests that ensure that the implementation behaves as expected when run in a real environment.
    Ensuring that code properly interacts as expected with a real Amazon S3 bucket, for instance.
 3. GUI unit tests - Tests that verify individual Deadline GUI widgets and dialogs using [pytest-qt](https://pytest-qt.readthedocs.io/).
-   These run as part of the unit test suite, use MockDeadlineBackend for API responses, and require no AWS account or Squish license.
-4. Squish GUI end-to-end tests - Tests that verify full GUI workflows using the Squish automated framework. Squish tests require a license.
+   These run as part of the unit test suite, use MockDeadlineBackend for API responses, and require no AWS account.
+4. UI tests - Subprocess-based tests that launch the real `deadline` GUI commands and drive them through the OS accessibility tree, verifying the UI renders the right widgets and responds correctly. See [UI Tests](#ui-tests).
 
 ### Writing Tests
 
@@ -202,13 +204,15 @@ hatch run test test/unit/deadline_client/ui/gui/
 
 These tests run automatically in CI as part of the standard unit test suite.
 
-### Squish GUI Submitter Tests
+### UI Tests
 
-Squish GUI tests are located under the `test/squish` directory of this repository. New tests can be added for the Deadline GUI when necessary (ie: new functionality is introduced and a test can be added for coverage, or existing functionality is modified). When changes are made, Squish automated tests should be run to ensure changes are not breaking Deadline CLI and GUI functionality.
+UI tests are located under the `test/ui` directory of this repository. They launch the real `deadline` GUI commands as a subprocess against an in-process mock Deadline backend and drive the GUI through the OS accessibility tree via [xa11y](https://xa11y.dev/). New UI tests can be added for new dialogs/widgets or to cover regressions in existing GUI behavior. See [test/README.md](./test/README.md) for the full testing layer guide.
 
-#### Running Squish GUI Submitter Tests
+#### Running UI Tests
 
-A separate ReadMe for developing/running Squish GUI tests is located in the `test/squish` directory. Please refer to [test/squish/SQUISH_README.md](./test/squish/SQUISH_README.md) on full instructions to use the automated tests. Note that a Squish license is required in order to run the tests. Currently, you may either have your own Squish license or you may file a [pull request](https://help.github.com/articles/creating-a-pull-request/) to the Deadline Cloud team to run or add any tests against any changes to be committed. Please perform any necessary manual tests prior to submitting any changes, in addition to making sure at least a minimal render job test passes.
+```bash
+hatch run ui:test
+```
 
 ## Changelog Guidelines
 

@@ -8,7 +8,6 @@ Prefer higher level tests (lower in this list) where possible. Higher level test
 | "Does `deadline <cmd>` produce the right output/exit code?" | `test/cli_e2e/` |
 | "Does the UI actually render correctly?" | `test/ui/` |
 | "Does it work against the real service?" | `test/integ/` |
-| Qt dialog / widget regressions | `test/squish/` |
 | Built installer / packaging | `test/installer/` |
 
 ## `test/unit/` — unit tests
@@ -80,12 +79,6 @@ reproducing a customer issue end-to-end. Requires AWS credentials and
 non-trivial setup.
 
 Run: `hatch run integ:test`
-
-## `test/squish/` — GUI tests (legacy)
-
-Automated UI tests driven by the Squish for Qt framework against the
-Deadline GUI commands. Requires a Squish license and Qt runtime.
-Superseded by `test/ui/` for new test coverage.
 
 ## `test/installer/` — installer tests
 
