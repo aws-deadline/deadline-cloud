@@ -38,18 +38,25 @@ def _sanitize_path(filepath: str) -> str:
     parts = filepath.replace("\\", "/").split("/")
 
     # If any path segment names one of our known packages, return everything
-    # from that segment onward. `stem` strips a trailing extension so paths
-    # like ".../deadline.egg-info/..." still match "deadline".
-    for i, part in enumerate(parts):
-        stem = part.split(".")[0]
+    # from that segment onward. Scan right-to-left and match the *rightmost*
+    # occurrence: the actually-installed package is always at the tail of
+    # the path, so a customer directory that happens to share a name with
+    # one of our packages (e.g. ~/deadline/...) earlier in the path can't
+    # cause us to keep the customer-named segments between them. `stem`
+    # strips a trailing extension so paths like ".../deadline.egg-info/..."
+    # still match "deadline".
+    for i in range(len(parts) - 1, -1, -1):
+        stem = parts[i].split(".")[0]
         if stem in _KNOWN_PACKAGES:
             return "/".join(parts[i:])
 
     # Unknown third-party library installed into a venv: keep the
     # library-relative subpath but drop everything above site-packages
     # (which would otherwise leak the customer's home / venv layout).
-    for i, part in enumerate(parts):
-        if part == "site-packages" and i + 1 < len(parts):
+    # Same right-to-left rationale as above — the real site-packages
+    # directory is always at the tail.
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i] == "site-packages" and i + 1 < len(parts):
             return "/".join(parts[i + 1 :])
 
     # Anything else (customer scripts, project trees) — keep only the

@@ -666,6 +666,27 @@ class TestTelemetryClientSwallowExceptions:
             id="frozen_module",
         ),
         pytest.param("<string>", "<string>", id="string_input"),
+        # A customer directory that happens to share a name with one of our
+        # known packages must not anchor the trim — only the *rightmost*
+        # match (the actually-installed package) should.
+        pytest.param(
+            "/home/user/deadline/scripts/venv/lib/python3.11/site-packages/deadline/client/api/_telemetry.py",
+            "deadline/client/api/_telemetry.py",
+            id="known_package_name_appears_in_customer_dir",
+        ),
+        pytest.param(
+            "/opt/openjd/customer-vendored/openjd/sessions/runner.py",
+            "openjd/sessions/runner.py",
+            id="known_package_name_appears_twice",
+        ),
+        # Same right-to-left rule applies to site-packages: a customer
+        # directory literally named "site-packages" must not leak the
+        # segments between it and the real site-packages dir.
+        pytest.param(
+            "/home/user/site-packages/scripts/venv/lib/python3.11/site-packages/somelib/core.py",
+            "somelib/core.py",
+            id="site_packages_name_appears_in_customer_dir",
+        ),
     ],
 )
 def test_sanitize_path(filepath, expected):
