@@ -8,10 +8,11 @@ services (CloudWatch Logs, S3) requires assuming a scoped role.
 
 ## Queue-Scoped Credentials
 
-`get_queue_scoped_config(farm_id, queue_id, config)` in `session.rs`:
+`get_queue_scoped_config(farm_id, queue_id, profile)` in `session.rs`:
 
-1. Calls `auth::get_user_and_identity_store_id(config)` — reads `user_id`
-   and `identity_store_id` from the AWS profile's `~/.aws/config` section
+1. Calls `auth::get_user_and_identity_store_id_for_profile(profile)` — reads
+   `user_id` and `identity_store_id` from the AWS profile's `~/.aws/config`
+   section (uses the profile name directly, or the default profile if `None`)
 2. If both are present (DCM user) → calls `get_queue_user_config` which
    builds an `SdkConfig` with `QueueUserCredentialProvider`
 3. If either is absent (non-DCM user) → returns the base `SdkConfig`

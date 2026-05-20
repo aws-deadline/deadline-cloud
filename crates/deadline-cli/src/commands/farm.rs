@@ -52,8 +52,9 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
     match action {
         FarmAction::List { profile } => {
             let config = setup(profile, None, &[])?;
-            let dl = session::deadline_client(&config).await;
-            let builder = client::apply_dcm_principal(dl.list_farms(), &config);
+            let p = crate::common::extract_profile(&config);
+            let dl = session::deadline_client(p.as_deref()).await;
+            let builder = client::apply_dcm_principal(dl.list_farms(), p.as_deref());
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
@@ -86,7 +87,8 @@ async fn run_async(action: FarmAction) -> Result<(), CliError> {
         FarmAction::Get { profile, farm_id } => {
             let config = setup(profile, farm_id, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(&config).await;
+            let p = crate::common::extract_profile(&config);
+            let dl = session::deadline_client(p.as_deref()).await;
             match dl.get_farm().farm_id(&farm).send().await {
                 Ok(output) => {
                     let resp = FarmResponse::from(output);

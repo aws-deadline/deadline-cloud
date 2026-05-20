@@ -26,7 +26,8 @@ impl TelemetryClient {
             None => deadline_lib::config::config_file::read_config()
                 .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
         };
-        let client = deadline_lib::api::telemetry::create_telemetry(&config);
+        let (opt_out, ident) = deadline_lib::api::telemetry::resolve_telemetry_params(&config);
+        let client = deadline_lib::api::telemetry::create_telemetry(opt_out, Some(&ident));
         Ok(Self {
             inner: Some(client),
         })

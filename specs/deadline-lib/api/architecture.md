@@ -153,19 +153,21 @@ let pages: Vec<ListFarmsOutput> = client::collect_paginated(
 ### Getting a session / SDK config
 
 ```rust
-let client = deadline_api::session::deadline_client(Some(&config)).await;
+let profile = session::resolve_profile_name(&config);
+let client = session::deadline_client(profile.as_deref()).await;
 ```
 
-This returns a cached `DeadlineClient` for the active profile with the
+This returns a cached `DeadlineClient` for the given profile with the
 `TelemetryInterceptor` installed. Changing profiles invalidates the cache.
+Pass `None` for the default credential chain.
 
 ### Queue-scoped credentials
 
 For operations that access S3 or CloudWatch on behalf of a queue:
 
 ```rust
-let scoped_config = deadline_api::session::get_queue_scoped_config(
-    farm_id, queue_id, Some(&config)
+let scoped_config = session::get_queue_scoped_config(
+    farm_id, queue_id, profile.as_deref()
 ).await?;
 ```
 

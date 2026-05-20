@@ -1,5 +1,4 @@
 use crate::api::errors::DeadlineError;
-use crate::config::ini::IniConfig;
 use aws_sdk_deadline::operation::get_job::GetJobOutput;
 use serde_json::Value;
 use std::time::Instant;
@@ -43,10 +42,10 @@ async fn collect_failed_tasks(
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<Vec<FailedTask>, DeadlineError> {
     let mut failed_tasks = Vec::new();
-    let client = crate::api::session::deadline_client(config).await;
+    let client = crate::api::session::deadline_client(profile).await;
 
     let steps_pages = crate::api::client::collect_paginated(
         client
@@ -147,13 +146,13 @@ pub async fn wait_for_job_completion(
     job_id: &str,
     max_poll_interval: u64,
     timeout: u64,
-    config: &IniConfig,
+    profile: Option<&str>,
     status_callback: Option<StatusFn<'_>>,
     job_callback: Option<JobProgressFn<'_>>,
 ) -> Result<JobCompletionResult, DeadlineError> {
     let start = Instant::now();
     let mut interval_ms: u64 = 500;
-    let client = crate::api::session::deadline_client(config).await;
+    let client = crate::api::session::deadline_client(profile).await;
 
     loop {
         let elapsed = start.elapsed().as_secs_f64();
@@ -189,7 +188,7 @@ pub async fn wait_for_job_completion(
             let failed_tasks = if status == "SUCCEEDED" {
                 Vec::new()
             } else {
-                collect_failed_tasks(farm_id, queue_id, job_id, config).await?
+                collect_failed_tasks(farm_id, queue_id, job_id, profile).await?
             };
             return Ok(JobCompletionResult {
                 status: status.to_owned(),

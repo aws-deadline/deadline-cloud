@@ -32,8 +32,11 @@ Error messages include actionable guidance:
 
 ## Profile Resolution
 
-`"(default)"`, `"default"`, and `""` all map to the default credential
-chain (no named profile). Any other value becomes a named profile.
+Session functions take `profile: Option<&str>` directly — callers extract
+the profile from config before calling. The sentinel values `"(default)"`,
+`"default"`, and `""` all map to `None` (default credential chain). Any
+other value becomes a named profile. The helper
+`session::resolve_profile_name(&config)` performs this extraction.
 
 ## Endpoint Override
 

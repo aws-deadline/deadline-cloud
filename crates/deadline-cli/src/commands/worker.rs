@@ -70,7 +70,8 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(&config).await;
+            let p = crate::common::extract_profile(&config);
+            let dl = session::deadline_client(p.as_deref()).await;
             let resp = match dl
                 .search_workers()
                 .farm_id(&farm)
@@ -126,7 +127,8 @@ async fn run_async(action: WorkerAction) -> Result<(), CliError> {
         } => {
             let config = setup(profile, farm_id)?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let resp = match session::deadline_client(&config)
+            let p = crate::common::extract_profile(&config);
+            let resp = match session::deadline_client(p.as_deref())
                 .await
                 .get_worker()
                 .farm_id(&farm)

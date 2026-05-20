@@ -91,11 +91,8 @@ impl WithPrincipalId
 }
 
 /// Apply the DCM user's `principal_id` to a list builder if the user is DCM.
-pub fn apply_dcm_principal<B: WithPrincipalId>(
-    builder: B,
-    config: &crate::config::ini::IniConfig,
-) -> B {
-    let (user_id, _) = crate::api::auth::get_user_and_identity_store_id(config);
+pub fn apply_dcm_principal<B: WithPrincipalId>(builder: B, profile: Option<&str>) -> B {
+    let (user_id, _) = crate::api::auth::get_user_and_identity_store_id_for_profile(profile);
     match user_id {
         Some(id) => builder.principal_id(id),
         None => builder,
@@ -274,7 +271,7 @@ mod tests {
                 self
             }
         }
-        let result = apply_dcm_principal(Fake { id: None }, &IniConfig::new());
+        let result = apply_dcm_principal(Fake { id: None }, None);
         assert!(result.id.is_none());
     }
 
@@ -293,8 +290,7 @@ mod tests {
                 self
             }
         }
-        let config = crate::config::ini::IniConfig::new();
-        let result = apply_dcm_principal(Fake { id: None }, &config);
+        let result = apply_dcm_principal(Fake { id: None }, None);
         assert!(result.id.is_none());
     }
 

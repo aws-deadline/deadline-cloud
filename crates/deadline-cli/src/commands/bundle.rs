@@ -245,7 +245,8 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 "Uploading Attachments",
             ));
 
-            let telemetry = deadline_lib::api::telemetry::create_telemetry(&config);
+            let (opt_out, ident) = deadline_lib::api::telemetry::resolve_telemetry_params(&config);
+            let telemetry = deadline_lib::api::telemetry::create_telemetry(opt_out, Some(&ident));
 
             // F8: If snapshot path ends in .zip, use a temp dir then zip after
             let snapshot_tmpdir: Option<PathBuf> =

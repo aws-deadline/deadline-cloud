@@ -168,20 +168,21 @@ class TestCompatAdditions:
 class TestFFINewMethods:
     @pytest.fixture(autouse=True)
     def _use_server(self, test_server):
-        self.ffi = ffi
+        import deadline._native
+        self._native = deadline._native
 
     def test_get_farm_returns_display_name(self):
-        result = self.ffi.get_farm("farm-abc123def4567890abc123def4567890")
+        result = self._native.get_farm("farm-abc123def4567890abc123def4567890")
         assert "displayName" in result
         assert result["farmId"] == "farm-abc123def4567890abc123def4567890"
 
     def test_get_farm_invalid_id_raises(self):
-        from deadline.client._ffi import DeadlineOperationError
+        from deadline._native import DeadlineOperationError
         with pytest.raises(DeadlineOperationError):
-            self.ffi.get_farm("farm-nonexistent")
+            self._native.get_farm("farm-nonexistent")
 
     def test_get_queue_returns_display_name(self):
-        result = self.ffi.get_queue(
+        result = self._native.get_queue(
             "farm-abc123def4567890abc123def4567890",
             "queue-abc123def4567890abc123def4567890",
         )
@@ -189,9 +190,9 @@ class TestFFINewMethods:
         assert result["queueId"] == "queue-abc123def4567890abc123def4567890"
 
     def test_get_queue_invalid_id_raises(self):
-        from deadline.client._ffi import DeadlineOperationError
+        from deadline._native import DeadlineOperationError
         with pytest.raises(DeadlineOperationError):
-            self.ffi.get_queue(
+            self._native.get_queue(
                 "farm-abc123def4567890abc123def4567890",
                 "queue-nonexistent",
             )
@@ -429,7 +430,7 @@ class TestDeadlineUIControllerRewired:
         c.set_config(config)
         assert c.config["defaults"]["aws_profile_name"] == "test"
 
-    def test_refresh_farms_emits_loading(self, qtbot, ffi):
+    def test_refresh_farms_emits_loading(self, qtbot, test_server):
         """refresh_farms should emit farms_loading(True) then farms_loading(False)."""
         from deadline.client.ui.controllers import DeadlineUIController
         c = DeadlineUIController.getInstance()
@@ -440,7 +441,7 @@ class TestDeadlineUIControllerRewired:
         assert loading_states[0] is True
         assert loading_states[-1] is False
 
-    def test_refresh_farms_emits_farm_list(self, qtbot, ffi):
+    def test_refresh_farms_emits_farm_list(self, qtbot, test_server):
         """refresh_farms should emit farms_updated with farm data from FFI."""
         from deadline.client.ui.controllers import DeadlineUIController
         c = DeadlineUIController.getInstance()
@@ -456,7 +457,7 @@ class TestDeadlineUIControllerRewired:
         names = [f[0] for f in farms]
         assert "Test Farm" in names
 
-    def test_refresh_queues_no_farm_emits_empty(self, qtbot, ffi):
+    def test_refresh_queues_no_farm_emits_empty(self, qtbot, test_server):
         from deadline.client.ui.controllers import DeadlineUIController
         c = DeadlineUIController.getInstance()
         queues_received = []
@@ -465,13 +466,13 @@ class TestDeadlineUIControllerRewired:
         qtbot.waitUntil(lambda: len(queues_received) > 0, timeout=2000)
         assert queues_received[0] == []
 
-    def test_on_farm_selected_updates_id(self, qtbot, ffi):
+    def test_on_farm_selected_updates_id(self, qtbot, test_server):
         from deadline.client.ui.controllers import DeadlineUIController
         c = DeadlineUIController.getInstance()
         c.on_farm_selected("farm-abc123def4567890abc123def4567890")
         assert c.current_farm_id == "farm-abc123def4567890abc123def4567890"
 
-    def test_on_farm_selected_clears_queue(self, qtbot, ffi):
+    def test_on_farm_selected_clears_queue(self, qtbot, test_server):
         from deadline.client.ui.controllers import DeadlineUIController
         c = DeadlineUIController.getInstance()
         c._current_queue_id = "old-queue"

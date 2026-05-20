@@ -393,8 +393,9 @@ pub async fn create_job_from_job_bundle(
     // 3. Get queue info
     let farm_id = get_setting("defaults.farm_id", params.config);
     let queue_id = get_setting("defaults.queue_id", params.config);
+    let profile = session::resolve_profile_name(params.config);
 
-    let queue = session::deadline_client(params.config)
+    let queue = session::deadline_client(profile.as_deref())
         .await
         .get_queue()
         .farm_id(&farm_id)
@@ -410,7 +411,7 @@ pub async fn create_job_from_job_bundle(
     let storage_profile = if storage_profile_id.is_empty() {
         None
     } else {
-        let sp_output = session::deadline_client(params.config)
+        let sp_output = session::deadline_client(profile.as_deref())
             .await
             .get_storage_profile_for_queue()
             .farm_id(&farm_id)
@@ -431,7 +432,7 @@ pub async fn create_job_from_job_bundle(
     let mut asset_references = AssetReferences::from_dict(asset_references_obj.as_ref());
 
     let queue_parameter_definitions =
-        queue_parameters::get_queue_parameter_definitions(&farm_id, &queue_id, params.config)
+        queue_parameters::get_queue_parameter_definitions(&farm_id, &queue_id, profile.as_deref())
             .await?;
 
     let mut parameters = merge_queue_job_parameters(
@@ -661,11 +662,11 @@ pub async fn create_job_from_job_bundle(
         }
 
         let queue_sdk_config = session::get_queue_user_config(
-            Some(&farm_id),
-            Some(&queue_id),
+            &farm_id,
+            &queue_id,
             Some(queue_display_name.to_owned()),
             false,
-            params.config,
+            profile.as_deref(),
         )
         .await?;
 
@@ -958,18 +959,21 @@ pub async fn create_job_from_job_bundle(
         return Ok(None);
     }
 
-    let response = api::create_job(&create_job_args, params.config).await?;
+    let response = api::create_job(&create_job_args, profile.as_deref()).await?;
 
     let job_id = response.job_id().to_owned();
 
     // 10. Poll for completion
     handler.on_message("Waiting for Job to be created...");
 
-    let (success, status_message) =
-        api::wait_for_create_job_to_complete(&farm_id, &queue_id, &job_id, params.config, || {
-            handler.should_continue()
-        })
-        .await?;
+    let (success, status_message) = api::wait_for_create_job_to_complete(
+        &farm_id,
+        &queue_id,
+        &job_id,
+        profile.as_deref(),
+        || handler.should_continue(),
+    )
+    .await?;
 
     // Record create_job telemetry
     if let Some(tc) = params.telemetry {

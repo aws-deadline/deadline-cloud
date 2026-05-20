@@ -59,8 +59,10 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
         FleetAction::List { profile, farm_id } => {
             let config = setup(profile, farm_id, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(&config).await;
-            let builder = client::apply_dcm_principal(dl.list_fleets().farm_id(&farm), &config);
+            let p = crate::common::extract_profile(&config);
+            let dl = session::deadline_client(p.as_deref()).await;
+            let builder =
+                client::apply_dcm_principal(dl.list_fleets().farm_id(&farm), p.as_deref());
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
@@ -117,10 +119,11 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                 &["farm_id"],
             )?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
+            let p = crate::common::extract_profile(&config);
 
             if let Some(fleet) = fleet_id {
                 // --fleet-id mode: typed get
-                let dl = session::deadline_client(&config).await;
+                let dl = session::deadline_client(p.as_deref()).await;
                 match dl.get_fleet().farm_id(&farm).fleet_id(&fleet).send().await {
                     Ok(output) => {
                         let resp = FleetResponse::from(output);
@@ -161,7 +164,7 @@ async fn run_async(action: FleetAction) -> Result<(), CliError> {
                     })?;
 
                 // Get queue display name
-                let dl = session::deadline_client(&config).await;
+                let dl = session::deadline_client(p.as_deref()).await;
                 let queue_output = match dl.get_queue().farm_id(&farm).queue_id(&queue).send().await
                 {
                     Ok(output) => output,

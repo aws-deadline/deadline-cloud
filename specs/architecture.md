@@ -223,9 +223,11 @@ replaced by the Rust code compiled into the PyO3 module.
   callsite. All API calls return typed SDK output. Display paths use
   serializable response structs built from typed output via `From<Output>`
   impls. See `specs/patterns.md` § "AWS SDK for Rust Usage".
-- **Config threading:** Functions that need config take `&IniConfig` (reads)
-  or `&mut IniConfig` (writes). Convenience wrappers that hit disk exist but
-  are not the primary API.
+- **Config threading:** Config utilities (`get_setting`, `set_setting`)
+  take `&IniConfig` (reads) or `&mut IniConfig` (writes). Session-layer
+  operations take explicit params (`profile: Option<&str>`, `farm_id: &str`,
+  etc.) — callers extract values from config before calling. See
+  `specs/patterns.md` § "Library/CLI separation of concerns".
 - **Credential scoping:** Non-Deadline AWS clients (CloudWatch Logs, S3)
   that access queue-scoped or fleet-scoped resources must use scoped
   credentials when the user is logged in via DCM. See

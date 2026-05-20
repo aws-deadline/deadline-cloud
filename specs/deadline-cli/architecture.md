@@ -96,7 +96,10 @@ Every command follows the same pattern:
 2. Apply CLI flags (`--profile`, `--farm-id`, `--queue-id`, `--job-id`,
    `--yes`) as in-memory overrides, validating that required settings
    are non-empty
-3. Thread `&config` through all library calls
+3. Extract profile via `extract_profile(&config)` for session calls
+4. Pass profile to library session functions; pass `&config` only to
+   config utilities (`get_setting`, `set_setting`) and functions that
+   still require it (telemetry, S3 pool config)
 
 ## SIGINT Handling
 

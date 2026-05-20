@@ -94,8 +94,9 @@ pub(crate) async fn suggest_resources_on_client_error(
 }
 
 async fn try_list_farms(config: &IniConfig, out: &mut Vec<String>) -> bool {
-    let dl = session::deadline_client(config).await;
-    let builder = client::apply_dcm_principal(dl.list_farms(), config);
+    let profile = crate::common::extract_profile(config);
+    let dl = session::deadline_client(profile.as_deref()).await;
+    let builder = client::apply_dcm_principal(dl.list_farms(), profile.as_deref());
     let resp = client::collect_paginated(builder.into_paginator().send()).await;
     match resp {
         Ok(pages) => {
@@ -119,8 +120,10 @@ async fn try_list_farms(config: &IniConfig, out: &mut Vec<String>) -> bool {
 }
 
 async fn try_list_queues(farm_id: &str, config: &IniConfig, out: &mut Vec<String>) -> bool {
-    let dl = session::deadline_client(config).await;
-    let builder = client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), config);
+    let profile = crate::common::extract_profile(config);
+    let dl = session::deadline_client(profile.as_deref()).await;
+    let builder =
+        client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), profile.as_deref());
     let resp = client::collect_paginated(builder.into_paginator().send()).await;
     match resp {
         Ok(pages) => {
@@ -142,8 +145,10 @@ async fn try_list_queues(farm_id: &str, config: &IniConfig, out: &mut Vec<String
 }
 
 async fn try_list_fleets(farm_id: &str, config: &IniConfig, out: &mut Vec<String>) -> bool {
-    let dl = session::deadline_client(config).await;
-    let builder = client::apply_dcm_principal(dl.list_fleets().farm_id(farm_id), config);
+    let profile = crate::common::extract_profile(config);
+    let dl = session::deadline_client(profile.as_deref()).await;
+    let builder =
+        client::apply_dcm_principal(dl.list_fleets().farm_id(farm_id), profile.as_deref());
     let resp = client::collect_paginated(builder.into_paginator().send()).await;
     match resp {
         Ok(pages) => {
@@ -170,9 +175,12 @@ async fn try_list_jobs(
     config: &IniConfig,
     out: &mut Vec<String>,
 ) -> bool {
-    let dl = session::deadline_client(config).await;
-    let builder =
-        client::apply_dcm_principal(dl.list_jobs().farm_id(farm_id).queue_id(queue_id), config);
+    let profile = crate::common::extract_profile(config);
+    let dl = session::deadline_client(profile.as_deref()).await;
+    let builder = client::apply_dcm_principal(
+        dl.list_jobs().farm_id(farm_id).queue_id(queue_id),
+        profile.as_deref(),
+    );
     match client::collect_paginated(builder.into_paginator().send()).await {
         Ok(pages) => {
             let items: Vec<serde_json::Value> = pages
@@ -198,7 +206,8 @@ async fn try_list_workers(
     config: &IniConfig,
     out: &mut Vec<String>,
 ) -> bool {
-    let dl = session::deadline_client(config).await;
+    let profile = crate::common::extract_profile(config);
+    let dl = session::deadline_client(profile.as_deref()).await;
     let resp = dl
         .search_workers()
         .farm_id(farm_id)
@@ -237,7 +246,8 @@ async fn try_list_storage_profiles(
     config: &IniConfig,
     out: &mut Vec<String>,
 ) -> bool {
-    let client = session::deadline_client(config).await;
+    let profile = crate::common::extract_profile(config);
+    let client = session::deadline_client(profile.as_deref()).await;
     match client::collect_paginated(
         client
             .list_storage_profiles_for_queue()

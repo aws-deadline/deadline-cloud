@@ -11,7 +11,7 @@ use serde_json::json;
 
 #[tokio::main]
 async fn main() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::with_config("[defaults]\naws_profile_name = (default)\n").await;
 
     // STS — needed for auth status checks
     sts::mock_get_caller_identity(&harness.server).await;

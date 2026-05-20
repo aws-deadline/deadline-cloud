@@ -75,82 +75,85 @@ This means you cannot `serde_json::to_value(&output)` on an SDK response.
 For display paths, manually extract fields into a serializable struct or
 `serde_json::Map`.
 
-### Typed SDK pattern (the norm)
+### Library/CLI separation of concerns
 
-All API calls use typed SDK fluent builders and return typed SDK output.
-**No `ResponseBodyCapture`. No `serde_json::Value` from API responses.**
+**The test:** "Is this useful as a library function to call within scripts?"
+If the answer is "it calls one SDK endpoint" — it stays in CLI. If the
+answer involves orchestration logic that any consumer would need — it
+belongs in the library.
 
-**Callers own their SDK calls.** There are no thin wrapper functions in
-`api.rs` that just re-declare parameters. Callers write the SDK fluent
-builder directly at the call site:
+**The library provides:**
+
+1. **Infrastructure** — `deadline_client(profile)` returns a correctly-
+   configured client with session caching, user-agent, telemetry
+   interceptor, and DCM support. Plus utilities: `apply_dcm_principal`,
+   `collect_paginated`, `deadline_error`, response types (`FarmResponse`,
+   etc. with `From<SdkOutput>` impls).
+
+2. **Complex operations** — Multi-step orchestration where the value is
+   in the logic: `create_job_from_job_bundle` (hooks, hashing, upload,
+   create, wait), `ManifestDownloader`, `IncrementalDownloadJob`,
+   `login`/`logout`, `job_monitoring`, `log_retrieval`.
+
+3. **Config utilities** — `read_config()`, `get_setting()`, etc.
+   Available to any caller that uses config files. NOT wired into
+   operations — just a utility.
+
+**The CLI owns:**
+
+1. **Simple API calls** — `list_farms`, `get_queue`, `search_workers`,
+   etc. These are 2-3 lines using the client the library gave you.
+   Don't wrap single SDK calls in library functions.
+
+2. **Config reading and extraction** — reads INI, extracts fields,
+   passes explicit values into library functions.
+
+3. **Output formatting and error presentation** — `cli_object_repr`,
+   progress bars, suggestions, exit codes.
+
+**Library operations take explicit params, not `&IniConfig`:**
 
 ```rust
-// Get — caller calls SDK directly
-let client = session::deadline_client(config).await;
-let output = client.get_farm().farm_id(id).send().await
-    .map_err(|e| format_sdk_error(&e))?;
-let name = output.display_name();  // typed field access
+// Library — takes what it needs, no config awareness
+session::deadline_client(profile: Option<&str>)
+create_job_from_job_bundle(params: SubmitJobParams)  // explicit fields, no config
+
+// CLI — reads config, extracts values, passes them in
+let config = config_file::read_config()?;
+let profile = config_file::get_setting("defaults.aws_profile_name", &config).ok();
+let dl = session::deadline_client(profile.as_deref()).await;
 ```
 
-**List — use SDK paginator via `collect_paginated`:**
+**A programmatic consumer (no config file) uses the same library:**
 
 ```rust
-let client = session::deadline_client(config).await;
-let builder = client::apply_dcm_principal(client.list_farms(), config);
+// No config, no disk — just pass values directly
+let dl = session::deadline_client(Some("my-profile")).await;
+let builder = client::apply_dcm_principal(dl.list_farms(), Some("my-profile"));
 let pages = client::collect_paginated(builder.into_paginator().send()).await?;
-for page in &pages {
-    for farm in page.farms() {
-        println!("{}: {}", farm.farm_id(), farm.display_name());
-    }
+```
+
+### What is a thin wrapper? (avoid these)
+
+A function is a **thin wrapper** if it does nothing beyond forwarding
+arguments — literally 1-2 lines that a caller could write inline with
+no loss of clarity:
+
+```rust
+// DON'T — wraps a single SDK call, adds no value
+pub async fn get_farm(farm_id: &str, profile: Option<&str>) -> Result<FarmDetails, DeadlineError> {
+    let client = session::deadline_client(profile).await;
+    Ok(FarmDetails::from(client.get_farm().farm_id(farm_id).send().await?))
 }
 ```
 
-**Search (single-page, offset-based) — caller calls SDK directly:**
+The CLI can write those 2 lines inline. A library function is justified
+only when it contains real logic: orchestration, multi-step flows,
+algorithmic pagination, polling, or complex input construction.
 
-```rust
-let client = session::deadline_client(config).await;
-let output = client.search_jobs()
-    .farm_id(farm)
-    .queue_ids(queue)
-    .item_offset(0)
-    .page_size(25)
-    .filter_expressions(filter)
-    .sort_expressions(sort)
-    .send().await
-    .map_err(|e| format_sdk_error(&e))?;
-for job in output.jobs() { /* typed JobSearchSummary access */ }
-```
+### What belongs in `api.rs` (complex operations)
 
-**Display paths — build serializable output at the call site:**
-
-```rust
-// For CLI commands that print the full response
-let output = client.get_job().farm_id(f).queue_id(q).job_id(j).send().await?;
-let resp = JobResponse::from(output);  // From<GetJobOutput> impl
-println!("{}", cli_object_repr(&serde_json::to_value(&resp)?));
-```
-
-### What is a thin SDK wrapper? (delete these)
-
-A function is a **thin wrapper** if its only job is to:
-1. Get a client (`session::deadline_client`)
-2. Call one SDK method with the same parameters the caller passed in
-3. Map the error
-
-This includes:
-- **Single get/update calls**: `get_job(farm, queue, job, config)` that just
-  does `client.get_job().farm_id(farm)...send().await.map_err(sdk_err)`
-- **Paginated list calls**: `list_sessions(farm, queue, job, config)` that
-  just does `collect_paginated(client.list_sessions()...into_paginator().send())`
-- **Void calls**: `update_job(...)` that sends and discards the response
-
-Even if a wrapper is used by 5+ callers, it's still a thin wrapper.
-Repetition of 2-3 lines at call sites is preferable to indirection that
-hides what SDK operation is being called, since operations can have optional
-parameters that may or may not be added, no point in wrapping that.
-
-**Keep a function in `api.rs` only if it has real logic beyond
-parameter forwarding:**
+Functions with **real logic beyond a single SDK call**:
 - Algorithmic pagination (e.g. `list_jobs_by_filter_expression` with
   createdAt thresholding and dedup)
 - Input construction from untyped data (e.g. `create_job` mapping a
@@ -164,13 +167,14 @@ parameter forwarding:**
 
 | Utility | Purpose |
 |---------|---------|
-| `session::deadline_client(config)` | Session caching, user-agent, telemetry interceptor |
+| `session::deadline_client(profile)` | Session caching, user-agent, telemetry interceptor |
 | `client::collect_paginated(stream)` | Drains SDK paginator into `Vec<PageOutput>` |
 | `client::deadline_error(e)` | Maps `SdkError` → `DeadlineError` with code+message |
 | `client::format_sdk_error(&e)` | Formats `SdkError` as `"Code: message"` string |
-| `client::apply_dcm_principal(builder, config)` | DCM principal injection for list APIs |
+| `client::apply_dcm_principal(builder, profile)` | DCM principal injection for list APIs |
 | `api::build_filter_expressions(json)` | Constructs SDK filter types from JSON |
 | `api::build_sort_expressions(json)` | Constructs SDK sort types from JSON |
+| `responses::FarmResponse`, etc. | Serializable types with `From<SdkOutput>` impls |
 
 ### DateTime formatting for display
 

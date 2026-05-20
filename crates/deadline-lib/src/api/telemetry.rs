@@ -54,9 +54,14 @@ pub struct TelemetryClient {
 }
 
 impl TelemetryClient {
-    pub fn new(package_name: &str, package_ver: &str, config: &IniConfig) -> Self {
+    pub fn new(
+        package_name: &str,
+        package_ver: &str,
+        opt_out: bool,
+        identifier: Option<&str>,
+    ) -> Self {
         let ver = truncate_version(package_ver);
-        let telemetry_id = get_or_create_identifier(config);
+        let telemetry_id = validate_or_generate_identifier(identifier);
         let mut common_details = HashMap::new();
         if package_name != "deadline-cloud-library" {
             common_details.insert(
@@ -65,22 +70,20 @@ impl TelemetryClient {
             );
         }
 
-        let mut client = Self {
+        Self {
             sender: None,
             thread_handle: None,
             initialized: false,
-            opted_out: false,
+            opted_out: opt_out,
             session_id: Uuid::new_v4().to_string(),
             telemetry_id,
             common_details,
             system_metadata: build_system_metadata(package_name, &ver),
-        };
-        client.opted_out = resolve_opt_out(config);
-        client
+        }
     }
 
     /// Start the background sender thread. Call after AWS config is available.
-    pub fn initialize(&mut self, endpoint_url: &str, _config: &IniConfig) {
+    pub fn initialize(&mut self, endpoint_url: &str) {
         self.initialize_with_metadata(endpoint_url, None, None, None);
     }
 
@@ -333,8 +336,8 @@ pub async fn resolve_account_id(sdk_config: &aws_config::SdkConfig) -> Option<St
 }
 
 /// Create a `TelemetryClient` initialized from `AWS_ENDPOINT_URL_DEADLINE`.
-pub fn create_telemetry(config: &IniConfig) -> TelemetryClient {
-    create_telemetry_with_metadata(config, None, None, None)
+pub fn create_telemetry(opt_out: bool, identifier: Option<&str>) -> TelemetryClient {
+    create_telemetry_with_metadata(opt_out, identifier, None, None, None)
 }
 
 /// Create a `TelemetryClient` with optional DCM metadata and account ID.
@@ -342,17 +345,29 @@ pub fn create_telemetry(config: &IniConfig) -> TelemetryClient {
 /// `auth::get_user_and_identity_store_id()` and `auth::get_monitor_id()`,
 /// and `account_id` from STS `GetCallerIdentity`.
 pub fn create_telemetry_with_metadata(
-    config: &IniConfig,
+    opt_out: bool,
+    identifier: Option<&str>,
     user_id: Option<&str>,
     monitor_id: Option<&str>,
     account_id: Option<&str>,
 ) -> TelemetryClient {
-    let mut client =
-        TelemetryClient::new("deadline-cloud-library", env!("CARGO_PKG_VERSION"), config);
+    let mut client = TelemetryClient::new(
+        "deadline-cloud-library",
+        env!("CARGO_PKG_VERSION"),
+        opt_out,
+        identifier,
+    );
     if let Ok(ep) = std::env::var("AWS_ENDPOINT_URL_DEADLINE") {
         client.initialize_with_metadata(&ep, user_id, monitor_id, account_id);
     }
     client
+}
+
+/// Extract telemetry parameters from config. Convenience for CLI callers.
+pub fn resolve_telemetry_params(config: &IniConfig) -> (bool, String) {
+    let opt_out = resolve_opt_out(config);
+    let identifier = get_or_create_identifier(config);
+    (opt_out, identifier)
 }
 
 /// Record a latency event matching Python's @`record_function_latency_telemetry_event`.
@@ -366,27 +381,15 @@ pub fn record_latency(client: &TelemetryClient, function_call: &str, start: std:
     client.record_event("com.amazon.rum.deadline.latency", details, false);
 }
 
-/// Run a sync function with latency telemetry. Uses the provided `TelemetryClient`
-/// or creates an ephemeral one. Matches Python's @`record_function_latency_telemetry_event`.
-pub fn with_telemetry_latency<F, T>(
-    function_call: &str,
-    config: &IniConfig,
-    telemetry: Option<&TelemetryClient>,
-    f: F,
-) -> T
+/// Run a sync function with latency telemetry. Matches Python's
+/// @`record_function_latency_telemetry_event`.
+pub fn with_telemetry_latency<F, T>(function_call: &str, telemetry: &TelemetryClient, f: F) -> T
 where
     F: FnOnce() -> T,
 {
-    let ephemeral;
-    let tc = if let Some(t) = telemetry {
-        t
-    } else {
-        ephemeral = create_telemetry(config);
-        &ephemeral
-    };
     let start = std::time::Instant::now();
     let result = f();
-    record_latency(tc, function_call, start);
+    record_latency(telemetry, function_call, start);
     result
 }
 
@@ -474,8 +477,7 @@ mod tests {
     // user_id from DCM is added to system metadata
     #[test]
     fn initialize_with_user_id_adds_to_system_metadata() {
-        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", &IniConfig::new());
-        client.opted_out = false; // override disk config for test isolation
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
         client.initialize_with_metadata("http://localhost:9999", Some("user-abc-123"), None, None);
         assert_eq!(
             client.system_metadata.get("user_id"),
@@ -486,8 +488,7 @@ mod tests {
     // monitor_id from DCM is added to system metadata
     #[test]
     fn initialize_with_monitor_id_adds_to_system_metadata() {
-        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", &IniConfig::new());
-        client.opted_out = false;
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
         client.initialize_with_metadata(
             "http://localhost:9999",
             None,
@@ -503,8 +504,7 @@ mod tests {
     // user ID and monitor ID both present
     #[test]
     fn initialize_with_both_user_and_monitor_id() {
-        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", &IniConfig::new());
-        client.opted_out = false;
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
         client.initialize_with_metadata(
             "http://localhost:9999",
             Some("user-abc"),
@@ -524,8 +524,7 @@ mod tests {
     // Neither present — no metadata added
     #[test]
     fn initialize_without_metadata_leaves_system_metadata_unchanged() {
-        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", &IniConfig::new());
-        client.opted_out = false;
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
         let before = client.system_metadata.len();
         client.initialize_with_metadata("http://localhost:9999", None, None, None);
         assert_eq!(client.system_metadata.len(), before);
@@ -534,8 +533,7 @@ mod tests {
     // accountId is added to common_details (not system_metadata)
     #[test]
     fn initialize_with_account_id_adds_to_common_details() {
-        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", &IniConfig::new());
-        client.opted_out = false;
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
         client.initialize_with_metadata("http://localhost:9999", None, None, Some("123456789012"));
         assert_eq!(
             client.common_details.get("accountId"),
@@ -596,8 +594,7 @@ mod tests {
     fn record_success_fail_on_ok_emits_success_true() {
         // Create a client that is opted-out so it won't try to send anything,
         // but we can inspect that the function doesn't panic and accepts Ok.
-        let mut client = TelemetryClient::new("test", "1.0.0", &IniConfig::new());
-        client.opted_out = true;
+        let client = TelemetryClient::new("test", "1.0.0", true, None);
         let result: Result<(), String> = Ok(());
         // Should not panic
         record_success_fail(&client, "test_metric", &result);
@@ -606,8 +603,7 @@ mod tests {
     /// On failure, emits event with is_success=false and exception_type set.
     #[test]
     fn record_success_fail_on_err_emits_success_false() {
-        let mut client = TelemetryClient::new("test", "1.0.0", &IniConfig::new());
-        client.opted_out = true;
+        let client = TelemetryClient::new("test", "1.0.0", true, None);
         let result: Result<(), String> = Err("SomeError: thing went wrong".into());
         // Should not panic
         record_success_fail(&client, "test_metric", &result);
@@ -637,8 +633,7 @@ mod tests {
             .await;
 
         let endpoint = format!("http://{}", server.address());
-        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", &IniConfig::new());
-        client.opted_out = false;
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
         client.initialize_with_metadata(&endpoint, None, None, None);
 
         let result: Result<(), String> = Ok(());
@@ -673,8 +668,7 @@ mod tests {
             .await;
 
         let endpoint = format!("http://{}", server.address());
-        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", &IniConfig::new());
-        client.opted_out = false;
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
         client.initialize_with_metadata(&endpoint, None, None, None);
 
         let result: Result<(), String> = Err("AccessDenied: forbidden".into());
@@ -702,8 +696,7 @@ mod tests {
             .await;
 
         let endpoint = format!("http://{}", server.address());
-        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", &IniConfig::new());
-        client.opted_out = false;
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
         client.initialize_with_metadata(&endpoint, None, None, None);
 
         let result: Result<(), String> =

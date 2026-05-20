@@ -67,10 +67,12 @@ async fn get_fleet_scoped_config(
     fleet_id: &str,
     config: &IniConfig,
 ) -> Result<aws_config::SdkConfig, DeadlineError> {
-    let (user_id, identity_store_id) = auth::get_user_and_identity_store_id(config);
+    let profile = session::resolve_profile_name(config);
+    let (user_id, identity_store_id) =
+        auth::get_user_and_identity_store_id_for_profile(profile.as_deref());
     if user_id.is_some() && identity_store_id.is_some() {
         // DCM user — assume fleet role
-        let dl = session::deadline_client(config).await;
+        let dl = session::deadline_client(profile.as_deref()).await;
         let resp = dl
             .assume_fleet_role_for_read()
             .farm_id(farm_id)
@@ -89,7 +91,7 @@ async fn get_fleet_scoped_config(
             )
         })?;
 
-        let base_config = session::get_sdk_config(config).await;
+        let base_config = session::get_sdk_config(profile.as_deref()).await;
         let region = base_config.region().cloned();
 
         let credentials = aws_credential_types::Credentials::new(
@@ -110,7 +112,7 @@ async fn get_fleet_scoped_config(
         Ok(builder.build())
     } else {
         // Non-DCM user — use base credentials
-        Ok(session::get_sdk_config(config).await)
+        Ok(session::get_sdk_config(profile.as_deref()).await)
     }
 }
 
@@ -156,6 +158,7 @@ pub async fn get_session_logs(
     next_token: Option<&str>,
     config: &IniConfig,
 ) -> Result<(SessionLogResult, SessionAutoSelect), DeadlineError> {
+    let profile = session::resolve_profile_name(config);
     // Resolve session_id
     let (resolved_session_id, auto_select) = if let Some(id) = session_id {
         (id.to_owned(), SessionAutoSelect::Provided)
@@ -163,12 +166,13 @@ pub async fn get_session_logs(
         let jid = job_id.ok_or_else(|| {
             DeadlineError::OperationError("Either session_id or job_id must be provided".into())
         })?;
-        auto_select_session(farm_id, queue_id, jid, config).await?
+        auto_select_session(farm_id, queue_id, jid, profile.as_deref()).await?
     };
 
     let log_group = format!("/aws/deadline/{farm_id}/{queue_id}");
     // Use queue-scoped credentials for DCM users (matching Python behavior)
-    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, config).await?;
+    let sdk_config =
+        session::get_queue_scoped_config(farm_id, queue_id, profile.as_deref()).await?;
     let client = logs_client(&sdk_config);
 
     let mut req = client
@@ -299,9 +303,9 @@ async fn auto_select_session(
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<(String, SessionAutoSelect), DeadlineError> {
-    let client = session::deadline_client(config).await;
+    let client = session::deadline_client(profile).await;
     let resp = crate::api::client::collect_paginated(
         client
             .list_sessions()

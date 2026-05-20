@@ -16,6 +16,8 @@ try:
 except AttributeError:
     _QueuedConnection = Qt.QueuedConnection  # type: ignore[attr-defined]
 
+_MOCK_TARGET = "deadline.client.ui.dialogs._job_submission_worker._native_create_job"
+
 
 class TestJobSubmissionWorker:
     """Tests for JobSubmissionWorker class."""
@@ -69,11 +71,11 @@ class TestJobSubmissionWorker:
         assert worker._confirmation_result is True
         assert worker._confirmation_event.is_set()
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_run_calls_api(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_run_calls_api(self, mock_create_job, qtbot):
         """Test that run() calls the API with correct kwargs."""
         worker = JobSubmissionWorker()
-        mock_get_ffi.return_value.create_job_from_job_bundle.return_value = {"job_id": "job-123"}
+        mock_create_job.return_value = {"job_id": "job-123"}
 
         succeeded_results = []
         worker.succeeded.connect(lambda x: succeeded_results.append(x), _QueuedConnection)
@@ -87,18 +89,18 @@ class TestJobSubmissionWorker:
         # Wait for completion
         qtbot.waitUntil(lambda: len(succeeded_results) > 0, timeout=2000)
 
-        mock_get_ffi.return_value.create_job_from_job_bundle.assert_called_once()
-        call_args = mock_get_ffi.return_value.create_job_from_job_bundle.call_args
+        mock_create_job.assert_called_once()
+        call_args = mock_create_job.call_args
         params_dict = call_args[0][0]  # first positional arg is the kwargs dict
         assert params_dict["job_bundle_dir"] == "/path/to/bundle"
         assert params_dict["submitter_name"] == "TestSubmitter"
         assert succeeded_results[0] == "job-123"
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_run_emits_succeeded_on_success(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_run_emits_succeeded_on_success(self, mock_create_job, qtbot):
         """Test that run() emits succeeded signal on success."""
         worker = JobSubmissionWorker()
-        mock_get_ffi.return_value.create_job_from_job_bundle.return_value = {"job_id": "job-456"}
+        mock_create_job.return_value = {"job_id": "job-456"}
 
         succeeded_results = []
         worker.succeeded.connect(lambda x: succeeded_results.append(x), _QueuedConnection)
@@ -110,12 +112,12 @@ class TestJobSubmissionWorker:
 
         assert succeeded_results[0] == "job-456"
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_run_emits_failed_on_exception(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_run_emits_failed_on_exception(self, mock_create_job, qtbot):
         """Test that run() emits failed signal on exception."""
         worker = JobSubmissionWorker()
         test_error = ValueError("Test error")
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = test_error
+        mock_create_job.side_effect = test_error
 
         failed_results = []
         worker.failed.connect(lambda x: failed_results.append(x), _QueuedConnection)
@@ -127,11 +129,11 @@ class TestJobSubmissionWorker:
 
         assert failed_results[0] is test_error
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_run_does_not_emit_succeeded_when_canceled(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_run_does_not_emit_succeeded_when_canceled(self, mock_create_job, qtbot):
         """Test that run() does not emit succeeded when canceled."""
         worker = JobSubmissionWorker()
-        mock_get_ffi.return_value.create_job_from_job_bundle.return_value = {"job_id": "job-789"}
+        mock_create_job.return_value = {"job_id": "job-789"}
 
         succeeded_results = []
         worker.succeeded.connect(lambda x: succeeded_results.append(x), _QueuedConnection)
@@ -150,12 +152,12 @@ class TestJobSubmissionWorker:
 
         assert len(succeeded_results) == 0
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_run_does_not_emit_failed_when_canceled(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_run_does_not_emit_failed_when_canceled(self, mock_create_job, qtbot):
         """Test that run() does not emit failed when canceled."""
         worker = JobSubmissionWorker()
         test_error = ValueError("Test error")
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = test_error
+        mock_create_job.side_effect = test_error
 
         failed_results = []
         worker.failed.connect(lambda x: failed_results.append(x), _QueuedConnection)
@@ -174,8 +176,8 @@ class TestJobSubmissionWorker:
 
         assert len(failed_results) == 0
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_print_callback_emits_signal(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_print_callback_emits_signal(self, mock_create_job, qtbot):
         """Test that print callback emits print_message signal."""
         worker = JobSubmissionWorker()
 
@@ -183,12 +185,12 @@ class TestJobSubmissionWorker:
         worker.print_message.connect(lambda x: print_messages.append(x), _QueuedConnection)
 
         def capture_callback(params, **kwargs):
-            callback = kwargs.get("print_cb")
+            callback = kwargs.get("on_print")
             if callback:
                 callback("Test message")
-            return "job-123"
+            return {"job_id": "job-123"}
 
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = capture_callback
+        mock_create_job.side_effect = capture_callback
 
         worker.set_submission_kwargs(job_bundle_dir="/path")
         worker.start()
@@ -197,74 +199,68 @@ class TestJobSubmissionWorker:
 
         assert "Test message" in print_messages
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_hashing_callback_emits_signal(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_hashing_callback_emits_signal(self, mock_create_job, qtbot):
         """Test that hashing callback emits hashing_progress signal."""
         worker = JobSubmissionWorker()
 
         progress_reports = []
         worker.hashing_progress.connect(lambda x: progress_reports.append(x), _QueuedConnection)
 
-        mock_metadata = MagicMock()
-        mock_metadata.progress = 50.0
-        mock_metadata.progressMessage = "Hashing..."
-
         def capture_callback(params, **kwargs):
-            callback = kwargs.get("hashing_cb")
+            callback = kwargs.get("on_hashing_progress")
             if callback:
-                callback(mock_metadata)
-            return "job-123"
+                callback({"status": "HASHING", "progress": 50.0, "transferRate": 0.0, "progressMessage": "Hashing...", "processedFiles": 5})
+            return {"job_id": "job-123"}
 
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = capture_callback
+        mock_create_job.side_effect = capture_callback
 
         worker.set_submission_kwargs(job_bundle_dir="/path")
         worker.start()
 
         qtbot.waitUntil(lambda: len(progress_reports) > 0, timeout=2000)
 
-        assert progress_reports[0] is mock_metadata
+        assert progress_reports[0].progress == 50.0
+        assert progress_reports[0].progress_message == "Hashing..."
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_upload_callback_emits_signal(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_upload_callback_emits_signal(self, mock_create_job, qtbot):
         """Test that upload callback emits upload_progress signal."""
         worker = JobSubmissionWorker()
 
         progress_reports = []
         worker.upload_progress.connect(lambda x: progress_reports.append(x), _QueuedConnection)
 
-        mock_metadata = MagicMock()
-        mock_metadata.progress = 75.0
-        mock_metadata.progressMessage = "Uploading..."
-
         def capture_callback(params, **kwargs):
-            callback = kwargs.get("upload_cb")
+            callback = kwargs.get("on_upload_progress")
             if callback:
-                callback(mock_metadata)
-            return "job-123"
+                callback({"status": "UPLOADING", "progress": 75.0, "transferRate": 1024.0, "progressMessage": "Uploading...", "processedFiles": 3})
+            return {"job_id": "job-123"}
 
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = capture_callback
+        mock_create_job.side_effect = capture_callback
 
         worker.set_submission_kwargs(job_bundle_dir="/path")
         worker.start()
 
         qtbot.waitUntil(lambda: len(progress_reports) > 0, timeout=2000)
 
-        assert progress_reports[0] is mock_metadata
+        assert progress_reports[0].progress == 75.0
+        assert progress_reports[0].progress_message == "Uploading..."
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_check_canceled_callback_returns_not_canceled(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_check_canceled_callback_returns_not_canceled(self, mock_create_job, qtbot):
         """Test that check_canceled callback returns correct value."""
         worker = JobSubmissionWorker()
 
         callback_results = []
 
         def capture_callback(params, **kwargs):
-            callback = kwargs.get("continue_cb")
+            callback = kwargs.get("on_continue")
             if callback:
                 callback_results.append(callback())
-            return "job-123"
+            return {"job_id": "job-123"}
 
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = capture_callback
+        mock_create_job.side_effect = capture_callback
 
         worker.set_submission_kwargs(job_bundle_dir="/path")
         worker.start()
@@ -274,8 +270,8 @@ class TestJobSubmissionWorker:
         # Should return True (not canceled)
         assert callback_results[0] is True
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_hashing_callback_returns_false_when_canceled(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_hashing_callback_returns_false_when_canceled(self, mock_create_job, qtbot):
         """Test that hashing callback returns False when canceled."""
         worker = JobSubmissionWorker()
 
@@ -283,15 +279,15 @@ class TestJobSubmissionWorker:
         mock_metadata = MagicMock()
 
         def capture_callback(params, **kwargs):
-            callback = kwargs.get("hashing_cb")
+            callback = kwargs.get("on_hashing_progress")
             if callback:
                 # Cancel during callback
                 worker.cancel()
                 result = callback(mock_metadata)
                 callback_results.append(result)
-            return "job-123"
+            return {"job_id": "job-123"}
 
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = capture_callback
+        mock_create_job.side_effect = capture_callback
 
         worker.set_submission_kwargs(job_bundle_dir="/path")
         worker.start()
@@ -301,8 +297,8 @@ class TestJobSubmissionWorker:
         assert len(callback_results) > 0
         assert callback_results[0] is False
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_confirmation_callback_emits_signal_and_waits(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_confirmation_callback_emits_signal_and_waits(self, mock_create_job, qtbot):
         """Test that confirmation callback emits signal and waits for response."""
         worker = JobSubmissionWorker()
 
@@ -312,10 +308,9 @@ class TestJobSubmissionWorker:
         )
 
         def capture_callback(params, **kwargs):
-            callback = kwargs.get("confirm_cb")
+            callback = kwargs.get("on_confirm")
             if callback:
                 # This will block until set_confirmation_result is called
-                # We'll set it from the main thread via signal handler
                 import threading
 
                 def respond_later():
@@ -327,9 +322,9 @@ class TestJobSubmissionWorker:
                 threading.Thread(target=respond_later).start()
                 result = callback("Confirm?", True)
                 return {"job_id": "job-123"} if result else {"job_id": ""}
-            return "job-123"
+            return {"job_id": "job-123"}
 
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = capture_callback
+        mock_create_job.side_effect = capture_callback
 
         succeeded_results = []
         worker.succeeded.connect(lambda x: succeeded_results.append(x), _QueuedConnection)
@@ -343,15 +338,15 @@ class TestJobSubmissionWorker:
         assert confirmation_requests[0] == ("Confirm?", True)
         assert succeeded_results[0] == "job-123"
 
-    @patch("deadline.client.ui.dialogs._job_submission_worker._get_ffi")
-    def test_confirmation_callback_returns_false_when_canceled(self, mock_get_ffi, qtbot):
+    @patch(_MOCK_TARGET)
+    def test_confirmation_callback_returns_false_when_canceled(self, mock_create_job, qtbot):
         """Test that confirmation callback returns False when canceled during wait."""
         worker = JobSubmissionWorker()
 
         callback_results = []
 
         def capture_callback(params, **kwargs):
-            callback = kwargs.get("confirm_cb")
+            callback = kwargs.get("on_confirm")
             if callback:
                 # Cancel while waiting for confirmation
                 import threading
@@ -365,9 +360,9 @@ class TestJobSubmissionWorker:
                 threading.Thread(target=cancel_later).start()
                 result = callback("Confirm?", True)
                 callback_results.append(result)
-            return "job-123"
+            return {"job_id": "job-123"}
 
-        mock_get_ffi.return_value.create_job_from_job_bundle.side_effect = capture_callback
+        mock_create_job.side_effect = capture_callback
 
         worker.set_submission_kwargs(job_bundle_dir="/path")
         worker.start()

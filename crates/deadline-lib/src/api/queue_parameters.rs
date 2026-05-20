@@ -4,16 +4,15 @@
 //! work item #7 is implemented.
 
 use crate::api::errors::DeadlineError;
-use crate::config::ini::IniConfig;
 use serde_json::Value;
 
 /// Fetch all queue parameter definitions for a queue.
 pub async fn get_queue_parameter_definitions(
     farm_id: &str,
     queue_id: &str,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<Vec<Value>, DeadlineError> {
-    let client = crate::api::session::deadline_client(config).await;
+    let client = crate::api::session::deadline_client(profile).await;
 
     // List all queue environments
     let env_pages = crate::api::client::collect_paginated(

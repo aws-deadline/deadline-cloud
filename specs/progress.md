@@ -100,13 +100,15 @@ pick and execute work items.
 | 31 | Crate restructure (openjd-rs integration + boundary cleanup) | ✅ Done | — | — |
 | 32 | Worker agent Python bindings (attachment operations) | Not started | `deadline-python-bindings/worker-agent-bindings.md` | — |
 | 33 | Error type parity audit and resolution | Not started | — | — |
+| 34 | Library/CLI boundary refactor (remove IniConfig from operations) | In progress | — | — |
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Deferred
 
 **Dependency status:** All core feature dependencies are resolved.
 No items remain as ⚠️ Gaps. #16f is blocked on #24.
 
-**Next action item:** #24 (Production distribution) — unblocks #16f Batch C and #25-26.
+**Next action item:** #34 (Library/CLI boundary refactor) — architectural
+cleanup that makes the library usable without config, then #24.
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 active work items.
@@ -243,6 +245,18 @@ story. See `specs/HANDOFF.md` for detailed analysis.
 - **JSON progress lines in `--output json` mode** — download-output and
   download-input don't emit `{"messageType":"progress",...}` lines during
   download (Python does via click progressbar callback). Low priority.
+
+- **Evaluate extracting `config` module into standalone crate** — After
+  #34 completes, the config module is only consumed by CLI and PyO3
+  (library operations take explicit params). Evaluate whether
+  `deadline-config` as a separate crate improves build times, clarifies
+  the dependency graph, or is unnecessary churn.
+- **Evaluate Rust-native GUI (eliminate Python entirely)** — Explore
+  replacing the Python Qt GUI with a Rust-native GUI framework (e.g.
+  `slint`, `iced`, `cxx-qt`, `egui`). Would remove the Python runtime,
+  PySide6, PyO3 bindings, and `_internal/` assembly from the distribution.
+  Trade-offs: ecosystem maturity, accessibility support, DCC submitter
+  integration (currently Python plugins), and development velocity.
 
 **Dependency upgrades needed:**
 - **rusqlite** 0.32 → 0.39 (major, breaking changes likely)

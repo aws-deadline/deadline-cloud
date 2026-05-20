@@ -6,9 +6,13 @@ use crate::DeadlineOperationError;
 #[pyo3(signature = (config_path=None))]
 pub fn list_farms<'py>(py: Python<'py>, config_path: Option<&str>) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
+    let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
-    let builder = deadline_lib::api::client::apply_dcm_principal(dl.list_farms(), &config);
+    let dl = rt.block_on(deadline_lib::api::session::deadline_client(
+        profile.as_deref(),
+    ));
+    let builder =
+        deadline_lib::api::client::apply_dcm_principal(dl.list_farms(), profile.as_deref());
     let pages = rt
         .block_on(deadline_lib::api::client::collect_paginated(
             builder.into_paginator().send(),
@@ -33,8 +37,11 @@ pub fn get_farm<'py>(
     config_path: Option<&str>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
+    let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
+    let dl = rt.block_on(deadline_lib::api::session::deadline_client(
+        profile.as_deref(),
+    ));
     let output = rt
         .block_on(dl.get_farm().farm_id(farm_id).send())
         .map_err(|e| {
@@ -54,10 +61,15 @@ pub fn list_queues<'py>(
     config_path: Option<&str>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
+    let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
-    let builder =
-        deadline_lib::api::client::apply_dcm_principal(dl.list_queues().farm_id(farm_id), &config);
+    let dl = rt.block_on(deadline_lib::api::session::deadline_client(
+        profile.as_deref(),
+    ));
+    let builder = deadline_lib::api::client::apply_dcm_principal(
+        dl.list_queues().farm_id(farm_id),
+        profile.as_deref(),
+    );
     let pages = rt
         .block_on(deadline_lib::api::client::collect_paginated(
             builder.into_paginator().send(),
@@ -82,8 +94,11 @@ pub fn get_queue<'py>(
     config_path: Option<&str>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
+    let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_lib::api::session::deadline_client(&config));
+    let dl = rt.block_on(deadline_lib::api::session::deadline_client(
+        profile.as_deref(),
+    ));
     let output = rt
         .block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id).send())
         .map_err(|e| {
@@ -104,10 +119,11 @@ pub fn list_storage_profiles_for_queue<'py>(
     config_path: Option<&str>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
+    let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
     let result = rt
         .block_on(async {
-            let client = deadline_lib::api::session::deadline_client(&config).await;
+            let client = deadline_lib::api::session::deadline_client(profile.as_deref()).await;
             let pages = deadline_lib::api::client::collect_paginated(
                 client
                     .list_storage_profiles_for_queue()
@@ -149,11 +165,14 @@ pub fn get_queue_parameter_definitions<'py>(
     config_path: Option<&str>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let config = crate::load_config(config_path)?;
+    let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
     let result = rt
         .block_on(
             deadline_lib::api::queue_parameters::get_queue_parameter_definitions(
-                farm_id, queue_id, &config,
+                farm_id,
+                queue_id,
+                profile.as_deref(),
             ),
         )
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;

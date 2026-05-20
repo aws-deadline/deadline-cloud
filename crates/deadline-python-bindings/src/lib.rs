@@ -37,6 +37,11 @@ fn load_config(config_path: Option<&str>) -> PyResult<deadline_lib::config::ini:
     .map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }
 
+/// Extract profile from config for session calls.
+fn extract_profile(config: &deadline_lib::config::ini::IniConfig) -> Option<String> {
+    deadline_lib::api::session::resolve_profile_name(config)
+}
+
 #[pymodule]
 #[pyo3(name = "_native")]
 fn deadline_native(m: &Bound<'_, PyModule>) -> PyResult<()> {

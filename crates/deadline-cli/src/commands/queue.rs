@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Local, Utc};
 use clap::Subcommand;
-use deadline_lib::api::telemetry::{create_telemetry, record_success_fail};
+use deadline_lib::api::telemetry::{
+    create_telemetry, record_success_fail, resolve_telemetry_params,
+};
 use deadline_lib::api::{api, client, session};
 use deadline_lib::attachments::incremental_download::IncrementalDownloadJob;
 use deadline_lib::attachments::incremental_download::IncrementalDownloadState;
@@ -258,8 +260,10 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
         QueueAction::List { profile, farm_id } => {
             let config = setup(profile, farm_id, None, &["farm_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(&config).await;
-            let builder = client::apply_dcm_principal(dl.list_queues().farm_id(&farm), &config);
+            let p = crate::common::extract_profile(&config);
+            let dl = session::deadline_client(p.as_deref()).await;
+            let builder =
+                client::apply_dcm_principal(dl.list_queues().farm_id(&farm), p.as_deref());
             match client::collect_paginated(builder.into_paginator().send()).await {
                 Ok(pages) => {
                     let structured: Vec<serde_json::Value> = pages
@@ -297,7 +301,8 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
-            let dl = session::deadline_client(&config).await;
+            let p = crate::common::extract_profile(&config);
+            let dl = session::deadline_client(p.as_deref()).await;
             match dl.get_queue().farm_id(&farm).queue_id(&queue).send().await {
                 Ok(output) => {
                     let resp = deadline_lib::api::responses::QueueResponse::from(output);
@@ -335,10 +340,12 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
 
-            let telemetry = create_telemetry(&config);
+            let (opt_out, ident) = resolve_telemetry_params(&config);
+            let telemetry = create_telemetry(opt_out, Some(&ident));
 
             // Both typed outputs have identical .credentials() shape
-            let dl = session::deadline_client(&config).await;
+            let p = crate::common::extract_profile(&config);
+            let dl = session::deadline_client(p.as_deref()).await;
             let creds_result = match mode.to_uppercase().as_str() {
                 "READ" => dl
                     .assume_queue_role_for_read()
@@ -426,8 +433,11 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             let config = setup(profile, farm_id, queue_id, &["farm_id", "queue_id"])?;
             let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
             let queue = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
+            let p = crate::common::extract_profile(&config);
             match deadline_lib::api::queue_parameters::get_queue_parameter_definitions(
-                &farm, &queue, &config,
+                &farm,
+                &queue,
+                p.as_deref(),
             )
             .await
             {
@@ -467,10 +477,9 @@ async fn run_async(action: QueueAction) -> Result<(), CliError> {
             conflict_resolution,
             dry_run,
         } => {
-            let tc = create_telemetry(
-                &config_file::read_config()
-                    .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
-            );
+            let cfg = config_file::read_config().unwrap_or_default();
+            let (opt_out, ident) = resolve_telemetry_params(&cfg);
+            let tc = create_telemetry(opt_out, Some(&ident));
             let result = run_sync_output(
                 profile,
                 farm_id,
@@ -560,6 +569,7 @@ async fn run_sync_output(
 
     let farm = config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();
     let queue_id_str = config_file::get_setting("defaults.queue_id", &config).unwrap_or_default();
+    let p = crate::common::extract_profile(&config);
 
     // Resolve storage profile
     let local_storage_profile_id: Option<String> = if ignore_storage_profiles {
@@ -581,7 +591,7 @@ async fn run_sync_output(
             ));
         }
         // Validate the storage profile exists
-        session::deadline_client(&config)
+        session::deadline_client(p.as_deref())
             .await
             .get_storage_profile_for_queue()
             .farm_id(&farm)
@@ -606,7 +616,7 @@ async fn run_sync_output(
     let checkpoint_file_path = checkpoint_dir.join(&checkpoint_file_name);
 
     // Get queue and validate job attachment settings
-    let queue = session::deadline_client(&config)
+    let queue = session::deadline_client(p.as_deref())
         .await
         .get_queue()
         .farm_id(&farm)
@@ -702,9 +712,9 @@ async fn run_sync_output(
         .map_err(|e: String| CliError::Operation(e))?;
 
     // Run the incremental output download orchestration
-    let tc = create_telemetry(
-        &config_file::read_config().unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
-    );
+    let cfg = config_file::read_config().unwrap_or_default();
+    let (opt_out, ident) = resolve_telemetry_params(&cfg);
+    let tc = create_telemetry(opt_out, Some(&ident));
     let updated_checkpoint = incremental_output_download(
         &farm,
         &queue_id_str,
@@ -750,6 +760,7 @@ async fn incremental_output_download(
     dry_run: bool,
     telemetry: &deadline_lib::api::telemetry::TelemetryClient,
 ) -> Result<IncrementalDownloadState, CliError> {
+    let p = crate::common::extract_profile(config);
     let now = Utc::now();
     let new_completed = std::cmp::max(
         checkpoint.downloads_started_timestamp,
@@ -799,7 +810,7 @@ async fn incremental_output_download(
         "operator": "OR"
     });
     let active_jobs =
-        api::list_jobs_by_filter_expression(farm_id, queue_id, &active_filter, config)
+        api::list_jobs_by_filter_expression(farm_id, queue_id, &active_filter, p.as_deref())
             .await
             .map_err(|e| CliError::Operation(format!("Failed to search active jobs: {e}")))?;
 
@@ -829,9 +840,10 @@ async fn incremental_output_download(
         }],
         "operator": "AND"
     });
-    let ended_jobs = api::list_jobs_by_filter_expression(farm_id, queue_id, &ended_filter, config)
-        .await
-        .map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
+    let ended_jobs =
+        api::list_jobs_by_filter_expression(farm_id, queue_id, &ended_filter, p.as_deref())
+            .await
+            .map_err(|e| CliError::Operation(format!("Failed to search ended jobs: {e}")))?;
 
     for job in &ended_jobs {
         if let Some(counts) = job.get("taskRunStatusCounts")
@@ -1022,7 +1034,7 @@ async fn incremental_output_download(
     }
 
     // For new jobs, call GetJob to get attachments
-    let dl = session::deadline_client(config).await;
+    let dl = session::deadline_client(p.as_deref()).await;
     for job_id in &new_job_ids {
         let job_detail = dl
             .get_job()
@@ -1373,7 +1385,7 @@ async fn incremental_output_download(
         eprintln!("Summary of paths to download:");
         eprintln!("  (no files to download)");
     } else {
-        let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, config)
+        let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, p.as_deref())
             .await
             .map_err(|e| CliError::Operation(format!("Failed to get S3 credentials:\n{e}")))?;
 

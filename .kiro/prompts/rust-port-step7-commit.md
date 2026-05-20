@@ -14,6 +14,14 @@ make test         # cargo test + pytest gui/tests/ (all tests green)
 ```
 If `make fmt` fails, run `cargo fmt` and include the fixes in your commit.
 
+**Python tests are mandatory.** Even if no Python code was touched, run:
+```bash
+source .venv/bin/activate && maturin develop && pytest gui/tests/ -v --tb=short
+```
+PyO3 binding signature changes, struct field changes, or behavioral
+differences in library code can break Python tests without any Rust test
+failing. Do NOT skip this step. Do NOT commit if Python tests fail.
+
 **Constraints:**
 - Do NOT commit if any pre-commit check fails because broken code must not be committed
 - Do NOT push the commit because it needs human review before sharing

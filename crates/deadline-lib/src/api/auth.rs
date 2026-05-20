@@ -127,9 +127,15 @@ pub fn get_user_and_identity_store_id(
     config: &crate::config::ini::IniConfig,
 ) -> (Option<String>, Option<String>) {
     let profile_name = session::resolve_profile_name(config);
+    get_user_and_identity_store_id_for_profile(profile_name.as_deref())
+}
 
+/// Like `get_user_and_identity_store_id` but takes a resolved profile name directly.
+pub fn get_user_and_identity_store_id_for_profile(
+    profile: Option<&str>,
+) -> (Option<String>, Option<String>) {
     let read_key = |key: &str| -> Option<String> {
-        match &profile_name {
+        match profile {
             Some(name) => read_aws_profile_key(name, key),
             None => read_aws_default_profile_key(key),
         }
@@ -158,7 +164,8 @@ pub fn get_monitor_id(config: &crate::config::ini::IniConfig) -> Option<String> 
 pub async fn check_authentication_status(
     config: &crate::config::ini::IniConfig,
 ) -> AwsAuthenticationStatus {
-    let client = session::deadline_client(config).await;
+    let profile = session::resolve_profile_name(config);
+    let client = session::deadline_client(profile.as_deref()).await;
     let mut req = client.list_farms().max_results(1);
     let (user_id, _) = get_user_and_identity_store_id(config);
     if let Some(uid) = user_id {
@@ -187,7 +194,8 @@ pub async fn login(
     let tc = if let Some(t) = telemetry {
         t
     } else {
-        ephemeral = crate::api::telemetry::create_telemetry(config);
+        let (opt_out, identifier) = crate::api::telemetry::resolve_telemetry_params(config);
+        ephemeral = crate::api::telemetry::create_telemetry(opt_out, Some(&identifier));
         &ephemeral
     };
     let start = std::time::Instant::now();
@@ -277,7 +285,15 @@ pub fn logout(
     config: &crate::config::ini::IniConfig,
     telemetry: Option<&TelemetryClient>,
 ) -> Result<String, String> {
-    with_telemetry_latency("logout", config, telemetry, || logout_inner(config))
+    let ephemeral;
+    let tc = if let Some(t) = telemetry {
+        t
+    } else {
+        let (opt_out, identifier) = crate::api::telemetry::resolve_telemetry_params(config);
+        ephemeral = crate::api::telemetry::create_telemetry(opt_out, Some(&identifier));
+        &ephemeral
+    };
+    with_telemetry_latency("logout", tc, || logout_inner(config))
 }
 
 fn logout_inner(config: &crate::config::ini::IniConfig) -> Result<String, String> {

@@ -39,6 +39,12 @@ pub(crate) fn strip_markdown_for_terminal(text: &str) -> String {
 // CLI options → config
 // ---------------------------------------------------------------------------
 
+/// Extract the AWS profile name from config for passing to session functions.
+/// Returns None for the default credential chain.
+pub(crate) fn extract_profile(config: &deadline_lib::config::ini::IniConfig) -> Option<String> {
+    deadline_lib::api::session::resolve_profile_name(config)
+}
+
 /// CLI flag values that override config settings.
 #[derive(Default)]
 pub(crate) struct CliOptions {

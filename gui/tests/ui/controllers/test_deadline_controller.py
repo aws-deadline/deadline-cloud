@@ -18,6 +18,8 @@ try:
 except AttributeError:
     _QueuedConnection = Qt.QueuedConnection  # type: ignore[attr-defined]
 
+_MOD = "deadline.client.ui.controllers._deadline_controller"
+
 
 class TestDeadlineUIController:
     """Tests for DeadlineUIController class."""
@@ -88,12 +90,12 @@ class TestDeadlineUIController:
 
         assert controller.current_queue_id == ""
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_refresh_farms_emits_loading_signal(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_farms")
+    def test_refresh_farms_emits_loading_signal(self, mock_list_farms, qtbot):
         """Test that refresh_farms emits farms_loading signal."""
         controller = DeadlineUIController.getInstance()
 
-        mock_get_ffi.return_value.list_farms.return_value = {"farms": []}
+        mock_list_farms.return_value = {"farms": []}
 
         loading_states = []
         controller.farms_loading.connect(lambda x: loading_states.append(x), _QueuedConnection)
@@ -106,12 +108,12 @@ class TestDeadlineUIController:
         assert loading_states[0] is True  # Loading started
         assert loading_states[-1] is False  # Loading finished
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_refresh_farms_emits_farms_updated(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_farms")
+    def test_refresh_farms_emits_farms_updated(self, mock_list_farms, qtbot):
         """Test that refresh_farms emits farms_updated with farm list."""
         controller = DeadlineUIController.getInstance()
 
-        mock_get_ffi.return_value.list_farms.return_value = {
+        mock_list_farms.return_value = {
             "farms": [
                 {"displayName": "Farm A", "farmId": "farm-a"},
                 {"displayName": "Farm B", "farmId": "farm-b"},
@@ -133,12 +135,12 @@ class TestDeadlineUIController:
         assert list(farms[0]) == ["Farm A", "farm-a"]
         assert list(farms[1]) == ["Farm B", "farm-b"]
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_refresh_farms_handles_error(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_farms")
+    def test_refresh_farms_handles_error(self, mock_list_farms, qtbot):
         """Test that refresh_farms handles API errors gracefully."""
         controller = DeadlineUIController.getInstance()
 
-        mock_get_ffi.return_value.list_farms.side_effect = Exception("API Error")
+        mock_list_farms.side_effect = Exception("API Error")
 
         farms_received = []
         errors_received = []
@@ -157,8 +159,8 @@ class TestDeadlineUIController:
         # Should emit error signal
         assert len(errors_received) == 1
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_refresh_queues_with_no_farm_emits_empty(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_queues")
+    def test_refresh_queues_with_no_farm_emits_empty(self, mock_list_queues, qtbot):
         """Test that refresh_queues with no farm emits empty list."""
         controller = DeadlineUIController.getInstance()
 
@@ -171,14 +173,14 @@ class TestDeadlineUIController:
         qtbot.waitUntil(lambda: len(queues_received) > 0, timeout=1000)
 
         assert queues_received[0] == []
-        mock_get_ffi.return_value.list_queues.assert_not_called()
+        mock_list_queues.assert_not_called()
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_refresh_queues_fetches_for_farm(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_queues")
+    def test_refresh_queues_fetches_for_farm(self, mock_list_queues, qtbot):
         """Test that refresh_queues fetches queues for specified farm."""
         controller = DeadlineUIController.getInstance()
 
-        mock_get_ffi.return_value.list_queues.return_value = {
+        mock_list_queues.return_value = {
             "queues": [
                 {"displayName": "Queue 1", "queueId": "queue-1"},
             ]
@@ -191,39 +193,39 @@ class TestDeadlineUIController:
 
         qtbot.waitUntil(lambda: len(queues_received) > 0, timeout=2000)
 
-        mock_get_ffi.return_value.list_queues.assert_called_once()
+        mock_list_queues.assert_called_once()
         # Note: Qt signals may convert tuples to lists
         assert list(queues_received[0][0]) == ["Queue 1", "queue-1"]
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_on_farm_selected_updates_current_farm(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_queues")
+    def test_on_farm_selected_updates_current_farm(self, mock_list_queues, qtbot):
         """Test that on_farm_selected updates current_farm_id."""
         controller = DeadlineUIController.getInstance()
 
-        mock_get_ffi.return_value.list_queues.return_value = {"queues": []}
+        mock_list_queues.return_value = {"queues": []}
 
         controller.on_farm_selected("farm-123")
 
         assert controller.current_farm_id == "farm-123"
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_on_farm_selected_clears_queue(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_queues")
+    def test_on_farm_selected_clears_queue(self, mock_list_queues, qtbot):
         """Test that on_farm_selected clears current_queue_id."""
         controller = DeadlineUIController.getInstance()
 
-        mock_get_ffi.return_value.list_queues.return_value = {"queues": []}
+        mock_list_queues.return_value = {"queues": []}
 
         controller._current_queue_id = "old-queue"
         controller.on_farm_selected("farm-123")
 
         assert controller.current_queue_id == ""
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_on_farm_selected_triggers_queue_refresh(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_queues")
+    def test_on_farm_selected_triggers_queue_refresh(self, mock_list_queues, qtbot):
         """Test that on_farm_selected triggers queue refresh."""
         controller = DeadlineUIController.getInstance()
 
-        mock_get_ffi.return_value.list_queues.return_value = {"queues": []}
+        mock_list_queues.return_value = {"queues": []}
 
         queues_received = []
         controller.queues_updated.connect(lambda x: queues_received.append(x), _QueuedConnection)
@@ -232,14 +234,14 @@ class TestDeadlineUIController:
 
         qtbot.waitUntil(lambda: len(queues_received) > 0, timeout=2000)
 
-        mock_get_ffi.return_value.list_queues.assert_called_once()
+        mock_list_queues.assert_called_once()
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_on_farm_selected_clears_dependent_data(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_queues")
+    def test_on_farm_selected_clears_dependent_data(self, mock_list_queues, qtbot):
         """Test that on_farm_selected clears storage profiles and queue params."""
         controller = DeadlineUIController.getInstance()
 
-        mock_get_ffi.return_value.list_queues.return_value = {"queues": []}
+        mock_list_queues.return_value = {"queues": []}
 
         storage_profiles_received = []
         queue_params_received = []
@@ -258,8 +260,8 @@ class TestDeadlineUIController:
         assert storage_profiles_received[0] == []
         assert queue_params_received[0] == []
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_on_farm_selected_ignores_same_farm(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_list_queues")
+    def test_on_farm_selected_ignores_same_farm(self, mock_list_queues, qtbot):
         """Test that on_farm_selected does nothing if farm unchanged."""
         controller = DeadlineUIController.getInstance()
 
@@ -267,29 +269,31 @@ class TestDeadlineUIController:
 
         controller.on_farm_selected("farm-123")
 
-        mock_get_ffi.return_value.list_queues.assert_not_called()
+        mock_list_queues.assert_not_called()
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_on_queue_selected_updates_current_queue(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_get_queue_params")
+    @patch(f"{_MOD}._native_list_storage_profiles")
+    def test_on_queue_selected_updates_current_queue(self, mock_storage, mock_params, qtbot):
         """Test that on_queue_selected updates current_queue_id."""
         controller = DeadlineUIController.getInstance()
 
         controller._current_farm_id = "farm-123"
-        mock_get_ffi.return_value.list_storage_profiles_for_queue.return_value = {"storageProfiles": []}
-        mock_get_ffi.return_value.get_queue_parameter_definitions.return_value = []
+        mock_storage.return_value = {"storageProfiles": []}
+        mock_params.return_value = []
 
         controller.on_queue_selected("queue-456")
 
         assert controller.current_queue_id == "queue-456"
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_on_queue_selected_triggers_storage_profile_refresh(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_get_queue_params")
+    @patch(f"{_MOD}._native_list_storage_profiles")
+    def test_on_queue_selected_triggers_storage_profile_refresh(self, mock_storage, mock_params, qtbot):
         """Test that on_queue_selected triggers storage profile refresh."""
         controller = DeadlineUIController.getInstance()
 
         controller._current_farm_id = "farm-123"
-        mock_get_ffi.return_value.list_storage_profiles_for_queue.return_value = {"storageProfiles": []}
-        mock_get_ffi.return_value.get_queue_parameter_definitions.return_value = []
+        mock_storage.return_value = {"storageProfiles": []}
+        mock_params.return_value = []
 
         storage_received = []
         controller.storage_profiles_updated.connect(
@@ -300,16 +304,17 @@ class TestDeadlineUIController:
 
         qtbot.waitUntil(lambda: len(storage_received) > 0, timeout=2000)
 
-        mock_get_ffi.return_value.list_storage_profiles_for_queue.assert_called_once()
+        mock_storage.assert_called_once()
 
-    @patch("deadline.client.ui.controllers._deadline_controller._get_ffi")
-    def test_on_queue_selected_triggers_queue_params_refresh(self, mock_get_ffi, qtbot):
+    @patch(f"{_MOD}._native_get_queue_params")
+    @patch(f"{_MOD}._native_list_storage_profiles")
+    def test_on_queue_selected_triggers_queue_params_refresh(self, mock_storage, mock_params, qtbot):
         """Test that on_queue_selected triggers queue parameters refresh."""
         controller = DeadlineUIController.getInstance()
 
         controller._current_farm_id = "farm-123"
-        mock_get_ffi.return_value.list_storage_profiles_for_queue.return_value = {"storageProfiles": []}
-        mock_get_ffi.return_value.get_queue_parameter_definitions.return_value = [{"name": "param1"}]
+        mock_storage.return_value = {"storageProfiles": []}
+        mock_params.return_value = [{"name": "param1"}]
 
         params_received = []
         controller.queue_parameters_updated.connect(
@@ -320,7 +325,7 @@ class TestDeadlineUIController:
 
         qtbot.waitUntil(lambda: len(params_received) > 0, timeout=2000)
 
-        mock_get_ffi.return_value.get_queue_parameter_definitions.assert_called_once()
+        mock_params.assert_called_once()
         assert params_received[0] == [{"name": "param1"}]
 
     def test_shutdown_cancels_operations(self, qtbot):

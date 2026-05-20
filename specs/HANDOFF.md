@@ -3,19 +3,44 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **None**
+Active work item: **#34 — Library/CLI boundary refactor (Batches A+B done, C-E pending)**
+
+---
+
+## #34 — Library/CLI Boundary Refactor
+
+**Goal:** Remove `&IniConfig` from all library operation function signatures.
+Library operations take explicit params (farm_id, profile, etc.). Config
+utilities remain in the library as a shared utility module, but operations
+never read config internally. Simple CRUD API calls stay in the CLI.
+
+**Remaining batches:**
+
+- **Batch C: Submission** — Remove `config` field from `SubmitJobParams`.
+  Add `farm_id`, `queue_id`, etc. as explicit fields.
+
+- **Batch D: S3/Attachments** — Change `build_s3_client` to take explicit
+  `max_pool: usize` instead of `&IniConfig`.
+
+- **Batch E: Docs update** — Final review of all specs for accuracy.
+
+**Status: Batches A+B awaiting commit**
 
 ---
 
 ## Completed items (older)
+
+- **#34 Batches A+B — Session + Telemetry refactor (2026-05-20)** —
+  Session functions take `profile: Option<&str>`, telemetry functions take
+  `opt_out: bool, identifier: Option<&str>` instead of `&IniConfig`.
+  Fixed 35 pre-existing Python test failures (stale `_get_ffi` mocks).
+  1,355 Rust tests pass, 371/373 Python tests pass.
 
 - **[L] Deferred refactors (2026-05-18)** — Unified `OutputDownloader`/
   `InputDownloader` into `ManifestDownloader`, separated validation from
   grouping in `prepare_paths_for_upload`, consolidated duplicate
   `format_sdk_error` functions, added 5 Level 1 tests for
   `create_job_from_job_bundle`. 1,350→1,355 tests.
-
-## Completed items (older)
 
 - **Per-file upload progress (2026-05-16)** — Wired openjd-snapshots
   `on_progress` callback for per-file progress during upload. Progress
@@ -40,16 +65,6 @@ Active work item: **None**
 - **Python parity audit (2026-05-11)** — GAP-1 (login session refresh),
   GAP-3 (--include/--match-paths-by on download-output), GAP-2
   (download-input command). All implemented and verified.
-- **#16f Batch A1** — DCC submitter import shim layer. Committed `7f1d84a`.
-- **#16f Batch A2** — TelemetryClient + ProgressReportMetadata runtime fixes.
-- **#16f Batch A3** — API module wrappers for Unreal.
-- **#30 Rust tooling setup** — rustfmt, release profile (LTO+strip,
-  36→29MB), cargo-deny, cargo-outdated, cargo-bloat, cargo-udeps.
-- **Strict clippy lint resolution** — 2064 → 0 warnings.
-- **CLI feature parity audit (AUDIT-108, AUDIT-109)** — Removed
-  Rust-only subcommands and `--json` flag.
-- **Codebase health audit** — Report:
-  `audit_reports/archive/2026-05-01-codebase-health.md`
 
 ---
 

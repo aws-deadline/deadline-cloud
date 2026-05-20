@@ -13,6 +13,13 @@ Do NOT restart from scratch.
 2. Run `cargo test` (full test suite — all crates, not just the one you changed)
 3. If snapshots were created, run `cargo insta review` — verify each against
    Python implementation before accepting.
+4. Run Python GUI tests — the PyO3 bindings and GUI code must not regress:
+   ```bash
+   source .venv/bin/activate && maturin develop && pytest gui/tests/ -v --tb=short
+   ```
+   If the venv doesn't exist, create it first per README.md instructions.
+   These tests MUST pass. Failures here indicate broken bindings or GUI
+   regressions that `cargo test` cannot catch.
 
 **Constraints:**
 - Do NOT use `INSTA_UPDATE=always` because each snapshot must be manually verified against Python output

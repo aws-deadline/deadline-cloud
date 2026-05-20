@@ -259,6 +259,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             let queue =
                 deadline_lib::config::config_file::get_setting("defaults.queue_id", &config)
                     .unwrap_or_default();
+            let p = crate::common::extract_profile(&config);
 
             let _asset = match asset_type.to_lowercase().as_str() {
                 "input" => deadline_lib::attachments::manifest_ops::AssetType::Input,
@@ -267,7 +268,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             };
 
             // Get queue attachment settings
-            let queue_resp = deadline_lib::api::session::deadline_client(&config)
+            let queue_resp = deadline_lib::api::session::deadline_client(p.as_deref())
                 .await
                 .get_queue()
                 .farm_id(&farm)
@@ -289,7 +290,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
             let prefix = ja_settings.root_prefix();
 
             // Get job to check for attachments
-            let job_output = deadline_lib::api::session::deadline_client(&config)
+            let job_output = deadline_lib::api::session::deadline_client(p.as_deref())
                 .await
                 .get_job()
                 .farm_id(&farm)
@@ -316,7 +317,7 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
 
             // Get queue-scoped credentials
             let sdk_config =
-                deadline_lib::api::session::get_queue_scoped_config(&farm, &queue, &config)
+                deadline_lib::api::session::get_queue_scoped_config(&farm, &queue, p.as_deref())
                     .await
                     .map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
 
@@ -417,8 +418,9 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 let queue =
                     deadline_lib::config::config_file::get_setting("defaults.queue_id", &config)
                         .unwrap_or_default();
+                let p = crate::common::extract_profile(&config);
 
-                let queue_resp = deadline_lib::api::session::deadline_client(&config)
+                let queue_resp = deadline_lib::api::session::deadline_client(p.as_deref())
                     .await
                     .get_queue()
                     .farm_id(&farm)
@@ -437,15 +439,16 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     )
                 })?;
                 let b = ja_settings.s3_bucket_name().to_owned();
-                let p = ja_settings.root_prefix().to_owned();
+                let cas_prefix = ja_settings.root_prefix().to_owned();
 
-                let cfg =
-                    deadline_lib::api::session::get_queue_scoped_config(&farm, &queue, &config)
-                        .await
-                        .map_err(|e| {
-                            CliError::Operation(format!("Failed to get credentials: {e}"))
-                        })?;
-                (b, p, cfg, config)
+                let cfg = deadline_lib::api::session::get_queue_scoped_config(
+                    &farm,
+                    &queue,
+                    p.as_deref(),
+                )
+                .await
+                .map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
+                (b, cas_prefix, cfg, config)
             };
 
             let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);

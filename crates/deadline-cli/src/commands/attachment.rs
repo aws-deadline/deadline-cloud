@@ -76,12 +76,13 @@ async fn resolve_s3_context(
     s3_root_uri: Option<String>,
     config: &IniConfig,
 ) -> Result<S3Context, CliError> {
+    let p = crate::common::extract_profile(config);
     if profile.is_some() {
         // --profile provided: use profile credentials, require explicit S3 URI
         let uri = s3_root_uri
             .filter(|u| !u.is_empty())
             .ok_or_else(|| CliError::Operation("No valid s3 root path available".into()))?;
-        let sdk_config = deadline_lib::api::session::get_sdk_config(config).await;
+        let sdk_config = deadline_lib::api::session::get_sdk_config(p.as_deref()).await;
         Ok(S3Context {
             sdk_config,
             s3_root_uri: uri,
@@ -97,7 +98,7 @@ async fn resolve_s3_context(
         let uri = if let Some(u) = s3_root_uri.filter(|u| !u.is_empty()) {
             u
         } else {
-            let queue = deadline_lib::api::session::deadline_client(config)
+            let queue = deadline_lib::api::session::deadline_client(p.as_deref())
                 .await
                 .get_queue()
                 .farm_id(&farm_id)
@@ -123,11 +124,11 @@ async fn resolve_s3_context(
 
         // Get queue-scoped credentials (unconditional — matches Python)
         let sdk_config = deadline_lib::api::session::get_queue_user_config(
-            Some(&farm_id),
-            Some(&queue_id),
+            &farm_id,
+            &queue_id,
             None,
             false,
-            config,
+            p.as_deref(),
         )
         .await
         .map_err(|e| CliError::Operation(e.to_string()))?;

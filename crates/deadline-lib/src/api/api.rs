@@ -1,7 +1,6 @@
 use crate::api::client::deadline_error;
 use crate::api::errors::DeadlineError;
 use crate::api::session;
-use crate::config::ini::IniConfig;
 use aws_sdk_deadline::operation::create_job::CreateJobOutput;
 use serde_json::Value;
 
@@ -20,14 +19,14 @@ pub async fn list_jobs_by_filter_expression(
     farm_id: &str,
     queue_id: &str,
     filter_expression: &Value,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<Vec<Value>, DeadlineError> {
     use aws_sdk_deadline::types::{
         ComparisonOperator, DateTimeFilterExpression, FieldSortExpression, LogicalOperator,
         SearchFilterExpression, SearchGroupedFilterExpressions, SearchSortExpression, SortOrder,
     };
 
-    let client = session::deadline_client(config).await;
+    let client = session::deadline_client(profile).await;
 
     let provided_filter = build_filter_expressions(filter_expression)?;
 
@@ -288,9 +287,9 @@ pub fn build_sort_expressions(
 /// Returns raw JSON with `steps` and `errors` arrays.
 pub async fn batch_get_steps_page(
     identifiers: &[Value],
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
+    let client = session::deadline_client(profile).await;
     let mut ids = Vec::new();
     for id in identifiers {
         let builder = aws_sdk_deadline::types::BatchGetStepIdentifier::builder()
@@ -377,9 +376,9 @@ pub async fn batch_get_steps_page(
 /// Returns raw JSON with `tasks` and `errors` arrays.
 pub async fn batch_get_tasks_page(
     identifiers: &[Value],
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<Value, DeadlineError> {
-    let client = session::deadline_client(config).await;
+    let client = session::deadline_client(profile).await;
     let mut ids = Vec::new();
     for id in identifiers {
         let builder = aws_sdk_deadline::types::BatchGetTaskIdentifier::builder()
@@ -537,9 +536,9 @@ fn build_sdk_attachments(
 /// targetTaskRunStatus.
 pub async fn create_job(
     args: &serde_json::Map<String, Value>,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<CreateJobOutput, DeadlineError> {
-    let client = session::deadline_client(config).await;
+    let client = session::deadline_client(profile).await;
 
     let farm_id = args.get("farmId").and_then(|v| v.as_str()).unwrap_or("");
     let queue_id = args.get("queueId").and_then(|v| v.as_str()).unwrap_or("");
@@ -605,7 +604,7 @@ pub async fn wait_for_create_job_to_complete(
     farm_id: &str,
     queue_id: &str,
     job_id: &str,
-    config: &IniConfig,
+    profile: Option<&str>,
     continue_callback: impl Fn() -> bool,
 ) -> Result<(bool, String), DeadlineError> {
     let initial_delay = std::time::Duration::from_millis(300);
@@ -614,7 +613,7 @@ pub async fn wait_for_create_job_to_complete(
 
     let start = std::time::Instant::now();
     let mut delay = initial_delay;
-    let client = session::deadline_client(config).await;
+    let client = session::deadline_client(profile).await;
 
     tokio::time::sleep(initial_delay).await;
 
@@ -694,14 +693,9 @@ mod tests {
             .await;
 
         // Pass a callback that always returns false (simulates SIGINT)
-        let result = wait_for_create_job_to_complete(
-            "farm-abc",
-            "queue-abc",
-            "job-abc",
-            &IniConfig::new(),
-            || false,
-        )
-        .await;
+        let result =
+            wait_for_create_job_to_complete("farm-abc", "queue-abc", "job-abc", None, || false)
+                .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();

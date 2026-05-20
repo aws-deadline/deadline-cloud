@@ -104,18 +104,18 @@ impl SessionCache {
     /// Get or load the SDK config for the current profile.
     /// Used by tests to verify caching behavior directly.
     #[cfg_attr(not(test), allow(dead_code, reason = "used only in tests"))]
-    async fn get_config(&mut self, config: &IniConfig) -> &SdkConfig {
-        let profile = resolve_profile(config);
-        if self.cached_profile.as_ref() != Some(&profile) {
+    async fn get_config(&mut self, profile: Option<&str>) -> &SdkConfig {
+        let profile_owned = profile.map(String::from);
+        if self.cached_profile.as_ref() != Some(&profile_owned) {
             self.cached_config = None;
         }
         if self.cached_config.is_none() {
             let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
-            if let Some(ref p) = profile {
+            if let Some(ref p) = profile_owned {
                 loader = loader.profile_name(p);
             }
             self.cached_config = Some(loader.load().await);
-            self.cached_profile = Some(profile);
+            self.cached_profile = Some(profile_owned);
         }
         self.cached_config.as_ref().expect("value set above")
     }
@@ -286,8 +286,8 @@ pub async fn invalidate_session_cache_async() {
 ///
 /// Minimizes lock hold duration: checks cache under lock, loads config
 /// outside the lock on cache miss, then re-acquires to store and build.
-pub async fn deadline_client(config: &IniConfig) -> DeadlineClient {
-    let sdk_config = get_or_load_config(config).await;
+pub async fn deadline_client(profile: Option<&str>) -> DeadlineClient {
+    let sdk_config = get_or_load_config(profile).await;
     let cache = SESSION.lock().await;
     let ua = cache.context.build_user_agent();
     drop(cache);
@@ -299,9 +299,13 @@ pub async fn deadline_client(config: &IniConfig) -> DeadlineClient {
     if let Ok(app_name) = aws_sdk_deadline::config::AppName::new(ua) {
         builder = builder.app_name(app_name);
     }
+    // Telemetry reads config from disk (decoupled — explicit params)
+    let config = config_file::read_config().unwrap_or_default();
+    let (opt_out, identifier) = crate::api::telemetry::resolve_telemetry_params(&config);
     let account_id = crate::api::telemetry::resolve_account_id(&sdk_config).await;
     let telemetry = crate::api::telemetry::create_telemetry_with_metadata(
-        config,
+        opt_out,
+        Some(&identifier),
         None,
         None,
         account_id.as_deref(),
@@ -311,13 +315,13 @@ pub async fn deadline_client(config: &IniConfig) -> DeadlineClient {
 }
 
 /// Get the cached `SdkConfig` (for building non-Deadline AWS clients like `CloudWatch` Logs).
-pub async fn get_sdk_config(config: &IniConfig) -> SdkConfig {
-    get_or_load_config(config).await
+pub async fn get_sdk_config(profile: Option<&str>) -> SdkConfig {
+    get_or_load_config(profile).await
 }
 
 /// Build an STS client using the cached SDK config.
-pub async fn sts_client(config: &IniConfig) -> StsClient {
-    let sdk_config = get_or_load_config(config).await;
+pub async fn sts_client(profile: Option<&str>) -> StsClient {
+    let sdk_config = get_or_load_config(profile).await;
     let ua = SESSION.lock().await.context.build_user_agent();
 
     let mut builder = aws_sdk_sts::config::Builder::from(&sdk_config);
@@ -333,13 +337,13 @@ pub async fn sts_client(config: &IniConfig) -> StsClient {
 /// Get or load the SDK config, minimizing lock hold duration.
 /// On cache hit: brief lock to clone the config.
 /// On cache miss: drop lock → load config → re-acquire → store.
-async fn get_or_load_config(config: &IniConfig) -> SdkConfig {
-    let profile = resolve_profile(config);
+async fn get_or_load_config(profile: Option<&str>) -> SdkConfig {
+    let profile_owned = profile.map(String::from);
 
     // Fast path: check cache under lock
     {
         let cache = SESSION.lock().await;
-        if cache.cached_profile.as_ref() == Some(&profile)
+        if cache.cached_profile.as_ref() == Some(&profile_owned)
             && let Some(ref cfg) = cache.cached_config
         {
             return cfg.clone();
@@ -348,7 +352,7 @@ async fn get_or_load_config(config: &IniConfig) -> SdkConfig {
 
     // Slow path: load config outside the lock
     let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
-    if let Some(ref p) = profile {
+    if let Some(ref p) = profile_owned {
         loader = loader.profile_name(p);
     }
     let loaded = loader.load().await;
@@ -356,28 +360,25 @@ async fn get_or_load_config(config: &IniConfig) -> SdkConfig {
     // Store in cache
     let mut cache = SESSION.lock().await;
     cache.cached_config = Some(loaded.clone());
-    cache.cached_profile = Some(profile);
+    cache.cached_profile = Some(profile_owned);
     loaded
 }
 
 /// Get an `SdkConfig` with queue user credentials.
-/// Falls back to config defaults for `farm_id` and `queue_id`.
 /// Python equivalent: `get_queue_user_boto3_session()`.
 pub async fn get_queue_user_config(
-    farm_id: Option<&str>,
-    queue_id: Option<&str>,
+    farm_id: &str,
+    queue_id: &str,
     queue_display_name: Option<String>,
     force_refresh: bool,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<SdkConfig, crate::api::errors::DeadlineError> {
     if force_refresh {
         invalidate_session_cache_async().await;
     }
-    let farm = farm_id.map_or_else(|| get_setting("defaults.farm_id", config), String::from);
-    let queue = queue_id.map_or_else(|| get_setting("defaults.queue_id", config), String::from);
 
     // Check queue config cache under lock
-    let key = (farm.clone(), queue.clone());
+    let key = (farm_id.to_owned(), queue_id.to_owned());
     {
         let cache = SESSION.lock().await;
         if let Some(cached) = cache.cached_queue_configs.get(&key) {
@@ -386,7 +387,7 @@ pub async fn get_queue_user_config(
     }
 
     // Load base config outside the lock
-    let base_config = get_or_load_config(config).await;
+    let base_config = get_or_load_config(profile).await;
     let region = base_config.region().cloned();
 
     // Build credential provider
@@ -396,7 +397,12 @@ pub async fn get_queue_user_config(
     }
     let dl_client = DeadlineClient::from_conf(dl_builder.build());
 
-    let provider = QueueUserCredentialProvider::new(dl_client, farm, queue, queue_display_name);
+    let provider = QueueUserCredentialProvider::new(
+        dl_client,
+        farm_id.to_owned(),
+        queue_id.to_owned(),
+        queue_display_name,
+    );
 
     let mut builder = SdkConfig::builder()
         .behavior_version(aws_config::BehaviorVersion::latest())
@@ -428,15 +434,16 @@ pub async fn get_queue_user_config(
 pub async fn get_queue_scoped_config(
     farm_id: &str,
     queue_id: &str,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<SdkConfig, crate::api::errors::DeadlineError> {
-    let (user_id, identity_store_id) = crate::api::auth::get_user_and_identity_store_id(config);
+    let (user_id, identity_store_id) =
+        crate::api::auth::get_user_and_identity_store_id_for_profile(profile);
     if user_id.is_some() && identity_store_id.is_some() {
         // DCM user — assume queue role
-        get_queue_user_config(Some(farm_id), Some(queue_id), None, false, config).await
+        get_queue_user_config(farm_id, queue_id, None, false, profile).await
     } else {
         // Non-DCM user — use base credentials
-        Ok(get_sdk_config(config).await)
+        Ok(get_sdk_config(profile).await)
     }
 }
 
@@ -565,9 +572,9 @@ mod tests {
     #[tokio::test]
     async fn get_config_twice_returns_cached() {
         let mut cache = SessionCache::new();
-        cache.get_config(&IniConfig::new()).await;
+        cache.get_config(None).await;
         let ptr1 = std::ptr::from_ref::<SdkConfig>(cache.cached_config.as_ref().unwrap());
-        cache.get_config(&IniConfig::new()).await;
+        cache.get_config(None).await;
         let ptr2 = std::ptr::from_ref::<SdkConfig>(cache.cached_config.as_ref().unwrap());
         assert_eq!(ptr1, ptr2, "second call should return cached config");
     }
@@ -576,7 +583,7 @@ mod tests {
     #[tokio::test]
     async fn invalidate_clears_cached_config() {
         let mut cache = SessionCache::new();
-        cache.get_config(&IniConfig::new()).await;
+        cache.get_config(None).await;
         assert!(cache.cached_config.is_some());
         cache.invalidate();
         assert!(cache.cached_config.is_none());
@@ -586,7 +593,7 @@ mod tests {
     #[tokio::test]
     async fn invalidate_after_caching_clears_all() {
         let mut cache = SessionCache::new();
-        cache.get_config(&IniConfig::new()).await;
+        cache.get_config(None).await;
         cache.invalidate();
         assert!(cache.cached_config.is_none());
         assert!(cache.cached_profile.is_none());
@@ -604,7 +611,7 @@ mod tests {
 
     #[tokio::test]
     async fn global_deadline_client_returns_client() {
-        let _client = deadline_client(&IniConfig::new()).await;
+        let _client = deadline_client(None).await;
     }
 
     #[test]
@@ -876,14 +883,7 @@ mod tests {
     #[tokio::test]
     async fn get_queue_user_config_caches_by_farm_and_queue() {
         // First call creates a config and caches it
-        let cfg1 = get_queue_user_config(
-            Some("farm-abc"),
-            Some("queue-123"),
-            None,
-            false,
-            &IniConfig::new(),
-        )
-        .await;
+        let cfg1 = get_queue_user_config("farm-abc", "queue-123", None, false, None).await;
         assert!(cfg1.is_ok());
         // Verify it's in the global cache
         let cache = SESSION.lock().await;
@@ -897,14 +897,7 @@ mod tests {
     // force_refresh clears base session and queue configs
     #[tokio::test]
     async fn invalidate_clears_queue_config_cache() {
-        let _ = get_queue_user_config(
-            Some("farm-abc"),
-            Some("queue-123"),
-            None,
-            false,
-            &IniConfig::new(),
-        )
-        .await;
+        let _ = get_queue_user_config("farm-abc", "queue-123", None, false, None).await;
         {
             let cache = SESSION.lock().await;
             assert!(!cache.cached_queue_configs.is_empty());
@@ -917,12 +910,10 @@ mod tests {
     // concurrent access — multiple tasks can call deadline_client without deadlock
     #[tokio::test]
     async fn concurrent_deadline_client_calls_do_not_deadlock() {
-        let config = IniConfig::new();
         let handles: Vec<_> = (0..4)
             .map(|_| {
-                let cfg = config.clone();
                 tokio::spawn(async move {
-                    let _client = deadline_client(&cfg).await;
+                    let _client = deadline_client(None).await;
                 })
             })
             .collect();
