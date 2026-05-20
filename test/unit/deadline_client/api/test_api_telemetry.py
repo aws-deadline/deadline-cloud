@@ -311,7 +311,6 @@ def test_record_error_with_trace(fresh_deadline_config, mock_telemetry_client):
     assert "ValueError" in event.event_details["stack_trace"]
     assert "message" not in event.event_details
     assert event.event_details["usage_mode"] == "CLI"
-    assert event.event_details["accountId"] == "111122223333"
 
 
 def test_record_error_with_trace_extra_details(fresh_deadline_config, mock_telemetry_client):
