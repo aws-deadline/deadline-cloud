@@ -222,7 +222,7 @@ class TelemetryClient:
         self.processing_thread.start()
         self._put_telemetry_record(
             TelemetryEvent(
-                event_type="com.amazon.rum.deadline.session_start",
+                event_type="com.amazon.rum.deadline.process_start",
                 event_details={},
             )
         )

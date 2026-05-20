@@ -427,8 +427,8 @@ def test_get_telemetry_client_caches_by_package_name(fresh_deadline_config):
     telemetry_mod.__cached_telemetry_clients = {}
 
 
-def test_session_start_event_emitted_on_start_threads(fresh_deadline_config):
-    """Tests that a session_start event is emitted when _start_threads is called"""
+def test_process_start_event_emitted_on_start_threads(fresh_deadline_config):
+    """Tests that a process_start event is emitted when _start_threads is called"""
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
     with patch.object(api._telemetry, "get_monitor_id", side_effect=[None]), patch.object(
         api._telemetry,
@@ -444,7 +444,7 @@ def test_session_start_event_emitted_on_start_threads(fresh_deadline_config):
         )
         assert client.is_initialized
         expected_event = TelemetryEvent(
-            event_type="com.amazon.rum.deadline.session_start",
+            event_type="com.amazon.rum.deadline.process_start",
             event_details={},
         )
         # Drain the queue to find the session_start event
