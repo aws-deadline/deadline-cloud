@@ -435,15 +435,10 @@ impl DeadlineServer {
     #[tool(name = "deadline_check_authentication_status")]
     async fn check_authentication_status(&self) -> String {
         with_mcp_telemetry!("deadline_check_authentication_status", {
-            let source = deadline_lib::api::auth::get_credentials_source(
-                &deadline_lib::config::config_file::read_config()
-                    .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
-            );
-            let status = deadline_lib::api::auth::check_authentication_status(
-                &deadline_lib::config::config_file::read_config()
-                    .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
-            )
-            .await;
+            let profile = mcp_profile();
+            let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
+            let status =
+                deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
             let api_available =
                 status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
             ok_result(json!({

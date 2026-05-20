@@ -32,20 +32,37 @@ async fn run_async(action: AuthAction) -> Result<(), CliError> {
     match action {
         AuthAction::Login => {
             let config = config_file::read_config().unwrap_or_else(|_| IniConfig::new());
-            let profile_name = session::display_profile_name(&config);
+            let profile = session::resolve_profile_name(&config);
+            let profile_name = profile.as_deref().unwrap_or("(default)");
+            let monitor_path = config_file::get_setting("deadline-cloud-monitor.path", &config)
+                .unwrap_or_default();
+            let (opt_out, ident) = deadline_lib::api::telemetry::resolve_telemetry_params(&config);
+            let telemetry = deadline_lib::api::telemetry::create_telemetry(opt_out, Some(&ident));
             println!("Logging into AWS Profile '{profile_name}' for AWS Deadline Cloud");
             let on_pending = |_source: auth::AwsCredentialsSource| {
                 println!("Opening Deadline Cloud monitor. Please log in and then return here.");
             };
-            let message = auth::login(Some(&on_pending), None, &config, None)
-                .await
-                .map_err(CliError::Operation)?;
+            let message = auth::login(
+                Some(&on_pending),
+                None,
+                profile.as_deref(),
+                &monitor_path,
+                &telemetry,
+            )
+            .await
+            .map_err(CliError::Operation)?;
             println!("\nSuccessfully logged in: {message}\n");
             Ok(())
         }
         AuthAction::Logout => {
             let config = config_file::read_config().unwrap_or_else(|_| IniConfig::new());
-            auth::logout(&config, None).map_err(CliError::Operation)?;
+            let profile = session::resolve_profile_name(&config);
+            let monitor_path = config_file::get_setting("deadline-cloud-monitor.path", &config)
+                .unwrap_or_default();
+            let (opt_out, ident) = deadline_lib::api::telemetry::resolve_telemetry_params(&config);
+            let telemetry = deadline_lib::api::telemetry::create_telemetry(opt_out, Some(&ident));
+            auth::logout(profile.as_deref(), &monitor_path, &telemetry)
+                .map_err(CliError::Operation)?;
             println!("Successfully logged out of all Deadline Cloud monitor AWS profiles");
             Ok(())
         }
@@ -61,8 +78,9 @@ async fn status(profile: Option<String>, output: &str) -> Result<(), CliError> {
     }
 
     let profile_name = session::display_profile_name(&config);
-    let creds_source = auth::get_credentials_source(&config);
-    let auth_status = auth::check_authentication_status(&config).await;
+    let resolved_profile = session::resolve_profile_name(&config);
+    let creds_source = auth::get_credentials_source(resolved_profile.as_deref());
+    let auth_status = auth::check_authentication_status(resolved_profile.as_deref()).await;
     // Auth check uses ListFarms, so AUTHENTICATED implies API available.
     let api_available = auth_status == auth::AwsAuthenticationStatus::Authenticated;
 

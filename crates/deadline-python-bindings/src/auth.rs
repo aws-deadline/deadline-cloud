@@ -13,7 +13,8 @@ use crate::DeadlineOperationError;
 pub fn get_credentials_source(config_path: Option<&str>) -> PyResult<String> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
-    let source = deadline_lib::api::auth::get_credentials_source(&config);
+    let profile = crate::extract_profile(&config);
+    let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
     Ok(source.to_string())
 }
 
@@ -22,10 +23,11 @@ pub fn get_credentials_source(config_path: Option<&str>) -> PyResult<String> {
 pub fn check_auth_status(py: Python<'_>, config_path: Option<&str>) -> PyResult<PyObject> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
+    let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
     let result = rt.block_on(async {
-        let source = deadline_lib::api::auth::get_credentials_source(&config);
-        let status = deadline_lib::api::auth::check_authentication_status(&config).await;
+        let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
+        let status = deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
         let api_available =
             status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
         (source.to_string(), status.to_string(), api_available)
@@ -46,6 +48,7 @@ pub fn check_auth_status_with_progress(
 ) -> PyResult<PyObject> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
+    let profile = crate::extract_profile(&config);
     let notify = |msg: &str| {
         if let Some(ref cb) = on_progress {
             Python::with_gil(|py| {
@@ -56,9 +59,9 @@ pub fn check_auth_status_with_progress(
     let rt = crate::make_runtime()?;
     let result = rt.block_on(async {
         notify("Checking credentials source...");
-        let source = deadline_lib::api::auth::get_credentials_source(&config);
+        let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
         notify("Checking authentication status...");
-        let status = deadline_lib::api::auth::check_authentication_status(&config).await;
+        let status = deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
         let api_available =
             status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
         notify("Done");
@@ -76,9 +79,10 @@ pub fn check_auth_status_with_progress(
 pub fn check_api_available(config_path: Option<&str>) -> PyResult<bool> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
+    let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
     let status = rt.block_on(deadline_lib::api::auth::check_authentication_status(
-        &config,
+        profile.as_deref(),
     ));
     Ok(status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated)
 }
@@ -92,6 +96,12 @@ pub fn login(
 ) -> PyResult<String> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
+    let profile = crate::extract_profile(&config);
+    let monitor_path =
+        deadline_lib::config::config_file::get_setting("deadline-cloud-monitor.path", &config)
+            .unwrap_or_default();
+    let (opt_out, ident) = deadline_lib::api::telemetry::resolve_telemetry_params(&config);
+    let telemetry = deadline_lib::api::telemetry::create_telemetry(opt_out, Some(&ident));
 
     let pending_cb = on_pending_authorization.as_ref().map(|cb| {
         move |source: deadline_lib::api::auth::AwsCredentialsSource| {
@@ -125,8 +135,9 @@ pub fn login(
             .as_ref()
             .map(|f| f as &dyn Fn(deadline_lib::api::auth::AwsCredentialsSource)),
         cancel_cb.as_ref().map(|f| f as &dyn Fn() -> bool),
-        &config,
-        None,
+        profile.as_deref(),
+        &monitor_path,
+        &telemetry,
     ))
     .map_err(DeadlineOperationError::new_err)
 }
@@ -136,5 +147,12 @@ pub fn login(
 pub fn logout(config_path: Option<&str>) -> PyResult<String> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
-    deadline_lib::api::auth::logout(&config, None).map_err(DeadlineOperationError::new_err)
+    let profile = crate::extract_profile(&config);
+    let monitor_path =
+        deadline_lib::config::config_file::get_setting("deadline-cloud-monitor.path", &config)
+            .unwrap_or_default();
+    let (opt_out, ident) = deadline_lib::api::telemetry::resolve_telemetry_params(&config);
+    let telemetry = deadline_lib::api::telemetry::create_telemetry(opt_out, Some(&ident));
+    deadline_lib::api::auth::logout(profile.as_deref(), &monitor_path, &telemetry)
+        .map_err(DeadlineOperationError::new_err)
 }

@@ -5,16 +5,16 @@ consulting the Work Items table in `specs/progress.md`.
 
 Active work item: **None**
 
+
 ---
 
 ## Completed items (older)
 
 - **#34 — Library/CLI boundary refactor (2026-05-20)** — Removed `&IniConfig`
-  from all library operation signatures. `SubmitJobParams` takes explicit
-  fields, `build_s3_client` takes `Option<usize>`, log retrieval takes
-  `profile: Option<&str>`. Fixed pre-existing flaky Python singleton test.
+  from ALL library operation signatures: submission, S3, log retrieval, auth
+  (`login`/`logout`/`get_credentials_source`/`check_authentication_status`),
+  and update checker. Library is now fully usable without config files.
   1,355 Rust tests, 373 Python tests pass.
-
 - **#34 Batches A+B — Session + Telemetry refactor (2026-05-20, bd763ef)** —
   Session functions take `profile: Option<&str>`, telemetry functions take
   `opt_out: bool, identifier: Option<&str>` instead of `&IniConfig`.

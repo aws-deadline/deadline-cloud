@@ -88,9 +88,8 @@ fn read_aws_config_section(content: &str, section_header: &str, key: &str) -> Op
 /// Determine where credentials come from.
 /// DCM profiles have `monitor_id` in the AWS profile's scoped config.
 /// Returns `NotValid` if the specified profile does not exist.
-pub fn get_credentials_source(config: &crate::config::ini::IniConfig) -> AwsCredentialsSource {
-    let profile_name = session::resolve_profile_name(config);
-    match &profile_name {
+pub fn get_credentials_source(profile: Option<&str>) -> AwsCredentialsSource {
+    match profile {
         Some(name) => {
             if !aws_profile_exists(name) {
                 AwsCredentialsSource::NotValid
@@ -123,11 +122,10 @@ fn aws_profile_exists(profile_name: &str) -> bool {
 
 /// If logged in with DCM, returns (`user_id`, `identity_store_id`).
 /// Otherwise returns (None, None).
-pub fn get_user_and_identity_store_id(
-    config: &crate::config::ini::IniConfig,
-) -> (Option<String>, Option<String>) {
-    let profile_name = session::resolve_profile_name(config);
-    get_user_and_identity_store_id_for_profile(profile_name.as_deref())
+/// If logged in with DCM, returns (`user_id`, `identity_store_id`).
+/// Otherwise returns (None, None). Takes a resolved profile name directly.
+pub fn get_user_and_identity_store_id(profile: Option<&str>) -> (Option<String>, Option<String>) {
+    get_user_and_identity_store_id_for_profile(profile)
 }
 
 /// Like `get_user_and_identity_store_id` but takes a resolved profile name directly.
@@ -151,9 +149,9 @@ pub fn get_user_and_identity_store_id_for_profile(
 }
 
 /// Returns the `monitor_id` from the AWS profile if it's a DCM profile.
-pub fn get_monitor_id(config: &crate::config::ini::IniConfig) -> Option<String> {
-    match session::resolve_profile_name(config) {
-        Some(name) => read_aws_profile_key(&name, "monitor_id"),
+pub fn get_monitor_id(profile: Option<&str>) -> Option<String> {
+    match profile {
+        Some(name) => read_aws_profile_key(name, "monitor_id"),
         None => read_aws_default_profile_key("monitor_id"),
     }
 }
@@ -161,20 +159,17 @@ pub fn get_monitor_id(config: &crate::config::ini::IniConfig) -> Option<String> 
 /// Check authentication by calling `ListFarms` with maxResults=1.
 /// This validates both credential validity AND Deadline API reachability
 /// in one call, matching Python's behavior. No STS dependency.
-pub async fn check_authentication_status(
-    config: &crate::config::ini::IniConfig,
-) -> AwsAuthenticationStatus {
-    let profile = session::resolve_profile_name(config);
-    let client = session::deadline_client(profile.as_deref()).await;
+pub async fn check_authentication_status(profile: Option<&str>) -> AwsAuthenticationStatus {
+    let client = session::deadline_client(profile).await;
     let mut req = client.list_farms().max_results(1);
-    let (user_id, _) = get_user_and_identity_store_id(config);
+    let (user_id, _) = get_user_and_identity_store_id(profile);
     if let Some(uid) = user_id {
         req = req.principal_id(uid);
     }
     if req.send().await.is_ok() {
         AwsAuthenticationStatus::Authenticated
     } else {
-        let source = get_credentials_source(config);
+        let source = get_credentials_source(profile);
         match source {
             AwsCredentialsSource::DeadlineCloudMonitorLogin => AwsAuthenticationStatus::NeedsLogin,
             _ => AwsAuthenticationStatus::ConfigurationError,
@@ -187,29 +182,29 @@ pub async fn check_authentication_status(
 pub async fn login(
     on_pending_authorization: Option<&dyn Fn(AwsCredentialsSource)>,
     on_cancellation_check: Option<&dyn Fn() -> bool>,
-    config: &crate::config::ini::IniConfig,
-    telemetry: Option<&TelemetryClient>,
+    profile: Option<&str>,
+    monitor_path: &str,
+    telemetry: &TelemetryClient,
 ) -> Result<String, String> {
-    let ephemeral;
-    let tc = if let Some(t) = telemetry {
-        t
-    } else {
-        let (opt_out, identifier) = crate::api::telemetry::resolve_telemetry_params(config);
-        ephemeral = crate::api::telemetry::create_telemetry(opt_out, Some(&identifier));
-        &ephemeral
-    };
     let start = std::time::Instant::now();
-    let result = login_inner(on_pending_authorization, on_cancellation_check, config).await;
-    crate::api::telemetry::record_latency(tc, "login", start);
+    let result = login_inner(
+        on_pending_authorization,
+        on_cancellation_check,
+        profile,
+        monitor_path,
+    )
+    .await;
+    crate::api::telemetry::record_latency(telemetry, "login", start);
     result
 }
 
 async fn login_inner(
     on_pending_authorization: Option<&dyn Fn(AwsCredentialsSource)>,
     on_cancellation_check: Option<&dyn Fn() -> bool>,
-    config: &crate::config::ini::IniConfig,
+    profile: Option<&str>,
+    monitor_path: &str,
 ) -> Result<String, String> {
-    let source = get_credentials_source(config);
+    let source = get_credentials_source(profile);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
         return Err(
             "Logging in is only supported for AWS Profiles created by Deadline Cloud monitor."
@@ -217,8 +212,7 @@ async fn login_inner(
         );
     }
 
-    let monitor_path = get_monitor_path(config);
-    let profile_name = session::display_profile_name(config);
+    let profile_name = profile.unwrap_or("(default)");
 
     let stdin_cfg = if cfg!(windows) {
         std::process::Stdio::piped()
@@ -226,8 +220,8 @@ async fn login_inner(
         std::process::Stdio::null()
     };
 
-    let mut child = std::process::Command::new(&monitor_path)
-        .args(["login", "--profile", &profile_name])
+    let mut child = std::process::Command::new(monitor_path)
+        .args(["login", "--profile", profile_name])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .stdin(stdin_cfg)
@@ -251,7 +245,7 @@ async fn login_inner(
         // as login completes. Without this, the cached SdkConfig retains stale
         // credentials and the auth probe never resolves to AUTHENTICATED.
         session::invalidate_session_cache_async().await;
-        let status = check_authentication_status(config).await;
+        let status = check_authentication_status(profile).await;
         if status == AwsAuthenticationStatus::Authenticated {
             return Ok(format!("Deadline Cloud monitor profile: {profile_name}"));
         }
@@ -282,22 +276,15 @@ async fn login_inner(
 /// Log out via Deadline Cloud Monitor.
 /// Only supported for DCM-created profiles (those with `monitor_id`).
 pub fn logout(
-    config: &crate::config::ini::IniConfig,
-    telemetry: Option<&TelemetryClient>,
+    profile: Option<&str>,
+    monitor_path: &str,
+    telemetry: &TelemetryClient,
 ) -> Result<String, String> {
-    let ephemeral;
-    let tc = if let Some(t) = telemetry {
-        t
-    } else {
-        let (opt_out, identifier) = crate::api::telemetry::resolve_telemetry_params(config);
-        ephemeral = crate::api::telemetry::create_telemetry(opt_out, Some(&identifier));
-        &ephemeral
-    };
-    with_telemetry_latency("logout", tc, || logout_inner(config))
+    with_telemetry_latency("logout", telemetry, || logout_inner(profile, monitor_path))
 }
 
-fn logout_inner(config: &crate::config::ini::IniConfig) -> Result<String, String> {
-    let source = get_credentials_source(config);
+fn logout_inner(profile: Option<&str>, monitor_path: &str) -> Result<String, String> {
+    let source = get_credentials_source(profile);
     if source != AwsCredentialsSource::DeadlineCloudMonitorLogin {
         return Err(
             "Logging out is only supported for AWS Profiles created by Deadline Cloud monitor."
@@ -305,11 +292,10 @@ fn logout_inner(config: &crate::config::ini::IniConfig) -> Result<String, String
         );
     }
 
-    let monitor_path = get_monitor_path(config);
-    let profile_name = session::display_profile_name(config);
+    let profile_name = profile.unwrap_or("(default)");
 
-    let output = std::process::Command::new(&monitor_path)
-        .args(["logout", "--profile", &profile_name])
+    let output = std::process::Command::new(monitor_path)
+        .args(["logout", "--profile", profile_name])
         .output()
         .map_err(|_| {
             format!(
@@ -330,11 +316,6 @@ fn logout_inner(config: &crate::config::ini::IniConfig) -> Result<String, String
 
     session::invalidate_session_cache();
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-fn get_monitor_path(config: &crate::config::ini::IniConfig) -> String {
-    crate::config::config_file::get_setting("deadline-cloud-monitor.path", config)
-        .unwrap_or_default()
 }
 
 // login/logout are tested at Level 2 in cli_auth.rs (require subprocess isolation).
@@ -466,10 +447,8 @@ mod tests {
     #[serial]
     fn credentials_source_dcm_profile() {
         let _f = with_aws_config("[profile dcm]\nmonitor_id = mon-abc\n");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "dcm");
         assert_eq!(
-            get_credentials_source(&ini),
+            get_credentials_source(Some("dcm")),
             AwsCredentialsSource::DeadlineCloudMonitorLogin
         );
     }
@@ -478,10 +457,8 @@ mod tests {
     #[serial]
     fn credentials_source_host_provided() {
         let _f = with_aws_config("[profile regular]\nregion = us-west-2\n");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "regular");
         assert_eq!(
-            get_credentials_source(&ini),
+            get_credentials_source(Some("regular")),
             AwsCredentialsSource::HostProvided
         );
     }
@@ -490,19 +467,18 @@ mod tests {
     #[serial]
     fn credentials_source_not_valid() {
         let _f = with_aws_config("[profile other]\nregion = us-west-2\n");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "nonexistent");
-        assert_eq!(get_credentials_source(&ini), AwsCredentialsSource::NotValid);
+        assert_eq!(
+            get_credentials_source(Some("nonexistent")),
+            AwsCredentialsSource::NotValid
+        );
     }
 
     #[test]
     #[serial]
     fn credentials_source_default_profile() {
         let _f = with_aws_config("");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "(default)");
         assert_eq!(
-            get_credentials_source(&ini),
+            get_credentials_source(None),
             AwsCredentialsSource::HostProvided
         );
     }
@@ -515,9 +491,7 @@ mod tests {
         let _f = with_aws_config(
             "[profile dcm]\nmonitor_id = mon-abc\nuser_id = user-123\nidentity_store_id = d-456\n",
         );
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "dcm");
-        let (uid, isid) = get_user_and_identity_store_id(&ini);
+        let (uid, isid) = get_user_and_identity_store_id(Some("dcm"));
         assert_eq!(uid.as_deref(), Some("user-123"));
         assert_eq!(isid.as_deref(), Some("d-456"));
     }
@@ -526,9 +500,7 @@ mod tests {
     #[serial]
     fn user_and_identity_non_dcm_returns_none() {
         let _f = with_aws_config("[profile regular]\nregion = us-west-2\n");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "regular");
-        let (uid, isid) = get_user_and_identity_store_id(&ini);
+        let (uid, isid) = get_user_and_identity_store_id(Some("regular"));
         assert!(uid.is_none());
         assert!(isid.is_none());
     }
@@ -538,9 +510,7 @@ mod tests {
     fn user_and_identity_dcm_missing_user_id() {
         let _f =
             with_aws_config("[profile dcm]\nmonitor_id = mon-abc\nidentity_store_id = d-456\n");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "dcm");
-        let (uid, isid) = get_user_and_identity_store_id(&ini);
+        let (uid, isid) = get_user_and_identity_store_id(Some("dcm"));
         assert!(uid.is_none());
         assert_eq!(isid.as_deref(), Some("d-456"));
     }
@@ -549,9 +519,7 @@ mod tests {
     #[serial]
     fn user_and_identity_default_profile_returns_none() {
         let _f = with_aws_config("");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "(default)");
-        assert_eq!(get_user_and_identity_store_id(&ini), (None, None));
+        assert_eq!(get_user_and_identity_store_id(None), (None, None));
     }
 
     // ── get_monitor_id ────────────────────────────────────────
@@ -560,17 +528,13 @@ mod tests {
     #[serial]
     fn monitor_id_dcm_profile() {
         let _f = with_aws_config("[profile dcm]\nmonitor_id = mon-xyz\n");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "dcm");
-        assert_eq!(get_monitor_id(&ini), Some("mon-xyz".into()));
+        assert_eq!(get_monitor_id(Some("dcm")), Some("mon-xyz".into()));
     }
 
     #[test]
     #[serial]
     fn monitor_id_non_dcm_profile() {
         let _f = with_aws_config("[profile regular]\nregion = us-west-2\n");
-        let mut ini = crate::config::ini::IniConfig::new();
-        ini.set("defaults", "aws_profile_name", "regular");
-        assert_eq!(get_monitor_id(&ini), None);
+        assert_eq!(get_monitor_id(Some("regular")), None);
     }
 }

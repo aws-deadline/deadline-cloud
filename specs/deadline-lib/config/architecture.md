@@ -5,7 +5,7 @@
 ```
 deadline-lib
 ├── config    ← this module
-├── api       ──► config (session utilities: resolve_profile_name, display_profile_name)
+├── api       ──► config (session + telemetry utilities: resolve_profile_name, resolve_telemetry_params)
 ├── bundle    ──► config (only config_file::get_cache_directory utility)
 └── attachments ──► config (only s3::parse_s3_max_pool_connections utility)
 ```
