@@ -61,22 +61,22 @@ pick and execute work items.
 | 15d | Level 2 test coverage audit | ✅ Done | — | 11 |
 | 15e | Behavioral parity audit | ✅ Done | — | 9 |
 | 15f | Wire queue/fleet assume role for all existing CLI commands | ✅ Done | `credential_scoping.md` | 15e-F1 |
-| 16 | GUI FFI remaining | In progress | — | 1-14 |
+| 16 | GUI FFI remaining | ✅ Done (will be superseded by #35) | — | 1-14 |
 | 16a | FFI: config, resource listing, auth functions | ✅ Done | — | 0i |
 | 16b | FFI: submission with callbacks, telemetry | ✅ Done | — | 16a, 11 |
 | 16c | PyO3 Python bindings (`deadline._native`) | ✅ Done | — | 16b |
-| 16d | Port Python Qt code into `gui/` package | ✅ Done | — | 16c |
-| 16d2 | GUI CLI commands (`bundle gui-submit`, `config gui`) | ✅ Done | `cli.md` | 16d |
-| 16d3 | GUI widget rendering fixes (config shim types) | ✅ Done | — | 16d2 |
-| 16e | Python packaging (`gui/pyproject.toml`) | ✅ Done | — | 16d3 |
-| 16f | DCC submitter dependency switchover | Blocked on #24 | — | 16e |
+| 16d | Port Python Qt code into `gui/` package | ✅ Done (superseded by #35) | — | 16c |
+| 16d2 | GUI CLI commands (`bundle gui-submit`, `config gui`) | ✅ Done (superseded by #35) | `cli.md` | 16d |
+| 16d3 | GUI widget rendering fixes (config shim types) | ✅ Done (superseded by #35) | — | 16d2 |
+| 16e | Python packaging (`gui/pyproject.toml`) | ✅ Done (superseded by #35) | — | 16d3 |
+| 16f | DCC submitter dependency switchover | Superseded by #35 | — | 16e |
 | 17 | MCP server | ✅ Done | `mcp.md` | 1-14 |
 | 18 | Submission hooks | ✅ Done | `submission_hooks.md` | 11 |
 | 19 | Update checker | ✅ Done | `new_features.md` | 0g |
 | 20 | Batch get API helper | ✅ Done | `new_features.md` | — |
 | 21 | Python bug-fix parity sweep | ✅ Done | `new_features.md` | — |
 | 21b | Spec drift detection | ✅ Done | — | — |
-| 21c | Python GUI boundary contract | Not started | — | 16c |
+| 21c | Python GUI boundary contract | Eliminated by #35 | — | 16c |
 | 21d | CLI backward-compat flags | ✅ Done | — | — |
 | 21e | `deadlinew` windowless launcher | ✅ Done | — | — |
 | 21f | Windows config path normalization | ✅ Done | — | — |
@@ -94,21 +94,23 @@ pick and execute work items.
 | 28c | Strict clippy lint resolution (2064 → 0 warnings) | ✅ Done | — | — |
 | 29 | Investigate Python `--save-debug-snapshot` bug on no-attachment bundles | Not started | — | — |
 | 30 | Rust tooling and optimization setup | ✅ Done | — | — |
-| 24 | Production distribution (maturin + PyPI) | Not started | — | 16e |
+| 24 | Production distribution (Rust binary + Qt libs) | Not started | — | 35 |
 | 25 | `deadline.client.api` backwards-compat shim | Not started | — | 24 |
 | 26 | Installer pipeline update | Not started | — | 24 |
 | 31 | Crate restructure (openjd-rs integration + boundary cleanup) | ✅ Done | — | — |
 | 32 | Worker agent Python bindings (attachment operations) | Not started | `deadline-python-bindings/worker-agent-bindings.md` | — |
 | 33 | Error type parity audit and resolution | Not started | — | — |
 | 34 | Library/CLI boundary refactor (remove IniConfig from operations) | ✅ Done | — | — |
+| 35 | Rust-native GUI via qtbridge-rust | Not started | `gui-rewrite.md` | 34 |
 
-**Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Deferred
+**Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Superseded · Eliminated
 
-**Dependency status:** All core feature dependencies are resolved.
-No items remain as ⚠️ Gaps. #16f is blocked on #24.
+**Next action item:** #35 (Rust-native GUI spike) — prove qtbridge-rust
+works for our use case, then #24 (distribution) and #32 (worker bindings)
+can proceed in parallel.
 
-**Next action item:** #24 (Production distribution) — packaging and
-distribution story for the Rust rewrite.
+**GUI rewrite plan:** See `specs/gui-rewrite.md` for full architecture,
+spike criteria, and migration phases.
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 active work items.

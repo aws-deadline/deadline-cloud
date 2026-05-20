@@ -5,6 +5,9 @@ consulting the Work Items table in `specs/progress.md`.
 
 Active work item: **None**
 
+**Next candidate:** #35 — Rust-native GUI spike (qtbridge-rust).
+See `specs/gui-rewrite.md` for architecture and spike criteria.
+
 
 ---
 
