@@ -288,7 +288,7 @@ def test_record_error(fresh_deadline_config, mock_telemetry_client):
 
 
 def test_record_error_with_trace(fresh_deadline_config, mock_telemetry_client):
-    """Test that record_error_with_trace sends a TelemetryEvent with sanitized stack trace fields"""
+    """Test that record_error_with_trace sends a TelemetryEvent with exactly the expected fields."""
     # GIVEN
     queue_mock = MagicMock()
     mock_telemetry_client.event_queue = queue_mock
@@ -306,15 +306,20 @@ def test_record_error_with_trace(fresh_deadline_config, mock_telemetry_client):
     queue_mock.put_nowait.assert_called_once()
     event: TelemetryEvent = queue_mock.put_nowait.call_args[0][0]
     assert event.event_type == "com.amazon.rum.deadline.error"
-    assert event.event_details["exception_type"] == "ValueError"
-    assert event.event_details["exception_scope"] == "test_scope"
-    assert "ValueError" in event.event_details["stack_trace"]
-    assert "message" not in event.event_details
-    assert event.event_details["usage_mode"] == "CLI"
+    # Pop the dynamic stack_trace and assert on the rest as a full dict so
+    # any unexpected key being added would cause the test to fail loudly.
+    stack_trace = event.event_details.pop("stack_trace")
+    assert event.event_details == {
+        "exception_type": "ValueError",
+        "exception_scope": "test_scope",
+        "usage_mode": "CLI",
+    }
+    assert "ValueError" in stack_trace
+    assert "Traceback (most recent call last):" in stack_trace
 
 
 def test_record_error_with_trace_extra_details(fresh_deadline_config, mock_telemetry_client):
-    """Test that extra_details are merged into the event"""
+    """Test that extra_details are merged into the event and no unexpected fields appear."""
     # GIVEN
     queue_mock = MagicMock()
     mock_telemetry_client.event_queue = queue_mock
@@ -332,12 +337,18 @@ def test_record_error_with_trace_extra_details(fresh_deadline_config, mock_telem
 
     # THEN
     event: TelemetryEvent = queue_mock.put_nowait.call_args[0][0]
-    assert event.event_details["command"] == "bundle submit"
-    assert event.event_details["exception_type"] == "RuntimeError"
+    stack_trace = event.event_details.pop("stack_trace")
+    assert event.event_details == {
+        "exception_type": "RuntimeError",
+        "exception_scope": "cli",
+        "command": "bundle submit",
+        "usage_mode": "CLI",
+    }
+    assert "RuntimeError" in stack_trace
 
 
 def test_record_error_with_trace_sanitizes_paths(fresh_deadline_config, mock_telemetry_client):
-    """Test that customer paths are stripped from the stack trace"""
+    """Customer paths must be stripped from the stack trace and no extra fields leak."""
     # GIVEN
     queue_mock = MagicMock()
     mock_telemetry_client.event_queue = queue_mock
@@ -353,8 +364,14 @@ def test_record_error_with_trace_sanitizes_paths(fresh_deadline_config, mock_tel
 
     # THEN
     event: TelemetryEvent = queue_mock.put_nowait.call_args[0][0]
-    stack_trace = event.event_details["stack_trace"]
-    # The stack trace should not contain the full absolute path to this test file
+    stack_trace = event.event_details.pop("stack_trace")
+    assert event.event_details == {
+        "exception_type": "TypeError",
+        "exception_scope": "test",
+        "usage_mode": "CLI",
+    }
+    # Every "File ..." line in the trace must reference a sanitized
+    # (relative) path, never an absolute filesystem path.
     for line in stack_trace.splitlines():
         if line.strip().startswith('File "'):
             path = line.split('"')[1]
@@ -610,46 +627,49 @@ class TestTelemetryClientSwallowExceptions:
             assert "version" not in client._system_metadata
 
 
-class TestSanitizePath:
-    def test_known_package_deadline(self):
-        assert (
-            _sanitize_path(
-                "/home/customer/secret/venv/lib/python3.11/site-packages/deadline/client/api/_telemetry.py"
-            )
-            == "deadline/client/api/_telemetry.py"
-        )
-
-    def test_known_package_openjd(self):
-        assert _sanitize_path("/opt/libs/openjd/sessions/runner.py") == "openjd/sessions/runner.py"
-
-    def test_known_package_botocore(self):
-        assert (
-            _sanitize_path("/usr/lib/python3/dist-packages/botocore/client.py")
-            == "botocore/client.py"
-        )
-
-    def test_site_packages_unknown_lib(self):
-        assert (
-            _sanitize_path("/home/user/venv/lib/python3.11/site-packages/somelib/core.py")
-            == "somelib/core.py"
-        )
-
-    def test_customer_script_returns_filename_only(self):
-        assert _sanitize_path("/home/customer/my-bucket-name/scripts/render.py") == "render.py"
-
-    def test_windows_path(self):
-        assert (
-            _sanitize_path(
-                "C:\\Users\\customer\\AppData\\Local\\deadline\\client\\api\\_telemetry.py"
-            )
-            == "deadline/client/api/_telemetry.py"
-        )
-
-    def test_frozen_module(self):
-        assert _sanitize_path("<frozen importlib._bootstrap>") == "<frozen importlib._bootstrap>"
-
-    def test_string_input(self):
-        assert _sanitize_path("<string>") == "<string>"
+@pytest.mark.parametrize(
+    "filepath, expected",
+    [
+        pytest.param(
+            "/home/customer/secret/venv/lib/python3.11/site-packages/deadline/client/api/_telemetry.py",
+            "deadline/client/api/_telemetry.py",
+            id="known_package_deadline",
+        ),
+        pytest.param(
+            "/opt/libs/openjd/sessions/runner.py",
+            "openjd/sessions/runner.py",
+            id="known_package_openjd",
+        ),
+        pytest.param(
+            "/usr/lib/python3/dist-packages/botocore/client.py",
+            "botocore/client.py",
+            id="known_package_botocore",
+        ),
+        pytest.param(
+            "/home/user/venv/lib/python3.11/site-packages/somelib/core.py",
+            "somelib/core.py",
+            id="site_packages_unknown_lib",
+        ),
+        pytest.param(
+            "/home/customer/my-bucket-name/scripts/render.py",
+            "render.py",
+            id="customer_script_returns_filename_only",
+        ),
+        pytest.param(
+            "C:\\Users\\customer\\AppData\\Local\\deadline\\client\\api\\_telemetry.py",
+            "deadline/client/api/_telemetry.py",
+            id="windows_path",
+        ),
+        pytest.param(
+            "<frozen importlib._bootstrap>",
+            "<frozen importlib._bootstrap>",
+            id="frozen_module",
+        ),
+        pytest.param("<string>", "<string>", id="string_input"),
+    ],
+)
+def test_sanitize_path(filepath, expected):
+    assert _sanitize_path(filepath) == expected
 
 
 class TestSanitizeException:
