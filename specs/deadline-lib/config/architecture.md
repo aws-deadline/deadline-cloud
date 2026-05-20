@@ -5,13 +5,17 @@
 ```
 deadline-lib
 ├── config    ← this module
-├── api       ──► config
-├── bundle    ──► config
-└── attachments ──► config
+├── api       ──► config (session utilities: resolve_profile_name, display_profile_name)
+├── bundle    ──► config (only config_file::get_cache_directory utility)
+└── attachments ──► config (only s3::parse_s3_max_pool_connections utility)
 ```
 
 The foundational module. Provides config file I/O and setting resolution.
 No AWS SDK dependencies — pure filesystem and string operations.
+
+Library **operations** do not take `&IniConfig` — callers read config,
+extract values, and pass explicit params. Config utilities (read, get,
+set, resolve) remain available for callers to use.
 
 ## Module Layout
 

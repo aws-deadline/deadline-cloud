@@ -186,7 +186,12 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
                 }
             });
 
-            let s3_client = s3::build_s3_client(&ctx.sdk_config, &config);
+            let s3_client = s3::build_s3_client(
+                &ctx.sdk_config,
+                config_file::get_setting("settings.s3_max_pool_connections", &config)
+                    .ok()
+                    .and_then(|v| s3::parse_s3_max_pool_connections(&v).ok()),
+            );
             let account_id = s3::get_account_id(&ctx.sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
@@ -241,7 +246,12 @@ async fn run_async(action: AttachmentAction) -> Result<(), CliError> {
 
             let ctx = resolve_s3_context(&profile, s3_root_uri, &config).await?;
 
-            let s3_client = s3::build_s3_client(&ctx.sdk_config, &config);
+            let s3_client = s3::build_s3_client(
+                &ctx.sdk_config,
+                config_file::get_setting("settings.s3_max_pool_connections", &config)
+                    .ok()
+                    .and_then(|v| s3::parse_s3_max_pool_connections(&v).ok()),
+            );
             let account_id = s3::get_account_id(&ctx.sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;

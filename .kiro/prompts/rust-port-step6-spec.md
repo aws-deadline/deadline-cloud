@@ -9,7 +9,8 @@ work item, review what was written and continue from where it left off.
 Do NOT restart from scratch.
 
 **Write or update spec files** in `specs/{crate}/` to describe the final
-audited state of the code.
+audited state of the code. Do NOT ASSUME they are up-to-date, they can become stale
+after EVERY CHANGE.
 
 **Include:**
 - Behavioral contract (what the code does, not how)

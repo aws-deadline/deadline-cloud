@@ -214,7 +214,6 @@ use crate::attachments::models::{FileSystemLocationType, JobAttachmentS3Settings
 use crate::attachments::progress_tracker::ProgressFn;
 use crate::attachments::upload;
 use crate::config::config_file;
-use crate::config::ini::IniConfig;
 
 use serde_json::{Value, json};
 
@@ -238,6 +237,10 @@ pub trait SubmissionHandler: Send + Sync {
 }
 
 /// Parameters for job submission.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "flat config params, not control flow"
+)]
 pub struct SubmitJobParams<'a> {
     pub job_bundle_dir: PathBuf,
     pub job_parameters: Vec<Value>,
@@ -247,7 +250,6 @@ pub struct SubmitJobParams<'a> {
     pub max_retries_per_task: Option<i32>,
     pub max_worker_count: Option<i32>,
     pub target_task_run_status: Option<String>,
-    pub job_attachments_file_system: Option<String>,
     pub require_paths_exist: bool,
     pub submitter_name: Option<String>,
     pub known_asset_paths: Vec<PathBuf>,
@@ -255,17 +257,25 @@ pub struct SubmitJobParams<'a> {
     /// if files are outside known asset paths (Python parity: `auto_accept`
     /// means "don't prompt" not "always proceed").
     pub auto_accept: bool,
-    pub force_s3_check: Option<bool>,
     pub debug_snapshot_dir: Option<PathBuf>,
-    pub config: &'a IniConfig,
     pub handler: &'a dyn SubmissionHandler,
     pub hashing_progress_callback: Option<ProgressFn>,
     pub upload_progress_callback: Option<ProgressFn>,
     pub telemetry: Option<&'a crate::api::telemetry::TelemetryClient>,
-}
-
-fn get_setting(name: &str, config: &IniConfig) -> String {
-    config_file::get_setting(name, config).unwrap_or_default()
+    // --- Explicit config-derived fields (previously read from &IniConfig) ---
+    pub farm_id: String,
+    pub queue_id: String,
+    pub profile: Option<String>,
+    pub storage_profile_id: Option<String>,
+    pub job_attachments_file_system: String,
+    pub force_s3_check: bool,
+    pub allow_bundle_hooks: bool,
+    pub allow_environment_hooks: bool,
+    /// Additional known asset paths from config (colon/semicolon-separated in config,
+    /// pre-split by caller).
+    pub known_config_paths: Vec<String>,
+    /// S3 max pool connections (parsed from config by caller). None = use default.
+    pub s3_max_pool_connections: Option<usize>,
 }
 
 /// Load hooks from environment and bundle, merge them, and confirm with user.
@@ -274,14 +284,8 @@ fn load_and_confirm_hooks(
     params: &SubmitJobParams<'_>,
 ) -> Result<Option<hooks::HookConfiguration>, DeadlineError> {
     let handler = params.handler;
-    let allow_bundle_hooks =
-        config_file::str2bool(&get_setting("settings.allow_bundle_hooks", params.config))
-            .unwrap_or(false);
-    let allow_env_hooks = config_file::str2bool(&get_setting(
-        "settings.allow_environment_hooks",
-        params.config,
-    ))
-    .unwrap_or(false);
+    let allow_bundle_hooks = params.allow_bundle_hooks;
+    let allow_env_hooks = params.allow_environment_hooks;
     let env_hooks_dir = std::env::var("DEADLINE_HOOKS_DIR").ok();
 
     let mut merged_hooks: Option<hooks::HookConfiguration> = None;
@@ -391,15 +395,15 @@ pub async fn create_job_from_job_bundle(
     }
 
     // 3. Get queue info
-    let farm_id = get_setting("defaults.farm_id", params.config);
-    let queue_id = get_setting("defaults.queue_id", params.config);
-    let profile = session::resolve_profile_name(params.config);
+    let farm_id = &params.farm_id;
+    let queue_id = &params.queue_id;
+    let profile = params.profile.as_deref();
 
-    let queue = session::deadline_client(profile.as_deref())
+    let queue = session::deadline_client(profile)
         .await
         .get_queue()
-        .farm_id(&farm_id)
-        .queue_id(&queue_id)
+        .farm_id(farm_id)
+        .queue_id(queue_id)
         .send()
         .await
         .map_err(client::deadline_error)?;
@@ -407,16 +411,16 @@ pub async fn create_job_from_job_bundle(
     handler.on_message(&format!("Submitting to Queue: {queue_display_name}\n"));
 
     // 4. Get storage profile (conditional)
-    let storage_profile_id = get_setting("settings.storage_profile_id", params.config);
+    let storage_profile_id = params.storage_profile_id.as_deref().unwrap_or("");
     let storage_profile = if storage_profile_id.is_empty() {
         None
     } else {
-        let sp_output = session::deadline_client(profile.as_deref())
+        let sp_output = session::deadline_client(profile)
             .await
             .get_storage_profile_for_queue()
-            .farm_id(&farm_id)
-            .queue_id(&queue_id)
-            .storage_profile_id(&storage_profile_id)
+            .farm_id(farm_id)
+            .queue_id(queue_id)
+            .storage_profile_id(storage_profile_id)
             .send()
             .await
             .map_err(client::deadline_error)?;
@@ -432,13 +436,12 @@ pub async fn create_job_from_job_bundle(
     let mut asset_references = AssetReferences::from_dict(asset_references_obj.as_ref());
 
     let queue_parameter_definitions =
-        queue_parameters::get_queue_parameter_definitions(&farm_id, &queue_id, profile.as_deref())
-            .await?;
+        queue_parameters::get_queue_parameter_definitions(farm_id, queue_id, profile).await?;
 
     let mut parameters = merge_queue_job_parameters(
         &job_bundle_parameters,
         &queue_parameter_definitions,
-        Some(&queue_id),
+        Some(queue_id),
     )?;
 
     apply_job_parameters(
@@ -452,14 +455,9 @@ pub async fn create_job_from_job_bundle(
     let (app_parameters, job_parameters) =
         split_parameter_args(&parameters, &params.job_bundle_dir, None, None)?;
 
-    let ja_file_system = params
-        .job_attachments_file_system
-        .unwrap_or_else(|| get_setting("defaults.job_attachments_file_system", params.config));
+    let ja_file_system = &params.job_attachments_file_system;
 
-    let force_s3_check = params.force_s3_check.unwrap_or_else(|| {
-        config_file::str2bool(&get_setting("settings.force_s3_check", params.config))
-            .unwrap_or(false)
-    });
+    let force_s3_check = params.force_s3_check;
 
     // 8. Build CreateJob args
     let mut create_job_args = serde_json::Map::new();
@@ -492,8 +490,8 @@ pub async fn create_job_from_job_bundle(
                 .unwrap_or("")
                 .to_owned(),
             priority: params.priority.unwrap_or(50),
-            farm_id: farm_id.clone(),
-            queue_id: queue_id.clone(),
+            farm_id: farm_id.to_owned(),
+            queue_id: queue_id.to_owned(),
             job_bundle_dir: std::fs::canonicalize(&params.job_bundle_dir)
                 .unwrap_or_else(|_| params.job_bundle_dir.clone()),
             parameters: parameters
@@ -511,7 +509,7 @@ pub async fn create_job_from_job_bundle(
             storage_profile_id: if storage_profile_id.is_empty() {
                 None
             } else {
-                Some(storage_profile_id.clone())
+                Some(storage_profile_id.to_owned())
             },
             job_id: None,
         };
@@ -582,10 +580,9 @@ pub async fn create_job_from_job_bundle(
             }
         }
 
-        let configured_known = get_setting("settings.known_asset_paths", params.config);
+        let configured_known = &params.known_config_paths;
         if !configured_known.is_empty() {
-            let path_list_sep = if cfg!(windows) { ';' } else { ':' };
-            known_paths.extend(configured_known.split(path_list_sep).map(String::from));
+            known_paths.extend(configured_known.iter().cloned());
         }
 
         let known_param_names: std::collections::HashSet<String> = params
@@ -662,15 +659,18 @@ pub async fn create_job_from_job_bundle(
         }
 
         let queue_sdk_config = session::get_queue_user_config(
-            &farm_id,
-            &queue_id,
+            farm_id,
+            queue_id,
             Some(queue_display_name.to_owned()),
             false,
-            profile.as_deref(),
+            profile,
         )
         .await?;
 
-        let s3_client = crate::attachments::s3::build_s3_client(&queue_sdk_config, params.config);
+        let s3_client = crate::attachments::s3::build_s3_client(
+            &queue_sdk_config,
+            params.s3_max_pool_connections,
+        );
         let account_id = crate::attachments::s3::get_account_id(&queue_sdk_config)
             .await
             .map_err(|e| op_err(format!("Failed to get account ID: {e}")))?;
@@ -789,8 +789,8 @@ pub async fn create_job_from_job_bundle(
                     });
                 }
                 upload::snapshot_assets(
-                    &farm_id,
-                    &queue_id,
+                    farm_id,
+                    queue_id,
                     &s3_settings,
                     snap_dir,
                     &manifests,
@@ -799,8 +799,8 @@ pub async fn create_job_from_job_bundle(
                 .map_err(|e| op_err(e.to_string()))
             } else {
                 upload::upload_assets(
-                    &farm_id,
-                    &queue_id,
+                    farm_id,
+                    queue_id,
                     &s3_settings,
                     &upload_group.asset_groups,
                     &upload_ctx,
@@ -959,21 +959,18 @@ pub async fn create_job_from_job_bundle(
         return Ok(None);
     }
 
-    let response = api::create_job(&create_job_args, profile.as_deref()).await?;
+    let response = api::create_job(&create_job_args, profile).await?;
 
     let job_id = response.job_id().to_owned();
 
     // 10. Poll for completion
     handler.on_message("Waiting for Job to be created...");
 
-    let (success, status_message) = api::wait_for_create_job_to_complete(
-        &farm_id,
-        &queue_id,
-        &job_id,
-        profile.as_deref(),
-        || handler.should_continue(),
-    )
-    .await?;
+    let (success, status_message) =
+        api::wait_for_create_job_to_complete(farm_id, queue_id, &job_id, profile, || {
+            handler.should_continue()
+        })
+        .await?;
 
     // Record create_job telemetry
     if let Some(tc) = params.telemetry {
@@ -1014,8 +1011,8 @@ pub async fn create_job_from_job_bundle(
                 .unwrap_or("")
                 .to_owned(),
             priority: params.priority.unwrap_or(50),
-            farm_id: farm_id.clone(),
-            queue_id: queue_id.clone(),
+            farm_id: farm_id.to_owned(),
+            queue_id: queue_id.to_owned(),
             job_bundle_dir: std::fs::canonicalize(&params.job_bundle_dir)
                 .unwrap_or_else(|_| params.job_bundle_dir.clone()),
             parameters: std::collections::HashMap::new(),
@@ -1025,7 +1022,7 @@ pub async fn create_job_from_job_bundle(
             storage_profile_id: if storage_profile_id.is_empty() {
                 None
             } else {
-                Some(storage_profile_id.clone())
+                Some(storage_profile_id.to_owned())
             },
             job_id: Some(job_id.clone()),
         };

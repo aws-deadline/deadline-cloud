@@ -1,4 +1,3 @@
-use crate::config::ini::IniConfig;
 use chrono::{DateTime, TimeZone, Utc};
 
 use crate::api::client::format_sdk_error;
@@ -65,14 +64,12 @@ fn logs_client(sdk_config: &aws_config::SdkConfig) -> aws_sdk_cloudwatchlogs::Cl
 async fn get_fleet_scoped_config(
     farm_id: &str,
     fleet_id: &str,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<aws_config::SdkConfig, DeadlineError> {
-    let profile = session::resolve_profile_name(config);
-    let (user_id, identity_store_id) =
-        auth::get_user_and_identity_store_id_for_profile(profile.as_deref());
+    let (user_id, identity_store_id) = auth::get_user_and_identity_store_id_for_profile(profile);
     if user_id.is_some() && identity_store_id.is_some() {
         // DCM user — assume fleet role
-        let dl = session::deadline_client(profile.as_deref()).await;
+        let dl = session::deadline_client(profile).await;
         let resp = dl
             .assume_fleet_role_for_read()
             .farm_id(farm_id)
@@ -91,7 +88,7 @@ async fn get_fleet_scoped_config(
             )
         })?;
 
-        let base_config = session::get_sdk_config(profile.as_deref()).await;
+        let base_config = session::get_sdk_config(profile).await;
         let region = base_config.region().cloned();
 
         let credentials = aws_credential_types::Credentials::new(
@@ -112,7 +109,7 @@ async fn get_fleet_scoped_config(
         Ok(builder.build())
     } else {
         // Non-DCM user — use base credentials
-        Ok(session::get_sdk_config(profile.as_deref()).await)
+        Ok(session::get_sdk_config(profile).await)
     }
 }
 
@@ -156,9 +153,8 @@ pub async fn get_session_logs(
     start_time: Option<DateTime<Utc>>,
     end_time: Option<DateTime<Utc>>,
     next_token: Option<&str>,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<(SessionLogResult, SessionAutoSelect), DeadlineError> {
-    let profile = session::resolve_profile_name(config);
     // Resolve session_id
     let (resolved_session_id, auto_select) = if let Some(id) = session_id {
         (id.to_owned(), SessionAutoSelect::Provided)
@@ -166,13 +162,12 @@ pub async fn get_session_logs(
         let jid = job_id.ok_or_else(|| {
             DeadlineError::OperationError("Either session_id or job_id must be provided".into())
         })?;
-        auto_select_session(farm_id, queue_id, jid, profile.as_deref()).await?
+        auto_select_session(farm_id, queue_id, jid, profile).await?
     };
 
     let log_group = format!("/aws/deadline/{farm_id}/{queue_id}");
     // Use queue-scoped credentials for DCM users (matching Python behavior)
-    let sdk_config =
-        session::get_queue_scoped_config(farm_id, queue_id, profile.as_deref()).await?;
+    let sdk_config = session::get_queue_scoped_config(farm_id, queue_id, profile).await?;
     let client = logs_client(&sdk_config);
 
     let mut req = client
@@ -238,11 +233,11 @@ pub async fn get_worker_logs(
     start_time: Option<DateTime<Utc>>,
     end_time: Option<DateTime<Utc>>,
     next_token: Option<&str>,
-    config: &IniConfig,
+    profile: Option<&str>,
 ) -> Result<WorkerLogResult, DeadlineError> {
     let log_group = format!("/aws/deadline/{farm_id}/{fleet_id}");
     // Use fleet-scoped credentials for DCM users (matching Python behavior)
-    let sdk_config = get_fleet_scoped_config(farm_id, fleet_id, config).await?;
+    let sdk_config = get_fleet_scoped_config(farm_id, fleet_id, profile).await?;
     let client = logs_client(&sdk_config);
 
     let mut req = client
@@ -407,7 +402,7 @@ mod tests {
             None,
             None,
             None,
-            &IniConfig::new(),
+            None,
         )
         .await
         .unwrap();
@@ -444,7 +439,7 @@ mod tests {
             None,
             None,
             None,
-            &IniConfig::new(),
+            None,
         )
         .await
         .unwrap();

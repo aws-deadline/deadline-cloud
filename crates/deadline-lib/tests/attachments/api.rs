@@ -59,10 +59,7 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
         .test_credentials()
         .load()
         .await;
-    deadline_lib::attachments::s3::build_s3_client(
-        &sdk_config,
-        &deadline_lib::config::ini::IniConfig::new(),
-    )
+    deadline_lib::attachments::s3::build_s3_client(&sdk_config, None)
 }
 
 // =====================================================================

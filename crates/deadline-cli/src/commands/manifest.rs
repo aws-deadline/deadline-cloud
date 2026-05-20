@@ -321,7 +321,17 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                     .await
                     .map_err(|e| CliError::Operation(format!("Failed to get credentials: {e}")))?;
 
-            let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);
+            let s3_client = deadline_lib::attachments::s3::build_s3_client(
+                &sdk_config,
+                deadline_lib::config::config_file::get_setting(
+                    "settings.s3_max_pool_connections",
+                    &config,
+                )
+                .ok()
+                .and_then(|v| {
+                    deadline_lib::attachments::s3::parse_s3_max_pool_connections(&v).ok()
+                }),
+            );
             let account_id = deadline_lib::attachments::s3::get_account_id(&sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;
@@ -451,7 +461,17 @@ async fn run_async(action: ManifestAction) -> Result<(), CliError> {
                 (b, cas_prefix, cfg, config)
             };
 
-            let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);
+            let s3_client = deadline_lib::attachments::s3::build_s3_client(
+                &sdk_config,
+                deadline_lib::config::config_file::get_setting(
+                    "settings.s3_max_pool_connections",
+                    &config,
+                )
+                .ok()
+                .and_then(|v| {
+                    deadline_lib::attachments::s3::parse_s3_max_pool_connections(&v).ok()
+                }),
+            );
             let account_id = deadline_lib::attachments::s3::get_account_id(&sdk_config)
                 .await
                 .map_err(|e| CliError::Operation(e.to_string()))?;

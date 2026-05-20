@@ -458,6 +458,9 @@ impl DeadlineServer {
     #[tool(name = "deadline_get_session_logs")]
     async fn get_session_logs(&self, Parameters(p): Parameters<GetSessionLogsParams>) -> String {
         with_mcp_telemetry!("deadline_get_session_logs", {
+            let config = deadline_lib::config::config_file::read_config()
+                .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
+            let profile = deadline_lib::api::session::resolve_profile_name(&config);
             match deadline_lib::api::log_retrieval::get_session_logs(
                 &p.farm_id,
                 &p.queue_id,
@@ -467,8 +470,7 @@ impl DeadlineServer {
                 None,
                 None,
                 p.next_token.as_deref(),
-                &deadline_lib::config::config_file::read_config()
-                    .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
+                profile.as_deref(),
             )
             .await
             {
@@ -800,6 +802,57 @@ impl DeadlineServer {
             let fs_type = p.job_attachments_file_system;
             let require_paths = p.require_paths_exist.unwrap_or(false);
             let submitter = p.submitter_name.unwrap_or_else(|| "MCP".to_owned());
+            let storage_profile_id = p.storage_profile_id.clone();
+
+            // Extract config-derived values before moving into thread
+            let profile = deadline_lib::api::session::resolve_profile_name(&config);
+            let ja_file_system = fs_type.unwrap_or_else(|| {
+                deadline_lib::config::config_file::get_setting(
+                    "defaults.job_attachments_file_system",
+                    &config,
+                )
+                .unwrap_or_default()
+            });
+            let force_s3_check = deadline_lib::config::config_file::str2bool(
+                &deadline_lib::config::config_file::get_setting("settings.force_s3_check", &config)
+                    .unwrap_or_default(),
+            )
+            .unwrap_or(false);
+            let allow_bundle_hooks = deadline_lib::config::config_file::str2bool(
+                &deadline_lib::config::config_file::get_setting(
+                    "settings.allow_bundle_hooks",
+                    &config,
+                )
+                .unwrap_or_default(),
+            )
+            .unwrap_or(false);
+            let allow_env_hooks = deadline_lib::config::config_file::str2bool(
+                &deadline_lib::config::config_file::get_setting(
+                    "settings.allow_environment_hooks",
+                    &config,
+                )
+                .unwrap_or_default(),
+            )
+            .unwrap_or(false);
+            let known_config_paths = {
+                let v = deadline_lib::config::config_file::get_setting(
+                    "settings.known_asset_paths",
+                    &config,
+                )
+                .unwrap_or_default();
+                if v.is_empty() {
+                    Vec::new()
+                } else {
+                    let sep = if cfg!(windows) { ';' } else { ':' };
+                    v.split(sep).map(String::from).collect()
+                }
+            };
+            let s3_max_pool = deadline_lib::config::config_file::get_setting(
+                "settings.s3_max_pool_connections",
+                &config,
+            )
+            .ok()
+            .and_then(|v| deadline_lib::attachments::s3::parse_s3_max_pool_connections(&v).ok());
 
             let handle = tokio::runtime::Handle::current();
             let result = std::thread::spawn(move || {
@@ -813,7 +866,6 @@ impl DeadlineServer {
                         max_retries_per_task: max_retries,
                         max_worker_count: max_workers,
                         target_task_run_status: None,
-                        job_attachments_file_system: fs_type,
                         require_paths_exist: require_paths,
                         submitter_name: Some(submitter),
                         known_asset_paths: parsed_known_asset_paths
@@ -821,13 +873,21 @@ impl DeadlineServer {
                             .map(PathBuf::from)
                             .collect(),
                         auto_accept: true,
-                        force_s3_check: None,
                         debug_snapshot_dir: None,
-                        config: &config,
                         handler: &McpSubmissionHandler,
                         hashing_progress_callback: None,
                         upload_progress_callback: None,
                         telemetry: None,
+                        farm_id,
+                        queue_id,
+                        profile,
+                        storage_profile_id,
+                        job_attachments_file_system: ja_file_system,
+                        force_s3_check,
+                        allow_bundle_hooks,
+                        allow_environment_hooks: allow_env_hooks,
+                        known_config_paths,
+                        s3_max_pool_connections: s3_max_pool,
                     };
                     deadline_lib::bundle::submission::create_job_from_job_bundle(submit_params)
                         .await
@@ -1037,6 +1097,7 @@ impl DeadlineServer {
             });
 
             // Get session logs
+            let profile = mcp_profile();
             match deadline_lib::api::log_retrieval::get_session_logs(
                 &p.farm_id,
                 &p.queue_id,
@@ -1046,8 +1107,7 @@ impl DeadlineServer {
                 None,
                 None,
                 None,
-                &deadline_lib::config::config_file::read_config()
-                    .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
+                profile.as_deref(),
             )
             .await
             {
@@ -1077,8 +1137,7 @@ impl DeadlineServer {
                     None,
                     None,
                     None,
-                    &deadline_lib::config::config_file::read_config()
-                        .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new()),
+                    profile.as_deref(),
                 )
                 .await
                 {

@@ -3,34 +3,19 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **#34 — Library/CLI boundary refactor (Batches A+B done, C-E pending)**
-
----
-
-## #34 — Library/CLI Boundary Refactor
-
-**Goal:** Remove `&IniConfig` from all library operation function signatures.
-Library operations take explicit params (farm_id, profile, etc.). Config
-utilities remain in the library as a shared utility module, but operations
-never read config internally. Simple CRUD API calls stay in the CLI.
-
-**Remaining batches:**
-
-- **Batch C: Submission** — Remove `config` field from `SubmitJobParams`.
-  Add `farm_id`, `queue_id`, etc. as explicit fields.
-
-- **Batch D: S3/Attachments** — Change `build_s3_client` to take explicit
-  `max_pool: usize` instead of `&IniConfig`.
-
-- **Batch E: Docs update** — Final review of all specs for accuracy.
-
-**Status: Batches A+B awaiting commit**
+Active work item: **None**
 
 ---
 
 ## Completed items (older)
 
-- **#34 Batches A+B — Session + Telemetry refactor (2026-05-20)** —
+- **#34 — Library/CLI boundary refactor (2026-05-20)** — Removed `&IniConfig`
+  from all library operation signatures. `SubmitJobParams` takes explicit
+  fields, `build_s3_client` takes `Option<usize>`, log retrieval takes
+  `profile: Option<&str>`. Fixed pre-existing flaky Python singleton test.
+  1,355 Rust tests, 373 Python tests pass.
+
+- **#34 Batches A+B — Session + Telemetry refactor (2026-05-20, bd763ef)** —
   Session functions take `profile: Option<&str>`, telemetry functions take
   `opt_out: bool, identifier: Option<&str>` instead of `&IniConfig`.
   Fixed 35 pre-existing Python test failures (stale `_get_ffi` mocks).

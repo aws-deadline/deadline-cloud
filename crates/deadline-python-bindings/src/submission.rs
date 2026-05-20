@@ -4,6 +4,62 @@ use std::path::PathBuf;
 
 use crate::DeadlineOperationError;
 
+/// Config-derived values needed for submission.
+struct SubmissionConfig {
+    farm_id: String,
+    queue_id: String,
+    profile: Option<String>,
+    storage_profile_id: Option<String>,
+    job_attachments_file_system: String,
+    force_s3_check: bool,
+    allow_bundle_hooks: bool,
+    allow_environment_hooks: bool,
+    known_config_paths: Vec<String>,
+    s3_max_pool_connections: Option<usize>,
+}
+
+fn extract_submission_config(
+    config: &deadline_lib::config::ini::IniConfig,
+    ja_file_system_override: Option<String>,
+    force_s3_check_override: Option<bool>,
+) -> SubmissionConfig {
+    let get =
+        |name| deadline_lib::config::config_file::get_setting(name, config).unwrap_or_default();
+    let bool_setting =
+        |name| deadline_lib::config::config_file::str2bool(&get(name)).unwrap_or(false);
+
+    SubmissionConfig {
+        farm_id: get("defaults.farm_id"),
+        queue_id: get("defaults.queue_id"),
+        profile: deadline_lib::api::session::resolve_profile_name(config),
+        storage_profile_id: {
+            let v = get("settings.storage_profile_id");
+            if v.is_empty() { None } else { Some(v) }
+        },
+        job_attachments_file_system: ja_file_system_override
+            .unwrap_or_else(|| get("defaults.job_attachments_file_system")),
+        force_s3_check: force_s3_check_override
+            .unwrap_or_else(|| bool_setting("settings.force_s3_check")),
+        allow_bundle_hooks: bool_setting("settings.allow_bundle_hooks"),
+        allow_environment_hooks: bool_setting("settings.allow_environment_hooks"),
+        known_config_paths: {
+            let v = get("settings.known_asset_paths");
+            if v.is_empty() {
+                Vec::new()
+            } else {
+                let sep = if cfg!(windows) { ';' } else { ':' };
+                v.split(sep).map(String::from).collect()
+            }
+        },
+        s3_max_pool_connections: deadline_lib::config::config_file::get_setting(
+            "settings.s3_max_pool_connections",
+            config,
+        )
+        .ok()
+        .and_then(|v| deadline_lib::attachments::s3::parse_s3_max_pool_connections(&v).ok()),
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (params, on_print=None, on_hashing_progress=None, on_upload_progress=None, on_confirm=None, on_continue=None))]
 pub fn create_job_from_job_bundle(
@@ -192,6 +248,9 @@ pub fn create_job_from_job_bundle(
         },
     );
 
+    // Extract config-derived values
+    let cfg = extract_submission_config(&config, job_attachments_file_system, force_s3_check);
+
     let submit_params = deadline_lib::bundle::SubmitJobParams {
         job_bundle_dir: PathBuf::from(job_bundle_dir),
         job_parameters,
@@ -201,18 +260,25 @@ pub fn create_job_from_job_bundle(
         max_retries_per_task,
         max_worker_count,
         target_task_run_status,
-        job_attachments_file_system,
         require_paths_exist,
         submitter_name,
         known_asset_paths: known_asset_paths.into_iter().map(PathBuf::from).collect(),
         auto_accept,
-        force_s3_check,
         debug_snapshot_dir: debug_snapshot_dir.map(PathBuf::from),
-        config: &config,
         handler: &handler,
         hashing_progress_callback: hashing_cb,
         upload_progress_callback: upload_cb,
         telemetry: None,
+        farm_id: cfg.farm_id,
+        queue_id: cfg.queue_id,
+        profile: cfg.profile,
+        storage_profile_id: cfg.storage_profile_id,
+        job_attachments_file_system: cfg.job_attachments_file_system,
+        force_s3_check: cfg.force_s3_check,
+        allow_bundle_hooks: cfg.allow_bundle_hooks,
+        allow_environment_hooks: cfg.allow_environment_hooks,
+        known_config_paths: cfg.known_config_paths,
+        s3_max_pool_connections: cfg.s3_max_pool_connections,
     };
 
     let rt = crate::make_runtime()?;

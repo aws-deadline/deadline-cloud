@@ -55,11 +55,12 @@ class TestAuthStatusWidget:
 
     def test_profile_name_displayed(self, qapp, stub_config):
         """Auth status widget shows the profile name, not blank."""
+        import deadline.client.ui.deadline_authentication_status as das_mod
         from deadline.client.ui.deadline_authentication_status import DeadlineAuthenticationStatus
         from deadline.client.config import config_file
 
-        # Reset singleton so it picks up our stub config
-        DeadlineAuthenticationStatus._deadline_authentication_status = None
+        # Reset module-level singleton so it picks up our stub config
+        das_mod._deadline_authentication_status = None
         status = DeadlineAuthenticationStatus.getInstance()
 
         profile = config_file.get_setting("defaults.aws_profile_name", config=status.config)
@@ -68,16 +69,17 @@ class TestAuthStatusWidget:
 
     def test_auth_status_resolves_after_refresh(self, qapp, stub_config):
         """After async refresh completes, auth status is AUTHENTICATED."""
+        import deadline.client.ui.deadline_authentication_status as das_mod
         from deadline.client.ui.deadline_authentication_status import DeadlineAuthenticationStatus
 
-        DeadlineAuthenticationStatus._deadline_authentication_status = None
+        das_mod._deadline_authentication_status = None
         status = DeadlineAuthenticationStatus.getInstance()
 
         # Process events to let async tasks complete
-        for _ in range(20):
+        for _ in range(40):
             qapp.processEvents()
             time.sleep(0.1)
-            if status.auth_status is not None:
+            if status.auth_status is not None and status.api_availability is not None:
                 break
 
         assert status.creds_source == "HOST_PROVIDED"
@@ -86,12 +88,13 @@ class TestAuthStatusWidget:
 
     def test_auth_widget_shows_profile_text(self, qapp, stub_config):
         """The auth status widget button shows profile name text."""
+        import deadline.client.ui.deadline_authentication_status as das_mod
         from deadline.client.ui.deadline_authentication_status import DeadlineAuthenticationStatus
         from deadline.client.ui.widgets.deadline_authentication_status_widget import (
             DeadlineAuthenticationStatusWidget,
         )
 
-        DeadlineAuthenticationStatus._deadline_authentication_status = None
+        das_mod._deadline_authentication_status = None
 
         widget = DeadlineAuthenticationStatusWidget()
 

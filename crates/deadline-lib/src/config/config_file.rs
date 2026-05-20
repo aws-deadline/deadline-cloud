@@ -1100,4 +1100,172 @@ mod tests {
             "20"
         );
     }
+
+    // =========================================================================
+    // Path normalization — Windows config path handling (#21f)
+    // =========================================================================
+
+    #[test]
+    #[cfg(windows)]
+    fn for_config_converts_backslashes_to_forward_slashes() {
+        assert_eq!(
+            normalize_path_for_config(r"C:\Users\artist\.deadline\config"),
+            "C:/Users/artist/.deadline/config"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn for_config_unc_path() {
+        assert_eq!(
+            normalize_path_for_config(r"\\server\share\folder"),
+            "//server/share/folder"
+        );
+    }
+
+    #[test]
+    fn for_config_preserves_forward_slashes() {
+        assert_eq!(
+            normalize_path_for_config("/home/user/.deadline/config"),
+            "/home/user/.deadline/config"
+        );
+    }
+
+    #[test]
+    fn for_config_empty_string() {
+        assert_eq!(normalize_path_for_config(""), "");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn from_config_converts_forward_slashes_to_backslashes() {
+        assert_eq!(
+            normalize_path_from_config("C:/Users/artist/.deadline/config"),
+            r"C:\Users\artist\.deadline\config"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn from_config_unc_path() {
+        assert_eq!(
+            normalize_path_from_config("//server/share/folder"),
+            r"\\server\share\folder"
+        );
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn from_config_is_noop_on_unix() {
+        assert_eq!(
+            normalize_path_from_config("/home/user/.deadline/config"),
+            "/home/user/.deadline/config"
+        );
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn for_config_is_noop_on_unix() {
+        assert_eq!(
+            normalize_path_for_config(r"path\with\backslashes"),
+            r"path\with\backslashes"
+        );
+    }
+
+    #[test]
+    fn from_config_empty_string() {
+        assert_eq!(normalize_path_from_config(""), "");
+    }
+
+    #[test]
+    fn get_setting_returns_path_setting_unchanged_on_unix_or_converted_on_windows() {
+        let mut config = IniConfig::new();
+        config.set(
+            "deadline-cloud-monitor",
+            "path",
+            "C:/Program Files/DCM/monitor.exe",
+        );
+
+        let val = get_setting("deadline-cloud-monitor.path", &config).unwrap();
+        if cfg!(windows) {
+            assert_eq!(val, r"C:\Program Files\DCM\monitor.exe");
+        } else {
+            assert_eq!(val, "C:/Program Files/DCM/monitor.exe");
+        }
+    }
+
+    #[test]
+    fn set_setting_stores_path_with_forward_slashes_on_windows() {
+        let mut config = IniConfig::new();
+        set_setting(
+            "deadline-cloud-monitor.path",
+            r"C:\Program Files\DCM\monitor.exe",
+            &mut config,
+        )
+        .unwrap();
+
+        let raw = config.get("deadline-cloud-monitor", "path").unwrap_or("");
+        if cfg!(windows) {
+            assert_eq!(raw, "C:/Program Files/DCM/monitor.exe");
+        } else {
+            assert_eq!(raw, r"C:\Program Files\DCM\monitor.exe");
+        }
+    }
+
+    #[test]
+    fn get_setting_normalizes_path_list_setting() {
+        let mut config = IniConfig::new();
+        let stored = if cfg!(windows) {
+            "C:/art/textures;D:/projects/renders"
+        } else {
+            "/art/textures:/projects/renders"
+        };
+        config.set("settings", "known_asset_paths", stored);
+
+        let val = get_setting("settings.known_asset_paths", &config).unwrap();
+        if cfg!(windows) {
+            assert_eq!(val, r"C:\art\textures;D:\projects\renders");
+        } else {
+            assert_eq!(val, "/art/textures:/projects/renders");
+        }
+    }
+
+    #[test]
+    fn set_setting_normalizes_path_list_on_windows() {
+        let mut config = IniConfig::new();
+        let input = if cfg!(windows) {
+            r"C:\art\textures;D:\projects\renders"
+        } else {
+            "/art/textures:/projects/renders"
+        };
+        set_setting("settings.known_asset_paths", input, &mut config).unwrap();
+
+        let raw = config.get("settings", "known_asset_paths").unwrap_or("");
+        if cfg!(windows) {
+            assert_eq!(raw, "C:/art/textures;D:/projects/renders");
+        } else {
+            assert_eq!(raw, "/art/textures:/projects/renders");
+        }
+    }
+
+    #[test]
+    fn non_path_setting_not_modified() {
+        let mut config = IniConfig::new();
+        set_setting("defaults.aws_profile_name", r"my/profile", &mut config).unwrap();
+        let val = get_setting("defaults.aws_profile_name", &config).unwrap();
+        assert_eq!(val, r"my/profile");
+    }
+
+    #[test]
+    fn path_setting_roundtrips_correctly() {
+        let mut config = IniConfig::new();
+        let original = if cfg!(windows) {
+            r"C:\Program Files\AWS\DeadlineCloudMonitor\monitor.exe"
+        } else {
+            "/usr/local/bin/DeadlineCloudMonitor"
+        };
+        set_setting("deadline-cloud-monitor.path", original, &mut config).unwrap();
+        let result = get_setting("deadline-cloud-monitor.path", &config).unwrap();
+        assert_eq!(result, original);
+    }
 }

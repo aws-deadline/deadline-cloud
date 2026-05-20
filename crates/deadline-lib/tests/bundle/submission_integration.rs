@@ -9,7 +9,6 @@
 use deadline_lib::bundle::submission::{
     SubmissionHandler, SubmitJobParams, create_job_from_job_bundle,
 };
-use deadline_lib::config::ini::IniConfig;
 use serde_json::json;
 use serial_test::serial;
 use std::fs;
@@ -75,12 +74,39 @@ async fn setup_env(server: &MockServer) {
     }
 }
 
-fn make_config(_dir: &TempDir) -> IniConfig {
-    let mut config = IniConfig::new();
-    deadline_lib::config::config_file::set_setting("defaults.farm_id", FARM, &mut config).unwrap();
-    deadline_lib::config::config_file::set_setting("defaults.queue_id", QUEUE, &mut config)
-        .unwrap();
-    config
+fn default_submit_params<'a>(
+    bundle_dir: PathBuf,
+    handler: &'a dyn SubmissionHandler,
+) -> SubmitJobParams<'a> {
+    SubmitJobParams {
+        job_bundle_dir: bundle_dir,
+        job_parameters: vec![],
+        name: None,
+        priority: None,
+        max_failed_tasks_count: None,
+        max_retries_per_task: None,
+        max_worker_count: None,
+        target_task_run_status: None,
+        require_paths_exist: false,
+        submitter_name: None,
+        known_asset_paths: vec![],
+        auto_accept: true,
+        debug_snapshot_dir: None,
+        handler,
+        hashing_progress_callback: None,
+        upload_progress_callback: None,
+        telemetry: None,
+        farm_id: FARM.to_owned(),
+        queue_id: QUEUE.to_owned(),
+        profile: None,
+        storage_profile_id: None,
+        job_attachments_file_system: String::new(),
+        force_s3_check: false,
+        allow_bundle_hooks: false,
+        allow_environment_hooks: false,
+        known_config_paths: vec![],
+        s3_max_pool_connections: None,
+    }
 }
 
 fn create_bundle(dir: &TempDir, name: &str) -> PathBuf {
@@ -183,33 +209,10 @@ async fn submit_no_attachments_returns_job_id() {
     mock_standard_submission(&server).await;
 
     let dir = TempDir::new().unwrap();
-    let config = make_config(&dir);
     let bundle_dir = create_bundle(&dir, "bundle");
     let handler = TestHandler::new();
 
-    let result = create_job_from_job_bundle(SubmitJobParams {
-        job_bundle_dir: bundle_dir,
-        job_parameters: vec![],
-        name: None,
-        priority: None,
-        max_failed_tasks_count: None,
-        max_retries_per_task: None,
-        max_worker_count: None,
-        target_task_run_status: None,
-        job_attachments_file_system: None,
-        require_paths_exist: false,
-        submitter_name: None,
-        known_asset_paths: vec![],
-        auto_accept: true,
-        force_s3_check: None,
-        debug_snapshot_dir: None,
-        config: &config,
-        handler: &handler,
-        hashing_progress_callback: None,
-        upload_progress_callback: None,
-        telemetry: None,
-    })
-    .await;
+    let result = create_job_from_job_bundle(default_submit_params(bundle_dir, &handler)).await;
 
     let job_id = result.unwrap().unwrap();
     assert_eq!(job_id, JOB);
@@ -238,33 +241,10 @@ async fn submit_create_job_api_error_returns_error() {
         .await;
 
     let dir = TempDir::new().unwrap();
-    let config = make_config(&dir);
     let bundle_dir = create_bundle(&dir, "bundle");
     let handler = TestHandler::new();
 
-    let result = create_job_from_job_bundle(SubmitJobParams {
-        job_bundle_dir: bundle_dir,
-        job_parameters: vec![],
-        name: None,
-        priority: None,
-        max_failed_tasks_count: None,
-        max_retries_per_task: None,
-        max_worker_count: None,
-        target_task_run_status: None,
-        job_attachments_file_system: None,
-        require_paths_exist: false,
-        submitter_name: None,
-        known_asset_paths: vec![],
-        auto_accept: true,
-        force_s3_check: None,
-        debug_snapshot_dir: None,
-        config: &config,
-        handler: &handler,
-        hashing_progress_callback: None,
-        upload_progress_callback: None,
-        telemetry: None,
-    })
-    .await;
+    let result = create_job_from_job_bundle(default_submit_params(bundle_dir, &handler)).await;
 
     let err = result.unwrap_err().to_string();
     assert!(
@@ -304,33 +284,10 @@ async fn submit_create_failed_status_returns_error() {
         .await;
 
     let dir = TempDir::new().unwrap();
-    let config = make_config(&dir);
     let bundle_dir = create_bundle(&dir, "bundle");
     let handler = TestHandler::new();
 
-    let result = create_job_from_job_bundle(SubmitJobParams {
-        job_bundle_dir: bundle_dir,
-        job_parameters: vec![],
-        name: None,
-        priority: None,
-        max_failed_tasks_count: None,
-        max_retries_per_task: None,
-        max_worker_count: None,
-        target_task_run_status: None,
-        job_attachments_file_system: None,
-        require_paths_exist: false,
-        submitter_name: None,
-        known_asset_paths: vec![],
-        auto_accept: true,
-        force_s3_check: None,
-        debug_snapshot_dir: None,
-        config: &config,
-        handler: &handler,
-        hashing_progress_callback: None,
-        upload_progress_callback: None,
-        telemetry: None,
-    })
-    .await;
+    let result = create_job_from_job_bundle(default_submit_params(bundle_dir, &handler)).await;
 
     let err = result.unwrap_err().to_string();
     assert!(
@@ -347,35 +304,12 @@ async fn submit_missing_template_returns_error() {
     setup_env(&server).await;
 
     let dir = TempDir::new().unwrap();
-    let config = make_config(&dir);
     // Empty bundle dir — no template file
     let bundle_dir = dir.path().join("empty_bundle");
     fs::create_dir_all(&bundle_dir).unwrap();
     let handler = TestHandler::new();
 
-    let result = create_job_from_job_bundle(SubmitJobParams {
-        job_bundle_dir: bundle_dir,
-        job_parameters: vec![],
-        name: None,
-        priority: None,
-        max_failed_tasks_count: None,
-        max_retries_per_task: None,
-        max_worker_count: None,
-        target_task_run_status: None,
-        job_attachments_file_system: None,
-        require_paths_exist: false,
-        submitter_name: None,
-        known_asset_paths: vec![],
-        auto_accept: true,
-        force_s3_check: None,
-        debug_snapshot_dir: None,
-        config: &config,
-        handler: &handler,
-        hashing_progress_callback: None,
-        upload_progress_callback: None,
-        telemetry: None,
-    })
-    .await;
+    let result = create_job_from_job_bundle(default_submit_params(bundle_dir, &handler)).await;
 
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
@@ -395,34 +329,12 @@ async fn submit_handler_receives_queue_name_message() {
     mock_standard_submission(&server).await;
 
     let dir = TempDir::new().unwrap();
-    let config = make_config(&dir);
     let bundle_dir = create_bundle(&dir, "bundle");
     let handler = TestHandler::new();
 
-    let _ = create_job_from_job_bundle(SubmitJobParams {
-        job_bundle_dir: bundle_dir,
-        job_parameters: vec![],
-        name: None,
-        priority: None,
-        max_failed_tasks_count: None,
-        max_retries_per_task: None,
-        max_worker_count: None,
-        target_task_run_status: None,
-        job_attachments_file_system: None,
-        require_paths_exist: false,
-        submitter_name: None,
-        known_asset_paths: vec![],
-        auto_accept: true,
-        force_s3_check: None,
-        debug_snapshot_dir: None,
-        config: &config,
-        handler: &handler,
-        hashing_progress_callback: None,
-        upload_progress_callback: None,
-        telemetry: None,
-    })
-    .await
-    .unwrap();
+    let _ = create_job_from_job_bundle(default_submit_params(bundle_dir, &handler))
+        .await
+        .unwrap();
 
     let msgs = handler.messages();
     assert!(

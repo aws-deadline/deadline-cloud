@@ -1,4 +1,5 @@
 use clap::Subcommand;
+use deadline_lib::api::session;
 use deadline_lib::bundle::{SubmissionHandler, SubmitJobParams, create_job_from_job_bundle};
 use deadline_lib::config::config_file;
 use regex::Regex;
@@ -289,7 +290,6 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 })),
                 max_worker_count,
                 target_task_run_status,
-                job_attachments_file_system,
                 require_paths_exist,
                 submitter_name: Some(submitter_name.unwrap_or_else(|| "CLI".into())),
                 known_asset_paths: known_asset_path.into_iter().map(PathBuf::from).collect(),
@@ -299,9 +299,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                             .unwrap_or_default(),
                     )
                     .unwrap_or(false),
-                force_s3_check: resolved_force_s3_check,
                 debug_snapshot_dir: effective_snapshot_dir.map(PathBuf::from),
-                config: &config,
                 handler: &CliSubmissionHandler,
                 hashing_progress_callback: Some(Box::new(move |processed, total| {
                     let pct = if total > 0 {
@@ -322,6 +320,55 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                     true
                 })),
                 telemetry: Some(&telemetry),
+                // Explicit config-derived fields
+                farm_id: config_file::get_setting("defaults.farm_id", &config).unwrap_or_default(),
+                queue_id: config_file::get_setting("defaults.queue_id", &config)
+                    .unwrap_or_default(),
+                profile: session::resolve_profile_name(&config),
+                storage_profile_id: {
+                    let v = config_file::get_setting("settings.storage_profile_id", &config)
+                        .unwrap_or_default();
+                    if v.is_empty() { None } else { Some(v) }
+                },
+                job_attachments_file_system: job_attachments_file_system.unwrap_or_else(|| {
+                    config_file::get_setting("defaults.job_attachments_file_system", &config)
+                        .unwrap_or_default()
+                }),
+                force_s3_check: resolved_force_s3_check.unwrap_or_else(|| {
+                    config_file::str2bool(
+                        &config_file::get_setting("settings.force_s3_check", &config)
+                            .unwrap_or_default(),
+                    )
+                    .unwrap_or(false)
+                }),
+                allow_bundle_hooks: config_file::str2bool(
+                    &config_file::get_setting("settings.allow_bundle_hooks", &config)
+                        .unwrap_or_default(),
+                )
+                .unwrap_or(false),
+                allow_environment_hooks: config_file::str2bool(
+                    &config_file::get_setting("settings.allow_environment_hooks", &config)
+                        .unwrap_or_default(),
+                )
+                .unwrap_or(false),
+                known_config_paths: {
+                    let v = config_file::get_setting("settings.known_asset_paths", &config)
+                        .unwrap_or_default();
+                    if v.is_empty() {
+                        Vec::new()
+                    } else {
+                        let sep = if cfg!(windows) { ';' } else { ':' };
+                        v.split(sep).map(String::from).collect()
+                    }
+                },
+                s3_max_pool_connections: config_file::get_setting(
+                    "settings.s3_max_pool_connections",
+                    &config,
+                )
+                .ok()
+                .and_then(|v| {
+                    deadline_lib::attachments::s3::parse_s3_max_pool_connections(&v).ok()
+                }),
             };
 
             let job_id = match create_job_from_job_bundle(submit_params).await {

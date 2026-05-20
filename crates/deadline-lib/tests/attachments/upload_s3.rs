@@ -98,34 +98,20 @@ async fn build_uploader(server: &MockServer) -> S3UploadContext {
         .test_credentials()
         .load()
         .await;
-    let config = deadline_lib::config::ini::IniConfig::new();
-    let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);
+    let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, None);
     S3UploadContext::new(s3_client, "123456789012".into()).unwrap()
 }
 
 /// Build an uploader with multiplier=1 (threshold=8MB) and pool=10 (workers=5).
 /// Use with 9MB+ files to exercise the multipart upload path.
 async fn build_uploader_low_threshold(server: &MockServer) -> S3UploadContext {
-    let mut config = deadline_lib::config::ini::IniConfig::new();
-    deadline_lib::config::config_file::set_setting(
-        "settings.small_file_threshold_multiplier",
-        "1",
-        &mut config,
-    )
-    .unwrap();
-    deadline_lib::config::config_file::set_setting(
-        "settings.s3_max_pool_connections",
-        "10",
-        &mut config,
-    )
-    .unwrap();
     let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(aws_config::Region::new("us-west-2"))
         .endpoint_url(server.uri())
         .test_credentials()
         .load()
         .await;
-    let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, &config);
+    let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, Some(10));
     S3UploadContext::new(s3_client, "123456789012".into()).unwrap()
 }
 

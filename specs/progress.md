@@ -100,15 +100,15 @@ pick and execute work items.
 | 31 | Crate restructure (openjd-rs integration + boundary cleanup) | ✅ Done | — | — |
 | 32 | Worker agent Python bindings (attachment operations) | Not started | `deadline-python-bindings/worker-agent-bindings.md` | — |
 | 33 | Error type parity audit and resolution | Not started | — | — |
-| 34 | Library/CLI boundary refactor (remove IniConfig from operations) | In progress | — | — |
+| 34 | Library/CLI boundary refactor (remove IniConfig from operations) | ✅ Done | — | — |
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Deferred
 
 **Dependency status:** All core feature dependencies are resolved.
 No items remain as ⚠️ Gaps. #16f is blocked on #24.
 
-**Next action item:** #34 (Library/CLI boundary refactor) — architectural
-cleanup that makes the library usable without config, then #24.
+**Next action item:** #24 (Production distribution) — packaging and
+distribution story for the Rust rewrite.
 
 **In-progress details:** See `HANDOFF.md` for current state of any
 active work items.
