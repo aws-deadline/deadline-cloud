@@ -2,19 +2,19 @@
 """
 Stack trace sanitizer for Deadline Cloud client telemetry.
 
-Uses an allowlist approach: only explicitly chosen fields (sanitized filename,
-line number, function name, exception type) are emitted. Source code context
-and exception messages are intentionally omitted as they could contain
-customer data.
-
-Conforms to ADR 2024-02-19: "No customer content or other information provided
-by the customer can be submitted, such as bucket names, file names, or similar."
+**Design tenet:** no customer-provided content (file paths, bucket names,
+exception message text, source code lines, local variable values, etc.) may
+appear in telemetry. Only an allowlist of structured fields is emitted:
+sanitized filename, line number, function name, and exception type. The
+exception's message string and source-line context are dropped entirely
+because we have no control over what third-party libraries put in them.
 """
 
 import traceback
 from typing import FrozenSet, List
 
-# Packages we control — safe to include relative paths for
+# Packages we author or vendor — emitting paths relative to these is safe
+# because the path itself only reveals which of our own modules raised.
 _KNOWN_PACKAGES: FrozenSet[str] = frozenset(
     {
         "deadline",
@@ -27,20 +27,33 @@ _KNOWN_PACKAGES: FrozenSet[str] = frozenset(
 
 def _sanitize_path(filepath: str) -> str:
     """Replace a full file path with the package-relative portion or bare filename."""
+    # Synthetic frame sources like "<string>", "<stdin>", or
+    # "<frozen importlib._bootstrap>" don't reference the filesystem and are
+    # already non-identifying, so pass them through unchanged.
     if filepath.startswith("<"):
         return filepath
 
+    # Normalize Windows separators so the rest of the function only deals
+    # with forward slashes.
     parts = filepath.replace("\\", "/").split("/")
 
+    # If any path segment names one of our known packages, return everything
+    # from that segment onward. `stem` strips a trailing extension so paths
+    # like ".../deadline.egg-info/..." still match "deadline".
     for i, part in enumerate(parts):
         stem = part.split(".")[0]
         if stem in _KNOWN_PACKAGES:
             return "/".join(parts[i:])
 
+    # Unknown third-party library installed into a venv: keep the
+    # library-relative subpath but drop everything above site-packages
+    # (which would otherwise leak the customer's home / venv layout).
     for i, part in enumerate(parts):
         if part == "site-packages" and i + 1 < len(parts):
             return "/".join(parts[i + 1 :])
 
+    # Anything else (customer scripts, project trees) — keep only the
+    # bare filename.
     return parts[-1]
 
 
