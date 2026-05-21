@@ -286,7 +286,7 @@ ComboBox {
 | `gui/deadline/client/exceptions.py` | ~40 | Deleted |
 | `gui/deadline/client/dataclasses/` | ~100 | Deleted (Rust structs) |
 | `gui/deadline/client/api/` | ~50 | Deleted |
-| `gui/tests/` | ~2000 | Replaced by Rust tests + QML tests |
+| `gui/tests/` | ~2000 | Replaced by L1 Rust model tests + L2 `xa11y` accessibility tests |
 | `gui/deadline/client/ui/translations/` | ~12 files | Converted to Qt `.ts` format |
 | `pyproject.toml` (maturin GUI config) | — | Simplified (DCC shim only) |
 

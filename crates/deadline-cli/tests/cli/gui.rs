@@ -167,29 +167,19 @@ async fn config_gui_help_shows_options() {
     assert_cmd_snapshot!(harness.cmd(&["config", "gui", "--help"]));
 }
 
-// Python not found → clear error message
-#[tokio::test]
-async fn config_gui_no_python_returns_error() {
-    let harness = TestHarness::new().await;
-    let mut cmd = harness.cmd(&["config", "gui"]);
-    cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");
-    cmd.env("PATH", "");
-    assert_cmd_snapshot!(cmd);
-}
-
-// --install-gui flag is accepted
+// --install-gui flag is accepted (no-op with native GUI)
 #[tokio::test]
 async fn config_gui_install_gui_flag_accepted() {
     let harness = TestHarness::new().await;
-    let mut cmd = harness.cmd(&["config", "gui", "--install-gui"]);
-    cmd.env("DEADLINE_PYTHON", "/nonexistent/python3");
-    cmd.env("PATH", "");
-    // Should fail with exit code 1 (Python-not-found), NOT exit code 2 (unknown flag)
-    let output = cmd.output().unwrap();
+    // --install-gui should not cause an arg error (exit code 2)
+    let output = harness
+        .cmd(&["config", "gui", "--install-gui", "--help"])
+        .output()
+        .unwrap();
     assert_eq!(
         output.status.code(),
-        Some(1),
-        "should exit 1 (operation error), not 2 (arg error). stderr: {}",
+        Some(0),
+        "should exit 0 (help shown), not 2 (arg error). stderr: {}",
         String::from_utf8_lossy(&output.stderr),
     );
 }

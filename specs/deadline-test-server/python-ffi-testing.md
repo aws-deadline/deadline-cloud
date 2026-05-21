@@ -1,7 +1,19 @@
 # Python FFI Test Infrastructure
 
-How the Python GUI tests (`gui/tests/`) use the same stub server
-infrastructure as the Rust CLI tests.
+How the Python FFI tests (`gui/tests/`) and GUI accessibility tests
+(`test/ui/`) use stub server infrastructure for isolation.
+
+## Context
+
+The primary GUI is now Rust+QML (`crates/deadline-gui/`). Python is only
+involved in two scenarios:
+1. **DCC plugins** — Maya/Blender/etc. call `deadline._native` (PyO3) to
+   invoke the Rust GUI from within their Python environment.
+2. **L2 accessibility tests** — Python `xa11y` library drives the real
+   `deadline` binary through the OS accessibility tree.
+
+The `gui/tests/test_native.py` tests verify the PyO3 boundary still works
+correctly for DCC plugin consumers.
 
 ## Problem
 

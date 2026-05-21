@@ -16,6 +16,7 @@ license = "Apache-2.0"
 [workspace.dependencies]
 # Internal crates
 deadline-lib = { path = "crates/deadline-lib" }
+deadline-gui = { path = "crates/deadline-gui" }
 deadline-test-server = { path = "crates/deadline-test-server" }
 
 # OpenJD crates

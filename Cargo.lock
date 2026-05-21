@@ -1290,6 +1290,7 @@ dependencies = [
  "aws-sdk-deadline",
  "chrono",
  "clap",
+ "deadline-gui",
  "deadline-lib",
  "deadline-test-server",
  "env_logger",
@@ -1322,6 +1323,8 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "deadline-lib",
+ "serde_json",
+ "tempfile",
  "tokio",
 ]
 

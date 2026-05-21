@@ -126,9 +126,8 @@ fn clear(setting_name: &str) -> Result<(), CliError> {
     Ok(())
 }
 
-fn run_config_gui(install_gui: bool) -> Result<(), CliError> {
-    let python = super::gui::find_python()?;
-    let params = serde_json::json!({});
-    super::gui::launch_gui(&python, "config-gui", &params.to_string(), install_gui)?;
+#[allow(clippy::unnecessary_wraps, reason = "signature matches other command handlers")]
+fn run_config_gui(_install_gui: bool) -> Result<(), CliError> {
+    deadline_gui::show_config_dialog();
     Ok(())
 }

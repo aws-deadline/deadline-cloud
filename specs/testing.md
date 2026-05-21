@@ -122,6 +122,61 @@ assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-abc"]));
 | Config file side effects | `assert_eq!` on file content |
 | API request validation | wiremock request matchers |
 | Unit test return values | `assert_eq!` |
+
+## GUI Testing
+
+The GUI (`crates/deadline-gui/`) uses Rust+QML via cxx-qt. Testing
+follows the same Level 1 / Level 2 philosophy, adapted for Qt.
+
+### Level 1: Model Logic (Pure Rust, no Qt)
+
+QObject `#[qinvokable]` methods should be thin wrappers that call
+testable pure-Rust functions. The logic lives in functions; the QObject
+is glue. These tests run in `cargo test` with no display server.
+
+**What to test at L1:**
+- Config loading/apply/dirty tracking
+- Resource list parsing (API response → name/id pairs)
+- Auth status derivation
+
+### Level 2: Accessibility Tree Tests (`xa11y` + subprocess)
+
+Launch the real `deadline` binary as a subprocess, then drive the GUI
+through the OS accessibility API using `xa11y` (Python). Qt exposes all
+QML elements to the platform accessibility layer (AT-SPI on Linux,
+Accessibility API on macOS, UIA on Windows). `xa11y` queries this tree
+regardless of whether the GUI is Python+PySide6 or Rust+cxx-qt.
+
+**What to test at L2:**
+- Dialog opens with correct title
+- All settings groups present
+- Settings round-trip: `deadline config set` → open GUI → verify value
+- Ok/Cancel/Apply button semantics
+
+**Infrastructure:** `test/ui/conftest.py` (mock backend + isolated env),
+`test/ui/helpers.py` (page objects wrapping `xa11y.App`).
+
+**QML requirement:** Elements must set `Accessible.name` so L2 tests
+can find them by name/role.
+
+### Choosing the Right Level
+
+| What | Level | Location |
+|------|-------|----------|
+| Model logic (load/apply/dirty) | L1 | `crates/deadline-gui/src/` inline |
+| Dialog behavior (full stack) | L2 | `test/ui/` (Python + xa11y) |
+| PyO3 bindings (DCC compat) | L1 | `gui/tests/test_native.py` |
+
+### Migrating from Python GUI Tests
+
+The `xa11y` subprocess tests from `deadline-cloud-python/test/ui/` work
+unchanged against the Rust GUI — they talk to the OS accessibility
+layer, not the framework. These become the acceptance criteria.
+
+The `pytest-qt` widget tests in `gui/tests/test_config_dialog_*.py` are
+replaced by L1 Rust model tests + L2 accessibility tests.
+
+
 ## Manual CLI Comparison Testing
 
 Stub-server tests verify behavior against canned responses. Manual

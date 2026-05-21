@@ -4,6 +4,7 @@
 //! as Rust QObject models backed by QML views.
 
 pub mod config_model;
+pub mod logic;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 
