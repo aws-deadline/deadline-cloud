@@ -2,6 +2,7 @@
 members = [
     "crates/deadline-lib",
     "crates/deadline-cli",
+    "crates/deadline-gui",
     "crates/deadline-python-bindings",
     "crates/deadline-test-server",
 ]

@@ -1,166 +1,361 @@
-# GUI Rewrite: Rust-Native Qt via qtbridge-rust
+# GUI Rewrite: Pure Rust + QML via cxx-qt
 
 ## Goal
 
-Eliminate all Python from `deadline-cloud-rs`. The GUI becomes Rust + QML
-via [qtbridge-rust](https://github.com/qt/qtbridge-rust). DCC submitter
-plugins (Maya, Blender, etc.) continue working unchanged via PyO3 bindings.
+Eliminate all Python from the `deadline` product. The GUI becomes pure
+Rust (business logic) + QML (declarative UI) via the `cxx-qt` crate (KDAB).
+No Python runtime ships with the CLI or installer.
 
-## Target Architecture
+DCC submitter plugins (Maya, Blender, etc.) call into the same Rust GUI
+crate via a minimal PyO3 shim — they don't ship Python GUI code either.
+
+## Technology: cxx-qt
+
+- **Repo:** https://github.com/KDAB/cxx-qt (cloned at `../cxx-qt/`)
+- **Version:** 0.8.1 (crates.io)
+- **License:** MIT OR Apache-2.0
+- **Platforms:** macOS arm64 ✅, Linux x86_64 ✅, Windows x64 ✅, WebAssembly
+- **Qt versions:** Qt 5.15 LTS, all Qt 6
+- **Build:** Pure Cargo (no CMake required)
+- **Prerequisite:** Qt 6 installed, `QMAKE` env var pointing to `qmake`
+
+## Spike Results (2026-05-20) ✅
+
+**Proven on macOS arm64 with Qt 6.11.1 (homebrew):**
+- cxx-qt v0.8.1 builds and links against system Qt
+- QObject model with `#[qproperty]`, `#[qinvokable]`, `Threading` compiles
+- QML dialog renders and displays on screen
+- `deadline-lib` config integration works (reads settings from INI)
+- Existing 1,149 tests unaffected (zero failures)
+- Build command: `QMAKE=/opt/homebrew/opt/qt/bin/qmake cargo build -p deadline-gui`
+
+**Skeleton already in place:** `crates/deadline-gui/` with `ConfigModel`,
+`ConfigDialog.qml`, and `build.rs` — ready for full implementation.
+
+## Final Architecture
+
+```mermaid
+graph TD
+    subgraph "User-facing products"
+        CLI["deadline CLI binary<br/>(Rust, single executable)"]
+        DCC["DCC Plugin<br/>(Python, runs inside Maya/Blender)"]
+    end
+
+    subgraph "Rust Workspace Crates"
+        GUI["deadline-gui<br/>(Rust models + QML files)<br/>depends on: deadline-lib, cxx-qt, tokio"]
+        LIB["deadline-lib<br/>(config, API, bundles, attachments)<br/>depends on: aws-sdk-*, openjd-*"]
+        CLIPKG["deadline-cli<br/>(clap arg parsing, output formatting)<br/>depends on: deadline-lib, deadline-gui"]
+        PYBIN["deadline-python-bindings<br/>(PyO3 thin shim, ~50 lines)<br/>depends on: deadline-gui, pyo3"]
+    end
+
+    subgraph "External Dependencies"
+        QT["Qt 6 (shared libs)<br/>linked at compile time via cxx-qt"]
+        AWS["AWS SDK for Rust"]
+        OPENJD["openjd-snapshots<br/>(hashing, S3 transfer)"]
+    end
+
+    CLI --> CLIPKG
+    CLIPKG --> GUI
+    CLIPKG --> LIB
+    GUI --> LIB
+    GUI --> QT
+    DCC --> PYBIN
+    PYBIN --> GUI
+    LIB --> AWS
+    LIB --> OPENJD
+```
+
+### Key Relationships Explained
+
+1. **`deadline-cli` depends on `deadline-gui`** — When the user runs
+   `deadline bundle gui-submit` or `deadline config gui`, the CLI calls
+   `deadline_gui::show_submit_dialog()` or `deadline_gui::show_config_dialog()`
+   directly. No subprocess, no IPC.
+
+2. **`deadline-gui` depends on `deadline-lib`** — The GUI models call
+   library functions for all business logic: `list_farms()`, `login()`,
+   `create_job_from_job_bundle()`, `read_config()`, etc. The GUI never
+   calls AWS APIs directly.
+
+3. **`deadline-cli` also depends on `deadline-lib` directly** — For
+   headless commands (`deadline bundle submit`, `deadline auth login`,
+   etc.) the CLI calls the library without involving the GUI crate.
+
+4. **`deadline-python-bindings` depends on `deadline-gui`** — DCC plugins
+   call `show_submit_dialog()` through PyO3. The binding is a thin wrapper
+   that converts Python dicts to Rust types and calls the same GUI code.
+
+5. **`deadline-gui` depends on `cxx-qt` + Qt 6** — The cxx-qt crate
+   provides the Rust↔Qt binding layer. Qt 6 shared libraries are linked
+   at compile time. QML files are embedded in the binary via `include_bytes!`.
+
+## Crate Dependency Graph (Cargo)
+
+```mermaid
+graph BT
+    LIB["deadline-lib"]
+    GUI["deadline-gui"]
+    CLI["deadline-cli"]
+    PY["deadline-python-bindings"]
+    TEST["deadline-test-server"]
+
+    GUI --> LIB
+    GUI -.-> |"cxx-qt, tokio"| EXT1["external"]
+    CLI --> LIB
+    CLI --> GUI
+    CLI -.-> |"clap, rmcp"| EXT2["external"]
+    PY --> GUI
+    PY -.-> |"pyo3"| EXT3["external"]
+    TEST --> LIB
+```
+
+## How Each User Path Works
+
+### CLI Headless Command (`deadline bundle submit`)
 
 ```
-deadline-cloud-rs/
-├── crates/
-│   ├── deadline-lib/              # Business logic (unchanged)
-│   ├── deadline-gui/              # NEW: Rust Qt backend + QML UI
-│   ├── deadline-cli/              # CLI binary (GUI commands call deadline-gui directly)
-│   └── deadline-python-bindings/  # PyO3 (business logic + GUI class exports)
-├── qml/                           # QML UI files (shared tabs, dialogs)
-└── (no gui/ directory)            # Python GUI code eliminated
+User runs: deadline bundle submit --job-bundle-dir /path
+
+deadline-cli:
+  1. Clap parses args
+  2. Reads config via deadline_lib::config
+  3. Calls deadline_lib::bundle::create_job_from_job_bundle()
+  4. Prints result
+
+No GUI involved. Pure Rust, single process.
 ```
 
-### Crate dependency graph
+### CLI GUI Command (`deadline bundle gui-submit`)
 
 ```
-deadline-lib          (no GUI, no Qt dependency)
-     ↑
-deadline-gui          (qtbridge-rust, QML rendering, dialog logic)
-     ↑          ↑
-deadline-cli    deadline-python-bindings
-(binary)        (cdylib for DCC plugins)
+User runs: deadline bundle gui-submit --job-bundle-dir /path
+
+deadline-cli:
+  1. Clap parses args, reads config
+  2. Calls deadline_gui::show_submit_dialog(params)
+
+deadline-gui:
+  3. Creates QApp (Qt event loop)
+  4. Registers Rust model structs with QML engine
+  5. Loads SubmitDialog.qml (embedded in binary)
+  6. QML renders the dialog, user interacts
+  7. User clicks Submit → QML calls Rust slot
+  8. Rust model spawns tokio task:
+     - Calls deadline_lib::bundle::create_job_from_job_bundle()
+     - Reports progress back to QML via QmlMethodInvoker
+  9. Returns job_id to CLI
+
+deadline-cli:
+  10. Prints result
+
+Single process. No Python. No subprocess.
 ```
 
-## How It Works
-
-### CLI path (`deadline bundle gui-submit`)
+### DCC Plugin (`Maya submitter`)
 
 ```
-User runs: deadline bundle gui-submit --job-bundle-dir /path/to/bundle
+Maya Python plugin:
+  1. Introspects scene (maya.cmds) → builds params dict
+  2. from deadline._native import show_submit_dialog
+  3. result = show_submit_dialog(params)
 
-1. CLI parses args, reads config
-2. CLI calls deadline_gui::show_submit_dialog(params)
-3. Rust creates QApp, loads QML, shows dialog
-4. User interacts with Qt Quick UI
-5. On submit: calls deadline_lib::create_job_from_job_bundle()
-6. Returns job ID to CLI, CLI prints result
+deadline-python-bindings (PyO3):
+  4. Converts Python dict → Rust SubmitParams struct
+  5. Calls deadline_gui::show_submit_dialog(params)
+
+deadline-gui:
+  6. Uses Maya's existing QApplication (already running)
+  7. Creates a new top-level QML window (SubmitDialog)
+  8. User interacts, submits
+  9. Returns result
+
+deadline-python-bindings:
+  10. Converts Rust result → Python dict
+  11. Returns to Maya plugin
+
+Maya plugin:
+  12. Shows success message in Maya UI
 ```
 
-No subprocess. No Python. Single process.
-
-### DCC plugin path (Maya, Blender, etc.)
+### Config GUI (`deadline config gui`)
 
 ```
-DCC plugin (Python, running inside Maya's interpreter):
+User runs: deadline config gui
 
-from deadline._native import SubmitJobToDeadlineDialog
+deadline-cli → deadline_gui::show_config_dialog()
 
-dialog = SubmitJobToDeadlineDialog(
-    job_setup_widget_type=SceneSettingsWidget,  # DCC-specific Python QWidget
-    initial_job_settings=render_settings,
-    ...
-)
-result = dialog.exec()
+deadline-gui:
+  1. Creates QApp
+  2. Loads ConfigDialog.qml
+  3. ConfigModel reads settings via deadline_lib::config
+  4. AuthModel checks credentials via deadline_lib::api::session
+  5. ResourceModel loads farms/queues via deadline_lib (async, tokio)
+  6. User edits settings
+  7. Apply → ConfigModel writes via deadline_lib::config
+  8. Dialog closes
+
+Returns to CLI.
 ```
 
-The PyO3 `SubmitJobToDeadlineDialog` class:
-1. Instantiates the Python `job_setup_widget_type()` to get a QWidget
-2. Extracts the raw QWidget* pointer via `shiboken6.getCppPointer(widget)`
-3. Creates the Rust Qt dialog (via deadline-gui)
-4. Embeds the DCC widget pointer into the dialog's tab layout
-5. Runs the dialog event loop
-6. Returns the result
+## Internal Structure of `deadline-gui`
 
-**DCC submitter code does not change.** Same import, same API.
+```
+crates/deadline-gui/
+├── Cargo.toml
+├── src/
+│   ├── lib.rs                 # Public API: show_submit_dialog(), show_config_dialog()
+│   ├── app.rs                 # QApp creation, QML engine setup
+│   ├── models/
+│   │   ├── mod.rs
+│   │   ├── auth.rs            # AuthModel — creds source, auth status, API availability
+│   │   ├── config.rs          # ConfigModel — settings form state, apply/cancel
+│   │   ├── resources.rs       # ResourceModel — farms, queues, storage profiles (QListModel)
+│   │   ├── submit.rs          # SubmitModel — job settings, parameters, attachments
+│   │   ├── progress.rs        # ProgressModel — hashing/upload progress, log messages
+│   │   └── parameters.rs      # ParameterListModel — dynamic form from queue params
+│   └── util.rs                # Shared helpers (tokio runtime, error formatting)
+└── qml/
+    ├── ConfigDialog.qml       # Workstation configuration window
+    ├── SubmitDialog.qml       # Job submission window with tabs
+    ├── ProgressDialog.qml     # Submission progress (bars, log, cancel)
+    ├── LoginDialog.qml        # SSO login flow
+    ├── components/
+    │   ├── AuthStatusBar.qml  # Login/logout/profile switch strip
+    │   ├── FarmSelector.qml   # Farm combo box with async loading
+    │   ├── QueueSelector.qml  # Queue combo box with async loading
+    │   ├── ParameterForm.qml  # Dynamic parameter inputs from job template
+    │   ├── AttachmentList.qml # Input/output file list with add/remove
+    │   ├── HostRequirements.qml
+    │   └── WarningDialog.qml  # Confirmation for large uploads
+    └── style/
+        └── Theme.qml          # Colors, fonts, spacing constants
+```
 
-### Key constraint: Qt version compatibility
+## Async Pattern (tokio ↔ Qt)
 
-DCC applications ship their own Qt (Maya 2025 = Qt 6.5, Blender = Qt 6.x via PySide6).
-The Rust shared library links against Qt 6 at build time. For in-process DCC usage,
-the Qt versions must be ABI-compatible (same major, close minor). This is the primary
-risk to validate in the spike.
+cxx-qt provides `impl cxx_qt::Threading` which gives access to
+`self.qt_thread()` — a `Send` handle that can queue closures to run
+on the Qt main thread from any background thread.
 
-## Spike (#35): What to Prove
+```rust
+// In the bridge module:
+impl cxx_qt::Threading for ResourceModel {}
 
-### Success criteria
+// In the implementation:
+impl qobject::ResourceModel {
+    #[qinvokable]
+    fn refresh_farms(self: Pin<&mut Self>) {
+        let qt_thread = self.qt_thread();
+        let profile = self.profile().to_string();
 
-1. **Build qtbridge-rust** on macOS arm64, Linux x86_64, Windows x64
-2. **Minimal dialog** — Create a QML dialog with form fields, show it from Rust
-3. **Tokio integration** — Run async submission (deadline-lib) alongside Qt event loop
-4. **DCC embedding** — Embed a Python QWidget (via raw pointer) into a Rust-owned QDialog
-5. **Qt version** — Confirm ABI compatibility with DCC-shipped Qt 6.x
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let result = rt.block_on(async {
+                deadline_lib::api::resources::list_farms(Some(&profile)).await
+            });
 
-### Spike deliverables
+            // Queue update on Qt main thread
+            qt_thread.queue(move |mut obj| {
+                match result {
+                    Ok(farms) => obj.as_mut().set_farms(farms),
+                    Err(e) => obj.as_mut().set_error(e.to_string()),
+                }
+            }).unwrap();
+        });
+    }
+}
+```
 
-- `crates/deadline-gui/` with a working config dialog (form fields, apply/cancel)
-- `deadline bundle gui-submit` launches the Rust dialog instead of Python subprocess
-- One DCC test: Maya plugin creates `SubmitJobToDeadlineDialog` with a custom widget
+QML side:
+```qml
+ComboBox {
+    model: resourceModel.farmNames
+    enabled: !resourceModel.farmsLoading
+    onActivated: resourceModel.selectFarm(currentIndex)
+}
+```
 
-### Spike non-goals
+## What Gets Deleted
 
-- Full feature parity with current Python GUI
-- All DCC submitters tested
-- Production packaging/distribution
+| Item | Lines | Fate |
+|------|-------|------|
+| `gui/deadline/client/ui/` | ~3000 | Replaced by `crates/deadline-gui/` |
+| `gui/deadline/client/config/` | ~200 | Deleted (Rust handles config) |
+| `gui/deadline/client/job_bundle/` | ~1500 | Deleted (Rust handles bundles) |
+| `gui/deadline/client/_compat.py` | ~90 | Deleted (native Rust enums) |
+| `gui/deadline/client/exceptions.py` | ~40 | Deleted |
+| `gui/deadline/client/dataclasses/` | ~100 | Deleted (Rust structs) |
+| `gui/deadline/client/api/` | ~50 | Deleted |
+| `gui/tests/` | ~2000 | Replaced by Rust tests + QML tests |
+| `gui/deadline/client/ui/translations/` | ~12 files | Converted to Qt `.ts` format |
+| `pyproject.toml` (maturin GUI config) | — | Simplified (DCC shim only) |
 
-## Migration Plan (post-spike)
+**Total Python deleted:** ~7000 lines
+**Total Rust+QML added:** ~3000 lines (estimated)
 
-### Phase 1: Config dialog
-- Port `DeadlineConfigDialog` to QML
-- Simplest dialog (form fields, dropdowns, apply/cancel)
-- Validates the full pipeline
+## What Ships to Customers
 
-### Phase 2: Submit dialog
-- Port `SubmitJobToDeadlineDialog` to QML
-- Shared tabs (job settings, attachments, host requirements, timeouts)
-- Progress dialog with async submission
-- DCC widget embedding
+### Installer (main product)
 
-### Phase 3: Eliminate Python
-- Remove `gui/` directory entirely
-- Remove PySide6/qtpy dependencies
-- `deadline-python-bindings` exports GUI classes directly
+```
+DeadlineClient/
+├── deadline              # Rust binary (CLI + GUI)
+├── libQt6Core.so        # Qt 6 shared libs (or framework on macOS)
+├── libQt6Quick.so
+├── libQt6Qml.so
+└── (platform libs)
+```
+
+No Python. No PySide6. No pip. No venv.
+
+### DCC Submitter Packages (separate distribution)
+
+```
+deadline-cloud-for-maya/
+├── deadline_submitter/
+│   ├── __init__.py           # Maya plugin entry point
+│   ├── scene_settings.py     # Maya-specific scene introspection
+│   └── ...
+└── deadline/
+    └── _native.abi3.so       # PyO3 shim → calls Rust GUI
+```
+
+The `.abi3.so` is the only compiled artifact. It contains the full
+`deadline-gui` + `deadline-lib` linked in. DCC plugins call one function
+and get the full GUI experience.
+
+## Migration Phases
+
+### Phase 1: Config Dialog (Spike)
+- Create `crates/deadline-gui/`
+- Implement `ConfigModel` + `ConfigDialog.qml`
+- Wire `deadline config gui` to call Rust GUI directly
+- Prove: builds on macOS arm64, tokio works, dialog renders
+
+### Phase 2: Submit Dialog
+- Implement `SubmitModel` + `SubmitDialog.qml`
+- Implement `ProgressModel` + `ProgressDialog.qml`
+- Wire `deadline bundle gui-submit` to call Rust GUI directly
+- Prove: full submission flow works end-to-end
+
+### Phase 3: DCC Integration
+- Update `deadline-python-bindings` to expose `show_submit_dialog()`
+- Test in Maya: plugin calls PyO3 → Rust GUI window appears
+- Prove: works inside DCC's existing QApplication
+
+### Phase 4: Cleanup
+- Delete `gui/` directory entirely
+- Remove PySide6/qtpy/PyYAML dependencies
+- Simplify `pyproject.toml` (DCC shim only)
 - Update installer pipeline (#26)
-
-### Phase 4: DCC submitter switchover
-- Update DCC repos to import from `deadline._native` instead of `deadline.client.ui`
-- Or: keep a namespace shim package that re-exports (zero code, just `__init__.py`)
-
-## What This Eliminates
-
-- `gui/` directory (~400KB of Python)
-- PySide6/qtpy/PyYAML Python dependencies
-- Python runtime in the installer (`_internal/` directory)
-- `maturin develop` step for GUI development
-- Python test suite for GUI (`pytest gui/tests/`)
-- The Rust→Python subprocess spawn for GUI commands
-
-## What This Keeps
-
-- `deadline-python-bindings` crate (PyO3 shared library for DCC plugins)
-- Python as the DCC plugin language (Maya/Blender/etc. are Python hosts)
-- Qt as the UI framework (same toolkit, different binding)
 
 ## Risks
 
 | Risk | Mitigation |
 |------|-----------|
-| qtbridge-rust is pre-release (no crates.io) | Pin to git commit; it's official Qt org |
-| macOS arm64 "experimental" | Spike validates this first |
-| Qt version mismatch with DCCs | Build against Qt 6.5 (Maya's version); test ABI compat |
-| QWidget embedding from Python pointer | Proven pattern (shiboken6 + raw pointer); spike validates |
-| DCC event loop ownership | DCC owns QApplication; Rust dialog runs modal within it |
-| Accessibility (screen readers) | Qt Quick has accessibility support; verify in Phase 2 |
-
-## Impact on Existing Work Items
-
-| Item | Status | Impact |
-|------|--------|--------|
-| #16c PyO3 bindings | ✅ Done | Stays — bindings expand to include GUI classes |
-| #16d Port Python Qt code | ✅ Done | Will be undone — replaced by Rust QML |
-| #16d2 GUI CLI commands | ✅ Done | Will be undone — CLI calls Rust GUI directly |
-| #16d3 Widget rendering fixes | ✅ Done | Will be undone — QML replaces widgets |
-| #16e Python packaging | ✅ Done | Will be undone — no Python package |
-| #16f DCC switchover | Blocked | Superseded by Phase 4 above |
-| #21c GUI boundary contract | Not started | Eliminated — no boundary |
-| #24 Production distribution | Not started | Simplified — no Python runtime to bundle |
-| #25 backwards-compat shim | Not started | Reduced — only namespace routing |
-| #26 Installer pipeline | Not started | Simplified — Rust binary + Qt libs only |
+| cxx-qt API changes (pre-1.0) | Pin to v0.8.x; KDAB maintains backward compat |
+| Qt 6 version mismatch with DCCs | Build against Qt 6.5 (Maya's version); test ABI compat |
+| QML learning curve for team | QML is simpler than Python Qt Widgets; examples provided |
+| DCC's QApplication ownership | Rust GUI creates window within existing app (Phase 3 validates) |
+| Qt 6 shared lib size (~30MB) | Same as PySide6 was shipping; actually smaller total |
+| License (MIT/Apache-2.0 for cxx-qt) | Fully compatible with our Apache-2.0 |

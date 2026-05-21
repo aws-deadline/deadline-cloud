@@ -1,0 +1,16 @@
+[package]
+name = "deadline-gui"
+description = "AWS Deadline Cloud GUI — Rust models + QML UI via cxx-qt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+deadline-lib = { workspace = true }
+cxx = "1.0"
+cxx-qt = "0.8"
+cxx-qt-lib = { version = "0.8", features = ["qt_full"] }
+tokio = { workspace = true }
+
+[build-dependencies]
+cxx-qt-build = { version = "0.8", features = ["link_qt_object_files"] }
