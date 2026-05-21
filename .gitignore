@@ -16,3 +16,4 @@ deadline.data/
 # Generated test fixture files (not committed)
 test_fixtures/job_bundles/large_attachments/inputs/
 .DS_Store
+.qmlls.ini

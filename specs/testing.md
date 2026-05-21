@@ -222,3 +222,47 @@ This applies to:
 
 When adding a new integration test crate, include the same allow at the
 top of its entry file.
+
+
+## Build & Test Performance
+
+Benchmarked 2026-05-21 on macOS arm64 (M-series).
+
+### Build times
+
+| Scenario | Time | Notes |
+|----------|------|-------|
+| Fresh (`cargo clean && cargo build`) | ~3.5 min | AWS SDK crates dominate (~90s) |
+| Incremental (touch deadline-lib) | ~2s | Fast — pure Rust |
+| Incremental (touch deadline-cli) | ~5s | Relinking large binary |
+| Incremental (touch deadline-gui) | ~12s | cxx-qt C++ codegen in build.rs |
+| No changes | ~1s | Fully cached |
+
+### Test times
+
+| Scenario | Time | Notes |
+|----------|------|-------|
+| Full suite (`cargo test`) | ~75s | 1,380 tests |
+| CLI tests only (`-p deadline-cli`) | ~53s | 441 subprocess tests |
+| Lib tests only (`-p deadline-lib`) | ~7s | 140 integration tests |
+| GUI logic only (`-p deadline-gui`) | <1s | 26 unit tests |
+
+### Why `cargo-nextest` doesn't help here
+
+Tested: `cargo nextest run` (62s for CLI) vs `cargo test` (53s for CLI).
+Nextest is slower because:
+
+- Our CLI tests use the **single-binary pattern** (one `cli.rs` entry
+  point with `mod` submodules) — no redundant linking.
+- Each test spawns a subprocess + wiremock server. Nextest adds per-test
+  process isolation overhead on top of that.
+- The tests are I/O-bound (port binding, process spawn), not CPU-bound.
+  Parallelism doesn't help when the bottleneck is I/O contention.
+
+### Recommended workflow
+
+- `cargo check` — fastest feedback for type errors (~2s)
+- `cargo test -p deadline-gui` — when working on GUI logic (<1s)
+- `cargo test -p deadline-cli -- config` — targeted CLI tests (~5s)
+- `cargo test` — full suite before committing (~75s)
+- Avoid `cargo clean` — incremental builds are 100x faster than fresh
