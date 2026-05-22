@@ -10,6 +10,8 @@ deadline-lib = { workspace = true }
 cxx = "1.0"
 cxx-qt = "0.8"
 cxx-qt-lib = { version = "0.8", features = ["qt_full"] }
+dirs = "5"
+notify = { version = "6", default-features = false, features = ["macos_fsevent"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 

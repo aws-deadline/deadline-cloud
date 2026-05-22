@@ -126,7 +126,10 @@ fn clear(setting_name: &str) -> Result<(), CliError> {
     Ok(())
 }
 
-#[allow(clippy::unnecessary_wraps, reason = "signature matches other command handlers")]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "signature matches other command handlers"
+)]
 fn run_config_gui(_install_gui: bool) -> Result<(), CliError> {
     deadline_gui::show_config_dialog();
     Ok(())

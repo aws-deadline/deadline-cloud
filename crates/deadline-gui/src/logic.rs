@@ -258,5 +258,9 @@ pub fn extract_storage_profiles(
     result
 }
 
+pub mod auth;
+pub mod resources;
+pub mod watcher;
+
 #[cfg(test)]
 mod tests;

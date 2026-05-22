@@ -3,37 +3,18 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **#35 — Rust-native GUI (cxx-qt) — Batch 1b+1c remaining**
-
-**Baseline:** 1,380 tests passing (2026-05-21)
-
----
-
-## Status: Batch 1 partially complete
-
-### What's done (1a + 1d)
-- `crates/deadline-gui/` — Full config dialog: logic module, QObject model,
-  QML form with 4 GroupBoxes, all settings, load/apply/dirty tracking
-- CLI wired: `deadline config gui` calls `deadline_gui::show_config_dialog()` directly
-- L1 tests: 26 passing (logic module)
-- L2 tests: 35 copied from `deadline-cloud-python/test/ui/` (acceptance criteria)
-
-### What remains (1b + 1c)
-- **1b — ResourceModel:** Async farm/queue/storage profile loading from API.
-  Currently farm/queue show raw IDs from config; need ComboBoxes populated
-  via `deadline_client().list_farms()` etc.
-- **1c — AuthModel:** Auth status bar with login/logout buttons, file watching
-  on `~/.aws/` and `~/.deadline/`, credential status display.
-
-### Key Technical Decisions
-- **cxx-qt v0.8.1** (KDAB), MIT/Apache-2.0
-- **Qt 6** via system `QMAKE` env var
-- **Logic + Model + View** pattern: pure Rust logic (testable) → QObject (thin bridge) → QML (view)
-- **Build:** `QMAKE=/opt/homebrew/opt/qt/bin/qmake cargo build -p deadline-gui`
+Active work item: **None**
 
 ---
 
 ## Completed items
+
+- **#35 Batch 1b+1c — ResourceModel + AuthModel (2026-05-22)** — Async
+  farm/queue/storage profile loading with cascading refresh and pre-selection
+  from config. Auth status bar with login/logout, file watcher on ~/.aws/
+  and ~/.deadline/. QML uses snake_case names (cxx-qt v0.8 convention).
+  1,380→1,421 tests. Remaining TODOs: Known Asset Paths UI, spinboxes
+  for max_retries/max_failed, file watcher shutdown.
 
 - **#35 Batch 1a+1d — Config Dialog + CLI wiring (2026-05-21)** — Full config
   dialog with all settings, logic module with 26 L1 tests, CLI calls Rust GUI

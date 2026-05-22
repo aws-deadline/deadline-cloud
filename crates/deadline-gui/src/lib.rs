@@ -3,8 +3,10 @@
 //! This crate provides the GUI dialogs (config, submit, login, progress)
 //! as Rust QObject models backed by QML views.
 
+pub mod auth_model;
 pub mod config_model;
 pub mod logic;
+pub mod resource_model;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 
