@@ -101,7 +101,7 @@ pick and execute work items.
 | 32 | Worker agent Python bindings (attachment operations) | Not started | `deadline-python-bindings/worker-agent-bindings.md` | — |
 | 33 | Error type parity audit and resolution | Not started | — | — |
 | 34 | Library/CLI boundary refactor (remove IniConfig from operations) | ✅ Done | — | — |
-| 35 | Rust-native GUI via qtbridge-rust | Not started | `gui-rewrite.md` | 34 |
+| 35 | Rust-native GUI via qtbridge-rust | In progress | `gui-rewrite.md` | 34 |
 
 **Status key:** ✅ Done · ⚠️ Gaps · In progress · Not started · Blocked · Superseded · Eliminated
 

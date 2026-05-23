@@ -84,5 +84,8 @@ fn deadline_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.py().get_type::<DeadlineOperationError>(),
     )?;
 
+    // Version (from Cargo.toml at compile time)
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+
     Ok(())
 }
