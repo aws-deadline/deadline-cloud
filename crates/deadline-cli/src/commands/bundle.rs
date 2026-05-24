@@ -458,23 +458,37 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             // Validate parameters
             let job_parameters = parse_parameters(&parameter)?;
 
-            // Build params JSON for the Python entry point
-            let params = serde_json::json!({
-                "job_bundle_dir": job_bundle_dir,
-                "browse": browse,
-                "output": output.to_lowercase(),
-                "known_asset_paths": known_asset_path,
-                "submitter_info": submitter_info_json,
-                "job_parameters": job_parameters,
-                "name": name,
-            });
+            // Validate: must have a bundle dir or --browse
+            let bundle_dir = job_bundle_dir.unwrap_or_default();
+            if bundle_dir.is_empty() && !browse {
+                return Err(CliError::Operation(
+                    "Specify a job bundle directory or run the bundle command with the --browse flag".to_string(),
+                ));
+            }
 
-            let python = super::gui::find_python()?;
-            let stdout =
-                super::gui::launch_gui(&python, "gui-submit", &params.to_string(), install_gui)?;
+            // Validate bundle dir exists (if provided)
+            if !bundle_dir.is_empty() && !std::path::Path::new(&bundle_dir).is_dir() {
+                return Err(CliError::Operation(format!(
+                    "Input Job Bundle Dir is not valid: {bundle_dir}"
+                )));
+            }
 
-            if !stdout.trim().is_empty() {
-                print!("{stdout}");
+            // Launch the Rust-native submit dialog directly
+            let params = deadline_gui::SubmitDialogParams {
+                job_bundle_dir: bundle_dir,
+                browse,
+                output: output.to_lowercase(),
+                known_asset_paths: known_asset_path,
+                submitter_info: submitter_info_json,
+                job_parameters,
+                name,
+            };
+
+            let _ = install_gui; // no-op for native GUI
+
+            let result = deadline_gui::show_submit_dialog(&params);
+            if !result.trim().is_empty() {
+                print!("{result}");
             }
             Ok(())
         }

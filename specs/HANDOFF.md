@@ -3,7 +3,283 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **None**
+Active work item: **#35 Phase 2+3 — Submit Dialog (Rust QML) + PyO3 show_submit_dialog()**
+
+---
+
+## #35 Phase 2+3 — Submit Dialog + DCC Integration
+
+**Baseline:** 1,421 tests passing (all green)
+
+### What Phase 2 Delivers
+
+A complete Rust QML submit dialog that replaces the Python
+`SubmitJobToDeadlineDialog`. When the user runs `deadline bundle gui-submit`,
+the CLI calls `deadline_gui::show_submit_dialog(params)` directly — no
+Python subprocess, no PySide6.
+
+### What Phase 3 Delivers
+
+A PyO3 function `show_submit_dialog(params_dict)` in
+`deadline-python-bindings` that DCC plugins call to open the same Rust
+QML dialog inside their existing QApplication.
+
+### Current State (Phase 1 complete)
+
+Already implemented in `crates/deadline-gui/`:
+- `ConfigModel` + `ConfigDialog.qml` — full config dialog
+- `AuthModel` — credential source, auth status, login/logout, file watcher
+- `ResourceModel` — farm/queue/storage profile cascading lists
+- `logic.rs` — pure business logic (26 L1 tests)
+- `logic/auth.rs`, `logic/resources.rs`, `logic/watcher.rs`
+- `build.rs` — cxx-qt-build with QML module registration
+- CLI `config gui` wired to call Rust GUI directly
+
+### Python Submit Dialog Components (to port)
+
+The Python submit dialog (`SubmitJobToDeadlineDialog`) has these tabs/areas:
+
+1. **Shared Job Settings tab** — Job properties (name, description, priority,
+   initial state, max failed tasks, max retries, max worker count) +
+   Deadline Cloud settings (farm/queue display) + Queue parameters (OpenJD
+   dynamic form from queue environments)
+
+2. **Job-specific settings tab** — For `JobBundle` submitter: shows
+   `input_job_bundle_dir` and browse button. For `CLI` submitter: shows
+   bash script editor and array parameter config. DCC submitters provide
+   their own widget type.
+
+3. **Job attachments tab** — Input files list, input directories list,
+   output directories list. Add/remove buttons. "Require paths exist"
+   checkbox.
+
+4. **Host requirements tab** (optional) — OS requirements, hardware
+   requirements (CPU, memory, GPU), custom requirements (amounts/attributes).
+
+5. **Auth status bar** — Same as config dialog (login/logout/profile switch)
+
+6. **Button bar** — Submit, Export Bundle, Settings, Help, (Load Bundle if browse mode)
+
+7. **Progress dialog** — Modal dialog with hashing progress bar, upload
+   progress bar, log text area, cancel button. Shows after Submit is clicked.
+
+### Buttons/Actions in Submit View
+
+| Button | Action |
+|--------|--------|
+| Submit | Validates → creates job history bundle → calls `create_job_from_job_bundle` in background thread → shows progress dialog |
+| Export Bundle | Same as Submit but purpose=EXPORT, saves bundle to disk, opens folder, no API call |
+| Settings | Opens config dialog (same one from Phase 1) |
+| Help | Shows submitter info dialog (name, version, package info) |
+| Load Bundle | (only if `browse=true`) File dialog to pick a new bundle dir, refreshes all tabs |
+| Login | SSO login flow |
+| Logout | Clears credentials |
+| Switch Profile | Opens config dialog focused on profile selector |
+
+### Implementation Plan
+
+#### Rust Models Needed
+
+| Model | Properties | Invokables |
+|-------|-----------|------------|
+| `SubmitModel` | name, description, priority, initial_status, max_failed_tasks, max_retries, max_worker_count, use_max_worker_count, farm_display, queue_display, job_bundle_dir, submitter_name, can_submit, status_message | submit(), export_bundle(), load_bundle(path), set_job_bundle_dir(path) |
+| `ParameterListModel` | parameters (semicolon-encoded), loading_state, error_message | refresh_queue_parameters(), set_parameter_value(name, value) |
+| `AttachmentModel` | input_files, input_dirs, output_dirs, require_paths_exist | add_input_file(path), remove_input_file(idx), add_input_dir(path), remove_input_dir(idx), add_output_dir(path), remove_output_dir(idx) |
+| `HostRequirementsModel` | os_family, cpu_arch, min_cpu, max_cpu, min_memory, max_memory, min_gpu, max_gpu, min_gpu_memory, max_gpu_memory, custom_amounts, custom_attributes | add_custom_amount(), remove_custom_amount(idx), add_custom_attribute(), remove_custom_attribute(idx) |
+| `ProgressModel` | status_text, hashing_progress, hashing_message, upload_progress, upload_message, log_text, is_complete, is_canceled | cancel() |
+
+#### QML Files Needed
+
+| File | Purpose |
+|------|---------|
+| `SubmitDialog.qml` | Main window with TabView (4 tabs) + auth bar + button bar |
+| `ProgressDialog.qml` | Modal progress window |
+| `components/JobPropertiesForm.qml` | Name, desc, priority, status, max fields |
+| `components/QueueParameterForm.qml` | Dynamic parameter inputs |
+| `components/AttachmentList.qml` | File/dir lists with add/remove |
+| `components/HostRequirementsForm.qml` | OS, hardware, custom requirements |
+| `components/AuthStatusBar.qml` | Reuse from config dialog |
+
+#### Logic Modules Needed
+
+| Module | Purpose |
+|--------|---------|
+| `logic/submit.rs` | Bundle preparation, parameter merging, on_create_job_bundle_callback equivalent |
+| `logic/parameters.rs` | Queue parameter fetching, OpenJD parameter validation |
+| `logic/attachments.rs` | AssetReferences manipulation (add/remove/merge) |
+| `logic/host_requirements.rs` | Serialize host requirements to JSON for template injection |
+
+#### Phase 3 Addition
+
+| File | Change |
+|------|--------|
+| `deadline-python-bindings/src/gui.rs` | New module: `show_submit_dialog(params_dict)` |
+| `deadline-python-bindings/src/lib.rs` | Register `gui::show_submit_dialog` |
+| `deadline-gui/src/lib.rs` | Add `pub fn show_submit_dialog(params: SubmitDialogParams)` |
+
+### Batching Strategy
+
+**Batch 2a — SubmitModel + SubmitDialog skeleton + Progress**
+- `SubmitModel` (job properties, submit/export actions)
+- `ProgressModel` (progress bars, log, cancel)
+- `SubmitDialog.qml` (tabs, button bar, basic layout)
+- `ProgressDialog.qml`
+- `logic/submit.rs` (bundle prep, submission orchestration)
+- Wire `deadline bundle gui-submit` to call Rust GUI directly
+- Tests: L1 for logic/submit.rs, L2 for CLI gui-submit
+
+**Batch 2b — Queue Parameters + Attachments**
+- `ParameterListModel` (fetch queue params, dynamic form state)
+- `AttachmentModel` (file/dir lists, add/remove)
+- `logic/parameters.rs` (queue parameter fetching + validation)
+- `logic/attachments.rs` (AssetReferences manipulation)
+- `QueueParameterForm.qml` + `AttachmentList.qml`
+- Tests: L1 for parameter/attachment logic
+
+**Batch 2c — Host Requirements + Polish**
+- `HostRequirementsModel`
+- `HostRequirementsForm.qml`
+- `logic/host_requirements.rs`
+- Help dialog, Load Bundle action, parameter validation warnings
+- Tests: L1 for host requirements serialization
+
+**Batch 3 — PyO3 Integration**
+- `deadline-python-bindings/src/gui.rs` — `show_submit_dialog()`
+- `deadline-gui/src/lib.rs` — public `show_submit_dialog(params)` entry point
+- Test: Python test calling `show_submit_dialog` with auto_close
+
+### Key Design Decisions
+
+1. **Reuse AuthModel and ResourceModel** from Phase 1 — they already handle
+   farm/queue display, login/logout, and profile switching.
+
+2. **Queue parameters as semicolon-encoded strings** — same pattern as
+   ResourceModel. QML splits on `;` for display. Avoids needing QAbstractListModel
+   (complex with cxx-qt).
+
+3. **Submission runs in std::thread** (not tokio task) — same pattern as
+   auth/resource refresh. The thread creates its own tokio Runtime, calls
+   `create_job_from_job_bundle`, and queues progress updates back to Qt
+   via `qt_thread.queue()`.
+
+4. **on_create_job_bundle_callback equivalent** — In Python, DCC submitters
+   provide a callback that writes the job bundle. In Rust, the `SubmitModel`
+   handles the standard JobBundle case directly (copy template, apply params,
+   write asset_references). DCC submitters (Phase 3) pass pre-built bundle
+   dirs via PyO3.
+
+5. **No CliJobSubmitter** — The Python `CliJobSubmitter` (bash script editor)
+   is a dev tool, not shipped to customers. Skip it for Phase 2.
+
+### Cross-Reference: Python → Rust
+
+| Python Component | Rust Equivalent |
+|-----------------|-----------------|
+| `SubmitJobToDeadlineDialog` | `SubmitModel` + `SubmitDialog.qml` |
+| `SharedJobSettingsWidget` | `SubmitModel` properties (name, desc, priority, etc.) |
+| `SharedJobPropertiesWidget` | `components/JobPropertiesForm.qml` |
+| `DeadlineCloudSettingsWidget` | Reuse `ResourceModel` (farm/queue display) |
+| `OpenJDParametersWidget` | `ParameterListModel` + `QueueParameterForm.qml` |
+| `JobBundleSettingsWidget` | Part of `SubmitModel` (job_bundle_dir property) |
+| `JobAttachmentsWidget` | `AttachmentModel` + `AttachmentList.qml` |
+| `HostRequirementsWidget` | `HostRequirementsModel` + `HostRequirementsForm.qml` |
+| `DeadlineAuthenticationStatusWidget` | Reuse `AuthModel` + `AuthStatusBar.qml` |
+| `SubmitJobProgressDialog` | `ProgressModel` + `ProgressDialog.qml` |
+| `JobSubmissionWorker` (QThread) | `std::thread` in `SubmitModel::submit()` |
+| `_gui_entry.py::run_gui_submit` | `deadline_gui::show_submit_dialog()` |
+| `job_bundle_submitter.py::on_create_job_bundle_callback` | `logic/submit.rs::prepare_job_bundle()` |
+
+### Status: Step 3 in progress — Batch 2a UI complete, Submit action next
+
+### What's Done (this session)
+
+**Logic layer (50 L1 tests, all passing):**
+- `src/logic/submit.rs` — bundle prep, param merge, validation
+- `src/logic/attachments.rs` — AssetReferences CRUD, merge
+- `src/logic/parameters.rs` — queue env parsing, merge, validation
+- `src/logic/host_requirements.rs` — serialization to JSON
+
+**QObject models:**
+- `src/submit_model.rs` — job properties, config reading, farm/queue, submit readiness
+- `src/progress_model.rs` — progress bars, log, cancel state
+
+**QML:**
+- `qml/SubmitDialog.qml` — full dialog with custom-styled tab buttons (Basic.Button
+  with palette-aware colors), job properties form, farm/queue display, auth bar,
+  button bar. Uses `import QtQuick.Controls.Basic as Basic` for tab buttons to
+  avoid native style customization warnings.
+
+**CLI wiring:**
+- `bundle gui-submit` calls `deadline_gui::show_submit_dialog()` directly (no Python)
+- Early validation: missing bundle dir or nonexistent path errors before GUI opens
+- 3 CLI snapshots updated (Python-not-found → bundle validation errors)
+
+**Test infrastructure:**
+- `src/bin/gui_test_harness.rs` — binary for GUI-crate-level xa11y tests
+- `tests/ui/conftest.py` — fixtures launching harness with mock backend
+- `tests/ui/test_config_dialog.py` — 3 L2 tests for config dialog
+- `tests/ui/test_submit_dialog.py` — 5 L2 tests (skipped until Submit wired)
+
+**Styling:**
+- No style override (uses system default Basic style)
+- Tab buttons: `Basic.Button` with custom background/contentItem using palette colors
+- `palette.highlight` for selected, `palette.mid` border, `palette.text` for text
+- Centered row, compact padding (8h/6v), rounded corners
+
+### Test Results
+- Rust: 1,473 passed, 0 failed
+- Python: 373 passed, 0 failed
+
+### What's Next (priority order)
+
+1. **Submit action** — wire Submit button → spawn thread → call
+   `create_job_from_job_bundle` → update ProgressModel → show ProgressDialog.qml
+   → return job_id. This is the core functionality.
+
+2. **`--output json` return value** — `show_submit_dialog()` currently returns
+   `{"status":"CANCELED"}` always. Wire it to return actual job_id on success.
+   Needed for xa11y tests to pass.
+
+3. **ProgressDialog.qml** — modal dialog with hashing/upload bars, log, cancel.
+   Shown during submission.
+
+4. **Queue parameters** — fetch via `GetQueueEnvironment` API, parse YAML templates,
+   render dynamic form. Uses `logic/parameters.rs` (already implemented).
+
+5. **Attachments UI** — wire `logic/attachments.rs` to QML list views with add/remove.
+
+6. **Host requirements UI** — wire `logic/host_requirements.rs` to form fields.
+
+7. **Settings button** — open config dialog from submit dialog.
+
+8. **Export Bundle** — write bundle to job history dir, show confirmation.
+
+9. **Phase 3: PyO3 `show_submit_dialog()`** — thin wrapper for DCC plugins.
+
+### Files Modified (this session, in `crates/deadline-gui/`)
+
+| File | Change |
+|------|--------|
+| `Cargo.toml` | Added `serde_yaml`, `[[bin]] gui-test-harness` |
+| `build.rs` | Added `SubmitDialog.qml`, `submit_model.rs`, `progress_model.rs` |
+| `src/lib.rs` | Added `show_submit_dialog()`, `SubmitDialogParams`, `get_submit_params_json()` |
+| `src/logic.rs` | Added `pub mod attachments, host_requirements, parameters, submit` |
+| `src/logic/submit.rs` | New — bundle prep + validation + tests |
+| `src/logic/attachments.rs` | New — AssetReferences + tests |
+| `src/logic/parameters.rs` | New — queue param parsing + tests |
+| `src/logic/host_requirements.rs` | New — serialization + tests |
+| `src/submit_model.rs` | New — QObject for submit dialog |
+| `src/progress_model.rs` | New — QObject for progress |
+| `src/bin/gui_test_harness.rs` | New — test binary |
+| `qml/SubmitDialog.qml` | New — full submit dialog UI |
+| `tests/ui/conftest.py` | New — xa11y fixtures |
+| `tests/ui/test_config_dialog.py` | New — L2 config tests |
+| `tests/ui/test_submit_dialog.py` | New — L2 submit tests (skipped) |
+| `tests/ui/__init__.py` | New |
+
+**Also modified in `crates/deadline-cli/`:**
+- `src/commands/bundle.rs` — switched gui-submit from Python to Rust GUI
+- 3 snapshot files updated
 
 ---
 

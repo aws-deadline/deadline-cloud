@@ -258,8 +258,12 @@ pub fn extract_storage_profiles(
     result
 }
 
+pub mod attachments;
 pub mod auth;
+pub mod host_requirements;
+pub mod parameters;
 pub mod resources;
+pub mod submit;
 pub mod watcher;
 
 #[cfg(test)]
