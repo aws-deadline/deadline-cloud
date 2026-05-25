@@ -1,3 +1,7 @@
+## 0.57.2 (2026-05-25)
+
+### Features
+* Telemetry error events now include sanitized stack traces to help improve diagnostics. Stack traces are sanitized using an allowlist-based approach and do not include exception messages. (#1080)
 ## 0.57.1 (2026-05-18)
 
 ### Bug Fixes
