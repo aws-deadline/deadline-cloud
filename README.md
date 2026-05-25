@@ -36,10 +36,12 @@ cargo test                     # Rust tests only
 cargo test -p deadline-cli     # CLI subprocess tests
 cargo test -p deadline-lib     # library crate
 cargo insta review             # review new/changed output snapshots
+pytest test/ui/ -v             # GUI accessibility tests (requires setup, see DEVELOPMENT.md)
 ```
 
 See [specs/testing.md](specs/testing.md) for the test philosophy (no mocking, Level 1
-vs Level 2, snapshot workflow).
+vs Level 2, snapshot workflow). See [DEVELOPMENT.md](DEVELOPMENT.md) §
+"UI accessibility tests" for xa11y setup.
 
 ## Python GUI Development
 

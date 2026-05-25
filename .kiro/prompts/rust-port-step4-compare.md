@@ -32,6 +32,14 @@ Do not proceed until auth is confirmed.
    compare error messages and exit codes for all error paths.
 6. Fix any output differences.
 
+**For GUI work items:** CLI diff doesn't apply to interactive dialogs.
+Instead, run the xa11y tests which verify equivalent behavior:
+```bash
+pytest test/ui/ -v --tb=short
+```
+If they fail, investigate whether it's a real regression or a test
+needing update for the Rust-native dialog.
+
 **Constraints:**
 - Do NOT accept output differences without documenting the rationale because undocumented divergences become bugs later
 - Do NOT skip error path comparisons because error messages are part of the user contract

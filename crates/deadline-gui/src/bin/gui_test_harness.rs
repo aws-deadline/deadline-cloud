@@ -30,7 +30,10 @@ fn main() {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string(),
-                browse: params.get("browse").and_then(|v| v.as_bool()).unwrap_or(false),
+                browse: params
+                    .get("browse")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
                 output: params
                     .get("output")
                     .and_then(|v| v.as_str())
@@ -51,7 +54,10 @@ fn main() {
                     .and_then(|v| v.as_array())
                     .cloned()
                     .unwrap_or_default(),
-                name: params.get("name").and_then(|v| v.as_str()).map(String::from),
+                name: params
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
             };
 
             let result = deadline_gui::show_submit_dialog(&submit_params);

@@ -189,101 +189,17 @@ The Python submit dialog (`SubmitJobToDeadlineDialog`) has these tabs/areas:
 | `_gui_entry.py::run_gui_submit` | `deadline_gui::show_submit_dialog()` |
 | `job_bundle_submitter.py::on_create_job_bundle_callback` | `logic/submit.rs::prepare_job_bundle()` |
 
-### Status: Step 3 in progress — Batch 2a UI complete, Submit action next
-
-### What's Done (this session)
-
-**Logic layer (50 L1 tests, all passing):**
-- `src/logic/submit.rs` — bundle prep, param merge, validation
-- `src/logic/attachments.rs` — AssetReferences CRUD, merge
-- `src/logic/parameters.rs` — queue env parsing, merge, validation
-- `src/logic/host_requirements.rs` — serialization to JSON
-
-**QObject models:**
-- `src/submit_model.rs` — job properties, config reading, farm/queue, submit readiness
-- `src/progress_model.rs` — progress bars, log, cancel state
-
-**QML:**
-- `qml/SubmitDialog.qml` — full dialog with custom-styled tab buttons (Basic.Button
-  with palette-aware colors), job properties form, farm/queue display, auth bar,
-  button bar. Uses `import QtQuick.Controls.Basic as Basic` for tab buttons to
-  avoid native style customization warnings.
-
-**CLI wiring:**
-- `bundle gui-submit` calls `deadline_gui::show_submit_dialog()` directly (no Python)
-- Early validation: missing bundle dir or nonexistent path errors before GUI opens
-- 3 CLI snapshots updated (Python-not-found → bundle validation errors)
-
-**Test infrastructure:**
-- `src/bin/gui_test_harness.rs` — binary for GUI-crate-level xa11y tests
-- `tests/ui/conftest.py` — fixtures launching harness with mock backend
-- `tests/ui/test_config_dialog.py` — 3 L2 tests for config dialog
-- `tests/ui/test_submit_dialog.py` — 5 L2 tests (skipped until Submit wired)
-
-**Styling:**
-- No style override (uses system default Basic style)
-- Tab buttons: `Basic.Button` with custom background/contentItem using palette colors
-- `palette.highlight` for selected, `palette.mid` border, `palette.text` for text
-- Centered row, compact padding (8h/6v), rounded corners
-
-### Test Results
-- Rust: 1,473 passed, 0 failed
-- Python: 373 passed, 0 failed
-
-### What's Next (priority order)
-
-1. **Submit action** — wire Submit button → spawn thread → call
-   `create_job_from_job_bundle` → update ProgressModel → show ProgressDialog.qml
-   → return job_id. This is the core functionality.
-
-2. **`--output json` return value** — `show_submit_dialog()` currently returns
-   `{"status":"CANCELED"}` always. Wire it to return actual job_id on success.
-   Needed for xa11y tests to pass.
-
-3. **ProgressDialog.qml** — modal dialog with hashing/upload bars, log, cancel.
-   Shown during submission.
-
-4. **Queue parameters** — fetch via `GetQueueEnvironment` API, parse YAML templates,
-   render dynamic form. Uses `logic/parameters.rs` (already implemented).
-
-5. **Attachments UI** — wire `logic/attachments.rs` to QML list views with add/remove.
-
-6. **Host requirements UI** — wire `logic/host_requirements.rs` to form fields.
-
-7. **Settings button** — open config dialog from submit dialog.
-
-8. **Export Bundle** — write bundle to job history dir, show confirmation.
-
-9. **Phase 3: PyO3 `show_submit_dialog()`** — thin wrapper for DCC plugins.
-
-### Files Modified (this session, in `crates/deadline-gui/`)
-
-| File | Change |
-|------|--------|
-| `Cargo.toml` | Added `serde_yaml`, `[[bin]] gui-test-harness` |
-| `build.rs` | Added `SubmitDialog.qml`, `submit_model.rs`, `progress_model.rs` |
-| `src/lib.rs` | Added `show_submit_dialog()`, `SubmitDialogParams`, `get_submit_params_json()` |
-| `src/logic.rs` | Added `pub mod attachments, host_requirements, parameters, submit` |
-| `src/logic/submit.rs` | New — bundle prep + validation + tests |
-| `src/logic/attachments.rs` | New — AssetReferences + tests |
-| `src/logic/parameters.rs` | New — queue param parsing + tests |
-| `src/logic/host_requirements.rs` | New — serialization + tests |
-| `src/submit_model.rs` | New — QObject for submit dialog |
-| `src/progress_model.rs` | New — QObject for progress |
-| `src/bin/gui_test_harness.rs` | New — test binary |
-| `qml/SubmitDialog.qml` | New — full submit dialog UI |
-| `tests/ui/conftest.py` | New — xa11y fixtures |
-| `tests/ui/test_config_dialog.py` | New — L2 config tests |
-| `tests/ui/test_submit_dialog.py` | New — L2 submit tests (skipped) |
-| `tests/ui/__init__.py` | New |
-
-**Also modified in `crates/deadline-cli/`:**
-- `src/commands/bundle.rs` — switched gui-submit from Python to Rust GUI
-- 3 snapshot files updated
+### Status: Batch 2a committed. Next: progress dialog styling, job history bundle, --output json.
 
 ---
 
 ## Completed items
+
+- **#35 Batch 2a — Submit Action + Progress Dialog (2026-05-24)** — Wired
+  Submit button to `create_job_from_job_bundle` via background thread,
+  progress dialog with hashing/upload bars, cancel support, result return.
+  TabBar accessibility fix, xa11y test infrastructure fixes (localhost URL,
+  dialog/window role selectors). 1,421→1,477 tests. 22/35 xa11y tests passing.
 
 - **#35 Batch 1b+1c — ResourceModel + AuthModel (2026-05-22)** — Async
   farm/queue/storage profile loading with cascading refresh and pre-selection

@@ -118,7 +118,12 @@ def last_json_object(text: str) -> dict:
 
 
 def _dialog_selector(name: str) -> str:
-    """Return the xa11y selector for a Qt dialog with the given *name*."""
+    """Return the xa11y selector for a Qt dialog/window with the given *name*.
+
+    Qt exposes ApplicationWindow as ``window`` and child Window as
+    ``dialog`` on macOS. This returns the ``dialog`` variant; callers
+    that need ``window`` should use ``window[name="..."]`` directly.
+    """
     return f'dialog[name="{name}"]'
 
 
@@ -282,9 +287,11 @@ class DeadlineApp:
 
     def _tab_locator(self, tab_name: str) -> xa11y.Locator:
         # Qt exposes tabs as ``radio_button`` on macOS and ``page_tab`` or
-        # ``tab`` on Linux/Windows. Comma alternation matches all variants.
+        # ``tab`` on Linux/Windows. Basic.Button with checkable:true exposes
+        # as ``check_box`` on macOS. Comma alternation matches all variants.
         return self.locator(
-            f'radio_button[name="{tab_name}"], page_tab[name="{tab_name}"], tab[name="{tab_name}"]'
+            f'radio_button[name="{tab_name}"], page_tab[name="{tab_name}"], '
+            f'tab[name="{tab_name}"], check_box[name="{tab_name}"]'
         )
 
     def tab_exists(self, tab_name: str) -> bool:
@@ -301,7 +308,12 @@ class DeadlineApp:
         return getattr(self, "_dialog_name", self.DIALOG)
 
     def dialog(self) -> xa11y.Locator:
-        return self.locator(_dialog_selector(self.dialog_name))
+        # Try both window and dialog roles (ApplicationWindow = window,
+        # child Window = dialog on macOS)
+        loc = self.locator(f'window[name="{self.dialog_name}"]')
+        if loc.exists():
+            return loc
+        return self.locator(f'dialog[name="{self.dialog_name}"]')
 
     def button(self, name: str) -> xa11y.Locator:
         return self.locator(f'button[name="{name}"]')

@@ -47,15 +47,40 @@ pub struct HardwareRequirements {
 impl HardwareRequirements {
     pub fn serialize(&self) -> Vec<serde_json::Value> {
         let mut result = Vec::new();
-        Self::push_amount(&mut result, "amount.worker.vcpu", self.cpu_min, self.cpu_max);
-        Self::push_amount(&mut result, "amount.worker.memory", self.memory_min, self.memory_max);
+        Self::push_amount(
+            &mut result,
+            "amount.worker.vcpu",
+            self.cpu_min,
+            self.cpu_max,
+        );
+        Self::push_amount(
+            &mut result,
+            "amount.worker.memory",
+            self.memory_min,
+            self.memory_max,
+        );
         Self::push_amount(&mut result, "amount.worker.gpu", self.gpu_min, self.gpu_max);
-        Self::push_amount(&mut result, "amount.worker.gpu.memory", self.gpu_memory_min, self.gpu_memory_max);
-        Self::push_amount(&mut result, "amount.worker.disk.scratch", self.scratch_min, self.scratch_max);
+        Self::push_amount(
+            &mut result,
+            "amount.worker.gpu.memory",
+            self.gpu_memory_min,
+            self.gpu_memory_max,
+        );
+        Self::push_amount(
+            &mut result,
+            "amount.worker.disk.scratch",
+            self.scratch_min,
+            self.scratch_max,
+        );
         result
     }
 
-    fn push_amount(result: &mut Vec<serde_json::Value>, name: &str, min: Option<i32>, max: Option<i32>) {
+    fn push_amount(
+        result: &mut Vec<serde_json::Value>,
+        name: &str,
+        min: Option<i32>,
+        max: Option<i32>,
+    ) {
         if min.is_none() && max.is_none() {
             return;
         }
@@ -183,7 +208,10 @@ mod tests {
 
     #[test]
     fn hardware_requirements_cpu_min_only() {
-        let req = HardwareRequirements { cpu_min: Some(4), ..Default::default() };
+        let req = HardwareRequirements {
+            cpu_min: Some(4),
+            ..Default::default()
+        };
         let result = req.serialize();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["name"], "amount.worker.vcpu");
@@ -193,7 +221,11 @@ mod tests {
 
     #[test]
     fn hardware_requirements_cpu_min_and_max() {
-        let req = HardwareRequirements { cpu_min: Some(2), cpu_max: Some(16), ..Default::default() };
+        let req = HardwareRequirements {
+            cpu_min: Some(2),
+            cpu_max: Some(16),
+            ..Default::default()
+        };
         let result = req.serialize();
         assert_eq!(result[0]["min"], 2);
         assert_eq!(result[0]["max"], 16);
@@ -219,7 +251,11 @@ mod tests {
 
     #[test]
     fn custom_amount_min_only() {
-        let req = CustomAmountRequirement { name: "render.slots".to_string(), min: Some(2), max: None };
+        let req = CustomAmountRequirement {
+            name: "render.slots".to_string(),
+            min: Some(2),
+            max: None,
+        };
         let result = req.serialize();
         assert_eq!(result["name"], "amount.worker.render.slots");
         assert_eq!(result["min"], 2);
@@ -228,7 +264,11 @@ mod tests {
 
     #[test]
     fn custom_amount_min_and_max() {
-        let req = CustomAmountRequirement { name: "licenses".to_string(), min: Some(1), max: Some(10) };
+        let req = CustomAmountRequirement {
+            name: "licenses".to_string(),
+            min: Some(1),
+            max: Some(10),
+        };
         let result = req.serialize();
         assert_eq!(result["min"], 1);
         assert_eq!(result["max"], 10);
@@ -243,7 +283,10 @@ mod tests {
         };
         let result = req.serialize();
         assert_eq!(result["name"], "attr.worker.department");
-        assert_eq!(result["anyOf"], serde_json::json!(["lighting", "compositing"]));
+        assert_eq!(
+            result["anyOf"],
+            serde_json::json!(["lighting", "compositing"])
+        );
     }
 
     #[test]
@@ -265,8 +308,16 @@ mod tests {
                 operating_systems: vec!["linux".to_string()],
                 cpu_architectures: vec!["x86_64".to_string()],
             },
-            hardware: HardwareRequirements { cpu_min: Some(4), memory_min: Some(8192), ..Default::default() },
-            custom_amounts: vec![CustomAmountRequirement { name: "slots".to_string(), min: Some(1), max: None }],
+            hardware: HardwareRequirements {
+                cpu_min: Some(4),
+                memory_min: Some(8192),
+                ..Default::default()
+            },
+            custom_amounts: vec![CustomAmountRequirement {
+                name: "slots".to_string(),
+                min: Some(1),
+                max: None,
+            }],
             custom_attributes: vec![CustomAttributeRequirement {
                 name: "pool".to_string(),
                 option: "anyOf".to_string(),

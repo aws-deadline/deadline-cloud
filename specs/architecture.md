@@ -55,8 +55,17 @@ deadline-cli (binary)
 │   │   └── config
 │   └── attachments  — S3 transfer, manifests, hash/check caches
 │       └── config
+├── deadline-gui     — Rust QML GUI (config dialog, submit dialog)
+│   └── deadline-lib
 ├── openjd-snapshots — hashing, manifests, upload/download engine
 └── rmcp             — MCP server (built into CLI)
+
+deadline-gui (Rust + QML via cxx-qt)
+├── deadline-lib
+├── cxx-qt, cxx-qt-lib
+├── tokio
+├── serde_json, serde_yaml
+└── notify (file watcher)
 
 deadline-python-bindings (PyO3 extension module, abi3-py39)
 ├── deadline-lib
@@ -79,8 +88,9 @@ deadline-test-server (dev-dependency of deadline-cli)
 | Crate | Role |
 |-------|------|
 | `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting, MCP server (`mcp-server` subcommand via rmcp SDK). No business logic beyond presentation. |
-| `deadline-python-bindings` | PyO3 extension module (`deadline._native`). Exposes config, auth, API listing, submission, and telemetry as native Python functions. Uses `abi3-py39` for compatibility with Python 3.9+. |
-| `gui/` | Python package. Qt widgets (presentation), controllers (call `deadline._native`), data classes (pure Python). Shipped alongside the Rust artifacts. DCC submitters import from this package. |
+| `deadline-gui` | Rust + QML GUI crate (cxx-qt). Config dialog, submit dialog, progress dialog. QObject models + pure logic module. Called directly by CLI for `config gui` and `bundle gui-submit`. |
+| `deadline-python-bindings` | PyO3 extension module (`deadline._native`). Exposes config, auth, API listing, submission, and telemetry as native Python functions. Used by DCC plugins via the `gui/` package. Uses `abi3-py39` for compatibility with Python 3.9+. |
+| `gui/` | Python package. Qt widgets (presentation), controllers (call `deadline._native`), data classes (pure Python). Used by DCC plugins. CLI GUI commands no longer use this — they call `deadline-gui` directly. |
 | `deadline-lib` | Unified library crate containing all business logic as modules (see below). |
 | `deadline-lib::config` | INI config file read/write, hierarchical setting resolution, str2bool. No AWS dependencies. |
 | `deadline-lib::api` | AWS API calls (Deadline Cloud service), session/credential management, auth, telemetry, error types (`DeadlineError`), job monitoring types. Owns the SDK/HTTP interaction. |
@@ -127,19 +137,20 @@ deadline-cli
 
 All Rust, one process, direct function calls.
 
-### CLI GUI Command (e.g., `deadline config gui`)
+### CLI GUI Command (e.g., `deadline config gui`, `deadline bundle gui-submit`)
 
 ```
 deadline-cli
-  → Spawns Python process
-  → Python loads gui/ package
-  → gui/ imports deadline._native (PyO3 module)
-  → Python shows QDialog
-  → User interacts with dialog
-  → Every button click / dropdown load calls deadline._native → Rust
-  → Rust reads config, calls APIs, saves config
-  → Python displays results
+  → Clap parses args, validates (submitter-info, bundle dir)
+  → Calls deadline_gui::show_config_dialog() or show_submit_dialog(&params)
+  → deadline-gui creates QApplication + QML engine
+  → QML dialog renders, user interacts
+  → QObject models call deadline-lib for config/API/submission
+  → Dialog closes → returns result
+  → CLI prints output (if --output json)
 ```
+
+All Rust, one process. No Python subprocess for GUI commands.
 
 ### DCC Plugin (e.g., Maya)
 

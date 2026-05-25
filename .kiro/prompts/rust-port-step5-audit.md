@@ -20,8 +20,18 @@ Check for alignment:
 - Are there code paths with no test coverage?
 - Do the CLI comparison results from Step 4 reveal anything the tests missed?
 
-**Produce a findings list.** For each finding, categorize as:
-Bug, Missing coverage, or Improvement.
+**Produce a findings list.** For each finding:
+1. Categorize as: Bug, Missing coverage, or Improvement
+2. **Self-triage before presenting** — for each finding, determine a verdict:
+   - **Bugs:** Check the Python implementation. If Python has the same
+     behavior, it's parity — not a bug in our code. Only flag if it
+     harms the user and Python doesn't have the issue either.
+   - **Missing coverage:** Always fix. Tests are cheap insurance.
+   - **Improvements:** Check if they align with `specs/patterns.md`.
+     If the benefit isn't concrete (just "cleaner"), defer.
+3. Present findings with your verdict and rationale. Lean towards
+   fixing over deferring when caught in a stalemate.
+
 If no findings, state "Audit clean — no findings."
 
 **Constraints:**

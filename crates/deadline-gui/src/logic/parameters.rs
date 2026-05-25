@@ -19,7 +19,10 @@ pub fn parse_queue_environment_parameters(
             Ok(v) => v,
             Err(_) => continue,
         };
-        if let Some(defs) = template.get("parameterDefinitions").and_then(|d| d.as_array()) {
+        if let Some(defs) = template
+            .get("parameterDefinitions")
+            .and_then(|d| d.as_array())
+        {
             params.extend(defs.iter().cloned());
         }
     }
@@ -68,7 +71,11 @@ pub fn apply_initial_values(
     initial_values: &HashMap<String, String>,
 ) {
     for param in params.iter_mut() {
-        let name = param.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+        let name = param
+            .get("name")
+            .and_then(|n| n.as_str())
+            .unwrap_or("")
+            .to_string();
         if let Some(value) = initial_values.get(&name) {
             param["value"] = serde_json::json!(value);
         }
@@ -162,14 +169,22 @@ mod tests {
         ];
         let job_params = vec![serde_json::json!({"name": "Frames", "value": "1-10"})];
         let merged = merge_queue_and_job_parameters(&queue_params, &job_params);
-        assert_eq!(merged.iter().find(|p| p["name"] == "RezPackages").unwrap()["value"], "");
-        assert_eq!(merged.iter().find(|p| p["name"] == "Frames").unwrap()["value"], "1-10");
+        assert_eq!(
+            merged.iter().find(|p| p["name"] == "RezPackages").unwrap()["value"],
+            ""
+        );
+        assert_eq!(
+            merged.iter().find(|p| p["name"] == "Frames").unwrap()["value"],
+            "1-10"
+        );
     }
 
     #[test]
     fn merge_parameters_job_only_params_appended() {
-        let queue_params = vec![serde_json::json!({"name": "RezPackages", "type": "STRING", "value": ""})];
-        let job_params = vec![serde_json::json!({"name": "SceneFile", "value": "/path/to/scene.ma"})];
+        let queue_params =
+            vec![serde_json::json!({"name": "RezPackages", "type": "STRING", "value": ""})];
+        let job_params =
+            vec![serde_json::json!({"name": "SceneFile", "value": "/path/to/scene.ma"})];
         let merged = merge_queue_and_job_parameters(&queue_params, &job_params);
         assert_eq!(merged.len(), 2);
     }
@@ -184,7 +199,9 @@ mod tests {
 
     #[test]
     fn merge_parameters_empty_job_params() {
-        let queue_params = vec![serde_json::json!({"name": "RezPackages", "type": "STRING", "value": "maya-2024"})];
+        let queue_params = vec![
+            serde_json::json!({"name": "RezPackages", "type": "STRING", "value": "maya-2024"}),
+        ];
         let merged = merge_queue_and_job_parameters(&queue_params, &[]);
         assert_eq!(merged[0]["value"], "maya-2024");
     }
@@ -196,17 +213,26 @@ mod tests {
             serde_json::json!({"name": "Frames", "type": "STRING", "value": "1-100"}),
         ];
         let initial_values = [("RezPackages".to_string(), "maya-2024 arnold-5".to_string())]
-            .into_iter().collect::<HashMap<_, _>>();
+            .into_iter()
+            .collect::<HashMap<_, _>>();
         apply_initial_values(&mut params, &initial_values);
-        assert_eq!(params.iter().find(|p| p["name"] == "RezPackages").unwrap()["value"], "maya-2024 arnold-5");
-        assert_eq!(params.iter().find(|p| p["name"] == "Frames").unwrap()["value"], "1-100");
+        assert_eq!(
+            params.iter().find(|p| p["name"] == "RezPackages").unwrap()["value"],
+            "maya-2024 arnold-5"
+        );
+        assert_eq!(
+            params.iter().find(|p| p["name"] == "Frames").unwrap()["value"],
+            "1-100"
+        );
     }
 
     #[test]
     fn apply_initial_values_unknown_names_ignored() {
-        let mut params = vec![serde_json::json!({"name": "RezPackages", "type": "STRING", "value": ""})];
+        let mut params =
+            vec![serde_json::json!({"name": "RezPackages", "type": "STRING", "value": ""})];
         let initial_values = [("NonExistent".to_string(), "value".to_string())]
-            .into_iter().collect::<HashMap<_, _>>();
+            .into_iter()
+            .collect::<HashMap<_, _>>();
         apply_initial_values(&mut params, &initial_values);
         assert_eq!(params[0]["value"], "");
     }
@@ -216,7 +242,9 @@ mod tests {
         let job_params = vec![serde_json::json!({"name": "Frames", "value": "1-10"})];
         let template_params = vec![serde_json::json!({"name": "Frames", "type": "STRING"})];
         let queue_params = vec![serde_json::json!({"name": "RezPackages", "type": "STRING"})];
-        assert!(find_unrecognized_parameters(&job_params, &template_params, &queue_params).is_empty());
+        assert!(
+            find_unrecognized_parameters(&job_params, &template_params, &queue_params).is_empty()
+        );
     }
 
     #[test]

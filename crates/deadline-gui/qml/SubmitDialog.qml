@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import com.amazon.deadline.gui
 
@@ -13,10 +12,7 @@ ApplicationWindow {
     visible: true
     title: {
         var name = submitModel.submitter_name
-        if (name && name !== "JobBundle") {
-            return "Deadline Cloud " + name + " Submitter"
-        }
-        return "Submit to AWS Deadline Cloud"
+        return "Deadline Cloud " + name + " Submitter"
     }
 
     SubmitModel { id: submitModel }
@@ -39,7 +35,8 @@ ApplicationWindow {
             var names = resourceModel.farm_names.toString().split(";")
             if (idx >= 0 && idx < names.length && names[idx]) {
                 farmLabel.text = names[idx]
-                submitModel.set_farm_queue(ids[idx] || "", submitModel.queue_display)
+                var fid = ids[idx] || ""
+                if (fid) submitModel.set_farm_queue(fid, submitModel.queue_display)
             }
         }
         function onQueue_namesChanged() {
@@ -51,7 +48,8 @@ ApplicationWindow {
                 var farmIds = resourceModel.farm_ids.toString().split(";")
                 var farmIdx = resourceModel.selected_farm_index
                 var farmId = (farmIdx >= 0 && farmIdx < farmIds.length) ? farmIds[farmIdx] : ""
-                submitModel.set_farm_queue(farmId, ids[idx] || "")
+                var qid = ids[idx] || ""
+                if (farmId && qid) submitModel.set_farm_queue(farmId, qid)
             }
         }
     }
@@ -62,67 +60,73 @@ ApplicationWindow {
         spacing: 10
 
         // ── Tab navigation ──
-        Row {
+        TabBar {
+            id: tabBar
             Layout.alignment: Qt.AlignHCenter
-            spacing: 1
-            Accessible.name: "tab_group"
+            Layout.fillWidth: true
+            background: Rectangle { color: "transparent" }
 
-            Basic.Button {
-                text: "Shared job settings"; Accessible.name: "Shared job settings"
-                checkable: true; checked: tabStack.currentIndex === 0; onClicked: tabStack.currentIndex = 0
-                flat: tabStack.currentIndex !== 0
-                leftPadding: 8; rightPadding: 8; topPadding: 6; bottomPadding: 6
+            TabButton {
+                text: "Shared job settings"
                 background: Rectangle {
+                    implicitHeight: 32
+                    color: tabBar.currentIndex === 0 ? palette.highlight : (parent.hovered ? palette.midlight : "transparent")
                     radius: 4
-                    border.width: 1
-                    border.color: palette.mid
-                    color: parent.checked ? palette.highlight : (parent.hovered ? palette.midlight : "transparent")
                 }
-                contentItem: Text { text: parent.text; color: parent.checked ? palette.highlightedText : palette.text; horizontalAlignment: Text.AlignHCenter }
+                contentItem: Text {
+                    text: parent.text
+                    color: tabBar.currentIndex === 0 ? palette.highlightedText : palette.text
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
-            Basic.Button {
-                text: "Job-specific settings"; Accessible.name: "Job-specific settings"
-                checkable: true; checked: tabStack.currentIndex === 1; onClicked: tabStack.currentIndex = 1
-                flat: tabStack.currentIndex !== 1
-                leftPadding: 8; rightPadding: 8; topPadding: 6; bottomPadding: 6
+            TabButton {
+                text: "Job-specific settings"
                 background: Rectangle {
+                    implicitHeight: 32
+                    color: tabBar.currentIndex === 1 ? palette.highlight : (parent.hovered ? palette.midlight : "transparent")
                     radius: 4
-                    border.width: 1
-                    border.color: palette.mid
-                    color: parent.checked ? palette.highlight : (parent.hovered ? palette.midlight : "transparent")
                 }
-                contentItem: Text { text: parent.text; color: parent.checked ? palette.highlightedText : palette.text; horizontalAlignment: Text.AlignHCenter }
+                contentItem: Text {
+                    text: parent.text
+                    color: tabBar.currentIndex === 1 ? palette.highlightedText : palette.text
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
-            Basic.Button {
-                text: "Job attachments"; Accessible.name: "Job attachments"
-                checkable: true; checked: tabStack.currentIndex === 2; onClicked: tabStack.currentIndex = 2
-                flat: tabStack.currentIndex !== 2
-                leftPadding: 8; rightPadding: 8; topPadding: 6; bottomPadding: 6
+            TabButton {
+                text: "Job attachments"
                 background: Rectangle {
+                    implicitHeight: 32
+                    color: tabBar.currentIndex === 2 ? palette.highlight : (parent.hovered ? palette.midlight : "transparent")
                     radius: 4
-                    border.width: 1
-                    border.color: palette.mid
-                    color: parent.checked ? palette.highlight : (parent.hovered ? palette.midlight : "transparent")
                 }
-                contentItem: Text { text: parent.text; color: parent.checked ? palette.highlightedText : palette.text; horizontalAlignment: Text.AlignHCenter }
+                contentItem: Text {
+                    text: parent.text
+                    color: tabBar.currentIndex === 2 ? palette.highlightedText : palette.text
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
-            Basic.Button {
-                text: "Host requirements"; Accessible.name: "Host requirements"
-                checkable: true; checked: tabStack.currentIndex === 3; onClicked: tabStack.currentIndex = 3
-                flat: tabStack.currentIndex !== 3
-                leftPadding: 8; rightPadding: 8; topPadding: 6; bottomPadding: 6
+            TabButton {
+                text: "Host requirements"
                 background: Rectangle {
+                    implicitHeight: 32
+                    color: tabBar.currentIndex === 3 ? palette.highlight : (parent.hovered ? palette.midlight : "transparent")
                     radius: 4
-                    border.width: 1
-                    border.color: palette.mid
-                    color: parent.checked ? palette.highlight : (parent.hovered ? palette.midlight : "transparent")
                 }
-                contentItem: Text { text: parent.text; color: parent.checked ? palette.highlightedText : palette.text; horizontalAlignment: Text.AlignHCenter }
+                contentItem: Text {
+                    text: parent.text
+                    color: tabBar.currentIndex === 3 ? palette.highlightedText : palette.text
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
 
         StackLayout {
             id: tabStack
+            currentIndex: tabBar.currentIndex
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -259,7 +263,118 @@ ApplicationWindow {
             Button { text: "Help"; onClicked: {} }
             Item { Layout.fillWidth: true }
             Button { text: "Export bundle"; Accessible.name: "Export bundle"; onClicked: {} }
-            Button { text: "Submit"; enabled: submitModel.can_submit; Accessible.name: "Submit"; onClicked: {} }
+            Button {
+                text: "Submit"; enabled: submitModel.can_submit && !submitModel.is_submitting
+                Accessible.name: "Submit"
+                onClicked: {
+                    submitModel.submit()
+                    progressDialog.visible = true
+                }
+            }
+        }
+    }
+
+    Window {
+        id: progressDialog
+        width: 500
+        height: 400
+        title: "AWS Deadline Cloud submission"
+        modality: Qt.ApplicationModal
+        flags: Qt.Dialog | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
+        visible: false
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 12
+
+            Label {
+                text: submitModel.submission_error !== ""
+                      ? "Submission failed"
+                      : submitModel.job_id_result !== ""
+                        ? "Submission complete"
+                        : "Submitting job..."
+                font.bold: true
+                font.pointSize: 13
+            }
+
+            GroupBox {
+                title: "Hashing Attachments"
+                Layout.fillWidth: true
+                ColumnLayout {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    ProgressBar {
+                        Layout.fillWidth: true
+                        from: 0; to: 100
+                        value: submitModel.hashing_progress
+                    }
+                    Label { text: submitModel.hashing_message; elide: Text.ElideRight; Layout.fillWidth: true }
+                }
+            }
+
+            GroupBox {
+                title: "Uploading Attachments"
+                Layout.fillWidth: true
+                ColumnLayout {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    ProgressBar {
+                        Layout.fillWidth: true
+                        from: 0; to: 100
+                        value: submitModel.upload_progress
+                    }
+                    Label { text: submitModel.upload_message; elide: Text.ElideRight; Layout.fillWidth: true }
+                }
+            }
+
+            GroupBox {
+                title: "Log"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                ScrollView {
+                    anchors.fill: parent
+                    TextArea {
+                        readOnly: true
+                        text: submitModel.log_text
+                        wrapMode: TextEdit.Wrap
+                        font.family: "monospace"
+                        font.pointSize: 10
+                    }
+                }
+            }
+
+            Label {
+                visible: submitModel.submission_error !== ""
+                text: submitModel.submission_error
+                color: "red"
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+
+            Label {
+                visible: submitModel.job_id_result !== ""
+                text: "Job ID: " + submitModel.job_id_result
+                font.bold: true
+                Layout.fillWidth: true
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: submitModel.submission_complete ? "Ok" : "Cancel"
+                    onClicked: {
+                        if (!submitModel.submission_complete) {
+                            submitModel.cancel_submission()
+                        }
+                        progressDialog.close()
+                        if (submitModel.submission_complete) {
+                            root.close()
+                        }
+                    }
+                }
+            }
         }
     }
 

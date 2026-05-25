@@ -44,6 +44,9 @@ pub struct SubmitDialogParams {
 /// Global storage for submit params (set before QML loads, read by SubmitModel).
 static SUBMIT_PARAMS: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
+/// Global storage for submit result (set by SubmitModel on completion, read by show_submit_dialog).
+static SUBMIT_RESULT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
 /// Get the params JSON stored for the current submit dialog invocation.
 pub fn get_submit_params_json() -> String {
     SUBMIT_PARAMS
@@ -51,6 +54,11 @@ pub fn get_submit_params_json() -> String {
         .unwrap_or_else(|e| e.into_inner())
         .clone()
         .unwrap_or_else(|| "{}".to_string())
+}
+
+/// Store the submission result (called from SubmitModel background thread).
+pub fn set_submit_result(result: &str) {
+    *SUBMIT_RESULT.lock().unwrap_or_else(|e| e.into_inner()) = Some(result.to_string());
 }
 
 /// Show the job submission dialog.
@@ -67,6 +75,7 @@ pub fn show_submit_dialog(params: &SubmitDialogParams) -> String {
     });
 
     *SUBMIT_PARAMS.lock().unwrap_or_else(|e| e.into_inner()) = Some(params_json.to_string());
+    *SUBMIT_RESULT.lock().unwrap_or_else(|e| e.into_inner()) = None;
 
     let mut app = QGuiApplication::new();
     let mut engine = QQmlApplicationEngine::new();
@@ -81,6 +90,10 @@ pub fn show_submit_dialog(params: &SubmitDialogParams) -> String {
         app.exec();
     }
 
-    // TODO: Return actual result (job_id or canceled) from the model
-    serde_json::json!({"status": "CANCELED"}).to_string()
+    // Return the result set by the submission thread, or CANCELED if dialog was closed
+    SUBMIT_RESULT
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_else(|| serde_json::json!({"status": "CANCELED"}).to_string())
 }

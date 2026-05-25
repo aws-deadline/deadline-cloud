@@ -60,6 +60,62 @@ fn extract_submission_config(
     }
 }
 
+#[allow(clippy::struct_field_names, reason = "cb suffix clarifies these are callbacks")]
+struct PySubmissionHandler {
+    print_cb: Option<PyObject>,
+    confirm_cb: Option<PyObject>,
+    continue_cb: Option<PyObject>,
+}
+
+// SAFETY: PyObject is only accessed via Python::with_gil which acquires the GIL,
+// ensuring exclusive access to the Python interpreter from any thread.
+#[allow(unsafe_code, reason = "PyObject requires manual Send/Sync for cross-thread use with GIL")]
+unsafe impl Send for PySubmissionHandler {}
+// SAFETY: Same as above — all PyObject access is gated by with_gil.
+#[allow(unsafe_code, reason = "PyObject requires manual Send/Sync for cross-thread use with GIL")]
+unsafe impl Sync for PySubmissionHandler {}
+
+impl deadline_lib::bundle::SubmissionHandler for PySubmissionHandler {
+    fn on_message(&self, msg: &str) {
+        if let Some(ref cb) = self.print_cb {
+            Python::with_gil(|py| {
+                let _ = cb.call1(py, (msg,));
+            });
+        }
+    }
+    fn confirm(&self, msg: &str, default: bool) -> bool {
+        match &self.confirm_cb {
+            Some(cb) => Python::with_gil(|py| {
+                cb.call1(py, (msg, default))
+                    .map(|r| r.is_truthy(py).unwrap_or(default))
+                    .unwrap_or(default)
+            }),
+            None => default,
+        }
+    }
+    fn should_continue(&self) -> bool {
+        match &self.continue_cb {
+            Some(cb) => Python::with_gil(|py| {
+                cb.call0(py)
+                    .map(|r| r.is_truthy(py).unwrap_or(true))
+                    .unwrap_or(true)
+            }),
+            None => true,
+        }
+    }
+    fn on_upload_summary(
+        &self,
+        stats: &deadline_lib::attachments::progress_tracker::SummaryStatistics,
+    ) {
+        if let Some(ref cb) = self.print_cb {
+            let msg = stats.format_upload_summary();
+            Python::with_gil(|py| {
+                let _ = cb.call1(py, (msg,));
+            });
+        }
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (params, on_print=None, on_hashing_progress=None, on_upload_progress=None, on_confirm=None, on_continue=None))]
 pub fn create_job_from_job_bundle(
@@ -121,61 +177,10 @@ pub fn create_job_from_job_bundle(
     };
 
     // Build handler
-    struct PySubmissionHandler {
-        on_print: Option<PyObject>,
-        on_confirm: Option<PyObject>,
-        on_continue: Option<PyObject>,
-    }
-
-    // SAFETY: PyObjects are Send when accessed only via Python::with_gil
-    unsafe impl Send for PySubmissionHandler {}
-    unsafe impl Sync for PySubmissionHandler {}
-
-    impl deadline_lib::bundle::SubmissionHandler for PySubmissionHandler {
-        fn on_message(&self, msg: &str) {
-            if let Some(ref cb) = self.on_print {
-                Python::with_gil(|py| {
-                    let _ = cb.call1(py, (msg,));
-                });
-            }
-        }
-        fn confirm(&self, msg: &str, default: bool) -> bool {
-            match &self.on_confirm {
-                Some(cb) => Python::with_gil(|py| {
-                    cb.call1(py, (msg, default))
-                        .map(|r| r.is_truthy(py).unwrap_or(default))
-                        .unwrap_or(default)
-                }),
-                None => default,
-            }
-        }
-        fn should_continue(&self) -> bool {
-            match &self.on_continue {
-                Some(cb) => Python::with_gil(|py| {
-                    cb.call0(py)
-                        .map(|r| r.is_truthy(py).unwrap_or(true))
-                        .unwrap_or(true)
-                }),
-                None => true,
-            }
-        }
-        fn on_upload_summary(
-            &self,
-            stats: &deadline_lib::attachments::progress_tracker::SummaryStatistics,
-        ) {
-            if let Some(ref cb) = self.on_print {
-                let msg = stats.format_upload_summary();
-                Python::with_gil(|py| {
-                    let _ = cb.call1(py, (msg,));
-                });
-            }
-        }
-    }
-
     let handler = PySubmissionHandler {
-        on_print,
-        on_confirm,
-        on_continue,
+        print_cb: on_print,
+        confirm_cb: on_confirm,
+        continue_cb: on_continue,
     };
 
     let hashing_cb = on_hashing_progress.map(

@@ -194,6 +194,21 @@ Tests follow three rules:
    wiremock for API calls, real temp directories for filesystem
    operations, and real config files for config tests.
 
+### UI accessibility tests (`test/ui/`)
+
+End-to-end GUI tests using [xa11y](https://lib.rs/crates/xa11y-macos).
+Launches the real binary against `MockDeadlineBackend` and drives it
+via the OS accessibility tree.
+
+```bash
+pip install botocore xa11y
+cargo build && pytest test/ui/ -v --tb=short
+```
+
+Requires macOS Accessibility permission for your terminal app
+(System Settings → Privacy & Security → Accessibility).
+On Linux: `apt install at-spi2-core xvfb && xvfb-run pytest test/ui/ -v`.
+
 ### Snapshots
 
 CLI output tests use `insta` snapshots. When you change CLI output, new

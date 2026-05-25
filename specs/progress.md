@@ -265,3 +265,6 @@ story. See `specs/HANDOFF.md` for detailed analysis.
 - **pyo3** 0.24 → 0.28 (major, breaking API changes)
 - **rustls-webpki** advisories pinned by transitive hyper-rustls 0.24
   (awaiting AWS SDK upstream fix). See `deny.toml`.
+- **PyO3 Send/Sync safety**: `PySubmissionHandler` uses `unsafe impl Send/Sync`
+  with `#[allow(unsafe_code)]`. Investigate whether upgrading PyO3 or using
+  `Py<PyAny>` (Send+Sync by design in newer PyO3) can eliminate the unsafe.

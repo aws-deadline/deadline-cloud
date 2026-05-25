@@ -64,11 +64,11 @@ pub fn prepare_job_bundle(
         template["description"] = serde_json::json!(settings.description);
     }
 
-    if let Some(hr) = host_requirements {
-        if let Some(steps) = template.get_mut("steps").and_then(|s| s.as_array_mut()) {
-            for step in steps.iter_mut() {
-                step["hostRequirements"] = hr.clone();
-            }
+    if let Some(hr) = host_requirements
+        && let Some(steps) = template.get_mut("steps").and_then(|s| s.as_array_mut())
+    {
+        for step in steps.iter_mut() {
+            step["hostRequirements"] = hr.clone();
         }
     }
 
@@ -134,16 +134,29 @@ pub fn prepare_job_bundle(
 }
 
 /// Validate whether the submit button should be enabled. Returns issues (empty = ready).
-pub fn validate_submit_readiness(farm_id: &str, queue_id: &str, api_available: bool) -> Vec<String> {
+pub fn validate_submit_readiness(
+    farm_id: &str,
+    queue_id: &str,
+    api_available: bool,
+) -> Vec<String> {
     let mut issues = Vec::new();
     if !api_available {
-        issues.push("AWS Deadline Cloud API is not accessible. Check your authentication status.".to_string());
+        issues.push(
+            "AWS Deadline Cloud API is not accessible. Check your authentication status."
+                .to_string(),
+        );
     }
     if farm_id.is_empty() {
-        issues.push("No farm is configured. Click Settings to select a farm for job submission.".to_string());
+        issues.push(
+            "No farm is configured. Click Settings to select a farm for job submission."
+                .to_string(),
+        );
     }
     if queue_id.is_empty() {
-        issues.push("No queue is configured. Click Settings to select a queue within your farm.".to_string());
+        issues.push(
+            "No queue is configured. Click Settings to select a queue within your farm."
+                .to_string(),
+        );
     }
     issues
 }
@@ -151,18 +164,96 @@ pub fn validate_submit_readiness(farm_id: &str, queue_id: &str, api_available: b
 fn read_template(bundle_dir: &Path) -> Result<(String, &'static str), String> {
     let json_path = bundle_dir.join("template.json");
     if json_path.is_file() {
-        let content = std::fs::read_to_string(&json_path).map_err(|e| format!("Read template: {e}"))?;
+        let content =
+            std::fs::read_to_string(&json_path).map_err(|e| format!("Read template: {e}"))?;
         return Ok((content, "json"));
     }
     let yaml_path = bundle_dir.join("template.yaml");
     if yaml_path.is_file() {
-        let content = std::fs::read_to_string(&yaml_path).map_err(|e| format!("Read template: {e}"))?;
+        let content =
+            std::fs::read_to_string(&yaml_path).map_err(|e| format!("Read template: {e}"))?;
         let value: serde_json::Value =
             serde_yaml::from_str(&content).map_err(|e| format!("Parse YAML template: {e}"))?;
-        let json_str = serde_json::to_string(&value).map_err(|e| format!("Convert to JSON: {e}"))?;
+        let json_str =
+            serde_json::to_string(&value).map_err(|e| format!("Convert to JSON: {e}"))?;
         return Ok((json_str, "yaml"));
     }
-    Err(format!("No template.json or template.yaml found in {}", bundle_dir.display()))
+    Err(format!(
+        "No template.json or template.yaml found in {}",
+        bundle_dir.display()
+    ))
+}
+
+/// Config-derived fields for job submission (extracted for testability).
+#[derive(Debug, Clone)]
+pub struct SubmitConfigFields {
+    pub job_attachments_file_system: String,
+    pub force_s3_check: bool,
+    pub allow_bundle_hooks: bool,
+    pub allow_environment_hooks: bool,
+    pub known_config_paths: Vec<String>,
+    pub s3_max_pool_connections: Option<usize>,
+}
+
+/// Read submission-related config fields from the config file.
+pub fn read_submit_config_fields() -> SubmitConfigFields {
+    let config = deadline_lib::config::config_file::read_config().unwrap_or_default();
+    let ja_fs = deadline_lib::config::config_file::get_setting(
+        "defaults.job_attachments_file_system",
+        &config,
+    )
+    .unwrap_or_default();
+    let force_s3 = deadline_lib::config::config_file::str2bool(
+        &deadline_lib::config::config_file::get_setting("settings.force_s3_check", &config)
+            .unwrap_or_default(),
+    )
+    .unwrap_or(false);
+    let allow_bundle_hooks = deadline_lib::config::config_file::str2bool(
+        &deadline_lib::config::config_file::get_setting("settings.allow_bundle_hooks", &config)
+            .unwrap_or_default(),
+    )
+    .unwrap_or(false);
+    let allow_env_hooks = deadline_lib::config::config_file::str2bool(
+        &deadline_lib::config::config_file::get_setting(
+            "settings.allow_environment_hooks",
+            &config,
+        )
+        .unwrap_or_default(),
+    )
+    .unwrap_or(false);
+    let known_config_paths = {
+        let v =
+            deadline_lib::config::config_file::get_setting("settings.known_asset_paths", &config)
+                .unwrap_or_default();
+        if v.is_empty() {
+            Vec::new()
+        } else {
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            v.split(sep).map(String::from).collect()
+        }
+    };
+    let s3_max_pool =
+        deadline_lib::config::config_file::get_setting("settings.s3_max_pool_connections", &config)
+            .ok()
+            .and_then(|v| deadline_lib::attachments::s3::parse_s3_max_pool_connections(&v).ok());
+
+    SubmitConfigFields {
+        job_attachments_file_system: ja_fs,
+        force_s3_check: force_s3,
+        allow_bundle_hooks,
+        allow_environment_hooks: allow_env_hooks,
+        known_config_paths,
+        s3_max_pool_connections: s3_max_pool,
+    }
+}
+
+/// Resolve `target_task_run_status` from the initial status string.
+pub fn resolve_target_task_run_status(initial_status: &str) -> Option<String> {
+    if initial_status == "SUSPENDED" {
+        Some("SUSPENDED".to_string())
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -191,8 +282,10 @@ mod tests {
     #[test]
     fn prepare_job_bundle_copies_template_with_name() {
         let dir = tempfile::tempdir().unwrap();
-        let bundle = create_bundle_dir(&dir,
-            r#"{"specificationVersion":"jobtemplate-2023-09","name":"Original","steps":[]}"#);
+        let bundle = create_bundle_dir(
+            &dir,
+            r#"{"specificationVersion":"jobtemplate-2023-09","name":"Original","steps":[]}"#,
+        );
         let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&output_dir).unwrap();
 
@@ -202,11 +295,19 @@ mod tests {
             input_job_bundle_dir: bundle.to_string_lossy().to_string(),
             ..Default::default()
         };
-        let result = prepare_job_bundle(&output_dir, &settings, &[], &AssetReferences::default(), None);
+        let result = prepare_job_bundle(
+            &output_dir,
+            &settings,
+            &[],
+            &AssetReferences::default(),
+            None,
+        );
         assert!(result.is_ok());
 
         let content: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(output_dir.join("template.json")).unwrap()).unwrap();
+            &std::fs::read_to_string(output_dir.join("template.json")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(content["name"], "My Custom Job");
         assert_eq!(content["description"], "A test job");
     }
@@ -214,8 +315,10 @@ mod tests {
     #[test]
     fn prepare_job_bundle_removes_empty_description() {
         let dir = tempfile::tempdir().unwrap();
-        let bundle = create_bundle_dir(&dir,
-            r#"{"specificationVersion":"jobtemplate-2023-09","name":"X","description":"old","steps":[]}"#);
+        let bundle = create_bundle_dir(
+            &dir,
+            r#"{"specificationVersion":"jobtemplate-2023-09","name":"X","description":"old","steps":[]}"#,
+        );
         let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&output_dir).unwrap();
 
@@ -224,18 +327,29 @@ mod tests {
             input_job_bundle_dir: bundle.to_string_lossy().to_string(),
             ..Default::default()
         };
-        prepare_job_bundle(&output_dir, &settings, &[], &AssetReferences::default(), None).unwrap();
+        prepare_job_bundle(
+            &output_dir,
+            &settings,
+            &[],
+            &AssetReferences::default(),
+            None,
+        )
+        .unwrap();
 
         let content: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(output_dir.join("template.json")).unwrap()).unwrap();
+            &std::fs::read_to_string(output_dir.join("template.json")).unwrap(),
+        )
+        .unwrap();
         assert!(content.get("description").is_none());
     }
 
     #[test]
     fn prepare_job_bundle_injects_host_requirements_into_steps() {
         let dir = tempfile::tempdir().unwrap();
-        let bundle = create_bundle_dir(&dir,
-            r#"{"specificationVersion":"jobtemplate-2023-09","name":"X","steps":[{"name":"S1","script":{"actions":{"onRun":{"command":"echo"}}}},{"name":"S2","script":{"actions":{"onRun":{"command":"echo"}}}}]}"#);
+        let bundle = create_bundle_dir(
+            &dir,
+            r#"{"specificationVersion":"jobtemplate-2023-09","name":"X","steps":[{"name":"S1","script":{"actions":{"onRun":{"command":"echo"}}}},{"name":"S2","script":{"actions":{"onRun":{"command":"echo"}}}}]}"#,
+        );
         let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&output_dir).unwrap();
 
@@ -248,10 +362,19 @@ mod tests {
             "amounts": [{"name": "amount.worker.vcpu", "min": 4}],
             "attributes": [{"name": "attr.worker.os.family", "anyOf": ["linux"]}]
         });
-        prepare_job_bundle(&output_dir, &settings, &[], &AssetReferences::default(), Some(&host_req)).unwrap();
+        prepare_job_bundle(
+            &output_dir,
+            &settings,
+            &[],
+            &AssetReferences::default(),
+            Some(&host_req),
+        )
+        .unwrap();
 
         let content: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(output_dir.join("template.json")).unwrap()).unwrap();
+            &std::fs::read_to_string(output_dir.join("template.json")).unwrap(),
+        )
+        .unwrap();
         let steps = content["steps"].as_array().unwrap();
         assert_eq!(steps[0]["hostRequirements"], host_req);
         assert_eq!(steps[1]["hostRequirements"], host_req);
@@ -277,16 +400,29 @@ mod tests {
         prepare_job_bundle(&output_dir, &settings, &[], &assets, None).unwrap();
 
         let content: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(output_dir.join("asset_references.json")).unwrap()).unwrap();
-        assert!(content["inputFilePaths"].as_array().unwrap().contains(&serde_json::json!("/extra/file.exr")));
+            &std::fs::read_to_string(output_dir.join("asset_references.json")).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            content["inputFilePaths"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("/extra/file.exr"))
+        );
     }
 
     #[test]
     fn prepare_job_bundle_copies_hooks_yaml() {
         let dir = tempfile::tempdir().unwrap();
-        let bundle = create_bundle_dir(&dir,
-            r#"{"specificationVersion":"jobtemplate-2023-09","name":"X","steps":[]}"#);
-        std::fs::write(bundle.join("hooks.yaml"), "hooks:\n  - name: pre\n    command: echo pre\n").unwrap();
+        let bundle = create_bundle_dir(
+            &dir,
+            r#"{"specificationVersion":"jobtemplate-2023-09","name":"X","steps":[]}"#,
+        );
+        std::fs::write(
+            bundle.join("hooks.yaml"),
+            "hooks:\n  - name: pre\n    command: echo pre\n",
+        )
+        .unwrap();
         let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&output_dir).unwrap();
 
@@ -295,7 +431,14 @@ mod tests {
             input_job_bundle_dir: bundle.to_string_lossy().to_string(),
             ..Default::default()
         };
-        prepare_job_bundle(&output_dir, &settings, &[], &AssetReferences::default(), None).unwrap();
+        prepare_job_bundle(
+            &output_dir,
+            &settings,
+            &[],
+            &AssetReferences::default(),
+            None,
+        )
+        .unwrap();
 
         assert!(output_dir.join("hooks.yaml").exists());
         let origin = std::fs::read_to_string(output_dir.join(".hooks_origin")).unwrap();
@@ -305,8 +448,10 @@ mod tests {
     #[test]
     fn prepare_job_bundle_merges_parameters() {
         let dir = tempfile::tempdir().unwrap();
-        let bundle = create_bundle_dir(&dir,
-            r#"{"specificationVersion":"jobtemplate-2023-09","name":"X","steps":[]}"#);
+        let bundle = create_bundle_dir(
+            &dir,
+            r#"{"specificationVersion":"jobtemplate-2023-09","name":"X","steps":[]}"#,
+        );
         let output_dir = dir.path().join("output");
         std::fs::create_dir_all(&output_dir).unwrap();
 
@@ -323,9 +468,22 @@ mod tests {
             serde_json::json!({"name": "RezPackages", "value": "maya-2024"}),
             serde_json::json!({"name": "Frames", "value": "1-100"}),
         ];
-        let params = prepare_job_bundle(&output_dir, &settings, &queue_params, &AssetReferences::default(), None).unwrap();
-        assert_eq!(params.iter().find(|p| p["name"] == "Frames").unwrap()["value"], "1-10");
-        assert_eq!(params.iter().find(|p| p["name"] == "RezPackages").unwrap()["value"], "maya-2024");
+        let params = prepare_job_bundle(
+            &output_dir,
+            &settings,
+            &queue_params,
+            &AssetReferences::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            params.iter().find(|p| p["name"] == "Frames").unwrap()["value"],
+            "1-10"
+        );
+        assert_eq!(
+            params.iter().find(|p| p["name"] == "RezPackages").unwrap()["value"],
+            "maya-2024"
+        );
     }
 
     #[test]
@@ -339,7 +497,16 @@ mod tests {
             input_job_bundle_dir: "/nonexistent/path".to_string(),
             ..Default::default()
         };
-        assert!(prepare_job_bundle(&output_dir, &settings, &[], &AssetReferences::default(), None).is_err());
+        assert!(
+            prepare_job_bundle(
+                &output_dir,
+                &settings,
+                &[],
+                &AssetReferences::default(),
+                None
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -368,5 +535,47 @@ mod tests {
     #[test]
     fn can_submit_passes_when_all_configured() {
         assert!(validate_submit_readiness("farm-abc", "queue-xyz", true).is_empty());
+    }
+
+    #[test]
+    fn resolve_target_task_run_status_ready_is_none() {
+        assert_eq!(resolve_target_task_run_status("READY"), None);
+    }
+
+    #[test]
+    fn resolve_target_task_run_status_suspended_returns_suspended() {
+        assert_eq!(
+            resolve_target_task_run_status("SUSPENDED"),
+            Some("SUSPENDED".to_string())
+        );
+    }
+
+    #[test]
+    fn read_submit_config_fields_does_not_panic() {
+        // Verify the function handles missing/empty config gracefully
+        let fields = read_submit_config_fields();
+        // All bool fields default to false when config is empty/missing
+        // (exact values depend on what config file is present during test)
+        let _ = fields.force_s3_check;
+        let _ = fields.allow_bundle_hooks;
+        let _ = fields.allow_environment_hooks;
+        let _ = fields.known_config_paths;
+        let _ = fields.s3_max_pool_connections;
+    }
+
+    #[test]
+    fn load_template_name_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = dir.path().join("bundle");
+        std::fs::create_dir_all(&bundle).unwrap();
+        std::fs::write(
+            bundle.join("template.yaml"),
+            "specificationVersion: jobtemplate-2023-09\nname: YAML Job\nsteps: []\n",
+        )
+        .unwrap();
+        assert_eq!(
+            crate::submit_model::load_template_name(&bundle),
+            Some("YAML Job".to_string())
+        );
     }
 }

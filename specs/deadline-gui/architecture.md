@@ -7,11 +7,9 @@ Rust + QML GUI for AWS Deadline Cloud, built with cxx-qt v0.8.
 Provides functions that the CLI and DCC plugins call:
 
 ```rust
-// CLI calls this (creates QApplication, blocks until dialog closes):
+// CLI calls these (creates QApplication, blocks until dialog closes):
 deadline_gui::show_config_dialog();
-
-// Future (Phase 2):
-deadline_gui::show_submit_dialog(params) -> Option<SubmitResult>;
+deadline_gui::show_submit_dialog(&params) -> String;  // JSON result
 ```
 
 ## How It Fits
@@ -59,17 +57,26 @@ crates/deadline-gui/
 ├── Cargo.toml
 ├── build.rs                  # Registers QML module + bridge files
 ├── src/
-│   ├── lib.rs                # Public API: show_config_dialog()
+│   ├── lib.rs                # Public API: show_config_dialog(), show_submit_dialog()
 │   ├── config_model.rs       # QObject: settings form, load/apply/dirty
 │   ├── resource_model.rs     # QObject: async farm/queue/storage profile lists
 │   ├── auth_model.rs         # QObject: auth status, login/logout, file watcher
+│   ├── submit_model.rs       # QObject: job submission, progress, cancel
+│   ├── progress_model.rs     # QObject: standalone progress state
 │   ├── logic.rs              # Module root
 │   ├── logic/tests.rs        # L1 tests for config logic
 │   ├── logic/auth.rs         # Auth state derivation (+ tests)
 │   ├── logic/resources.rs    # Resource fetch + selection (+ tests)
-│   └── logic/watcher.rs      # File watcher path logic (+ tests)
+│   ├── logic/watcher.rs      # File watcher path logic (+ tests)
+│   ├── logic/submit.rs       # Bundle prep, validation, config extraction (+ tests)
+│   ├── logic/attachments.rs  # AssetReferences CRUD (+ tests)
+│   ├── logic/parameters.rs   # Queue parameter parsing (+ tests)
+│   ├── logic/host_requirements.rs  # Host requirements serialization (+ tests)
+│   └── bin/gui_test_harness.rs     # Test binary for xa11y tests
 └── qml/
-    └── ConfigDialog.qml      # Full config dialog
+    ├── ConfigDialog.qml      # Config dialog
+    ├── SubmitDialog.qml      # Submit dialog with inline progress
+    └── ProgressDialog.qml    # Standalone progress dialog (reusable)
 ```
 
 ## cxx-qt Naming Convention
@@ -115,6 +122,36 @@ No automatic camelCase conversion.
 |----------|---------|
 | `watch_paths()` | Returns ~/.aws/ and ~/.deadline/ |
 | `should_trigger_refresh(path, watch_paths)` | Filter relevant file changes |
+
+### Submit (logic/submit.rs)
+
+| Function | Purpose |
+|----------|---------|
+| `prepare_job_bundle(output_dir, settings, queue_params, assets, host_req)` | Copy template, merge params, write assets, copy hooks |
+| `validate_submit_readiness(farm_id, queue_id, api_available)` | Returns issues list (empty = ready) |
+| `read_submit_config_fields()` | Extract submission config from INI (testable) |
+| `resolve_target_task_run_status(initial_status)` | Map "SUSPENDED" → Some, else None |
+
+### Attachments (logic/attachments.rs)
+
+| Function | Purpose |
+|----------|---------|
+| `AssetReferences::add_input_file/dir`, `remove_*`, `merge` | CRUD for file/dir lists |
+| `AssetReferences::from_json/to_json` | Serialize/deserialize |
+
+### Parameters (logic/parameters.rs)
+
+| Function | Purpose |
+|----------|---------|
+| `parse_queue_parameters(environments)` | Extract params from queue env YAML |
+| `merge_parameters(queue_params, job_params)` | Job overrides queue |
+| `validate_parameters(params, known_names)` | Detect unrecognized params |
+
+### Host Requirements (logic/host_requirements.rs)
+
+| Function | Purpose |
+|----------|---------|
+| `serialize_host_requirements(os, hardware, custom)` | Build JSON for template injection |
 
 ## Async Pattern
 
@@ -167,11 +204,19 @@ Dependencies: `cxx-qt 0.8`, `cxx-qt-lib`, `cxx-qt-build`, `deadline-lib`,
 
 ## Testing
 
-- **L1:** `cargo test -p deadline-gui` — 67 tests (config + auth + resources + watcher logic)
-- **L2:** `pytest test/ui/` — accessibility tests via xa11y against the real binary
+- **L1:** `cargo test -p deadline-gui` — 123 tests (config + auth + resources + watcher + submit + attachments + parameters + host requirements logic)
+- **L2:** `pytest test/ui/` — 35 accessibility tests via xa11y against the real binary (22 passing, 13 deferred to later phases)
 
 ## Remaining TODOs
 
+- Progress dialog styling (all-white background)
+- Job history bundle writing after successful submit
+- `--output json` stdout printing
+- Export bundle action
+- Queue parameters dynamic form
+- Attachments UI (add/remove)
+- Host requirements UI
+- Settings button (open config from submit)
 - Known Asset Paths UI (Add/Edit/Remove list widget)
-- `max_retries_per_task` / `max_failed_tasks_count` spinboxes
 - File watcher shutdown on dialog close
+- Phase 3: PyO3 `show_submit_dialog()` for DCC plugins

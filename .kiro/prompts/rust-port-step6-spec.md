@@ -12,6 +12,16 @@ Do NOT restart from scratch.
 audited state of the code. Do NOT ASSUME they are up-to-date, they can become stale
 after EVERY CHANGE.
 
+**Scope:** Check ALL specs that could be affected, not just the crate you changed:
+- `specs/{crate}/architecture.md` — layout, module contracts, test counts
+- `specs/architecture.md` — crate graph, data flows, crate responsibilities
+- `specs/deadline-cli/*.md` — if CLI behavior changed
+- `specs/deadline-gui/architecture.md` — if GUI models, logic, or QML changed
+- `specs/deadline-lib/` — if library API, bundle, attachments, or config changed
+- `specs/deadline-python-bindings/` — if bindings interface changed
+- Strip stale content rather than just appending new content.
+- Match the tone and length of existing sections when writing.
+
 **Include:**
 - Behavioral contract (what the code does, not how)
 - Data flows

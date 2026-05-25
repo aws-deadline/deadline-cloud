@@ -20,6 +20,12 @@ Do NOT restart from scratch.
    If the venv doesn't exist, create it first per README.md instructions.
    These tests MUST pass. Failures here indicate broken bindings or GUI
    regressions that `cargo test` cannot catch.
+5. If the work item involves GUI (deadline-gui crate), run xa11y UI tests:
+   ```bash
+   pytest test/ui/ -v --tb=short
+   ```
+   Requires macOS Accessibility permission (see DEVELOPMENT.md).
+   If unavailable, note which tests should now pass and flag for verification.
 
 **Constraints:**
 - Do NOT use `INSTA_UPDATE=always` because each snapshot must be manually verified against Python output

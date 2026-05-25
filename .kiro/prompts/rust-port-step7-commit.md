@@ -22,6 +22,14 @@ PyO3 binding signature changes, struct field changes, or behavioral
 differences in library code can break Python tests without any Rust test
 failing. Do NOT skip this step. Do NOT commit if Python tests fail.
 
+**xa11y UI tests (for GUI work items).** If the work item touches
+`deadline-gui` or GUI CLI commands, also run:
+```bash
+pytest test/ui/ -v --tb=short
+```
+Requires macOS Accessibility permission (see DEVELOPMENT.md).
+Do NOT commit if these tests regress.
+
 **Constraints:**
 - Do NOT commit if any pre-commit check fails because broken code must not be committed
 - Do NOT push the commit because it needs human review before sharing

@@ -49,6 +49,9 @@ def _mock_backend_server() -> Iterator[tuple[MockDeadlineBackend, str]]:
     """Session-scoped MockDeadlineBackend + HTTP server."""
     backend = MockDeadlineBackend()
     server, base_url, _ = start_server(backend)
+    # Use localhost instead of 127.0.0.1 so the Rust SDK's "management."
+    # host-prefix resolves correctly (management.localhost → 127.0.0.1).
+    base_url = base_url.replace("127.0.0.1", "localhost")
     try:
         yield backend, base_url
     finally:

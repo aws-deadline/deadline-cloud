@@ -64,7 +64,7 @@ impl qobject::ProgressModel {
         let new_text = if current.is_empty() {
             message.to_string()
         } else {
-            format!("{current}\n{}", message.to_string())
+            format!("{current}\n{message}")
         };
         self.as_mut()
             .set_log_text(cxx_qt_lib::QString::from(&new_text));

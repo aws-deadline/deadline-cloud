@@ -2,6 +2,9 @@
 //!
 //! Both `bundle gui-submit` and `config gui` use this module to find Python
 //! and launch the Qt-based GUI entry point.
+//!
+//! Currently unused — the Rust-native GUI is called directly. Retained for
+//! fallback scenarios (e.g., DCC plugins that still need Python subprocess).
 
 use std::path::PathBuf;
 use std::process::Command;

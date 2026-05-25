@@ -25,6 +25,8 @@ This may mean new tests or updating existing tests with gaps. Derive from:
 - Consider adding new tests if no existing tests are worth updating if the new
   behavior being added is too unique to do so
 - Prefer Level 2 (CLI subprocess + stub server) when CLI-reachable
+- For GUI features: Level 2 tests go in `test/ui/` using xa11y
+  (see DEVELOPMENT.md)
 - Use Level 1 (library unit) for precision or non-CLI-reachable behavior
 - CLI output tests use `insta-cmd` snapshots
 - Run tests and confirm they all fail — if any passes, it's not testing

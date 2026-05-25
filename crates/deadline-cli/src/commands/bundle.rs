@@ -462,7 +462,7 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             let bundle_dir = job_bundle_dir.unwrap_or_default();
             if bundle_dir.is_empty() && !browse {
                 return Err(CliError::Operation(
-                    "Specify a job bundle directory or run the bundle command with the --browse flag".to_string(),
+                    "Specify a job bundle directory or run the bundle command with the --browse flag".into(),
                 ));
             }
 
