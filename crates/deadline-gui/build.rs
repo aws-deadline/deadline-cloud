@@ -13,6 +13,8 @@ fn main() {
         "src/auth_model.rs",
         "src/submit_model.rs",
         "src/progress_model.rs",
+        "src/parameter_model.rs",
+        "src/attachment_model.rs",
     ])
     .build();
 }

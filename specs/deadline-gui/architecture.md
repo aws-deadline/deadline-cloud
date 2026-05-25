@@ -63,19 +63,21 @@ crates/deadline-gui/
 │   ├── auth_model.rs         # QObject: auth status, login/logout, file watcher
 │   ├── submit_model.rs       # QObject: job submission, progress, cancel
 │   ├── progress_model.rs     # QObject: standalone progress state
+│   ├── parameter_model.rs    # QObject: async queue parameter fetch + dynamic form state
+│   ├── attachment_model.rs   # QObject: auto/user attachment lists, add/remove
 │   ├── logic.rs              # Module root
 │   ├── logic/tests.rs        # L1 tests for config logic
 │   ├── logic/auth.rs         # Auth state derivation (+ tests)
 │   ├── logic/resources.rs    # Resource fetch + selection (+ tests)
 │   ├── logic/watcher.rs      # File watcher path logic (+ tests)
 │   ├── logic/submit.rs       # Bundle prep, validation, config extraction (+ tests)
-│   ├── logic/attachments.rs  # AssetReferences CRUD (+ tests)
-│   ├── logic/parameters.rs   # Queue parameter parsing (+ tests)
+│   ├── logic/attachments.rs  # AssetReferences CRUD + AttachmentState (+ tests)
+│   ├── logic/parameters.rs   # Queue parameter parsing, conflict detection, control resolution (+ tests)
 │   ├── logic/host_requirements.rs  # Host requirements serialization (+ tests)
 │   └── bin/gui_test_harness.rs     # Test binary for xa11y tests
 └── qml/
     ├── ConfigDialog.qml      # Config dialog
-    ├── SubmitDialog.qml      # Submit dialog with inline progress
+    ├── SubmitDialog.qml      # Submit dialog (4 tabs + auth bar + buttons + progress)
     └── ProgressDialog.qml    # Standalone progress dialog (reusable)
 ```
 
@@ -138,16 +140,26 @@ No automatic camelCase conversion.
 
 | Function | Purpose |
 |----------|---------|
-| `AssetReferences::add_input_file/dir`, `remove_*`, `merge` | CRUD for file/dir lists |
-| `AssetReferences::from_json/to_json` | Serialize/deserialize |
+| `AssetReferences::from_json/to_json` | Flat format (inputFilePaths, etc.) |
+| `AssetReferences::from_bundle_json/to_bundle_json` | Nested bundle format (assetReferences.inputs.filenames, etc.) |
+| `AssetReferences::add_*/remove_*` | CRUD with dedup-on-insert |
+| `merge_attachments(auto, user)` | Union of both, deduplicated (all 4 fields) |
+| `AttachmentState` | Tracks auto-detected vs user-added separately |
+| `AttachmentState::add_*/remove_*` | Add deduplicates against auto; remove only affects user |
+| `AttachmentState::merged()` | Returns union for submission |
 
 ### Parameters (logic/parameters.rs)
 
 | Function | Purpose |
 |----------|---------|
-| `parse_queue_parameters(environments)` | Extract params from queue env YAML |
-| `merge_parameters(queue_params, job_params)` | Job overrides queue |
-| `validate_parameters(params, known_names)` | Detect unrecognized params |
+| `parse_queue_environment_parameters(envs)` | Extract parameterDefinitions from env YAML templates |
+| `sort_environments_by_priority(envs)` | Sort by priority field (ascending) |
+| `assign_group_labels(params, env_name)` | Set groupLabel to "Queue Environment: {name}" when missing |
+| `detect_parameter_conflicts(params)` | Dedup by name; error on type/constraint mismatch (set comparison for allowedValues) |
+| `get_ui_control(param)` | Resolve control type: LINE_EDIT, SPIN_BOX, DROPDOWN_LIST, CHECK_BOX, HIDDEN, etc. |
+| `merge_queue_and_job_parameters(queue, job)` | Job values override queue defaults |
+| `apply_initial_values(params, values)` | Submitter overrides (e.g. DCC sets RezPackages) |
+| `find_unrecognized_parameters(job, template, queue)` | Detect params not in template or queue |
 
 ### Host Requirements (logic/host_requirements.rs)
 
@@ -181,6 +193,11 @@ On user selection change (e.g. pick new farm):
 - Updates configured ID
 - Triggers fetch for next level
 
+**Property set ordering (critical):** When updating QML properties after
+an async fetch, `selected_*_index` must be set BEFORE `*_names`. QML
+signal handlers fire on `*_namesChanged` and read `selected_*_index` —
+if the index isn't set yet, the wrong item is selected.
+
 ## Auth Status: State Machine
 
 ```
@@ -206,15 +223,15 @@ Dependencies: `cxx-qt 0.8`, `cxx-qt-lib`, `cxx-qt-build`, `deadline-lib`,
 
 ## Testing
 
-- **L1:** `cargo test -p deadline-gui` — 128 tests (config + auth + resources + watcher + submit + attachments + parameters + host requirements logic)
-- **L2:** `pytest test/ui/` — 35 accessibility tests via xa11y against the real binary (25 passing, 10 deferred — all config gui combo box accessibility)
+- **L1:** `cargo test -p deadline-gui` — 133 tests (config + auth + resources + watcher + submit + attachments + parameters + host requirements logic)
+- **L2:** `pytest test/ui/` — 38 accessibility tests via xa11y against the real binary (all passing)
 
 ## Remaining TODOs
 
-- Queue parameters dynamic form
-- Attachments UI (add/remove)
-- Host requirements UI
-- Settings button (open config from submit)
+- Host requirements UI (Tab 3 — model exists, QML is placeholder)
+- Settings button (open config dialog from submit dialog)
+- Help dialog (submitter info)
+- Load Bundle action (browse mode)
 - Known Asset Paths UI (Add/Edit/Remove list widget)
 - File watcher shutdown on dialog close
 - Phase 3: PyO3 `show_submit_dialog()` for DCC plugins

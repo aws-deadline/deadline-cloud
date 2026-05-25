@@ -3,42 +3,33 @@ CARGO_FLAGS := $(if $(filter release,$(PROFILE)),--release,)
 TARGET_DIR := target/$(PROFILE)
 BIN_NAME := deadline
 
-.PHONY: all build develop wheel test test-rust test-python lint fmt check clean setup-tools
+.PHONY: all build test test-rust test-ui lint fmt check clean setup-tools setup-test
 
 # Install required and recommended Cargo tools
 setup-tools:
 	cargo install cargo-insta cargo-deny cargo-outdated cargo-bloat
 
-# Default: build everything and install into .venv
-all: develop
+# Default: build
+all: build
 
 # Build Rust workspace (all crates)
 build:
 	cargo build $(CARGO_FLAGS)
 
-# Build + install into .venv (local development)
-develop: build
-	@mkdir -p deadline.data/scripts
-	cp $(TARGET_DIR)/$(BIN_NAME) deadline.data/scripts/$(BIN_NAME)
-	maturin develop
-
-# Build release wheel for distribution
-wheel:
-	$(MAKE) build PROFILE=release
-	@mkdir -p deadline.data/scripts
-	cp target/release/$(BIN_NAME) deadline.data/scripts/$(BIN_NAME)
-	maturin build --release
-
 # Run all tests
-test: test-rust test-python
+test: test-rust test-ui
 
 # Run Rust tests only
 test-rust:
 	cargo test
 
-# Run Python GUI tests only
-test-python:
-	pytest gui/tests/ -v
+# Run xa11y UI tests (requires macOS Accessibility permission)
+test-ui: build setup-test
+	python3 -m pytest test/ui/ -v
+
+# Install Python test dependencies
+setup-test:
+	pip install -e ".[test]" --quiet
 
 # Lint
 lint:
@@ -55,5 +46,3 @@ check:
 # Clean all build artifacts
 clean:
 	cargo clean
-	rm -rf deadline.data
-	rm -f gui/deadline/_native.abi3.so

@@ -11,9 +11,12 @@ license = {text = "Apache-2.0"}
 dependencies = ["pyyaml>=6.0"]
 
 [project.optional-dependencies]
-gui = [
-    "PySide6-essentials>=6.6,<6.11",
-    "QtPy==2.4.*",
+test = [
+    "pytest>=7.0",
+    "xa11y",
+    "openjd-model>=0.9",
+    "pyyaml>=6.0",
+    "botocore",
 ]
 
 [tool.maturin]
@@ -24,4 +27,4 @@ data = "deadline.data"
 features = ["extension-module"]
 
 [tool.pytest.ini_options]
-testpaths = ["gui/tests"]
+testpaths = ["test/ui"]

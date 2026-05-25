@@ -447,8 +447,8 @@ mod tests {
         };
         let assets = AssetReferences {
             input_file_paths: vec!["/extra/file.exr".to_string()],
-            input_directory_paths: vec![],
             output_directory_paths: vec!["/out".to_string()],
+            ..Default::default()
         };
         prepare_job_bundle(&output_dir, &settings, &[], &assets, None).unwrap();
 
@@ -686,8 +686,8 @@ mod tests {
         };
         let assets = AssetReferences {
             input_file_paths: vec!["/scene.ma".to_string()],
-            input_directory_paths: vec![],
             output_directory_paths: vec!["/render_output".to_string()],
+            ..Default::default()
         };
 
         let history_dir = export_bundle_to_history(

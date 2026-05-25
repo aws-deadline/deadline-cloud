@@ -18,6 +18,8 @@ ApplicationWindow {
     SubmitModel { id: submitModel }
     AuthModel { id: authModel; Component.onCompleted: authModel.start_watching() }
     ResourceModel { id: resourceModel }
+    ParameterListModel { id: parameterModel }
+    AttachmentModel { id: attachmentModel }
 
     Connections {
         target: authModel
@@ -49,7 +51,10 @@ ApplicationWindow {
                 var farmIdx = resourceModel.selected_farm_index
                 var farmId = (farmIdx >= 0 && farmIdx < farmIds.length) ? farmIds[farmIdx] : ""
                 var qid = ids[idx] || ""
-                if (farmId && qid) submitModel.set_farm_queue(farmId, qid)
+                if (farmId && qid) {
+                    submitModel.set_farm_queue(farmId, qid)
+                    parameterModel.refresh(farmId, qid, submitModel.aws_profile)
+                }
             }
         }
     }
@@ -185,6 +190,137 @@ ApplicationWindow {
                             Label { id: queueLabel; text: submitModel.queue_display || "<not configured>"; Layout.fillWidth: true; elide: Text.ElideRight }
                         }
                     }
+
+                    // ── Queue Parameters (dynamic) ──
+                    Loader {
+                        Layout.fillWidth: true
+                        active: true
+                        sourceComponent: parameterModel.is_loading
+                            ? loadingComponent
+                            : parameterModel.loading_state.toString() !== ""
+                              ? errorComponent
+                              : parameterModel.parameters_json.toString() !== "[]"
+                                ? parametersComponent
+                                : null
+                    }
+
+                    Component {
+                        id: loadingComponent
+                        Label {
+                            text: "Loading Queue Environments..."
+                            horizontalAlignment: Text.AlignHCenter
+                            Accessible.name: "Loading Queue Environments"
+                        }
+                    }
+
+                    Component {
+                        id: errorComponent
+                        Label {
+                            text: parameterModel.loading_state
+                            color: "red"
+                            wrapMode: Text.Wrap
+                        }
+                    }
+
+                    Component {
+                        id: parametersComponent
+                        ColumnLayout {
+                            spacing: 8
+                            width: parent ? parent.width : 0
+                            Repeater {
+                                model: {
+                                    try {
+                                        var params = JSON.parse(parameterModel.parameters_json)
+                                        return params.filter(function(p) {
+                                            return p.name.indexOf(":") === -1
+                                        })
+                                    } catch(e) { return [] }
+                                }
+                                delegate: ColumnLayout {
+                                    Layout.fillWidth: true
+                                    visible: {
+                                        var ctrl = modelData._resolvedControl || ""
+                                        return ctrl !== "HIDDEN"
+                                    }
+                                    // Group label header
+                                    Label {
+                                        visible: {
+                                            var gl = (modelData.userInterface || {}).groupLabel || ""
+                                            if (!gl) return false
+                                            var params = JSON.parse(parameterModel.parameters_json).filter(function(p) { return p.name.indexOf(":") === -1 })
+                                            for (var i = 0; i < params.length; i++) {
+                                                if ((params[i].userInterface || {}).groupLabel === gl) {
+                                                    return params[i].name === modelData.name
+                                                }
+                                            }
+                                            return false
+                                        }
+                                        text: (modelData.userInterface || {}).groupLabel || ""
+                                        font.bold: true
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label {
+                                            text: (modelData.userInterface || {}).label || modelData.name
+                                            Layout.minimumWidth: 120
+                                            Layout.maximumWidth: 250
+                                            wrapMode: Text.Wrap
+                                            Accessible.name: (modelData.userInterface || {}).label || modelData.name
+                                        }
+                                        // LINE_EDIT / MULTILINE_EDIT
+                                        TextField {
+                                            visible: modelData._resolvedControl === "LINE_EDIT" || modelData._resolvedControl === "MULTILINE_EDIT"
+                                            Layout.fillWidth: true
+                                            text: modelData.value !== undefined ? String(modelData.value) : (modelData["default"] !== undefined ? String(modelData["default"]) : "")
+                                            Accessible.name: modelData.name
+                                            onTextChanged: parameterModel.set_parameter_value(modelData.name, text)
+                                        }
+                                        // DROPDOWN_LIST
+                                        ComboBox {
+                                            visible: modelData._resolvedControl === "DROPDOWN_LIST"
+                                            Layout.fillWidth: true
+                                            model: modelData.allowedValues || []
+                                            currentIndex: {
+                                                var vals = modelData.allowedValues || []
+                                                var cur = modelData.value !== undefined ? String(modelData.value) : (modelData["default"] !== undefined ? String(modelData["default"]) : "")
+                                                var idx = vals.indexOf(cur)
+                                                return idx >= 0 ? idx : 0
+                                            }
+                                            Accessible.name: currentText
+                                            onActivated: parameterModel.set_parameter_value(modelData.name, currentText)
+                                        }
+                                        // SPIN_BOX (INT/FLOAT)
+                                        SpinBox {
+                                            visible: modelData._resolvedControl === "SPIN_BOX"
+                                            Layout.fillWidth: true
+                                            from: modelData.minValue !== undefined ? Number(modelData.minValue) : -2147483647
+                                            to: modelData.maxValue !== undefined ? Number(modelData.maxValue) : 2147483647
+                                            value: {
+                                                var v = modelData.value !== undefined ? modelData.value : modelData["default"]
+                                                return v !== undefined ? Number(v) : 0
+                                            }
+                                            Accessible.name: modelData.name
+                                            onValueChanged: parameterModel.set_parameter_value(modelData.name, String(value))
+                                        }
+                                        // CHECK_BOX
+                                        CheckBox {
+                                            visible: modelData._resolvedControl === "CHECK_BOX"
+                                            Layout.fillWidth: true
+                                            checked: {
+                                                var v = modelData.value !== undefined ? String(modelData.value) : (modelData["default"] !== undefined ? String(modelData["default"]) : "")
+                                                return v.toUpperCase() === "TRUE" || v.toUpperCase() === "YES" || v.toUpperCase() === "ON" || v === "1"
+                                            }
+                                            Accessible.name: (modelData.userInterface || {}).label || modelData.name
+                                            onCheckedChanged: {
+                                                var vals = modelData.allowedValues || ["True", "False"]
+                                                parameterModel.set_parameter_value(modelData.name, checked ? vals[0] : vals[1])
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -215,9 +351,124 @@ ApplicationWindow {
                 ColumnLayout {
                     width: parent.width
                     spacing: 12
-                    GroupBox { title: "Input files"; Layout.fillWidth: true; Label { text: "No input files configured."; wrapMode: Text.Wrap } }
-                    GroupBox { title: "Input directories"; Layout.fillWidth: true; Label { text: "No input directories configured."; wrapMode: Text.Wrap } }
-                    GroupBox { title: "Output directories"; Layout.fillWidth: true; Label { text: "No output directories configured."; wrapMode: Text.Wrap } }
+
+                    CheckBox {
+                        text: "Require all input paths exist"
+                        checked: attachmentModel.require_paths_exist
+                        Accessible.name: "Require all input paths exist"
+                        onCheckedChanged: attachmentModel.require_paths_exist = checked
+                    }
+
+                    GroupBox {
+                        title: "Input files"
+                        Layout.fillWidth: true
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            RowLayout {
+                                Button { text: "Add..."; Accessible.name: "Add input file"; onClicked: inputFileDialog.open() }
+                                Button { text: "Remove selected"; Accessible.name: "Remove input file"; onClicked: { if (inputFilesList.currentIndex >= 0) attachmentModel.remove_input_file(inputFilesList.currentIndex) } }
+                                Item { Layout.fillWidth: true }
+                                Label { text: (attachmentModel.auto_input_files.toString() ? attachmentModel.auto_input_files.toString().split(";").length : 0) + " auto, " + (attachmentModel.input_files.toString() ? attachmentModel.input_files.toString().split(";").length : 0) + " added" }
+                            }
+                            ListView {
+                                id: inputFilesList
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 100
+                                clip: true
+                                Rectangle { anchors.fill: parent; color: palette.base; z: -1 }
+                                model: {
+                                    var items = []
+                                    var auto = attachmentModel.auto_input_files.toString()
+                                    if (auto) items = items.concat(auto.split(";").map(function(p) { return {path: p, isAuto: true} }))
+                                    var user = attachmentModel.input_files.toString()
+                                    if (user) items = items.concat(user.split(";").map(function(p) { return {path: p, isAuto: false} }))
+                                    return items
+                                }
+                                delegate: Text {
+                                    text: modelData.path
+                                    color: palette.text
+                                    font.italic: modelData.isAuto
+                                    width: inputFilesList.width
+                                    elide: Text.ElideMiddle
+                                }
+                            }
+                        }
+                    }
+
+                    GroupBox {
+                        title: "Input directories"
+                        Layout.fillWidth: true
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            RowLayout {
+                                Button { text: "Add..."; Accessible.name: "Add input directory"; onClicked: inputDirDialog.open() }
+                                Button { text: "Remove selected"; Accessible.name: "Remove input directory"; onClicked: { if (inputDirsList.currentIndex >= 0) attachmentModel.remove_input_dir(inputDirsList.currentIndex) } }
+                                Item { Layout.fillWidth: true }
+                                Label { text: (attachmentModel.auto_input_dirs.toString() ? attachmentModel.auto_input_dirs.toString().split(";").length : 0) + " auto, " + (attachmentModel.input_dirs.toString() ? attachmentModel.input_dirs.toString().split(";").length : 0) + " added" }
+                            }
+                            ListView {
+                                id: inputDirsList
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 80
+                                clip: true
+                                Rectangle { anchors.fill: parent; color: palette.base; z: -1 }
+                                model: {
+                                    var items = []
+                                    var auto = attachmentModel.auto_input_dirs.toString()
+                                    if (auto) items = items.concat(auto.split(";").map(function(p) { return {path: p, isAuto: true} }))
+                                    var user = attachmentModel.input_dirs.toString()
+                                    if (user) items = items.concat(user.split(";").map(function(p) { return {path: p, isAuto: false} }))
+                                    return items
+                                }
+                                delegate: Text {
+                                    text: modelData.path
+                                    color: palette.text
+                                    font.italic: modelData.isAuto
+                                    width: inputDirsList.width
+                                    elide: Text.ElideMiddle
+                                }
+                            }
+                        }
+                    }
+
+                    GroupBox {
+                        title: "Output directories"
+                        Layout.fillWidth: true
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            RowLayout {
+                                Button { text: "Add..."; Accessible.name: "Add output directory"; onClicked: outputDirDialog.open() }
+                                Button { text: "Remove selected"; Accessible.name: "Remove output directory"; onClicked: { if (outputDirsList.currentIndex >= 0) attachmentModel.remove_output_dir(outputDirsList.currentIndex) } }
+                                Item { Layout.fillWidth: true }
+                                Label { text: (attachmentModel.auto_output_dirs.toString() ? attachmentModel.auto_output_dirs.toString().split(";").length : 0) + " auto, " + (attachmentModel.output_dirs.toString() ? attachmentModel.output_dirs.toString().split(";").length : 0) + " added" }
+                            }
+                            ListView {
+                                id: outputDirsList
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 80
+                                clip: true
+                                Rectangle { anchors.fill: parent; color: palette.base; z: -1 }
+                                model: {
+                                    var items = []
+                                    var auto = attachmentModel.auto_output_dirs.toString()
+                                    if (auto) items = items.concat(auto.split(";").map(function(p) { return {path: p, isAuto: true} }))
+                                    var user = attachmentModel.output_dirs.toString()
+                                    if (user) items = items.concat(user.split(";").map(function(p) { return {path: p, isAuto: false} }))
+                                    return items
+                                }
+                                delegate: Text {
+                                    text: modelData.path
+                                    color: palette.text
+                                    font.italic: modelData.isAuto
+                                    width: outputDirsList.width
+                                    elide: Text.ElideMiddle
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -420,6 +671,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         submitModel.initialize("")
+        attachmentModel.initialize(submitModel.job_bundle_dir)
         resourceModel.set_configured_ids(submitModel.farm_display, submitModel.queue_display, "")
         var profile = submitModel.aws_profile
         resourceModel.set_profile(profile)

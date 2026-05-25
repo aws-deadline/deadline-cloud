@@ -85,6 +85,7 @@ class MockDeadlineBackend:
         self.sessions: dict[tuple, dict] = {}
         self.session_actions: dict[tuple, dict] = {}
         self.storage_profiles: dict[tuple, dict] = {}
+        self.queue_environments: dict[tuple, list] = {}  # (farmId, queueId) -> [env, ...]
         self.call_counts: dict[str, int] = {}
         self.batch_call_sizes: dict[str, list[int]] = {}
         self._job_environments: dict[str, list[str]] = {}  # job_id -> [env_name, ...]
@@ -106,6 +107,7 @@ class MockDeadlineBackend:
         self.tasks.clear()
         self.sessions.clear()
         self.session_actions.clear()
+        self.queue_environments.clear()
         self.call_counts.clear()
         self.batch_call_sizes.clear()
         self._job_environments.clear()
@@ -427,7 +429,37 @@ class MockDeadlineBackend:
         self._validate("ListQueueEnvironments", params)
         if (farmId, queueId) not in self.queues:
             raise _resource_not_found("queue", queueId, "ListQueueEnvironments")
-        return {"environments": []}
+        envs = self.queue_environments.get((farmId, queueId), [])
+        return {
+            "environments": [
+                {"queueEnvironmentId": e["queueEnvironmentId"], "name": e["name"], "priority": e["priority"]}
+                for e in envs
+            ]
+        }
+
+    @route("GET", "/farms/{farmId}/queues/{queueId}/environments/{queueEnvironmentId}", "GetQueueEnvironment")
+    def get_queue_environment(
+        self, *, farmId: str, queueId: str, queueEnvironmentId: str, **kwargs
+    ) -> dict:
+        envs = self.queue_environments.get((farmId, queueId), [])
+        for env in envs:
+            if env["queueEnvironmentId"] == queueEnvironmentId:
+                return env
+        raise _resource_not_found("queueEnvironment", queueEnvironmentId, "GetQueueEnvironment")
+
+    def create_queue_environment(self, *, farmId: str, queueId: str, name: str, priority: int, template: str) -> dict:
+        """Test helper to add a queue environment (not an API route)."""
+        env_id = self._gen_id("queueenv")
+        env = {
+            "queueEnvironmentId": env_id,
+            "name": name,
+            "priority": priority,
+            "template": template,
+            "farmId": farmId,
+            "queueId": queueId,
+        }
+        self.queue_environments.setdefault((farmId, queueId), []).append(env)
+        return env
 
     @route("GET", "/farms/{farmId}/queues/{queueId}/user-roles", "AssumeQueueRoleForUser")
     def assume_queue_role_for_user(self, *, farmId: str, queueId: str) -> dict:

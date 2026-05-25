@@ -8,6 +8,10 @@ Read these files first and abide by them:
 work item, review what was written and continue from where it left off.
 Do NOT restart from scratch.
 
+⛔ GATE: Before writing any test code, present the full list of tests you
+plan to write (test names, what each tests, which module/file). Stop and
+wait for human approval. Do NOT write test code until approved.
+
 **Write tests that define the behavioral contract before implementation.**
 This may mean new tests or updating existing tests with gaps. Derive from:
 1. Python implementation code to determine testable behavior

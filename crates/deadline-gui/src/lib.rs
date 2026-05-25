@@ -3,9 +3,11 @@
 //! This crate provides the GUI dialogs (config, submit, login, progress)
 //! as Rust QObject models backed by QML views.
 
+pub mod attachment_model;
 pub mod auth_model;
 pub mod config_model;
 pub mod logic;
+pub mod parameter_model;
 pub mod progress_model;
 pub mod resource_model;
 pub mod submit_model;

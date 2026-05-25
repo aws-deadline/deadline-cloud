@@ -13,19 +13,17 @@ Do NOT restart from scratch.
 2. Run `cargo test` (full test suite — all crates, not just the one you changed)
 3. If snapshots were created, run `cargo insta review` — verify each against
    Python implementation before accepting.
-4. Run Python GUI tests — the PyO3 bindings and GUI code must not regress:
+4. If the work item involves GUI (deadline-gui crate), you MUST run xa11y UI tests:
    ```bash
-   source .venv/bin/activate && maturin develop && pytest gui/tests/ -v --tb=short
-   ```
-   If the venv doesn't exist, create it first per README.md instructions.
-   These tests MUST pass. Failures here indicate broken bindings or GUI
-   regressions that `cargo test` cannot catch.
-5. If the work item involves GUI (deadline-gui crate), run xa11y UI tests:
-   ```bash
-   pytest test/ui/ -v --tb=short
+   make test-ui
    ```
    Requires macOS Accessibility permission (see DEVELOPMENT.md).
-   If unavailable, note which tests should now pass and flag for verification.
+   These tests MUST pass — they catch QML type registration errors,
+   missing Accessible.name attributes, and runtime failures that
+   `cargo test` cannot detect (e.g. build.rs not registering new
+   QObject types). If the tests cannot run (no display server, no
+   accessibility permission), explicitly state this limitation and
+   do NOT claim the implementation is complete without verification.
 
 **Constraints:**
 - Do NOT use `INSTA_UPDATE=always` because each snapshot must be manually verified against Python output

@@ -61,14 +61,14 @@ cargo insta review                       # review new/changed CLI output snapsho
 
 ### Python GUI development
 
+The Python Qt GUI (`gui/`) is being replaced by the Rust QML GUI
+(`crates/deadline-gui/`). The Rust GUI is the primary development target.
+GUI commands (`bundle gui-submit`, `config gui`) call Rust directly.
+
+To run GUI accessibility tests:
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
-maturin develop                          # build PyO3 module + install gui/ package
-pytest gui/tests/ -v                     # run Python tests
+make test-ui                             # xa11y tests against real binary
 ```
 
-GUI commands need Python with PySide6. The Rust CLI finds Python via:
-1. `DEADLINE_PYTHON` env var
-2. `_internal/Python` relative to binary (installer layout)
-3. `python3` / `python` on PATH
+GUI commands need Qt 6 libraries. The Rust CLI finds them via the
+system Qt installation or bundled libs.

@@ -199,24 +199,16 @@ atexit.register(reap_all)
 
 
 def _find_app(pid: int, baseline_names: set, timeout: float) -> xa11y.App:
-    """Wait for an ``xa11y.App`` to appear for *pid*.
-
-    ``App.by_pid`` selects elements with role ``application``, which Windows
-    UIA never reports (apps are exposed as ``window``). Iterating
-    ``App.list()`` works on every platform because list collects both
-    ``application`` and ``window`` roles. The name fallback is for AT-SPI on
-    Linux, which sometimes reports the wrong PID (typically 1) for child
-    processes.
-    """
+    """Wait for an ``xa11y.App`` to appear for *pid*."""
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         apps = xa11y.App.list()
         for a in apps:
             if a.pid == pid:
-                return xa11y.App.by_name(a.name)
+                return xa11y.App.by_pid(pid)
         for a in apps:
             if a.name not in baseline_names:
-                return xa11y.App.by_name(a.name)
+                return xa11y.App.by_pid(a.pid)
         time.sleep(0.25)
     raise TimeoutError(f"No accessibility app found for PID {pid}")
 
@@ -332,6 +324,7 @@ class DeadlineApp:
         """Dismiss the dialog and reap the subprocess."""
         if self.proc.poll() is not None:
             _terminate(self.proc)
+            self._wait_deregistered()
             return
 
         for candidate in (button_name, "Close", "close button"):
@@ -357,11 +350,24 @@ class DeadlineApp:
                 pass
         _terminate(self.proc)
 
+        # Wait for macOS accessibility deregistration so subsequent launches
+        # don't collide with the dying process's accessibility entry.
+        self._wait_deregistered()
+
     def _signal_terminate(self) -> None:
         """Ask the subprocess to shut down gracefully via SIGTERM."""
         import signal
 
         _send_signal_to_proc(self.proc, signal.SIGTERM)
+
+    def _wait_deregistered(self, timeout: float = 5.0) -> None:
+        """Wait until this process disappears from the accessibility tree."""
+        pid = self.proc.pid
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if not any(a.pid == pid for a in xa11y.App.list()):
+                return
+            time.sleep(0.2)
 
 
 class ConfigDialog(DeadlineApp):

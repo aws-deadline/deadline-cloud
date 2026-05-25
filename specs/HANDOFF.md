@@ -189,11 +189,21 @@ The Python submit dialog (`SubmitJobToDeadlineDialog`) has these tabs/areas:
 | `_gui_entry.py::run_gui_submit` | `deadline_gui::show_submit_dialog()` |
 | `job_bundle_submitter.py::on_create_job_bundle_callback` | `logic/submit.rs::prepare_job_bundle()` |
 
-### Status: Batch 2a complete. Next: Batch 2b (Queue Parameters + Attachments UI).
+### Status: Batch 2a complete. Next: Batch 2c (Host Requirements + Polish).
 
 ---
 
 ## Completed items
+
+- **#35 Batch 2b — Queue Parameters + Attachments UI (2026-05-25)** —
+  ParameterListModel (async fetch, conflict detection, control type resolution),
+  AttachmentModel (auto/user split, add/remove, bundle JSON format),
+  QML dynamic parameter form (TextField/ComboBox/SpinBox/CheckBox per control type),
+  QML attachment lists with contrast fix, ComboBox accessibility fix (config dialog),
+  farm/queue selection race condition fix (property set ordering),
+  xa11y test infrastructure fix (by_pid instead of by_name),
+  mock backend queue environment support, test dependency management.
+  1,483→1,488 Rust tests. 35→38 xa11y tests (all passing).
 
 - **#35 Batch 2a — Job History + Output JSON + Progress Polish (2026-05-25)** —
   Export bundle button, job history bundle creation before submit, `--output json`

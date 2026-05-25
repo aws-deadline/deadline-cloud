@@ -223,7 +223,7 @@ ApplicationWindow {
                                 configModel.job_attachments_filesystem = currentText
                                 configModel.notify_changed()
                             }
-                            Accessible.name: "Job attachments filesystem options"
+                            Accessible.name: currentText
                         }
                     }
                 }
@@ -294,7 +294,7 @@ ApplicationWindow {
                                 configModel.conflict_resolution = currentText
                                 configModel.notify_changed()
                             }
-                            Accessible.name: "Conflict resolution option"
+                            Accessible.name: currentText
                         }
 
                         Label { text: "Current logging level" }
@@ -309,7 +309,7 @@ ApplicationWindow {
                                 configModel.log_level = currentText
                                 configModel.notify_changed()
                             }
-                            Accessible.name: "Current logging level"
+                            Accessible.name: currentText
                         }
 
                         Label { text: "Language" }
@@ -324,7 +324,7 @@ ApplicationWindow {
                                 configModel.locale = currentText
                                 configModel.notify_changed()
                             }
-                            Accessible.name: "Language"
+                            Accessible.name: currentText
                         }
                     }
                 }

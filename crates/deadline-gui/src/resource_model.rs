@@ -146,9 +146,9 @@ impl qobject::ResourceModel {
                     let names: Vec<&str> =
                         entries.iter().map(|e| e.display_name.as_str()).collect();
                     let ids: Vec<&str> = entries.iter().map(|e| e.id.as_str()).collect();
-                    obj.as_mut().set_farm_names(QString::from(&names.join(";")));
-                    obj.as_mut().set_farm_ids(QString::from(&ids.join(";")));
                     obj.as_mut().set_selected_farm_index(idx as i32);
+                    obj.as_mut().set_farm_ids(QString::from(&ids.join(";")));
+                    obj.as_mut().set_farm_names(QString::from(&names.join(";")));
                     obj.as_mut().set_farms_loading(false);
 
                     // Cascade: fetch queues for selected farm
@@ -209,10 +209,10 @@ impl qobject::ResourceModel {
                     let names: Vec<&str> =
                         entries.iter().map(|e| e.display_name.as_str()).collect();
                     let ids: Vec<&str> = entries.iter().map(|e| e.id.as_str()).collect();
+                    obj.as_mut().set_selected_queue_index(idx as i32);
+                    obj.as_mut().set_queue_ids(QString::from(&ids.join(";")));
                     obj.as_mut()
                         .set_queue_names(QString::from(&names.join(";")));
-                    obj.as_mut().set_queue_ids(QString::from(&ids.join(";")));
-                    obj.as_mut().set_selected_queue_index(idx as i32);
                     obj.as_mut().set_queues_loading(false);
 
                     // Cascade: fetch storage profiles for selected queue

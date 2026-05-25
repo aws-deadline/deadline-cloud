@@ -10,24 +10,15 @@ Do NOT create duplicate commits.
 ```bash
 make fmt          # cargo fmt --check (no formatting drift)
 make lint         # cargo clippy -- -D warnings (no lint warnings)
-make test         # cargo test + pytest gui/tests/ (all tests green)
+make test         # cargo test + xa11y UI tests (all tests green)
 ```
 If `make fmt` fails, run `cargo fmt` and include the fixes in your commit.
 
-**Python tests are mandatory.** Even if no Python code was touched, run:
-```bash
-source .venv/bin/activate && maturin develop && pytest gui/tests/ -v --tb=short
-```
-PyO3 binding signature changes, struct field changes, or behavioral
-differences in library code can break Python tests without any Rust test
-failing. Do NOT skip this step. Do NOT commit if Python tests fail.
-
-**xa11y UI tests (for GUI work items).** If the work item touches
-`deadline-gui` or GUI CLI commands, also run:
-```bash
-pytest test/ui/ -v --tb=short
-```
-Requires macOS Accessibility permission (see DEVELOPMENT.md).
+**xa11y UI tests are mandatory for GUI work.** If the work item touches
+`deadline-gui` or GUI CLI commands, `make test` includes `test-ui` which
+runs the xa11y accessibility tests against the real binary. These catch
+QML type registration errors, accessibility regressions, and runtime
+failures that `cargo test` cannot detect.
 Do NOT commit if these tests regress.
 
 **Constraints:**
