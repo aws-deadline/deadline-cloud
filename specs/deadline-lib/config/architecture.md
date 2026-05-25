@@ -103,6 +103,15 @@ corrupting the config.
 **Clear writes the default, doesn't remove the key.** Preserves the
 key's presence as a signal that the setting has been touched.
 
+**Path settings expand `~` on read.** Settings with `is_path: true` or
+`is_path_list: true` have their `~` prefix expanded to the user's home
+directory (`$HOME` / `$USERPROFILE`) when returned by `get_setting` or
+`get_setting_default`. This differs from Python where `get_setting`
+returns raw values and callers call `os.path.expanduser()`. The Rust
+approach prevents bugs where a caller forgets to expand (which creates
+a literal `~` directory). The expansion applies to both the stored
+value and the computed default.
+
 **Profile resolution is pure.** `get_best_profile_for_farm` works on a
 cloned config and takes the profile list as a parameter. No AWS SDK
 dependency — the caller provides the profile list.

@@ -60,7 +60,10 @@ fn extract_submission_config(
     }
 }
 
-#[allow(clippy::struct_field_names, reason = "cb suffix clarifies these are callbacks")]
+#[allow(
+    clippy::struct_field_names,
+    reason = "cb suffix clarifies these are callbacks"
+)]
 struct PySubmissionHandler {
     print_cb: Option<PyObject>,
     confirm_cb: Option<PyObject>,
@@ -69,10 +72,16 @@ struct PySubmissionHandler {
 
 // SAFETY: PyObject is only accessed via Python::with_gil which acquires the GIL,
 // ensuring exclusive access to the Python interpreter from any thread.
-#[allow(unsafe_code, reason = "PyObject requires manual Send/Sync for cross-thread use with GIL")]
+#[allow(
+    unsafe_code,
+    reason = "PyObject requires manual Send/Sync for cross-thread use with GIL"
+)]
 unsafe impl Send for PySubmissionHandler {}
 // SAFETY: Same as above — all PyObject access is gated by with_gil.
-#[allow(unsafe_code, reason = "PyObject requires manual Send/Sync for cross-thread use with GIL")]
+#[allow(
+    unsafe_code,
+    reason = "PyObject requires manual Send/Sync for cross-thread use with GIL"
+)]
 unsafe impl Sync for PySubmissionHandler {}
 
 impl deadline_lib::bundle::SubmissionHandler for PySubmissionHandler {

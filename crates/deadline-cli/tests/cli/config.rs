@@ -6,6 +6,10 @@ use insta_cmd::assert_cmd_snapshot;
 fn config_show_settings() -> insta::Settings {
     let mut settings = insta::Settings::clone_current();
     settings.add_filter(r"(?m)^   /.*config$", "   [CONFIG_PATH]");
+    settings.add_filter(
+        r"/.*/\.deadline/job_history/",
+        "[HOME]/.deadline/job_history/",
+    );
     settings
 }
 
@@ -26,6 +30,10 @@ async fn config_show_json_prints_all_settings_as_json() {
     settings.add_filter(
         r#""settings\.config_file_path": "[^"]*""#,
         r#""settings.config_file_path": "[CONFIG_PATH]""#,
+    );
+    settings.add_filter(
+        r#"/.*/\.deadline/job_history/"#,
+        r#"[HOME]/.deadline/job_history/"#,
     );
     let _guard = settings.bind_to_scope();
 

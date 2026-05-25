@@ -262,7 +262,7 @@ ApplicationWindow {
             Button { text: "Settings..."; onClicked: {} }
             Button { text: "Help"; onClicked: {} }
             Item { Layout.fillWidth: true }
-            Button { text: "Export bundle"; Accessible.name: "Export bundle"; onClicked: {} }
+            Button { text: "Export bundle"; Accessible.name: "Export bundle"; onClicked: { submitModel.export_bundle(); exportOkDialog.visible = true } }
             Button {
                 text: "Submit"; enabled: submitModel.can_submit && !submitModel.is_submitting
                 Accessible.name: "Submit"
@@ -271,10 +271,32 @@ ApplicationWindow {
                     progressDialog.visible = true
                 }
             }
+            Button { text: "Cancel"; Accessible.name: "Cancel"; onClicked: root.close() }
         }
     }
 
-    Window {
+    ApplicationWindow {
+        id: exportOkDialog
+        width: 350
+        height: 120
+        title: "Export complete"
+        modality: Qt.ApplicationModal
+        flags: Qt.Dialog | Qt.WindowTitleHint
+        visible: false
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            Label { text: "Saved the submission as a job bundle."; Layout.fillWidth: true }
+            Item { Layout.fillHeight: true }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                Button { text: "OK"; Accessible.name: "OK"; onClicked: { exportOkDialog.close(); root.close() } }
+            }
+        }
+    }
+
+    ApplicationWindow {
         id: progressDialog
         width: 500
         height: 400
@@ -290,12 +312,25 @@ ApplicationWindow {
 
             Label {
                 text: submitModel.submission_error !== ""
-                      ? "Submission failed"
+                      ? "Submission error"
                       : submitModel.job_id_result !== ""
                         ? "Submission complete"
-                        : "Submitting job..."
+                        : submitModel.submission_complete
+                          ? "Submission canceled"
+                          : submitModel.is_submitting
+                            ? "Preparing files..."
+                            : ""
                 font.bold: true
                 font.pointSize: 13
+                Accessible.name: submitModel.submission_error !== ""
+                      ? "Submission error"
+                      : submitModel.job_id_result !== ""
+                        ? "Submission complete"
+                        : submitModel.submission_complete
+                          ? "Submission canceled"
+                          : submitModel.is_submitting
+                            ? "Preparing files..."
+                            : ""
             }
 
             GroupBox {
@@ -338,7 +373,7 @@ ApplicationWindow {
                         readOnly: true
                         text: submitModel.log_text
                         wrapMode: TextEdit.Wrap
-                        font.family: "monospace"
+                        font.family: Qt.platform.os === "osx" ? "Menlo" : "Monospace"
                         font.pointSize: 10
                     }
                 }
@@ -363,13 +398,18 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 Button {
-                    text: submitModel.submission_complete ? "Ok" : "Cancel"
+                    text: submitModel.job_id_result !== "" ? "Ok"
+                          : submitModel.submission_complete ? "Close"
+                          : "Cancel"
+                    Accessible.name: submitModel.job_id_result !== "" ? "Ok"
+                          : submitModel.submission_complete ? "Close"
+                          : "Cancel"
                     onClicked: {
                         if (!submitModel.submission_complete) {
                             submitModel.cancel_submission()
                         }
                         progressDialog.close()
-                        if (submitModel.submission_complete) {
+                        if (submitModel.job_id_result !== "") {
                             root.close()
                         }
                     }

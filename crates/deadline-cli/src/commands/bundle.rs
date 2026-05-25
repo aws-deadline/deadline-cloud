@@ -3,6 +3,7 @@ use deadline_lib::api::session;
 use deadline_lib::bundle::{SubmissionHandler, SubmitJobParams, create_job_from_job_bundle};
 use deadline_lib::config::config_file;
 use regex::Regex;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -488,7 +489,8 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
 
             let result = deadline_gui::show_submit_dialog(&params);
             if !result.trim().is_empty() {
-                print!("{result}");
+                println!("{result}");
+                let _ = std::io::stdout().flush();
             }
             Ok(())
         }

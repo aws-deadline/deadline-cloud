@@ -189,11 +189,18 @@ The Python submit dialog (`SubmitJobToDeadlineDialog`) has these tabs/areas:
 | `_gui_entry.py::run_gui_submit` | `deadline_gui::show_submit_dialog()` |
 | `job_bundle_submitter.py::on_create_job_bundle_callback` | `logic/submit.rs::prepare_job_bundle()` |
 
-### Status: Batch 2a committed. Next: progress dialog styling, job history bundle, --output json.
+### Status: Batch 2a complete. Next: Batch 2b (Queue Parameters + Attachments UI).
 
 ---
 
 ## Completed items
+
+- **#35 Batch 2a — Job History + Output JSON + Progress Polish (2026-05-25)** —
+  Export bundle button, job history bundle creation before submit, `--output json`
+  with correct format (SUBMITTED/CANCELED/jobId/jobHistoryBundleDirectory),
+  progress dialog dark mode + status labels + cancel handling, tilde expansion
+  in `get_setting` for path settings, Cancel button on main dialog.
+  1,477→1,483 tests. 25/35 xa11y tests passing (16/16 submit tests).
 
 - **#35 Batch 2a — Submit Action + Progress Dialog (2026-05-24)** — Wired
   Submit button to `create_job_from_job_bundle` via background thread,

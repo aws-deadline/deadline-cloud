@@ -254,15 +254,27 @@ pub fn get_setting(setting_name: &str, config: &IniConfig) -> Result<String, Con
         None => resolve_default(setting_def, config),
     };
 
-    // Normalize path settings on Windows (forward slash → native backslash)
-    if cfg!(windows) && setting_def.is_path && !result.is_empty() {
-        Ok(normalize_path_from_config(&result))
-    } else if cfg!(windows) && setting_def.is_path_list && !result.is_empty() {
+    // Normalize path settings: expand tilde, and on Windows convert slashes
+    if setting_def.is_path && !result.is_empty() {
+        let expanded = expand_tilde(&result);
+        Ok(if cfg!(windows) {
+            normalize_path_from_config(&expanded.to_string_lossy())
+        } else {
+            expanded.to_string_lossy().into_owned()
+        })
+    } else if setting_def.is_path_list && !result.is_empty() {
         let path_sep = if cfg!(windows) { ';' } else { ':' };
         Ok(result
             .split(path_sep)
             .filter(|p| !p.is_empty())
-            .map(normalize_path_from_config)
+            .map(|p| {
+                let expanded = expand_tilde(p);
+                if cfg!(windows) {
+                    normalize_path_from_config(&expanded.to_string_lossy())
+                } else {
+                    expanded.to_string_lossy().into_owned()
+                }
+            })
             .collect::<Vec<_>>()
             .join(&path_sep.to_string()))
     } else {
@@ -279,7 +291,20 @@ pub fn get_setting_from_disk(setting_name: &str) -> Result<String, ConfigError> 
 /// Get the default value using an already-loaded config.
 pub fn get_setting_default(setting_name: &str, config: &IniConfig) -> Result<String, ConfigError> {
     let setting_def = validate_setting(setting_name)?;
-    Ok(resolve_default(setting_def, config))
+    let result = resolve_default(setting_def, config);
+    if setting_def.is_path && !result.is_empty() {
+        Ok(expand_tilde(&result).to_string_lossy().into_owned())
+    } else if setting_def.is_path_list && !result.is_empty() {
+        let path_sep = if cfg!(windows) { ';' } else { ':' };
+        Ok(result
+            .split(path_sep)
+            .filter(|p| !p.is_empty())
+            .map(|p| expand_tilde(p).to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(&path_sep.to_string()))
+    } else {
+        Ok(result)
+    }
 }
 
 /// Convenience: read from disk, then get the default.
@@ -752,6 +777,17 @@ mod tests {
             val.contains("MyProfile"),
             "should substitute profile name: {val}"
         );
+    }
+
+    #[test]
+    fn get_setting_expands_tilde_for_path_settings() {
+        let config = IniConfig::new();
+        let val = get_setting("settings.job_history_dir", &config).unwrap();
+        assert!(
+            !val.starts_with("~/"),
+            "tilde should be expanded to home dir, got: {val}"
+        );
+        assert!(!val.is_empty(), "expanded path should not be empty");
     }
 
     #[test]

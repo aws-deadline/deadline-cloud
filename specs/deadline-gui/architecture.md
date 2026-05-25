@@ -128,6 +128,8 @@ No automatic camelCase conversion.
 | Function | Purpose |
 |----------|---------|
 | `prepare_job_bundle(output_dir, settings, queue_params, assets, host_req)` | Copy template, merge params, write assets, copy hooks |
+| `export_bundle_to_history(settings, queue_params, assets, host_req, submitter, history_dir)` | Create job history dir + prepare bundle there |
+| `format_gui_submit_result(output_mode, job_id, history_dir)` | Format result for stdout (JSON or verbose) |
 | `validate_submit_readiness(farm_id, queue_id, api_available)` | Returns issues list (empty = ready) |
 | `read_submit_config_fields()` | Extract submission config from INI (testable) |
 | `resolve_target_task_run_status(initial_status)` | Map "SUSPENDED" → Some, else None |
@@ -204,15 +206,11 @@ Dependencies: `cxx-qt 0.8`, `cxx-qt-lib`, `cxx-qt-build`, `deadline-lib`,
 
 ## Testing
 
-- **L1:** `cargo test -p deadline-gui` — 123 tests (config + auth + resources + watcher + submit + attachments + parameters + host requirements logic)
-- **L2:** `pytest test/ui/` — 35 accessibility tests via xa11y against the real binary (22 passing, 13 deferred to later phases)
+- **L1:** `cargo test -p deadline-gui` — 128 tests (config + auth + resources + watcher + submit + attachments + parameters + host requirements logic)
+- **L2:** `pytest test/ui/` — 35 accessibility tests via xa11y against the real binary (25 passing, 10 deferred — all config gui combo box accessibility)
 
 ## Remaining TODOs
 
-- Progress dialog styling (all-white background)
-- Job history bundle writing after successful submit
-- `--output json` stdout printing
-- Export bundle action
 - Queue parameters dynamic form
 - Attachments UI (add/remove)
 - Host requirements UI

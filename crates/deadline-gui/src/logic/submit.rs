@@ -247,6 +247,59 @@ pub fn read_submit_config_fields() -> SubmitConfigFields {
     }
 }
 
+/// Format the GUI submit result for stdout based on the output mode.
+pub fn format_gui_submit_result(
+    output_mode: &str,
+    job_id: Option<&str>,
+    job_history_bundle_dir: Option<&str>,
+) -> String {
+    if output_mode == "json" {
+        if let Some(id) = job_id {
+            serde_json::json!({
+                "status": "SUBMITTED",
+                "jobId": id,
+                "jobHistoryBundleDirectory": job_history_bundle_dir.unwrap_or(""),
+            })
+            .to_string()
+        } else {
+            serde_json::json!({"status": "CANCELED"}).to_string()
+        }
+    } else if let Some(id) = job_id {
+        format!("Submitted job bundle:\n   Job ID: {id}")
+    } else {
+        "Job submission canceled.".to_string()
+    }
+}
+
+/// Create a job history bundle directory and prepare the bundle there.
+///
+/// Returns the path to the created job history bundle directory.
+pub fn export_bundle_to_history(
+    settings: &SubmitSettings,
+    queue_parameters: &[serde_json::Value],
+    asset_references: &AssetReferences,
+    host_requirements: Option<&serde_json::Value>,
+    submitter_name: &str,
+    job_history_dir: &str,
+) -> Result<String, String> {
+    let history_dir = deadline_lib::bundle::history::create_job_history_bundle_dir(
+        submitter_name,
+        &settings.name,
+        job_history_dir,
+    )
+    .map_err(|e| e.to_string())?;
+
+    let output_path = Path::new(&history_dir);
+    prepare_job_bundle(
+        output_path,
+        settings,
+        queue_parameters,
+        asset_references,
+        host_requirements,
+    )?;
+    Ok(history_dir)
+}
+
 /// Resolve `target_task_run_status` from the initial status string.
 pub fn resolve_target_task_run_status(initial_status: &str) -> Option<String> {
     if initial_status == "SUSPENDED" {
@@ -576,6 +629,138 @@ mod tests {
         assert_eq!(
             crate::submit_model::load_template_name(&bundle),
             Some("YAML Job".to_string())
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // format_gui_submit_result
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn format_gui_submit_result_success_json() {
+        let history_dir = "/tmp/history/2026-05/2026-05-25-01-JobBundle-MyJob";
+        let result = format_gui_submit_result("json", Some("job-abc123"), Some(history_dir));
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["status"], "SUBMITTED");
+        assert_eq!(parsed["jobId"], "job-abc123");
+        assert_eq!(parsed["jobHistoryBundleDirectory"], history_dir);
+    }
+
+    #[test]
+    fn format_gui_submit_result_canceled() {
+        // JSON mode
+        let json_result = format_gui_submit_result("json", None, None);
+        let parsed: serde_json::Value = serde_json::from_str(&json_result).unwrap();
+        assert_eq!(parsed, serde_json::json!({"status": "CANCELED"}));
+
+        // Verbose mode
+        let verbose_result = format_gui_submit_result("verbose", None, None);
+        assert!(verbose_result.contains("canceled"));
+    }
+
+    #[test]
+    fn format_gui_submit_result_success_verbose() {
+        let result = format_gui_submit_result("verbose", Some("job-xyz789"), Some("/tmp/h"));
+        assert!(result.contains("job-xyz789"));
+        assert!(result.contains("Submitted job bundle"));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // export_bundle_to_history
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn export_bundle_to_history_happy_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = create_bundle_dir(
+            &dir,
+            r#"{"specificationVersion":"jobtemplate-2023-09","name":"Export Test","steps":[]}"#,
+        );
+        let history_base = dir.path().join("history");
+        std::fs::create_dir_all(&history_base).unwrap();
+
+        let settings = SubmitSettings {
+            name: "Export Test".to_string(),
+            input_job_bundle_dir: bundle.to_string_lossy().to_string(),
+            ..Default::default()
+        };
+        let assets = AssetReferences {
+            input_file_paths: vec!["/scene.ma".to_string()],
+            input_directory_paths: vec![],
+            output_directory_paths: vec!["/render_output".to_string()],
+        };
+
+        let history_dir = export_bundle_to_history(
+            &settings,
+            &[],
+            &assets,
+            None,
+            "MayaSubmitter",
+            history_base.to_str().unwrap(),
+        )
+        .unwrap();
+
+        // Directory created with submitter + job name
+        let dirname = std::path::Path::new(&history_dir)
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(dirname.contains("MayaSubmitter"), "got: {dirname}");
+        assert!(dirname.contains("Export Test"), "got: {dirname}");
+
+        // Template written with correct name
+        let template: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(std::path::Path::new(&history_dir).join("template.json"))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(template["name"], "Export Test");
+
+        // Asset references written
+        let ar: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                std::path::Path::new(&history_dir).join("asset_references.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            ar["inputFilePaths"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("/scene.ma"))
+        );
+        assert!(
+            ar["outputDirectoryPaths"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("/render_output"))
+        );
+    }
+
+    #[test]
+    fn export_bundle_to_history_invalid_bundle_dir_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let history_base = dir.path().join("history");
+        std::fs::create_dir_all(&history_base).unwrap();
+
+        let settings = SubmitSettings {
+            name: "X".to_string(),
+            input_job_bundle_dir: "/nonexistent/bundle".to_string(),
+            ..Default::default()
+        };
+
+        assert!(
+            export_bundle_to_history(
+                &settings,
+                &[],
+                &AssetReferences::default(),
+                None,
+                "Sub",
+                history_base.to_str().unwrap(),
+            )
+            .is_err()
         );
     }
 }

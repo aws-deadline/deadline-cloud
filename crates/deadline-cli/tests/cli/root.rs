@@ -6,6 +6,10 @@ use insta_cmd::assert_cmd_snapshot;
 fn config_show_settings() -> insta::Settings {
     let mut settings = insta::Settings::clone_current();
     settings.add_filter(r"(?m)^   /.*config$", "   [CONFIG_PATH]");
+    settings.add_filter(
+        r"/.*/\.deadline/job_history/",
+        "[HOME]/.deadline/job_history/",
+    );
     settings
 }
 

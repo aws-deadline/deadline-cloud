@@ -55,6 +55,7 @@ pub struct SubmitModelRust {
     api_available: bool,
     storage_profile_id: String,
     canceled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    job_history_bundle_dir: String,
 }
 
 #[cxx_qt::bridge]
@@ -118,6 +119,10 @@ pub mod qobject {
         /// Cancel an in-progress submission.
         #[qinvokable]
         fn cancel_submission(self: Pin<&mut Self>);
+
+        /// Export the job bundle to the job history directory.
+        #[qinvokable]
+        fn export_bundle(self: Pin<&mut Self>);
 
         /// Append a message to the log.
         #[qinvokable]
@@ -286,6 +291,43 @@ impl qobject::SubmitModel {
 
         let target_task_run_status = logic::submit::resolve_target_task_run_status(&initial_status);
 
+        // Create job history bundle dir and prepare bundle there
+        let job_history_dir = deadline_lib::config::config_file::get_setting(
+            "settings.job_history_dir",
+            &deadline_lib::config::config_file::read_config().unwrap_or_default(),
+        )
+        .unwrap_or_default();
+
+        let settings = logic::submit::SubmitSettings {
+            name: name.clone(),
+            description: String::new(),
+            input_job_bundle_dir: bundle_dir.clone(),
+            priority,
+            initial_status: initial_status.clone(),
+            max_failed_tasks_count: max_failed,
+            max_retries_per_task: max_retries,
+            max_worker_count: max_workers.unwrap_or(-1),
+            parameters: job_parameters.clone(),
+        };
+
+        let history_bundle_dir = logic::submit::export_bundle_to_history(
+            &settings,
+            &[],
+            &logic::attachments::AssetReferences::default(),
+            None,
+            &submitter_name,
+            &job_history_dir,
+        )
+        .unwrap_or_default();
+        self.as_mut().rust_mut().job_history_bundle_dir = history_bundle_dir.clone();
+
+        // Use the history bundle dir for submission (matches Python behavior)
+        let submit_bundle_dir = if history_bundle_dir.is_empty() {
+            bundle_dir
+        } else {
+            history_bundle_dir
+        };
+
         let qt_thread = self.qt_thread();
         let canceled_for_handler = canceled.clone();
         let qt_thread_for_hash = self.qt_thread();
@@ -359,7 +401,7 @@ impl qobject::SubmitModel {
                 });
 
             let submit_params = deadline_lib::bundle::SubmitJobParams {
-                job_bundle_dir: PathBuf::from(&bundle_dir),
+                job_bundle_dir: PathBuf::from(&submit_bundle_dir),
                 job_parameters,
                 name: Some(name),
                 priority: Some(priority),
@@ -400,6 +442,8 @@ impl qobject::SubmitModel {
                 submit_params,
             ));
 
+            let was_canceled = handler.canceled.load(Ordering::Relaxed);
+
             qt_thread
                 .queue(move |mut obj| {
                     obj.as_mut().set_is_submitting(false);
@@ -407,37 +451,35 @@ impl qobject::SubmitModel {
                     match result {
                         Ok(Some(job_id)) => {
                             obj.as_mut().set_job_id_result(QString::from(&job_id));
-                            // Store result globally for show_submit_dialog return value
-                            crate::set_submit_result(
-                                &serde_json::json!({
-                                    "status": "SUCCESS",
-                                    "job_id": job_id,
-                                })
-                                .to_string(),
-                            );
+                            let history_dir = obj.as_ref().rust().job_history_bundle_dir.clone();
+                            let output_mode = {
+                                let params_str = crate::get_submit_params_json();
+                                let params: serde_json::Value = serde_json::from_str(&params_str)
+                                    .unwrap_or(serde_json::json!({}));
+                                params
+                                    .get("output")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("verbose")
+                                    .to_string()
+                            };
+                            crate::set_submit_result(&logic::submit::format_gui_submit_result(
+                                &output_mode,
+                                Some(&job_id),
+                                Some(&history_dir),
+                            ));
                         }
                         Ok(None) => {
                             obj.as_mut().set_submission_error(QString::from(
                                 "Submission completed but no job ID returned.",
                             ));
-                            crate::set_submit_result(
-                                &serde_json::json!({
-                                    "status": "ERROR",
-                                    "message": "No job ID returned",
-                                })
-                                .to_string(),
-                            );
+                        }
+                        Err(_) if was_canceled => {
+                            // Canceled by user — don't set error, leave result as CANCELED
+                            // (show_submit_dialog defaults to CANCELED when no result is set)
                         }
                         Err(e) => {
                             let msg = e.to_string();
                             obj.as_mut().set_submission_error(QString::from(&msg));
-                            crate::set_submit_result(
-                                &serde_json::json!({
-                                    "status": "ERROR",
-                                    "message": msg,
-                                })
-                                .to_string(),
-                            );
                         }
                     }
                 })
@@ -452,6 +494,44 @@ impl qobject::SubmitModel {
             .store(true, std::sync::atomic::Ordering::Relaxed);
         self.as_mut()
             .set_status_message(QString::from("Canceling submission..."));
+    }
+
+    pub fn export_bundle(mut self: Pin<&mut Self>) {
+        let name = self.as_ref().name().to_string();
+        let bundle_dir = self.as_ref().job_bundle_dir().to_string();
+        let submitter_name = self.as_ref().submitter_name().to_string();
+
+        let job_history_dir = deadline_lib::config::config_file::get_setting(
+            "settings.job_history_dir",
+            &deadline_lib::config::config_file::read_config().unwrap_or_default(),
+        )
+        .unwrap_or_default();
+
+        let settings = logic::submit::SubmitSettings {
+            name,
+            description: String::new(),
+            input_job_bundle_dir: bundle_dir,
+            ..Default::default()
+        };
+
+        match logic::submit::export_bundle_to_history(
+            &settings,
+            &[],
+            &logic::attachments::AssetReferences::default(),
+            None,
+            &submitter_name,
+            &job_history_dir,
+        ) {
+            Ok(dir) => {
+                self.as_mut().rust_mut().job_history_bundle_dir = dir.clone();
+                self.as_mut()
+                    .set_status_message(QString::from(&format!("Exported bundle to: {dir}")));
+            }
+            Err(e) => {
+                self.as_mut()
+                    .set_submission_error(QString::from(&format!("Export failed: {e}")));
+            }
+        }
     }
 
     pub fn append_log(mut self: Pin<&mut Self>, message: QString) {
