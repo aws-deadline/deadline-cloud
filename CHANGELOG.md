@@ -1,3 +1,23 @@
+## 0.57.1 (2026-05-18)
+
+### Bug Fixes
+* Environment hooks now correctly receive the job bundle directory instead of the hooks directory. Previously, `HookManager.execute_pre_submission_hooks()` was overwriting `metadata.job_bundle_dir` with the hooks directory path for environment hooks (DEADLINE_HOOKS_DIR). (#1162)
+* Pre-submission hooks can now modify the `template` and `priority` fields. Previously, only `attachments.assetReferences` changes from hook output were applied. (#1162)
+## 0.57.0 (2026-05-08)
+
+### BREAKING CHANGES
+* The `deadline job download-output` command now supports storage profile path mapping, which may change download destination paths when a storage profile is configured. Users relying on the previous raw path behavior should review their download scripts. (#1029)
+
+### Features
+* Added `deadline job download-input` CLI command that downloads job input files (job attachments) with optional glob-style `--include` filtering, `--match-paths-by` (JOB/LOCAL) storage profile path mapping, JSON output, and conflict resolution options. (#1154)
+* Added `--include` / `-i` repeatable option to `deadline job download-output`, allowing you to download specific files using glob patterns or relative paths instead of all job outputs. Multiple patterns are OR'd. Without `--include`, all outputs download as before. (#1108)
+* Added storage profile path mapping support to `deadline job download-output`, enabling automatic path translation between job and local filesystem paths. (#1029)
+* Added two new workstation configuration settings: `settings.max_retries_per_task` (default: 5) and `settings.max_failed_tasks_count` (default: 20). These defaults are used when submitting jobs via CLI, API, or GUI when no explicit value is provided and the job bundle doesn't specify them. (#1150)
+* Removed the hard dependency on AWS STS. Authentication status checks now use `deadline:ListFarms` instead of `sts:GetCallerIdentity`, avoiding slow timeouts and hard failures on networks that block STS. (#1147)
+
+### Bug Fixes
+* Fixed `deadline auth login` failing for Deadline Cloud Monitor (IdC) profiles after the STS-to-ListFarms switch. The `principalId` is now correctly passed in the ListFarms authentication probe. (#1151)
+* Fixed dependency job attachment syncing using COPY mode (which created files with `(1)` suffixes) instead of OVERWRITE mode. Synced attachments now correctly overwrite existing files. (#1106)
 ## 0.56.0 (2026-04-20)
 
 ### Features
@@ -21,12 +41,6 @@
 * Decoupled Job Attachments from the Client package — `deadline.job_attachments` no longer imports from `deadline.client` ([migration guide](https://github.com/aws-deadline/deadline-cloud/blob/mainline/docs/design/client-job-attachments-decoupling.md#migration-guide)) (#1076)
 
 ### Features
-* Add submission hooks support for job bundles (#986)
-  * Pre-submission and post-submission hooks can be configured via `hooks.yaml` or `hooks.json` in job bundles
-  * Pre-submission hooks run before hashing/uploading and can validate or modify the submission payload
-  * Post-submission hooks run after successful job creation for notifications and integrations
-  * Hooks receive job metadata via stdin (JSON) and environment variables (`DEADLINE_*`)
-  * Works with both `deadline bundle submit` (CLI) and `deadline bundle gui-submit` (GUI)
 * `deadline handle-web-url --install` and `--uninstall` now print a confirmation message on success (#1056) ([`6d0c5d9`](https://github.com/aws-deadline/deadline-cloud/commit/6d0c5d9dc167e8fd65721feb5cd6d318c7f38b44))
 
 ### Bug Fixes
@@ -49,6 +63,7 @@
 * Show checkboxes in multiselect combo boxes on macOS (#1052) ([`c4eb36b`](https://github.com/aws-deadline/deadline-cloud/commit/c4eb36b93c850330c0928afa00efb84cd3b1864f))
 * Accept hidden parameters with empty string defaults (#1032) ([`347adcc`](https://github.com/aws-deadline/deadline-cloud/commit/347adcce70e873792b62e554d70ab311f2d3ba09))
 * Fix load job bundle button not working (#1041) ([`eee187e`](https://github.com/aws-deadline/deadline-cloud/commit/eee187e7f763a1f52d7d09ee8980801e8c1841c6))
+
 
 ## 0.54.2 (2026-03-04)
 

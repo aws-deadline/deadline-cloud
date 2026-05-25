@@ -1,0 +1,1 @@
+Test job attachment file for the simple_ui_with_ja job bundle.

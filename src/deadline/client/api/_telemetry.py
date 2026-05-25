@@ -28,6 +28,7 @@ from ._session import (
     get_boto3_client,
     get_boto3_session,
 )
+from ._stack_trace_sanitizer import sanitize_exception
 from ..config import config_file
 from .. import version
 
@@ -189,6 +190,27 @@ class TelemetryClient:
 
         self._initialized = True
         self._start_threads()
+
+    def record_error_with_trace(
+        self,
+        exc: BaseException,
+        exception_scope: str,
+        extra_details: Optional[dict] = None,
+        from_gui: bool = False,
+    ) -> None:
+        event_details: dict = {
+            "exception_type": type(exc).__qualname__,
+            "exception_scope": exception_scope,
+            "stack_trace": sanitize_exception(exc),
+        }
+        if extra_details:
+            event_details.update(extra_details)
+
+        self.record_event(
+            event_type="com.amazon.rum.deadline.error",
+            event_details=event_details,
+            from_gui=from_gui,
+        )
 
     @property
     def is_initialized(self) -> bool:

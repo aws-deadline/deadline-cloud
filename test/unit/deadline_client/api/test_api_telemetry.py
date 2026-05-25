@@ -21,6 +21,10 @@ from deadline.client.api._telemetry import (
     record_success_fail_telemetry_event,
     record_function_latency_telemetry_event,
 )
+from deadline.client.api._stack_trace_sanitizer import (
+    _sanitize_path,
+    sanitize_exception,
+)
 from deadline.job_attachments.progress_tracker import SummaryStatistics
 
 
@@ -63,6 +67,7 @@ def test_opt_out_config(fresh_deadline_config):
     client.record_hashing_summary(SummaryStatistics(), from_gui=True)
     client.record_upload_summary(SummaryStatistics(), from_gui=False)
     client.record_error({}, str(type(Exception)))
+    client.record_error_with_trace(RuntimeError("opt-out test"), "test")
 
 
 @pytest.mark.parametrize(
@@ -95,6 +100,7 @@ def test_opt_out_env_var(fresh_deadline_config, monkeypatch, env_var_value):
     client.record_hashing_summary(SummaryStatistics(), from_gui=True)
     client.record_upload_summary(SummaryStatistics(), from_gui=False)
     client.record_error({}, str(type(Exception)))
+    client.record_error_with_trace(RuntimeError("opt-out test"), "test")
 
 
 def test_initialize_failure_then_success(fresh_deadline_config):
@@ -279,6 +285,97 @@ def test_record_error(fresh_deadline_config, mock_telemetry_client):
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_error_with_trace(fresh_deadline_config, mock_telemetry_client):
+    """Test that record_error_with_trace sends a TelemetryEvent with exactly the expected fields."""
+    # GIVEN
+    queue_mock = MagicMock()
+    mock_telemetry_client.event_queue = queue_mock
+
+    try:
+        raise ValueError("something broke")
+    except ValueError as exc:
+        with patch.object(
+            mock_telemetry_client, "get_account_id", return_value="111122223333"
+        ), patch.object(api._telemetry, "get_boto3_session"):
+            # WHEN
+            mock_telemetry_client.record_error_with_trace(exc, "test_scope")
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once()
+    event: TelemetryEvent = queue_mock.put_nowait.call_args[0][0]
+    assert event.event_type == "com.amazon.rum.deadline.error"
+    # Pop the dynamic stack_trace and assert on the rest as a full dict so
+    # any unexpected key being added would cause the test to fail loudly.
+    stack_trace = event.event_details.pop("stack_trace")
+    assert event.event_details == {
+        "exception_type": "ValueError",
+        "exception_scope": "test_scope",
+        "usage_mode": "CLI",
+    }
+    assert "ValueError" in stack_trace
+    assert "Traceback (most recent call last):" in stack_trace
+
+
+def test_record_error_with_trace_extra_details(fresh_deadline_config, mock_telemetry_client):
+    """Test that extra_details are merged into the event and no unexpected fields appear."""
+    # GIVEN
+    queue_mock = MagicMock()
+    mock_telemetry_client.event_queue = queue_mock
+
+    try:
+        raise RuntimeError("fail")
+    except RuntimeError as exc:
+        with patch.object(
+            mock_telemetry_client, "get_account_id", return_value="111122223333"
+        ), patch.object(api._telemetry, "get_boto3_session"):
+            # WHEN
+            mock_telemetry_client.record_error_with_trace(
+                exc, "cli", extra_details={"command": "bundle submit"}
+            )
+
+    # THEN
+    event: TelemetryEvent = queue_mock.put_nowait.call_args[0][0]
+    stack_trace = event.event_details.pop("stack_trace")
+    assert event.event_details == {
+        "exception_type": "RuntimeError",
+        "exception_scope": "cli",
+        "command": "bundle submit",
+        "usage_mode": "CLI",
+    }
+    assert "RuntimeError" in stack_trace
+
+
+def test_record_error_with_trace_sanitizes_paths(fresh_deadline_config, mock_telemetry_client):
+    """Customer paths must be stripped from the stack trace and no extra fields leak."""
+    # GIVEN
+    queue_mock = MagicMock()
+    mock_telemetry_client.event_queue = queue_mock
+
+    try:
+        raise TypeError("bad type")
+    except TypeError as exc:
+        with patch.object(
+            mock_telemetry_client, "get_account_id", return_value="111122223333"
+        ), patch.object(api._telemetry, "get_boto3_session"):
+            # WHEN
+            mock_telemetry_client.record_error_with_trace(exc, "test")
+
+    # THEN
+    event: TelemetryEvent = queue_mock.put_nowait.call_args[0][0]
+    stack_trace = event.event_details.pop("stack_trace")
+    assert event.event_details == {
+        "exception_type": "TypeError",
+        "exception_scope": "test",
+        "usage_mode": "CLI",
+    }
+    # Every "File ..." line in the trace must reference a sanitized
+    # (relative) path, never an absolute filesystem path.
+    for line in stack_trace.splitlines():
+        if line.strip().startswith('File "'):
+            path = line.split('"')[1]
+            assert not path.startswith("/"), f"Absolute path leaked: {path}"
 
 
 @pytest.mark.parametrize(
@@ -528,6 +625,136 @@ class TestTelemetryClientSwallowExceptions:
                 config=config.config_file.read_config(),
             )
             assert "version" not in client._system_metadata
+
+
+@pytest.mark.parametrize(
+    "filepath, expected",
+    [
+        pytest.param(
+            "/home/customer/secret/venv/lib/python3.11/site-packages/deadline/client/api/_telemetry.py",
+            "deadline/client/api/_telemetry.py",
+            id="known_package_deadline",
+        ),
+        pytest.param(
+            "/opt/libs/openjd/sessions/runner.py",
+            "openjd/sessions/runner.py",
+            id="known_package_openjd",
+        ),
+        pytest.param(
+            "/usr/lib/python3/dist-packages/botocore/client.py",
+            "botocore/client.py",
+            id="known_package_botocore",
+        ),
+        pytest.param(
+            "/home/user/venv/lib/python3.11/site-packages/somelib/core.py",
+            "somelib/core.py",
+            id="site_packages_unknown_lib",
+        ),
+        pytest.param(
+            "/home/customer/my-bucket-name/scripts/render.py",
+            "render.py",
+            id="customer_script_returns_filename_only",
+        ),
+        pytest.param(
+            "C:\\Users\\customer\\AppData\\Local\\deadline\\client\\api\\_telemetry.py",
+            "deadline/client/api/_telemetry.py",
+            id="windows_path",
+        ),
+        pytest.param(
+            "<frozen importlib._bootstrap>",
+            "<frozen importlib._bootstrap>",
+            id="frozen_module",
+        ),
+        pytest.param("<string>", "<string>", id="string_input"),
+        # A customer directory that happens to share a name with one of our
+        # known packages must not anchor the trim — only the *rightmost*
+        # match (the actually-installed package) should.
+        pytest.param(
+            "/home/user/deadline/scripts/venv/lib/python3.11/site-packages/deadline/client/api/_telemetry.py",
+            "deadline/client/api/_telemetry.py",
+            id="known_package_name_appears_in_customer_dir",
+        ),
+        pytest.param(
+            "/opt/openjd/customer-vendored/openjd/sessions/runner.py",
+            "openjd/sessions/runner.py",
+            id="known_package_name_appears_twice",
+        ),
+        # Same right-to-left rule applies to site-packages: a customer
+        # directory literally named "site-packages" must not leak the
+        # segments between it and the real site-packages dir.
+        pytest.param(
+            "/home/user/site-packages/scripts/venv/lib/python3.11/site-packages/somelib/core.py",
+            "somelib/core.py",
+            id="site_packages_name_appears_in_customer_dir",
+        ),
+    ],
+)
+def test_sanitize_path(filepath, expected):
+    assert _sanitize_path(filepath) == expected
+
+
+class TestSanitizeException:
+    def test_live_exception(self):
+        try:
+            raise RuntimeError("test error")
+        except RuntimeError as e:
+            result = sanitize_exception(e)
+            assert "RuntimeError" in result
+            assert "Traceback (most recent call last):" in result
+
+    def test_no_absolute_paths(self):
+        try:
+            raise RuntimeError("path test")
+        except RuntimeError as e:
+            result = sanitize_exception(e)
+            for line in result.splitlines():
+                if line.strip().startswith('File "'):
+                    path = line.split('"')[1]
+                    assert not path.startswith("/"), f"Absolute path leaked: {path}"
+
+    def test_no_source_code_context(self):
+        """Source code lines are omitted to avoid leaking customer data."""
+        try:
+            customer_secret = "sensitive"  # noqa: F841
+            raise ValueError("fail")
+        except ValueError as e:
+            result = sanitize_exception(e)
+            assert "customer_secret" not in result
+            assert "sensitive" not in result
+
+    def test_message_omitted(self):
+        """Exception messages are not included — only the type."""
+        try:
+            raise FileNotFoundError("/home/customer/secret/file.txt")
+        except FileNotFoundError as e:
+            result = sanitize_exception(e)
+            assert "customer" not in result
+            assert "secret" not in result
+            assert "FileNotFoundError" in result
+
+    def test_chained_exception_cause(self):
+        try:
+            try:
+                raise KeyError("original")
+            except KeyError as e:
+                raise ValueError("wrapper") from e
+        except ValueError as e:
+            result = sanitize_exception(e)
+            assert "KeyError" in result
+            assert "ValueError" in result
+            assert "direct cause" in result
+
+    def test_chained_exception_context(self):
+        try:
+            try:
+                raise KeyError("original")
+            except KeyError:
+                raise ValueError("during handling")
+        except ValueError as e:
+            result = sanitize_exception(e)
+            assert "KeyError" in result
+            assert "ValueError" in result
+            assert "During handling" in result
 
 
 class TestGetAccountId:
