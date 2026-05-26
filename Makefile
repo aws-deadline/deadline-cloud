@@ -16,50 +16,53 @@ else
   PIP := pip
 endif
 
-.PHONY: all build test test-rust test-ui lint fmt check clean setup-tools setup-test
+.PHONY: build build-rust build-python test test-rust test-ui test-bindings setup setup-rust setup-python lint fmt check clean
 
-# Install required and recommended Cargo tools
-setup-tools:
-	cargo install cargo-insta cargo-deny cargo-outdated cargo-bloat
+# ── Build ──
 
-# Default: build
-all: build
+build: build-rust build-python
 
-# Build Rust workspace (all crates)
-build:
+build-rust:
 	cargo build $(CARGO_FLAGS)
 
-# Run all tests
+build-python:
+	maturin develop --quiet
+
+# ── Test ──
+
 test: test-rust test-ui test-bindings
 
-# Run Rust tests only
 test-rust:
 	cargo test
 
-# Run xa11y UI tests (requires macOS Accessibility permission)
-test-ui: build setup-test
+test-ui: build-rust
 	$(PYTHON) -m pytest pytests/ui_accessibility/ -v
 
-# Run PyO3 binding tests
-test-bindings: setup-test
-	maturin develop --quiet && $(PYTHON) -m pytest pytests/bindings/ -v
+test-bindings: build-python
+	$(PYTHON) -m pytest pytests/bindings/ -v
 
-# Install Python test dependencies
-setup-test:
+# ── Setup (once after clone or after dependency changes) ──
+
+setup: setup-rust setup-python
+
+setup-rust:
+	cargo install cargo-insta cargo-deny cargo-outdated cargo-bloat
+
+setup-python:
 	$(PIP) install -e ".[test]" --quiet
 
-# Lint
+# ── Quality ──
+
 lint:
 	cargo clippy --workspace --all-targets -- -D warnings
 
-# Format check
 fmt:
 	cargo fmt --check
 
-# Type check without producing artifacts
 check:
 	cargo check --workspace
 
-# Clean all build artifacts
+# ── Clean ──
+
 clean:
 	cargo clean

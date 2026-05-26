@@ -7,36 +7,31 @@ client software: CLI, GUI FFI layer, and shared library crates.
 
 - [Rust](https://rustup.rs/) (stable, edition 2024)
 - Python 3.9+ (for GUI commands and Python bindings development)
-- Dev tools: `make setup-tools` (installs cargo-insta, cargo-deny, etc.)
+- Dev tools: `make setup` (installs Cargo tools + Python packages)
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the full setup guide.
 
 ## Build
 
 ```bash
-# Full build + install into venv (recommended)
-make
-
-# Or individual steps:
-cargo build                    # full workspace (Rust only)
+make build                     # Rust binary + Python extension
+make build-rust                # Rust binary only (no venv needed)
+make build-python              # PyO3 extension into venv (maturin develop)
 cargo build -p deadline-cli    # just the CLI binary
-make wheel                     # build distributable .whl
 ```
 
-After `make`, the `deadline` CLI is on PATH (in the active venv) and
-`deadline._native` is importable from Python.
-
-The CLI binary is also at `target/debug/deadline`.
+After `make build`, the `deadline` CLI binary is at `target/debug/deadline`
+and `deadline._native` is importable from Python.
 
 ## Test
 
 ```bash
-make test                      # Rust + Python tests
-cargo test                     # Rust tests only
-cargo test -p deadline-cli     # CLI subprocess tests
-cargo test -p deadline-lib     # library crate
+make test                      # all tests (Rust + xa11y UI + PyO3 bindings)
+make test-rust                 # Rust tests only (no venv needed)
+make test-ui                   # xa11y GUI accessibility tests
+make test-bindings             # PyO3 binding tests
+cargo test -p deadline-lib     # single crate
 cargo insta review             # review new/changed output snapshots
-pytest test/ui/ -v             # GUI accessibility tests (requires setup, see DEVELOPMENT.md)
 ```
 
 See [specs/testing.md](specs/testing.md) for the test philosophy (no mocking, Level 1
@@ -54,14 +49,14 @@ via the `deadline._native` PyO3 module.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
-make                           # builds everything + installs into venv
+make setup-python              # install Python deps (once)
+make build                     # builds Rust binary + installs extension into venv
 ```
 
 ### Running GUI commands
 
 ```bash
-# After maturin develop, the Rust CLI finds Python on PATH:
+# After make build, the Rust CLI finds Python on PATH:
 ./target/debug/deadline bundle gui-submit /path/to/job/bundle
 ./target/debug/deadline config gui
 
@@ -72,9 +67,8 @@ DEADLINE_PYTHON=.venv/bin/python ./target/debug/deadline config gui
 ### Testing Python code
 
 ```bash
-pytest gui/tests/ -v                    # all Python tests (needs PySide6)
-pytest gui/tests/test_native.py -v      # PyO3 bindings tests
-pytest gui/tests/test_gui_entry.py -v   # GUI entry point tests (needs PySide6)
+make test-bindings             # PyO3 binding tests (builds extension first)
+make test-ui                   # xa11y GUI tests (builds binary first)
 ```
 
 ### How it works
@@ -112,7 +106,8 @@ data flows.
 | `gui/deadline/client/config/` | Config shim routing through `deadline._native` |
 | `gui/deadline/client/dataclasses/` | `SubmitterInfo` and other shared types |
 | `gui/deadline/client/job_bundle/` | Job bundle YAML/parameter handling for GUI |
-| `gui/tests/` | Python tests (pytest + pytest-qt) |
+| `pytests/bindings/` | PyO3 binding tests |
+| `pytests/ui_accessibility/` | xa11y GUI accessibility tests |
 | `pyproject.toml` | maturin build config for the `deadline` Python package |
 
 ## Documentation

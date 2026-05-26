@@ -22,19 +22,18 @@ Install prerequisites and build:
 # Rust toolchain (stable channel, edition 2024)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Install dev tools (cargo-insta, cargo-deny, cargo-outdated, cargo-bloat)
-make setup-tools
-
-# Python venv (needed for GUI and wheel builds)
+# Python venv (needed for GUI and PyO3 bindings)
 python3 -m venv .venv && source .venv/bin/activate
-pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
 
-# Build everything and install into venv
-make
+# Install all dev dependencies (Cargo tools + Python packages)
+make setup
+
+# Build everything
+make build                     # Rust binary + Python extension into venv
 ```
 
-After `make`, the `deadline` CLI is on PATH (in the venv) and
-`deadline._native` is importable from Python.
+After `make build`, the `deadline` CLI binary is at `target/debug/deadline`
+and `deadline._native` is importable from Python.
 
 For Rust-only work (no GUI), you can skip the venv and use
 `cargo build` / `cargo test` directly.
@@ -43,24 +42,27 @@ For Rust-only work (no GUI), you can skip the venv and use
 
 | Task | Command |
 |------|---------|
-| Build all + install into venv | `make` |
-| Build Rust only | `cargo build` |
-| Build release wheel | `make wheel` |
-| Run all tests (Rust + Python) | `make test` (auto-detects `.venv/`) |
+| Build all (Rust + Python extension) | `make build` |
+| Build Rust binary only | `make build-rust` |
+| Build Python extension only | `make build-python` |
+| Run all tests | `make test` |
 | Run Rust tests only | `make test-rust` (no venv needed) |
 | Run xa11y UI tests | `make test-ui` |
 | Run PyO3 binding tests | `make test-bindings` |
 | Run single crate tests | `cargo test -p deadline-lib` |
 | Review snapshot changes | `cargo insta review` |
+| Install Python deps (once) | `make setup-python` |
+| Install Cargo tools (once) | `make setup-rust` |
+| Install all deps (once) | `make setup` |
 | Lint | `make lint` |
 | Format code | `cargo fmt` |
-| Check formatting | `cargo fmt --check` |
+| Check formatting | `make fmt` |
 | Audit dependencies | `cargo deny check` |
 | Find outdated deps | `cargo outdated -R` |
 | Analyze binary size | `cargo bloat --release -p deadline-cli --crates` |
 | Clean all artifacts | `make clean` |
 
-The CLI binary is at `target/debug/deadline` (or on PATH after `make`).
+The CLI binary is at `target/debug/deadline`.
 
 ## Workspace Structure
 
@@ -195,20 +197,19 @@ Tests follow three rules:
    wiremock for API calls, real temp directories for filesystem
    operations, and real config files for config tests.
 
-### UI accessibility tests (`test/ui/`)
+### UI accessibility tests (`pytests/ui_accessibility/`)
 
 End-to-end GUI tests using [xa11y](https://lib.rs/crates/xa11y-macos).
 Launches the real binary against `MockDeadlineBackend` and drives it
 via the OS accessibility tree.
 
 ```bash
-pip install botocore xa11y
-cargo build && pytest test/ui/ -v --tb=short
+make test-ui
 ```
 
 Requires macOS Accessibility permission for your terminal app
 (System Settings → Privacy & Security → Accessibility).
-On Linux: `apt install at-spi2-core xvfb && xvfb-run pytest test/ui/ -v`.
+On Linux: `apt install at-spi2-core xvfb && xvfb-run make test-ui`.
 
 ### Snapshots
 

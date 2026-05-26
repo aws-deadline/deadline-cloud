@@ -62,12 +62,11 @@ cargo insta review                       # review new/changed CLI output snapsho
 ### Full test suite (Rust + Python)
 
 `make test` runs Rust tests, xa11y UI tests, and PyO3 binding tests.
-The Python tests require a virtual environment. The Makefile auto-detects
-`.venv/` if present, but you must create it first:
+The Python tests require a virtual environment:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
+make setup-python                        # install Python deps (once)
 make test                                # Rust + Python tests
 ```
 
