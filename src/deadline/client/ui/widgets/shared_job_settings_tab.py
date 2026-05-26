@@ -17,11 +17,12 @@ from qtpy.QtWidgets import (  # type: ignore
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QRadioButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
+
+from .radio_button_widget import HoverRadioButton
 
 from ... import api
 from ...config import get_setting
@@ -268,8 +269,8 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_worker_count_box_label.setToolTip(tr("Maximum worker count of job."))
         self.max_worker_count_box = QSpinBox()
         self.max_worker_count_box.setRange(1, 2147483647)
-        self.unlimited_max_worker_count = QRadioButton(tr("No max worker count"))
-        self.limited_max_worker_count = QRadioButton(tr("Set max worker count"))
+        self.unlimited_max_worker_count = HoverRadioButton(tr("No max worker count"))
+        self.limited_max_worker_count = HoverRadioButton(tr("Set max worker count"))
         self.limited_max_worker_count.toggled.connect(
             self.limited_max_worker_count_radio_button_toggled
         )

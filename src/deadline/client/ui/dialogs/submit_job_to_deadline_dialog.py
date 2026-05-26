@@ -621,10 +621,8 @@ class SubmitJobToDeadlineDialog(QDialog):
             job_progress_dialog.close()
         except Exception as exc:
             logger.exception("error submitting job")
-            api.get_deadline_cloud_library_telemetry_client().record_error(
-                event_details={"exception_scope": "on_submit"},
-                exception_type=str(type(exc)),
-                from_gui=True,
+            api.get_deadline_cloud_library_telemetry_client().record_error_with_trace(
+                exc, "on_submit", from_gui=True
             )
             QMessageBox.critical(
                 self,

@@ -20,6 +20,7 @@ __all__ = [
     "DeadlineCloudSettingsWidget",
     "SharedJobSettingsWidget",
     "SharedJobPropertiesWidget",
+    "HoverRadioButton",
     # Controller-based combo boxes
     "DeadlineFarmListComboBoxController",
     "DeadlineQueueListComboBoxController",
@@ -41,6 +42,7 @@ from .job_bundle_settings_tab import JobBundleSettingsWidget
 from .job_timeouts_widget import TimeoutEntryWidget, TimeoutTableWidget
 from .openjd_parameters_widget import OpenJDParametersWidget
 from .path_widgets import DirectoryPickerWidget, InputFilePickerWidget, OutputFilePickerWidget
+from .radio_button_widget import HoverRadioButton
 from .shared_job_settings_tab import (
     DeadlineCloudSettingsWidget,
     SharedJobSettingsWidget,
