@@ -3,6 +3,19 @@ CARGO_FLAGS := $(if $(filter release,$(PROFILE)),--release,)
 TARGET_DIR := target/$(PROFILE)
 BIN_NAME := deadline
 
+# Use .venv if it exists and no venv is already active
+VENV_DIR := .venv
+ifdef VIRTUAL_ENV
+  PYTHON := python3
+  PIP := pip
+else ifneq (,$(wildcard $(VENV_DIR)/bin/python3))
+  PYTHON := $(VENV_DIR)/bin/python3
+  PIP := $(VENV_DIR)/bin/pip
+else
+  PYTHON := python3
+  PIP := pip
+endif
+
 .PHONY: all build test test-rust test-ui lint fmt check clean setup-tools setup-test
 
 # Install required and recommended Cargo tools
@@ -25,15 +38,15 @@ test-rust:
 
 # Run xa11y UI tests (requires macOS Accessibility permission)
 test-ui: build setup-test
-	python3 -m pytest pytests/ui_accessibility/ -v
+	$(PYTHON) -m pytest pytests/ui_accessibility/ -v
 
 # Run PyO3 binding tests
 test-bindings: setup-test
-	maturin develop --quiet && python3 -m pytest pytests/bindings/ -v
+	maturin develop --quiet && $(PYTHON) -m pytest pytests/bindings/ -v
 
 # Install Python test dependencies
 setup-test:
-	pip install -e ".[test]" --quiet
+	$(PIP) install -e ".[test]" --quiet
 
 # Lint
 lint:

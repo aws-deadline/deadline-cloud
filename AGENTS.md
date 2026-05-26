@@ -59,6 +59,20 @@ cargo test -p deadline-cli               # CLI subprocess tests (Level 2)
 cargo insta review                       # review new/changed CLI output snapshots
 ```
 
+### Full test suite (Rust + Python)
+
+`make test` runs Rust tests, xa11y UI tests, and PyO3 binding tests.
+The Python tests require a virtual environment. The Makefile auto-detects
+`.venv/` if present, but you must create it first:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install maturin PySide6-essentials qtpy pyyaml pytest-qt
+make test                                # Rust + Python tests
+```
+
+If you only need Rust tests, `cargo test` works without a venv.
+
 ### Python GUI development
 
 The Python Qt GUI (`gui/`) is being replaced by the Rust QML GUI

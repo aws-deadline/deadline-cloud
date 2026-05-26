@@ -25,9 +25,14 @@ Before studying anything, run the full test suite:
 make test 2>&1 | tail -20
 ```
 This runs `cargo test` (Rust), `pytest pytests/ui_accessibility/` (xa11y UI),
-and `pytest pytests/bindings/` (PyO3 bindings). Record the current pass
-counts for all three. This is the baseline — if it's not green, fix it
-before proceeding because you cannot port on top of a broken build.
+and `pytest pytests/bindings/` (PyO3 bindings). The Makefile auto-detects
+`.venv/` — no manual activation needed. If `.venv/` doesn't exist, create
+it first (`python3 -m venv .venv && .venv/bin/pip install -e ".[test]"`).
+If only Rust tests matter, `cargo test` works without a venv.
+
+Record the current pass counts for all three. This is the baseline — if
+it's not green, fix it before proceeding because you cannot port on top
+of a broken build.
 
 **Study the feature deeply:**
 - `specs/{crate}/README.md` and topic files for the target crate

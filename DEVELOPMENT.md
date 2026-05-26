@@ -46,9 +46,10 @@ For Rust-only work (no GUI), you can skip the venv and use
 | Build all + install into venv | `make` |
 | Build Rust only | `cargo build` |
 | Build release wheel | `make wheel` |
-| Run all tests (Rust + Python) | `make test` |
-| Run Rust tests only | `make test-rust` |
-| Run Python GUI tests only | `make test-python` |
+| Run all tests (Rust + Python) | `make test` (auto-detects `.venv/`) |
+| Run Rust tests only | `make test-rust` (no venv needed) |
+| Run xa11y UI tests | `make test-ui` |
+| Run PyO3 binding tests | `make test-bindings` |
 | Run single crate tests | `cargo test -p deadline-lib` |
 | Review snapshot changes | `cargo insta review` |
 | Lint | `make lint` |
