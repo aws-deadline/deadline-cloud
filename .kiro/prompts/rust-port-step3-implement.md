@@ -10,20 +10,21 @@ Do NOT restart from scratch.
 
 **Write the minimum code to make the tests pass.** Then:
 1. Run `cargo build` (full workspace)
-2. Run `cargo test` (full test suite — all crates, not just the one you changed)
+2. Run `make test` (full test suite — Rust tests, xa11y UI tests, PyO3 binding tests)
 3. If snapshots were created, run `cargo insta review` — verify each against
    Python implementation before accepting.
-4. If the work item involves GUI (deadline-gui crate), you MUST run xa11y UI tests:
-   ```bash
-   make test-ui
-   ```
-   Requires macOS Accessibility permission (see DEVELOPMENT.md).
-   These tests MUST pass — they catch QML type registration errors,
-   missing Accessible.name attributes, and runtime failures that
-   `cargo test` cannot detect (e.g. build.rs not registering new
-   QObject types). If the tests cannot run (no display server, no
-   accessibility permission), explicitly state this limitation and
-   do NOT claim the implementation is complete without verification.
+
+The `make test` target runs:
+- `cargo test` — all Rust crate tests
+- `pytest pytests/ui_accessibility/` — xa11y UI tests (requires macOS
+  Accessibility permission; catches QML type registration errors, missing
+  Accessible.name attributes, and runtime failures that `cargo test`
+  cannot detect)
+- `pytest pytests/bindings/` — PyO3 binding tests (requires `maturin`)
+
+If any test category cannot run (no display server, no accessibility
+permission, maturin not installed), explicitly state this limitation and
+do NOT claim the implementation is complete without verification.
 
 **Constraints:**
 - Do NOT use `INSTA_UPDATE=always` because each snapshot must be manually verified against Python output

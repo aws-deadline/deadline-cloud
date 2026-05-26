@@ -20,12 +20,14 @@ Do NOT begin studying any feature until the human has confirmed which work item 
 Do not proceed until the human picks one.
 
 **Record baseline:**
-Before studying anything, run:
+Before studying anything, run the full test suite:
 ```bash
-cargo test 2>&1 | tail -5
+make test 2>&1 | tail -20
 ```
-Record the current pass count. This is the baseline — if it's not green,
-fix it before proceeding because you cannot port on top of a broken build.
+This runs `cargo test` (Rust), `pytest pytests/ui_accessibility/` (xa11y UI),
+and `pytest pytests/bindings/` (PyO3 bindings). Record the current pass
+counts for all three. This is the baseline — if it's not green, fix it
+before proceeding because you cannot port on top of a broken build.
 
 **Study the feature deeply:**
 - `specs/{crate}/README.md` and topic files for the target crate
