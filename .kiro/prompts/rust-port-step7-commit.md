@@ -10,16 +10,10 @@ Do NOT create duplicate commits.
 ```bash
 make fmt          # cargo fmt --check (no formatting drift)
 make lint         # cargo clippy -- -D warnings (no lint warnings)
-make test         # cargo test + xa11y UI tests (all tests green)
+make test         # all tests: Rust + xa11y UI + PyO3 bindings
 ```
 If `make fmt` fails, run `cargo fmt` and include the fixes in your commit.
-
-**xa11y UI tests are mandatory for GUI work.** If the work item touches
-`deadline-gui` or GUI CLI commands, `make test` includes `test-ui` which
-runs the xa11y accessibility tests against the real binary. These catch
-QML type registration errors, accessibility regressions, and runtime
-failures that `cargo test` cannot detect.
-Do NOT commit if these tests regress.
+Do NOT commit if any check fails.
 
 **Constraints:**
 - Do NOT commit if any pre-commit check fails because broken code must not be committed

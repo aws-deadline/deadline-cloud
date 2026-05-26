@@ -17,7 +17,7 @@ build:
 	cargo build $(CARGO_FLAGS)
 
 # Run all tests
-test: test-rust test-ui
+test: test-rust test-ui test-bindings
 
 # Run Rust tests only
 test-rust:
@@ -25,7 +25,11 @@ test-rust:
 
 # Run xa11y UI tests (requires macOS Accessibility permission)
 test-ui: build setup-test
-	python3 -m pytest test/ui/ -v
+	python3 -m pytest pytests/ui_accessibility/ -v
+
+# Run PyO3 binding tests
+test-bindings: setup-test
+	maturin develop --quiet && python3 -m pytest pytests/bindings/ -v
 
 # Install Python test dependencies
 setup-test:

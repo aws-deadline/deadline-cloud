@@ -224,7 +224,7 @@ Dependencies: `cxx-qt 0.8`, `cxx-qt-lib`, `cxx-qt-build`, `deadline-lib`,
 ## Testing
 
 - **L1:** `cargo test -p deadline-gui` — 133 tests (config + auth + resources + watcher + submit + attachments + parameters + host requirements logic)
-- **L2:** `pytest test/ui/` — 38 accessibility tests via xa11y against the real binary (all passing)
+- **L2:** `make test-ui` (runs `pytests/ui_accessibility/`) — 38 accessibility tests via xa11y against the real binary (all passing)
 
 ## Remaining TODOs
 

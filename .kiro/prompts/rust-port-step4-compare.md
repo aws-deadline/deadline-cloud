@@ -35,7 +35,7 @@ Do not proceed until auth is confirmed.
 **For GUI work items:** CLI diff doesn't apply to interactive dialogs.
 Instead, run the xa11y tests which verify equivalent behavior:
 ```bash
-pytest test/ui/ -v --tb=short
+pytest pytests/ui_accessibility/ -v --tb=short
 ```
 If they fail, investigate whether it's a real regression or a test
 needing update for the Rust-native dialog.

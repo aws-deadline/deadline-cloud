@@ -153,8 +153,8 @@ regardless of whether the GUI is Python+PySide6 or Rust+cxx-qt.
 - Settings round-trip: `deadline config set` → open GUI → verify value
 - Ok/Cancel/Apply button semantics
 
-**Infrastructure:** `test/ui/conftest.py` (mock backend + isolated env),
-`test/ui/helpers.py` (page objects wrapping `xa11y.App`).
+**Infrastructure:** `pytests/ui_accessibility/conftest.py` (mock backend + isolated env),
+`pytests/ui_accessibility/helpers.py` (page objects wrapping `xa11y.App`).
 
 **QML requirement:** Elements must set `Accessible.name` so L2 tests
 can find them by name/role.
@@ -164,17 +164,17 @@ can find them by name/role.
 | What | Level | Location |
 |------|-------|----------|
 | Model logic (load/apply/dirty) | L1 | `crates/deadline-gui/src/` inline |
-| Dialog behavior (full stack) | L2 | `test/ui/` (Python + xa11y) |
-| PyO3 bindings (DCC compat) | L1 | `gui/tests/test_native.py` |
+| Dialog behavior (full stack) | L2 | `pytests/ui_accessibility/` (Python + xa11y) |
+| PyO3 bindings (DCC compat) | L1 | `pytests/bindings/test_native.py` |
 
 ### Migrating from Python GUI Tests
 
-The `xa11y` subprocess tests from `deadline-cloud-python/test/ui/` work
+The `xa11y` subprocess tests from `deadline-cloud-python/pytests/ui_accessibility/` work
 unchanged against the Rust GUI — they talk to the OS accessibility
 layer, not the framework. These become the acceptance criteria.
 
-The `pytest-qt` widget tests in `gui/tests/test_config_dialog_*.py` are
-replaced by L1 Rust model tests + L2 accessibility tests.
+The old `pytest-qt` widget tests have been removed — replaced by L1
+Rust model tests + L2 accessibility tests.
 
 
 ## Manual CLI Comparison Testing

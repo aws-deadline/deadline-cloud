@@ -27,4 +27,4 @@ data = "deadline.data"
 features = ["extension-module"]
 
 [tool.pytest.ini_options]
-testpaths = ["test/ui"]
+testpaths = ["pytests"]

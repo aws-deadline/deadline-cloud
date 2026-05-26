@@ -62,7 +62,7 @@ pip install maturin pytest
 maturin develop
 
 # Run tests
-pytest gui/tests/test_native.py -v
+pytest pytests/bindings/test_native.py -v
 ```
 
 ## Migration from C ABI (`deadline-gui-ffi`)

@@ -247,6 +247,9 @@ story. See `specs/HANDOFF.md` for detailed analysis.
 - **JSON progress lines in `--output json` mode** — download-output and
   download-input don't emit `{"messageType":"progress",...}` lines during
   download (Python does via click progressbar callback). Low priority.
+- **`make test` dependency bootstrapping** — `make test-bindings` requires
+  `maturin` to be installed. Currently assumes it's on PATH. Consider
+  adding `maturin>=1.7` to `[test]` deps or documenting the prerequisite.
 
 - **Evaluate extracting `config` module into standalone crate** — After
   #34 completes, the config module is only consumed by CLI and PyO3

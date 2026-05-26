@@ -4,11 +4,9 @@
 
 This repo is a complete replacement for `deadline-cloud-python`. It ships:
 
-1. **Rust CLI binary** (`deadline`) — headless commands
-2. **PyO3 extension module** (`deadline._native`) — Python bindings for GUI callers
-3. **Python Qt GUI** (`gui/`) — presentation layer, backed by the Rust library
-4. **Python compatibility package** — re-exports `deadline.client.api`,
-   `deadline.client.ui`, etc. so DCC submitters work with unchanged imports
+1. **Rust CLI binary** (`deadline`) — headless commands + GUI dialogs (via QML)
+2. **PyO3 extension module** (`deadline._native`) — Python bindings for DCC plugins
+3. **Rust QML GUI** (`crates/deadline-gui/`) — config and submit dialogs
 
 ```
 deadline-cloud-rs/
@@ -19,24 +17,21 @@ deadline-cloud-rs/
 │   │       ├── api/                 # AWS API calls, auth, telemetry
 │   │       ├── bundle/              # Job bundle parsing, submission
 │   │       └── attachments/         # S3 transfer, hashing, manifests
-│   ├── deadline-cli/                # Binary — headless CLI commands
+│   ├── deadline-cli/                # Binary — headless CLI commands + GUI dispatch
+│   ├── deadline-gui/                # Rust QML GUI (cxx-qt)
+│   │   ├── src/                     # QObject models + logic module
+│   │   └── qml/                     # QML views (ConfigDialog, SubmitDialog)
 │   ├── deadline-python-bindings/    # PyO3 extension module (deadline._native)
-│   └── deadline-test-server/        # Test infrastructure
-├── gui/                             # Python Qt GUI package
+│   └── deadline-test-server/        # Test infrastructure (wiremock)
+├── gui/                             # Python package (DCC compatibility layer, being eliminated)
 │   └── deadline/
 │       ├── _native.abi3.so          # PyO3 module (built by maturin)
-│       ├── client/
-│       │   ├── api/                 # Python wrappers → _native calls
-│       │   ├── ui/                  # Qt widgets, dialogs, controllers
-│       │   ├── config/              # Python wrapper → _native config calls
-│       │   ├── job_bundle/          # Data classes, YAML helpers
-│       │   ├── dataclasses/         # SubmitterInfo, etc.
-│       │   └── exceptions.py        # Python exception types
-│       ├── job_attachments/
-│       │   └── progress_tracker.py  # ProgressReportMetadata (callbacks)
-│       └── common/
-│           └── path_utils.py
-├── pyproject.toml                   # maturin build config for PyPI wheel
+│       └── client/                  # Re-exports for DCC submitter imports
+├── pytests/                         # Python-based test suites
+│   ├── _common/                     # Shared mock backend
+│   ├── ui_accessibility/            # L2 xa11y tests (real binary + accessibility tree)
+│   └── bindings/                    # PyO3 binding tests
+├── pyproject.toml                   # maturin build config + test deps
 ├── specs/                           # Design docs
 └── test_fixtures/                   # Manual comparison bundles
 ```
@@ -72,11 +67,6 @@ deadline-python-bindings (PyO3 extension module, abi3-py39)
 ├── pyo3
 └── pythonize
 
-gui/ (Python package) ── import deadline._native ──► PyO3 module
-├── Qt widgets (pure presentation, no Rust dependency)
-├── Controllers/dialogs (call Rust via deadline._native)
-└── Data classes & utilities (pure Python, no Rust dependency)
-
 deadline-test-server (dev-dependency of deadline-cli)
 ├── wiremock
 ├── tempfile
@@ -89,8 +79,7 @@ deadline-test-server (dev-dependency of deadline-cli)
 |-------|------|
 | `deadline-cli` | Binary. Clap argument parsing, subcommand dispatch, output formatting, MCP server (`mcp-server` subcommand via rmcp SDK). No business logic beyond presentation. |
 | `deadline-gui` | Rust + QML GUI crate (cxx-qt). Config dialog, submit dialog, progress dialog. QObject models + pure logic module. Called directly by CLI for `config gui` and `bundle gui-submit`. |
-| `deadline-python-bindings` | PyO3 extension module (`deadline._native`). Exposes config, auth, API listing, submission, and telemetry as native Python functions. Used by DCC plugins via the `gui/` package. Uses `abi3-py39` for compatibility with Python 3.9+. |
-| `gui/` | Python package. Qt widgets (presentation), controllers (call `deadline._native`), data classes (pure Python). Used by DCC plugins. CLI GUI commands no longer use this — they call `deadline-gui` directly. |
+| `deadline-python-bindings` | PyO3 extension module (`deadline._native`). Exposes config, auth, API listing, submission, and telemetry as native Python functions. Used by DCC plugins. Uses `abi3-py39` for compatibility with Python 3.9+. Phase 3 will add `show_submit_dialog()`. |
 | `deadline-lib` | Unified library crate containing all business logic as modules (see below). |
 | `deadline-lib::config` | INI config file read/write, hierarchical setting resolution, str2bool. No AWS dependencies. |
 | `deadline-lib::api` | AWS API calls (Deadline Cloud service), session/credential management, auth, telemetry, error types (`DeadlineError`), job monitoring types. Owns the SDK/HTTP interaction. |
@@ -152,7 +141,7 @@ deadline-cli
 
 All Rust, one process. No Python subprocess for GUI commands.
 
-### DCC Plugin (e.g., Maya)
+### DCC Plugin (e.g., Maya) — Current (Phase 3 pending)
 
 ```
 Maya Python plugin
@@ -160,15 +149,25 @@ Maya Python plugin
   → Builds scene_data dict
   → import deadline.client.ui (from gui/ package)
   → gui/ imports deadline._native (one-time, via dlopen)
-  → Shows SubmitJobToDeadlineDialog (Python Qt)
+  → Shows SubmitJobToDeadlineDialog (Python Qt via PySide6)
   → User clicks Submit
   → Dialog calls deadline._native.create_job_from_job_bundle() → Rust
   → Returns job_id
 ```
 
-DCC submitters use the same import paths as before (`from deadline.client.api
-import ...`, `from deadline.client.ui.dialogs import ...`). The `gui/` package
-re-exports these, backed by Rust via the PyO3 module.
+### DCC Plugin — After Phase 3
+
+```
+Maya Python plugin
+  → Scene introspection via maya.cmds
+  → Builds params dict
+  → import deadline._native
+  → Calls deadline._native.show_submit_dialog(params) → Rust QML dialog
+  → Returns result dict (job_id, status)
+```
+
+No PySide6, no Python Qt code. The Rust QML dialog runs inside the
+DCC's existing QApplication.
 
 ### After Effects
 
@@ -180,21 +179,15 @@ ExtendScript (JSX)
 
 ## Packaging (maturin + PyO3)
 
-The root `pyproject.toml` uses maturin as the build backend. A single
-`pip install deadline` command installs:
+The root `pyproject.toml` uses maturin as the build backend. Currently
+used for:
 
-- The Rust CLI binary (`deadline`) on PATH
-- The PyO3 extension module (`deadline._native.abi3.so`)
-- The Python Qt GUI code (from `gui/`)
+1. Building the PyO3 extension module (`deadline._native.abi3.so`)
+2. Managing Python test dependencies (`pip install -e ".[test]"`)
 
-```
-pip install deadline          # CLI + PyO3 module (no GUI deps)
-pip install "deadline[gui]"   # Above + PySide6 + QtPy
-```
-
-Platform-specific wheels are built per OS/arch (linux-x64, macos-arm64,
-windows-x64). The `abi3-py39` flag means one wheel per platform covers
-all Python versions 3.9+.
+The `gui/` Python package is a transitional compatibility layer for DCC
+plugins. It will be eliminated once Phase 3 (PyO3 `show_submit_dialog`)
+is complete and DCC submitters are switched over.
 
 ### What ships in the wheel
 

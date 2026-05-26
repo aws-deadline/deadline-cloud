@@ -1,7 +1,7 @@
 # Python FFI Test Infrastructure
 
-How the Python FFI tests (`gui/tests/`) and GUI accessibility tests
-(`test/ui/`) use stub server infrastructure for isolation.
+How the Python FFI tests (`pytests/bindings/`) and GUI accessibility tests
+(`pytests/ui_accessibility/`) use stub server infrastructure for isolation.
 
 ## Context
 
@@ -12,7 +12,7 @@ involved in two scenarios:
 2. **L2 accessibility tests** — Python `xa11y` library drives the real
    `deadline` binary through the OS accessibility tree.
 
-The `gui/tests/test_native.py` tests verify the PyO3 boundary still works
+The `pytests/bindings/test_native.py` tests verify the PyO3 boundary still works
 correctly for DCC plugin consumers.
 
 ## Problem
@@ -167,10 +167,10 @@ async fn list_farms_returns_farms_array() {
 cargo test
 
 # Python FFI tests
-PYTHONPATH=gui python3 -m pytest gui/tests/
+PYTHONPATH=gui python3 -m pytest pytests/bindings/
 
 # Everything
-make test  # or: cargo test && PYTHONPATH=gui pytest gui/tests/
+make test  # or: cargo test && PYTHONPATH=gui pytest pytests/bindings/
 ```
 
 The Python tests require `cargo build -p deadline-test-server` first
@@ -197,7 +197,7 @@ set for CLI subprocess tests.
 ## Implementation Order
 
 1. Add `[[bin]]` target `ffi-test-server` to `deadline-test-server`
-2. Rewrite `gui/tests/conftest.py` to start the server binary
-3. Rewrite `gui/tests/testdeadline._native` to assert on canned data
+2. Rewrite `pytests/bindings/conftest.py` to start the server binary
+3. Rewrite `pytests/bindings/testdeadline._native` to assert on canned data
 4. Upgrade Rust gui-ffi tests to use `TestHarness`
 5. Add `make test` or equivalent to run both suites
