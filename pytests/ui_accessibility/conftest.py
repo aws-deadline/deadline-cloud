@@ -81,6 +81,7 @@ def deadline_env(tmp_path: Path, mock_backend) -> tuple[MockDeadlineBackend, dic
     env = {
         **os.environ,
         "HOME": str(fake_home),
+        "AWS_ENDPOINT_URL": deadline_url,
         "AWS_ENDPOINT_URL_DEADLINE": deadline_url,
         "AWS_ACCESS_KEY_ID": "testing",
         "AWS_SECRET_ACCESS_KEY": "testing",

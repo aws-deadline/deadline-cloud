@@ -240,6 +240,18 @@ story. See `specs/HANDOFF.md` for detailed analysis.
   explicit sorting wherever maps are displayed.
 - **Python formatting/linting**: Add ruff (format + lint) for `gui/`
   Python code. Currently no Python formatter is configured.
+- **Stateful test server**: Explore replacing `deadline-test-server`
+  (wiremock, static responses) with a stateful mock that supports
+  dynamic CRUD, call counting, configurable delays, and per-test
+  clearing. Would unify the Rust L2 tests and xa11y GUI tests on a
+  single mock backend instead of maintaining two (Rust wiremock +
+  Python `MockDeadlineBackend`).
+- **Stabilize xa11y GUI tests**: Several tests are flaky due to timing
+  issues — `resolve_account_id` adds a 2-second STS timeout when the
+  mock returns 404, and tests that reopen dialogs hit 15-second
+  visibility timeouts. Fix: add STS route to the Python mock (return
+  a canned response), increase dialog wait timeouts, or skip the STS
+  call entirely when endpoint is HTTP (non-TLS).
 - **Reduce `serde_json::Value` usage** — 108 references in CLI code.
   Address incrementally when touching those files.
 - **Audit `collect()` then iterate** — 18 sites. Quick fixes when
