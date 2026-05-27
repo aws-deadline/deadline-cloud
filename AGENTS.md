@@ -1,7 +1,7 @@
 # AGENTS.md
 
 This is the Rust implementation of the AWS Deadline Cloud client software:
-CLI, GUI FFI layer, and shared library crates.
+CLI, Python bindings, and shared library crates.
 
 ## Documentation
 
@@ -74,14 +74,13 @@ If you only need Rust tests, `cargo test` works without a venv.
 
 ### Python GUI development
 
-The Python Qt GUI (`gui/`) is being replaced by the Rust QML GUI
-(`crates/deadline-gui/`). The Rust GUI is the primary development target.
-GUI commands (`bundle gui-submit`, `config gui`) call Rust directly.
+The Python Qt GUI (`gui/`) provides the submit and config dialogs.
+GUI commands (`bundle gui-submit`, `config gui`) spawn a Python
+subprocess that runs the PySide6 dialog.
 
 To run GUI accessibility tests:
 ```bash
-make test-ui                             # xa11y tests against real binary
+make test-ui                             # xa11y tests against Python Qt GUI
 ```
 
-GUI commands need Qt 6 libraries. The Rust CLI finds them via the
-system Qt installation or bundled libs.
+GUI commands require Python 3.9+ and PySide6 installed.

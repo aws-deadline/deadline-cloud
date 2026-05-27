@@ -25,9 +25,15 @@ from helpers import SAMPLE_TEMPLATE, SubmitterDialog, reap_all  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _reap_ui_subprocesses() -> Iterator[None]:
-    """Kill any GUI subprocesses still alive at test end."""
+    """Kill any GUI subprocesses still alive at test end and clear macOS crash state."""
+    import shutil
     yield
     reap_all()
+    # Clear macOS "unexpectedly quit" saved state to prevent recovery dialogs
+    # from blocking subsequent test launches after a crash (e.g. xfail tests).
+    saved_state = Path.home() / "Library/Saved Application State/org.python.python.savedState"
+    if saved_state.exists():
+        shutil.rmtree(saved_state, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

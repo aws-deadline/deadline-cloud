@@ -132,17 +132,18 @@ This matches Python's behavior where `auto_accept=True` + unknown paths raises
 
 ## `bundle gui-submit`
 
-Opens a Rust-native QML dialog for job bundle submission. No Python
-subprocess — the CLI calls `deadline_gui::show_submit_dialog()` directly.
+Opens the Python Qt submit dialog for job bundle submission. The CLI
+spawns a Python subprocess that runs the PySide6 dialog.
 
 ### Architecture
 
 ```
-Rust CLI → validate args → deadline_gui::show_submit_dialog(&params)
-         → QML dialog renders (TabBar, forms, auth bar)
-         → User interacts → Submit button → background thread
-         → create_job_from_job_bundle() → progress dialog
-         → Returns JSON result string → CLI prints if --output json
+Rust CLI → validate args → spawn Python subprocess
+         → python -m deadline.client.ui._gui_entry gui-submit --params-json '{...}'
+         → Qt dialog renders (tabs, forms, auth bar)
+         → User interacts → Submit button
+         → create_job_from_job_bundle() via deadline._native → Rust
+         → Returns JSON result string on stdout → CLI prints
 ```
 
 ### Options

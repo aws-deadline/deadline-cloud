@@ -17,8 +17,8 @@ Do NOT restart from scratch.
 The `make test` target runs:
 - `cargo test` — all Rust crate tests
 - `pytest pytests/ui_accessibility/` — xa11y UI tests (requires macOS
-  Accessibility permission; catches QML type registration errors, missing
-  Accessible.name attributes, and runtime failures that `cargo test`
+  Accessibility permission; catches GUI rendering issues, missing
+  accessibility attributes, and runtime failures that `cargo test`
   cannot detect)
 - `pytest pytests/bindings/` — PyO3 binding tests (requires `maturin`)
 

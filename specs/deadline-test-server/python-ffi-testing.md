@@ -5,12 +5,13 @@ How the Python FFI tests (`pytests/bindings/`) and GUI accessibility tests
 
 ## Context
 
-The primary GUI is now Rust+QML (`crates/deadline-gui/`). Python is only
-involved in two scenarios:
-1. **DCC plugins** — Maya/Blender/etc. call `deadline._native` (PyO3) to
-   invoke the Rust GUI from within their Python environment.
-2. **L2 accessibility tests** — Python `xa11y` library drives the real
-   `deadline` binary through the OS accessibility tree.
+The GUI is Python Qt (PySide6) in `gui/`. The Rust CLI spawns it as a
+subprocess for `bundle gui-submit` and `config gui`. Python is involved in:
+1. **DCC plugins** — Maya/Blender/etc. import `deadline.client.ui` which
+   uses `deadline._native` (PyO3) for backend operations.
+2. **CLI GUI commands** — The Rust binary spawns Python to show the Qt dialog.
+3. **L2 accessibility tests** — Python `xa11y` library drives the GUI
+   through the OS accessibility tree.
 
 The `pytests/bindings/test_native.py` tests verify the PyO3 boundary still works
 correctly for DCC plugin consumers.
@@ -139,43 +140,26 @@ def test_list_farms(self, ffi):
     assert result["farms"][0]["displayName"] == "Test Farm"
 ```
 
-## Rust gui-ffi Tests
+## Rust Tests
 
-The existing Rust unit tests in `crates/deadline-python-bindings/src/lib.rs`
-have the same problem — they call `extern "C"` functions that hit real
-AWS. These should also be upgraded to use `TestHarness` in-process:
-
-```rust
-#[tokio::test]
-async fn list_farms_returns_farms_array() {
-    let harness = TestHarness::new().await;
-    farms::mock_list_farms(&harness.server, &[
-        json!({"farmId": "farm-abc", "displayName": "My Farm"}),
-    ]).await;
-    // env vars redirect FFI calls to stub
-    std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", harness.server_uri());
-    // ...
-    let json = call_ffi_json(deadline_list_farms(harness.config_path));
-    assert_eq!(json["farms"][0]["farmId"], "farm-abc");
-}
-```
+The Rust unit and integration tests use `TestHarness` (wiremock) for
+all API interactions. No special setup needed — `cargo test` runs them.
 
 ## Running All Tests
 
 ```bash
-# Rust tests (CLI + library + gui-ffi)
+# Rust tests (CLI + library)
 cargo test
 
-# Python FFI tests
-PYTHONPATH=gui python3 -m pytest pytests/bindings/
+# Python binding tests
+python3 -m pytest pytests/bindings/
+
+# Python GUI accessibility tests
+python3 -m pytest pytests/ui_accessibility/
 
 # Everything
-make test  # or: cargo test && PYTHONPATH=gui pytest pytests/bindings/
+make test
 ```
-
-The Python tests require `cargo build -p deadline-test-server` first
-(to build the `ffi-test-server` binary). The pytest fixture handles
-this automatically if the binary is missing.
 
 ## Env Vars Set by the Test Fixture
 
@@ -194,10 +178,10 @@ this automatically if the binary is missing.
 These match exactly what `TestHarness::cli()` and `TestHarness::cmd()`
 set for CLI subprocess tests.
 
-## Implementation Order
+## Implementation Status
 
-1. Add `[[bin]]` target `ffi-test-server` to `deadline-test-server`
-2. Rewrite `pytests/bindings/conftest.py` to start the server binary
-3. Rewrite `pytests/bindings/testdeadline._native` to assert on canned data
-4. Upgrade Rust gui-ffi tests to use `TestHarness`
-5. Add `make test` or equivalent to run both suites
+1. ~~Add `[[bin]]` target `ffi-test-server` to `deadline-test-server`~~ (eliminated — PyO3 tests use MockDeadlineBackend directly)
+2. ✅ `pytests/bindings/conftest.py` starts MockDeadlineBackend in-process
+3. ✅ `pytests/bindings/test_native.py` asserts on canned data
+4. ✅ Rust tests use `TestHarness` (wiremock)
+5. ✅ `make test` runs all suites

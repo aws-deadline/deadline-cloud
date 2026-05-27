@@ -288,30 +288,28 @@ The schema is under our control so there's no SDK compatibility concern.
 **Use for:** checkpoint files, incremental download state, any
 persistent data format owned by this codebase.
 
-## GUI Commands: Rust QML (deadline-gui)
+## GUI Commands: Python Qt Subprocess
 
-GUI commands (`bundle gui-submit`, `config gui`) call directly into the
-`deadline-gui` crate. No Python subprocess, no PySide6.
+GUI commands (`bundle gui-submit`, `config gui`) spawn a Python
+subprocess that runs the Qt dialog. The CLI validates args, then
+passes them as JSON to the Python entry point.
 
 ### Pattern: launch a GUI command
 
 ```rust
-// CLI validates args, then calls the GUI crate directly:
-let result = deadline_gui::show_submit_dialog(&params);
+// CLI validates args, then spawns the Python GUI:
+let result = launch_python_gui("gui-submit", &params_json, install_gui)?;
 // result is a JSON string: {"status": "SUBMITTED", "jobId": "...", ...}
 ```
 
 ### Rules
 
 - **CLI validates, GUI renders.** Arg parsing and validation happen in
-  the CLI before calling `deadline-gui`. The GUI receives pre-validated params.
-- **JSON is the contract.** CLI passes params as a Rust struct. GUI returns
-  result as a JSON string to stdout (for `--output json` mode).
-- **Logic in logic/, rendering in QML.** QObject models are thin wrappers.
-  All testable behavior lives in `logic/` (pure Rust, no Qt dependency).
-- **Property set ordering matters.** When updating QML properties after
-  async operations, set index/selection properties BEFORE list properties
-  to avoid signal handler race conditions.
+  the CLI before spawning the subprocess.
+- **JSON is the contract.** CLI passes params as JSON via `--params-json`.
+  GUI prints result JSON to stdout.
+- **Python + PySide6 required.** GUI commands need Python 3.9+ and
+  PySide6 installed. Use `--install-gui` to auto-install.
 
 
 ## Porting a CLI Command: Parity Checklist

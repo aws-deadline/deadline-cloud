@@ -19,7 +19,6 @@ path = "src/deadlinew.rs"
 
 [dependencies]
 deadline-lib = { workspace = true }
-deadline-gui = { workspace = true }
 openjd-snapshots = { workspace = true }
 aws-sdk-deadline = { workspace = true }
 clap = { workspace = true }

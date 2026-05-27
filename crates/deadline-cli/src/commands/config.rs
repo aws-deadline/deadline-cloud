@@ -130,7 +130,27 @@ fn clear(setting_name: &str) -> Result<(), CliError> {
     clippy::unnecessary_wraps,
     reason = "signature matches other command handlers"
 )]
-fn run_config_gui(_install_gui: bool) -> Result<(), CliError> {
-    deadline_gui::show_config_dialog();
+fn run_config_gui(install_gui: bool) -> Result<(), CliError> {
+    let python = crate::commands::bundle::find_python()?;
+    let mut cmd = std::process::Command::new(&python);
+    cmd.args(["-m", "deadline.client.ui._gui_entry", "config-gui"]);
+    cmd.args(["--params-json", "{}"]);
+    if install_gui {
+        cmd.arg("--install-gui");
+    }
+    let status = cmd
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .stdin(std::process::Stdio::null())
+        .status()
+        .map_err(|e| {
+            CliError::Operation(format!("Failed to launch GUI subprocess ({python}): {e}"))
+        })?;
+    if !status.success() {
+        let code = status.code().unwrap_or(1);
+        return Err(CliError::Operation(format!(
+            "GUI subprocess exited with code {code}"
+        )));
+    }
     Ok(())
 }

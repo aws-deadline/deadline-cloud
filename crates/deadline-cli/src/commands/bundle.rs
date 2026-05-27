@@ -474,20 +474,18 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 )));
             }
 
-            // Launch the Rust-native submit dialog directly
-            let params = deadline_gui::SubmitDialogParams {
-                job_bundle_dir: bundle_dir,
-                browse,
-                output: output.to_lowercase(),
-                known_asset_paths: known_asset_path,
-                submitter_info: submitter_info_json,
-                job_parameters,
-                name,
-            };
+            // Launch the Python Qt GUI as a subprocess
+            let params_json = serde_json::json!({
+                "job_bundle_dir": bundle_dir,
+                "browse": browse,
+                "output": output.to_lowercase(),
+                "known_asset_paths": known_asset_path,
+                "submitter_info": submitter_info_json,
+                "job_parameters": job_parameters,
+                "name": name,
+            });
 
-            let _ = install_gui; // no-op for native GUI
-
-            let result = deadline_gui::show_submit_dialog(&params);
+            let result = launch_python_gui("gui-submit", &params_json, install_gui)?;
             if !result.trim().is_empty() {
                 println!("{result}");
                 let _ = std::io::stdout().flush();
@@ -605,4 +603,83 @@ fn create_zip_from_dir(src_dir: &std::path::Path, zip_path: &str) -> Result<(), 
         return Err(format!("zip exited with status {status}"));
     }
     Ok(())
+}
+
+/// Launch the Python Qt GUI as a subprocess.
+pub(crate) fn launch_python_gui(
+    command: &str,
+    params: &serde_json::Value,
+    install_gui: bool,
+) -> Result<String, CliError> {
+    let python = find_python()?;
+    let params_json = serde_json::to_string(params).unwrap_or_else(|_| "{}".to_string());
+
+    let mut cmd = std::process::Command::new(&python);
+    cmd.args(["-m", "deadline.client.ui._gui_entry", command]);
+    cmd.args(["--params-json", &params_json]);
+    if install_gui {
+        cmd.arg("--install-gui");
+    }
+
+    let output = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .output()
+        .map_err(|e| {
+            CliError::Operation(format!(
+                "Failed to launch GUI subprocess ({python}): {e}"
+            ))
+        })?;
+
+    if !output.status.success() {
+        let code = output.status.code().unwrap_or(1);
+        if code == 1 {
+            // PySide6 not installed or user canceled
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("PySide6") || stderr.contains("GUI dependencies") {
+                return Err(CliError::Operation(
+                    "GUI dependencies (PySide6) are not installed.\n\
+                     Install them with: pip install 'deadline[gui]'\n\
+                     Or re-run with --install-gui to install automatically."
+                        .into(),
+                ));
+            }
+        }
+        return Err(CliError::Operation(format!(
+            "GUI subprocess exited with code {code}"
+        )));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Find a Python interpreter.
+pub(crate) fn find_python() -> Result<String, CliError> {
+    // Check for a venv first (common in development)
+    if let Ok(virtual_env) = std::env::var("VIRTUAL_ENV") {
+        let venv_python = std::path::Path::new(&virtual_env).join("bin/python3");
+        if venv_python.exists() {
+            return Ok(venv_python.to_string_lossy().to_string());
+        }
+    }
+
+    // Try python3, then python
+    for name in &["python3", "python"] {
+        let result = std::process::Command::new(name)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        if let Ok(status) = result {
+            if status.success() {
+                return Ok((*name).to_string());
+            }
+        }
+    }
+
+    Err(CliError::Operation(
+        "Python 3 is required for GUI commands but was not found.\n\
+         Install Python 3.9+ and ensure it is on your PATH."
+            .into(),
+    ))
 }

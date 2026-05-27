@@ -35,7 +35,7 @@ test: test-rust test-ui test-bindings
 test-rust:
 	cargo test
 
-test-ui: build-rust
+test-ui: build-python
 	$(PYTHON) -m pytest pytests/ui_accessibility/ -v
 
 test-bindings: build-python

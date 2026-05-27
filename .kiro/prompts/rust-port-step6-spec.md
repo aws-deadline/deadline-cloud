@@ -16,7 +16,6 @@ after EVERY CHANGE.
 - `specs/{crate}/architecture.md` — layout, module contracts, test counts
 - `specs/architecture.md` — crate graph, data flows, crate responsibilities
 - `specs/deadline-cli/*.md` — if CLI behavior changed
-- `specs/deadline-gui/architecture.md` — if GUI models, logic, or QML changed
 - `specs/deadline-lib/` — if library API, bundle, attachments, or config changed
 - `specs/deadline-python-bindings/` — if bindings interface changed
 - Strip stale content rather than just appending new content.

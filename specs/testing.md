@@ -125,56 +125,33 @@ assert_cmd_snapshot!(harness.cmd(&["farm", "get", "--farm-id", "farm-abc"]));
 
 ## GUI Testing
 
-The GUI (`crates/deadline-gui/`) uses Rust+QML via cxx-qt. Testing
-follows the same Level 1 / Level 2 philosophy, adapted for Qt.
-
-### Level 1: Model Logic (Pure Rust, no Qt)
-
-QObject `#[qinvokable]` methods should be thin wrappers that call
-testable pure-Rust functions. The logic lives in functions; the QObject
-is glue. These tests run in `cargo test` with no display server.
-
-**What to test at L1:**
-- Config loading/apply/dirty tracking
-- Resource list parsing (API response → name/id pairs)
-- Auth status derivation
+The GUI (`gui/`) uses Python Qt (PySide6). Testing uses accessibility
+tree tests that drive the GUI through the OS accessibility API.
 
 ### Level 2: Accessibility Tree Tests (`xa11y` + subprocess)
 
-Launch the real `deadline` binary as a subprocess, then drive the GUI
-through the OS accessibility API using `xa11y` (Python). Qt exposes all
-QML elements to the platform accessibility layer (AT-SPI on Linux,
-Accessibility API on macOS, UIA on Windows). `xa11y` queries this tree
-regardless of whether the GUI is Python+PySide6 or Rust+cxx-qt.
+Launch the Python Qt GUI as a subprocess, then drive it through the OS
+accessibility API using `xa11y` (Python). Qt exposes all widgets to the
+platform accessibility layer (AT-SPI on Linux, Accessibility API on
+macOS, UIA on Windows). `xa11y` queries this tree by role and name.
 
 **What to test at L2:**
 - Dialog opens with correct title
 - All settings groups present
 - Settings round-trip: `deadline config set` → open GUI → verify value
 - Ok/Cancel/Apply button semantics
+- Host requirements form controls
+- Job submission flow
 
 **Infrastructure:** `pytests/ui_accessibility/conftest.py` (mock backend + isolated env),
 `pytests/ui_accessibility/helpers.py` (page objects wrapping `xa11y.App`).
-
-**QML requirement:** Elements must set `Accessible.name` so L2 tests
-can find them by name/role.
 
 ### Choosing the Right Level
 
 | What | Level | Location |
 |------|-------|----------|
-| Model logic (load/apply/dirty) | L1 | `crates/deadline-gui/src/` inline |
 | Dialog behavior (full stack) | L2 | `pytests/ui_accessibility/` (Python + xa11y) |
 | PyO3 bindings (DCC compat) | L1 | `pytests/bindings/test_native.py` |
-
-### Migrating from Python GUI Tests
-
-The `xa11y` subprocess tests from `deadline-cloud-python/pytests/ui_accessibility/` work
-unchanged against the Rust GUI — they talk to the OS accessibility
-layer, not the framework. These become the acceptance criteria.
-
-The old `pytest-qt` widget tests have been removed — replaced by L1
-Rust model tests + L2 accessibility tests.
 
 
 ## Manual CLI Comparison Testing
@@ -235,17 +212,15 @@ Benchmarked 2026-05-21 on macOS arm64 (M-series).
 | Fresh (`cargo clean && cargo build`) | ~3.5 min | AWS SDK crates dominate (~90s) |
 | Incremental (touch deadline-lib) | ~2s | Fast — pure Rust |
 | Incremental (touch deadline-cli) | ~5s | Relinking large binary |
-| Incremental (touch deadline-gui) | ~12s | cxx-qt C++ codegen in build.rs |
 | No changes | ~1s | Fully cached |
 
 ### Test times
 
 | Scenario | Time | Notes |
 |----------|------|-------|
-| Full suite (`cargo test`) | ~75s | 1,380 tests |
+| Full suite (`cargo test`) | ~75s | 1,355 tests |
 | CLI tests only (`-p deadline-cli`) | ~53s | 441 subprocess tests |
 | Lib tests only (`-p deadline-lib`) | ~7s | 140 integration tests |
-| GUI logic only (`-p deadline-gui`) | <1s | 26 unit tests |
 
 ### Why `cargo-nextest` doesn't help here
 
@@ -262,7 +237,6 @@ Nextest is slower because:
 ### Recommended workflow
 
 - `cargo check` — fastest feedback for type errors (~2s)
-- `cargo test -p deadline-gui` — when working on GUI logic (<1s)
 - `cargo test -p deadline-cli -- config` — targeted CLI tests (~5s)
 - `cargo test` — full suite before committing (~75s)
 - Avoid `cargo clean` — incremental builds are 100x faster than fresh

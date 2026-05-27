@@ -218,6 +218,58 @@ def _find_app(pid: int, baseline_names: set, timeout: float) -> xa11y.App:
 # ---------------------------------------------------------------------------
 
 
+def _translate_args_to_gui_entry(args: Sequence[str]) -> tuple[str, dict]:
+    """Translate CLI args to (_gui_entry command, params dict).
+
+    Maps ['config', 'gui'] → ('config-gui', {})
+    Maps ['bundle', 'gui-submit', ...] → ('gui-submit', {params})
+    """
+    args_list = list(args)
+    if args_list[:2] == ["config", "gui"]:
+        return "config-gui", {}
+
+    # bundle gui-submit [options] [bundle_dir]
+    if "gui-submit" in args_list:
+        params: dict = {}
+        idx = args_list.index("gui-submit")
+        remaining = args_list[idx + 1:]
+        # Parse known options
+        i = 0
+        positional = []
+        while i < len(remaining):
+            arg = remaining[i]
+            if arg == "--output":
+                i += 1
+                params["output"] = remaining[i] if i < len(remaining) else "verbose"
+            elif arg == "--browse":
+                params["browse"] = True
+            elif arg == "--install-gui":
+                pass  # not needed for direct launch
+            elif arg.startswith("--submitter-info"):
+                if "=" in arg:
+                    params.setdefault("submitter_info", {})
+                    k, v = arg.split("=", 1)[1].split("=", 1) if "=" in arg.split("=", 1)[1] else (arg.split("=", 1)[1], "")
+                    params["submitter_info"][k] = v
+                else:
+                    i += 1
+                    if i < len(remaining):
+                        params.setdefault("submitter_info", {})
+                        k, v = remaining[i].split("=", 1) if "=" in remaining[i] else (remaining[i], "")
+                        params["submitter_info"][k] = v
+            elif arg == "--name":
+                i += 1
+                params["name"] = remaining[i] if i < len(remaining) else None
+            elif not arg.startswith("-"):
+                positional.append(arg)
+            i += 1
+        if positional:
+            params["job_bundle_dir"] = positional[0]
+        return "gui-submit", params
+
+    # Fallback: pass through as-is (shouldn't happen)
+    return args_list[0] if args_list else "", {}
+
+
 class DeadlineApp:
     """Launches a deadline subprocess and exposes its accessibility tree."""
 
@@ -236,8 +288,17 @@ class DeadlineApp:
         capture_stdio: bool = False,
         dialog_name: Optional[str] = None,
     ) -> _T:
-        """Spawn ``deadline <args>`` and attach to its accessibility tree."""
-        cmd = [_deadline_binary(), *args]
+        """Spawn the Python Qt GUI and attach to its accessibility tree.
+
+        Translates CLI args (e.g. ['config', 'gui'] or ['bundle', 'gui-submit', dir])
+        into a direct Python subprocess call to the GUI entry point, matching
+        how the original deadline-cloud-python xa11y tests worked.
+        """
+        gui_cmd, params = _translate_args_to_gui_entry(args)
+        cmd = [
+            sys.executable, "-m", "deadline.client.ui._gui_entry",
+            gui_cmd, "--params-json", json.dumps(params),
+        ]
         baseline = {a.name for a in xa11y.App.list()}
         popen_kwargs: dict = dict(
             env=env,
