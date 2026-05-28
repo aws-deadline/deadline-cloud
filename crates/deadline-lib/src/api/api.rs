@@ -655,14 +655,16 @@ pub async fn wait_for_create_job_to_complete(
 }
 
 #[cfg(test)]
+#[allow(unsafe_code, reason = "env var manipulation in serialized tests")]
 mod tests {
     use super::*;
     use serial_test::serial;
     use wiremock::matchers::{method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    async fn setup_env(server: &MockServer) {
+    fn setup_env(server: &MockServer) {
         let url = format!("http://localhost:{}", server.address().port());
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe {
             std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", &url);
             std::env::set_var("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
@@ -679,7 +681,7 @@ mod tests {
     #[serial]
     async fn wait_for_create_job_cancels_when_callback_returns_false() {
         let server = MockServer::start().await;
-        setup_env(&server).await;
+        setup_env(&server);
 
         // Mock GetJob returning CREATE_IN_PROGRESS (would loop forever without cancellation)
         Mock::given(method("GET"))

@@ -1,8 +1,9 @@
 //! Level 1 tests for `create_job_from_job_bundle`.
 //!
 //! These test the orchestration function directly (not via CLI) to assert on
-//! precision the CLI can't expose: exact CreateJob request body, hook metadata
+//! precision the CLI can't expose: exact `CreateJob` request body, hook metadata
 //! construction, and telemetry event payloads.
+#![allow(unsafe_code, reason = "env var manipulation in serialized tests")]
 //!
 //! Uses wiremock + real temp dirs + #[serial] (env var mutation).
 
@@ -54,7 +55,8 @@ impl SubmissionHandler for TestHandler {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-async fn setup_env(server: &MockServer) {
+fn setup_env(server: &MockServer) {
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
     unsafe {
         std::env::set_var(
             "AWS_ENDPOINT_URL_DEADLINE",
@@ -74,10 +76,10 @@ async fn setup_env(server: &MockServer) {
     }
 }
 
-fn default_submit_params<'a>(
+fn default_submit_params(
     bundle_dir: PathBuf,
-    handler: &'a dyn SubmissionHandler,
-) -> SubmitJobParams<'a> {
+    handler: &dyn SubmissionHandler,
+) -> SubmitJobParams<'_> {
     SubmitJobParams {
         job_bundle_dir: bundle_dir,
         job_parameters: vec![],
@@ -204,7 +206,7 @@ async fn mock_standard_submission(server: &MockServer) {
 #[serial]
 async fn submit_no_attachments_returns_job_id() {
     let server = MockServer::start().await;
-    setup_env(&server).await;
+    setup_env(&server);
 
     mock_standard_submission(&server).await;
 
@@ -218,12 +220,12 @@ async fn submit_no_attachments_returns_job_id() {
     assert_eq!(job_id, JOB);
 }
 
-/// CreateJob API failure returns error with message.
+/// `CreateJob` API failure returns error with message.
 #[tokio::test]
 #[serial]
 async fn submit_create_job_api_error_returns_error() {
     let server = MockServer::start().await;
-    setup_env(&server).await;
+    setup_env(&server);
 
     mock_get_queue(&server).await;
     mock_list_queue_environments_empty(&server).await;
@@ -253,12 +255,12 @@ async fn submit_create_job_api_error_returns_error() {
     );
 }
 
-/// Polling returns CREATE_FAILED → error with job ID.
+/// Polling returns `CREATE_FAILED` → error with job ID.
 #[tokio::test]
 #[serial]
 async fn submit_create_failed_status_returns_error() {
     let server = MockServer::start().await;
-    setup_env(&server).await;
+    setup_env(&server);
 
     mock_get_queue(&server).await;
     mock_list_queue_environments_empty(&server).await;
@@ -301,7 +303,7 @@ async fn submit_create_failed_status_returns_error() {
 #[serial]
 async fn submit_missing_template_returns_error() {
     let server = MockServer::start().await;
-    setup_env(&server).await;
+    setup_env(&server);
 
     let dir = TempDir::new().unwrap();
     // Empty bundle dir — no template file
@@ -324,7 +326,7 @@ async fn submit_missing_template_returns_error() {
 #[serial]
 async fn submit_handler_receives_queue_name_message() {
     let server = MockServer::start().await;
-    setup_env(&server).await;
+    setup_env(&server);
 
     mock_standard_submission(&server).await;
 

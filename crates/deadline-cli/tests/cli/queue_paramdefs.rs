@@ -176,7 +176,7 @@ async fn queue_paramdefs_duplicate_identical_keeps_one() {
         json!({
             "queueEnvironmentId": "env-a", "name": "Env A", "priority": 10,
             "templateType": "YAML",
-            "template": env_template("Env A", &[shared_param.clone()]),
+            "template": env_template("Env A", std::slice::from_ref(&shared_param)),
         }),
     )
     .await;

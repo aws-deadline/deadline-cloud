@@ -7,7 +7,7 @@ use serde_json::json;
 
 // --- helpers ---
 
-async fn setup(harness: &TestHarness) {
+fn setup(harness: &TestHarness) {
     harness
         .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
         .assert()
@@ -36,7 +36,7 @@ const JOB: &str = "job-aaf4cdf8aae242f58fb84c5bb19f199b";
 #[tokio::test]
 async fn job_cancel_with_yes_prints_summary_and_cancels() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB,
         "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
@@ -57,7 +57,7 @@ async fn job_cancel_with_yes_prints_summary_and_cancels() {
 #[tokio::test]
 async fn job_cancel_mark_as_suspended_with_yes() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB,
         "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
@@ -75,7 +75,7 @@ async fn job_cancel_mark_as_suspended_with_yes() {
 #[tokio::test]
 async fn job_cancel_get_job_fails_prints_error_with_suggestions() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     errors::mock_get_job_not_found(&harness.server, FARM, QUEUE, JOB).await;
     jobs::mock_list_jobs(
         &harness.server,
@@ -92,7 +92,7 @@ async fn job_cancel_get_job_fails_prints_error_with_suggestions() {
 #[tokio::test]
 async fn job_cancel_mark_as_invalid_value_exits_with_error() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     assert_cmd_snapshot!(harness.cmd(&["job", "cancel", "--mark-as", "BANANA", "--yes"]));
 }
@@ -102,7 +102,7 @@ async fn job_cancel_mark_as_invalid_value_exits_with_error() {
 #[tokio::test]
 async fn job_requeue_tasks_with_yes_requeues_failed_tasks() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",
@@ -143,7 +143,7 @@ async fn job_requeue_tasks_with_yes_requeues_failed_tasks() {
 #[tokio::test]
 async fn job_requeue_tasks_no_matching_tasks_exits_zero() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "SUCCEEDED",
@@ -156,7 +156,7 @@ async fn job_requeue_tasks_no_matching_tasks_exits_zero() {
 #[tokio::test]
 async fn job_requeue_tasks_custom_run_status() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",
@@ -208,7 +208,7 @@ async fn job_requeue_tasks_custom_run_status() {
 #[tokio::test]
 async fn job_requeue_tasks_with_parameters_shows_param_format() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",
@@ -249,7 +249,7 @@ async fn job_requeue_tasks_with_parameters_shows_param_format() {
 #[tokio::test]
 async fn job_requeue_tasks_step_with_no_matching_tasks() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",
@@ -286,7 +286,7 @@ async fn job_requeue_tasks_step_with_no_matching_tasks() {
 #[tokio::test]
 async fn job_requeue_tasks_run_status_invalid_value_exits_with_error() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     assert_cmd_snapshot!(harness.cmd(&["job", "requeue-tasks", "--run-status", "BANANA", "--yes"]));
 }
@@ -295,7 +295,7 @@ async fn job_requeue_tasks_run_status_invalid_value_exits_with_error() {
 #[tokio::test]
 async fn job_cancel_confirm_empty_input_reprompts() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB,
         "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
@@ -327,7 +327,7 @@ async fn job_cancel_confirm_empty_input_reprompts() {
 #[tokio::test]
 async fn job_cancel_confirm_eof_exits_cleanly() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB,
         "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
@@ -357,7 +357,7 @@ async fn job_cancel_confirm_eof_exits_cleanly() {
 #[tokio::test]
 async fn job_requeue_tasks_get_job_fails_prints_error() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     errors::mock_get_job_not_found(&harness.server, FARM, QUEUE, JOB).await;
     jobs::mock_list_jobs(
         &harness.server,
@@ -374,7 +374,7 @@ async fn job_requeue_tasks_get_job_fails_prints_error() {
 #[tokio::test]
 async fn job_requeue_tasks_with_paginated_steps() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
     jobs::mock_get_job(&harness.server, FARM, QUEUE, json!({
         "jobId": JOB, "name": "Render Job", "lifecycleStatus": "CREATE_COMPLETE", "lifecycleStatusMessage": "", "priority": 50,
         "taskRunStatus": "FAILED",

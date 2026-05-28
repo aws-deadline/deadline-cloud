@@ -116,15 +116,16 @@ pub fn pascal_to_snake(s: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(unsafe_code, reason = "env var manipulation in serialized tests")]
 mod tests {
     use super::*;
-    use crate::config::ini::IniConfig;
     use serde_json::json;
     use serial_test::serial;
     use wiremock::matchers::{method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    async fn setup_env(server: &MockServer) {
+    fn setup_env(server: &MockServer) {
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe {
             std::env::set_var(
                 "AWS_ENDPOINT_URL_DEADLINE",
@@ -181,7 +182,7 @@ mod tests {
     #[serial]
     async fn collect_paginated_drains_all_pages_via_native_paginator() {
         let server = MockServer::start().await;
-        setup_env(&server).await;
+        setup_env(&server);
 
         Mock::given(method("GET")).and(path_regex(".*/farms$"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -221,7 +222,7 @@ mod tests {
     #[serial]
     async fn collect_paginated_maps_sdk_error_from_any_page() {
         let server = MockServer::start().await;
-        setup_env(&server).await;
+        setup_env(&server);
 
         Mock::given(method("GET")).and(path_regex(".*/farms$"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -259,9 +260,6 @@ mod tests {
     #[test]
     #[serial]
     fn apply_dcm_principal_noop_when_no_config() {
-        unsafe {
-            std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
-        }
         struct Fake {
             id: Option<String>,
         }
@@ -270,6 +268,10 @@ mod tests {
                 self.id = Some(id.into());
                 self
             }
+        }
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
+        unsafe {
+            std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
         }
         let result = apply_dcm_principal(Fake { id: None }, None);
         assert!(result.id.is_none());
@@ -278,9 +280,6 @@ mod tests {
     #[test]
     #[serial]
     fn apply_dcm_principal_noop_when_not_dcm_user() {
-        unsafe {
-            std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
-        }
         struct Fake {
             id: Option<String>,
         }
@@ -289,6 +288,10 @@ mod tests {
                 self.id = Some(id.into());
                 self
             }
+        }
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
+        unsafe {
+            std::env::set_var("AWS_CONFIG_FILE", "/dev/null");
         }
         let result = apply_dcm_principal(Fake { id: None }, None);
         assert!(result.id.is_none());
@@ -300,7 +303,7 @@ mod tests {
     #[serial]
     async fn sdk_err_maps_service_error_with_code_and_message() {
         let server = MockServer::start().await;
-        setup_env(&server).await;
+        setup_env(&server);
 
         Mock::given(method("GET"))
             .and(path_regex(".*/farms/farm-nope"))

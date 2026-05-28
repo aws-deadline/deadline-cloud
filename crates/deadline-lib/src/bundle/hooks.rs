@@ -1111,6 +1111,7 @@ mod tests {
     }
 
     /// Write a shell script that exits 0 with no output.
+    #[allow(dead_code, reason = "prepared for hook execution tests")]
     fn write_noop_hook(dir: &Path) -> String {
         let script = dir.join("noop.sh");
         std::fs::write(&script, "#!/bin/sh\nexit 0\n").unwrap();

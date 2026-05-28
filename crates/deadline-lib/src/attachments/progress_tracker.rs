@@ -500,6 +500,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp, reason = "exact f64 addition of small integers")]
     fn summary_statistics_aggregate_sums_all_fields() {
         let mut s1 = SummaryStatistics {
             total_time: 1.0,

@@ -95,7 +95,7 @@ fn job_detail_no_attachments(job_id: &str) -> serde_json::Value {
     })
 }
 
-async fn setup_config(harness: &TestHarness) {
+fn setup_config(harness: &TestHarness) {
     harness
         .cli(&["config", "set", "defaults.farm_id", "farm-abc"])
         .assert()
@@ -106,8 +106,8 @@ async fn setup_config(harness: &TestHarness) {
         .success();
 }
 
-async fn setup_config_with_storage_profile(harness: &TestHarness) {
-    setup_config(harness).await;
+fn setup_config_with_storage_profile(harness: &TestHarness) {
+    setup_config(harness);
     harness
         .cli(&[
             "config",
@@ -149,7 +149,7 @@ fn timestamp_filters() -> insta::Settings {
 #[tokio::test]
 async fn sync_output_storage_profile_and_ignore_mutual_exclusion() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     assert_cmd_snapshot!(harness.cmd(&[
@@ -167,7 +167,7 @@ async fn sync_output_storage_profile_and_ignore_mutual_exclusion() {
 #[tokio::test]
 async fn sync_output_no_storage_profile_configured_returns_error() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     assert_cmd_snapshot!(harness.cmd(&[
@@ -182,7 +182,7 @@ async fn sync_output_no_storage_profile_configured_returns_error() {
 #[tokio::test]
 async fn sync_output_checkpoint_storage_profile_mismatch_returns_error() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -227,7 +227,7 @@ async fn sync_output_checkpoint_storage_profile_mismatch_returns_error() {
 #[tokio::test]
 async fn sync_output_queue_no_attachments_returns_error() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_without_attachments()).await;
@@ -252,7 +252,7 @@ async fn sync_output_queue_no_attachments_returns_error() {
 #[tokio::test]
 async fn sync_output_checkpoint_dir_not_writable_returns_error() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
 
     assert_cmd_snapshot!(harness.cmd(&[
         "queue",
@@ -266,7 +266,7 @@ async fn sync_output_checkpoint_dir_not_writable_returns_error() {
 #[tokio::test]
 async fn sync_output_pid_lock_prevents_concurrent_runs() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -305,7 +305,7 @@ async fn sync_output_pid_lock_prevents_concurrent_runs() {
 #[tokio::test]
 async fn sync_output_first_run_no_jobs() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -347,7 +347,7 @@ async fn sync_output_first_run_no_jobs() {
 #[tokio::test]
 async fn sync_output_first_run_one_new_job_with_attachments() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -389,7 +389,7 @@ async fn sync_output_first_run_one_new_job_with_attachments() {
 #[tokio::test]
 async fn sync_output_job_without_attachments_skipped() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -427,7 +427,7 @@ async fn sync_output_job_without_attachments_skipped() {
 #[tokio::test]
 async fn sync_output_ignore_storage_profiles() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -454,7 +454,7 @@ async fn sync_output_ignore_storage_profiles() {
 #[tokio::test]
 async fn sync_output_subsequent_run_resumes_from_checkpoint() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -505,7 +505,7 @@ async fn sync_output_subsequent_run_resumes_from_checkpoint() {
 #[tokio::test]
 async fn sync_output_force_bootstrap_overwrites_checkpoint() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -559,7 +559,7 @@ async fn sync_output_force_bootstrap_overwrites_checkpoint() {
 #[tokio::test]
 async fn sync_output_dry_run_does_not_save_checkpoint() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -608,7 +608,7 @@ async fn sync_output_dry_run_does_not_save_checkpoint() {
 #[tokio::test]
 async fn sync_output_conflict_resolution_skip() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -644,7 +644,7 @@ async fn sync_output_conflict_resolution_skip() {
 #[tokio::test]
 async fn sync_output_json_output() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -672,7 +672,7 @@ async fn sync_output_json_output() {
 #[tokio::test]
 async fn sync_output_job_with_session_actions_no_manifests() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -745,7 +745,7 @@ async fn sync_output_job_with_session_actions_no_manifests() {
 #[tokio::test]
 async fn sync_output_search_jobs_fails_returns_error() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -774,7 +774,7 @@ async fn sync_output_search_jobs_fails_returns_error() {
 #[tokio::test]
 async fn sync_output_multi_run_job_unchanged_on_second_run() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -850,7 +850,7 @@ async fn sync_output_multi_run_job_unchanged_on_second_run() {
 #[tokio::test]
 async fn sync_output_multi_run_job_existing_task_count_changed() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -929,7 +929,7 @@ async fn sync_output_multi_run_job_existing_task_count_changed() {
 #[tokio::test]
 async fn sync_output_multi_run_job_finished_tracking_succeeded() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -1004,7 +1004,7 @@ async fn sync_output_multi_run_job_finished_tracking_succeeded() {
 #[tokio::test]
 async fn sync_output_multi_run_job_canceled() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -1079,7 +1079,7 @@ async fn sync_output_multi_run_job_canceled() {
 #[tokio::test]
 async fn sync_output_multi_run_job_without_attachments_tracked() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -1089,7 +1089,7 @@ async fn sync_output_multi_run_job_without_attachments_tracked() {
 
     // Run 1: job without attachments
     let job1 = active_job("job-noatt2", "No Att Job", 1, 0);
-    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job1.clone()], 1).await;
+    jobs::mock_search_jobs(&harness.server, "farm-abc", std::slice::from_ref(&job1), 1).await;
     jobs::mock_get_job(
         &harness.server,
         "farm-abc",
@@ -1147,7 +1147,7 @@ async fn sync_output_multi_run_job_without_attachments_tracked() {
 #[tokio::test]
 async fn sync_output_storage_profile_path_mapping_rules_printed() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -1225,7 +1225,7 @@ async fn sync_output_storage_profile_path_mapping_rules_printed() {
 #[tokio::test]
 async fn sync_output_downloads_files_to_disk() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
     let download_dir = TempDir::new().unwrap();
     let download_root = download_dir.path().to_str().unwrap();
@@ -1236,7 +1236,7 @@ async fn sync_output_downloads_files_to_disk() {
 
     // Job with 1 succeeded task
     let job = active_job("job-dl", "Download Job", 1, 0);
-    jobs::mock_search_jobs(&harness.server, "farm-abc", &[job.clone()], 1).await;
+    jobs::mock_search_jobs(&harness.server, "farm-abc", std::slice::from_ref(&job), 1).await;
 
     // GetJob returns attachments with a root path pointing to our temp dir
     let mut job_detail = job_detail_with_attachments("job-dl", None);
@@ -1367,7 +1367,7 @@ async fn sync_output_downloads_files_to_disk() {
 #[tokio::test]
 async fn sync_output_paginates_beyond_100_jobs() {
     let harness = TestHarness::new().await;
-    setup_config_with_storage_profile(&harness).await;
+    setup_config_with_storage_profile(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -1470,7 +1470,7 @@ async fn sync_output_paginates_beyond_100_jobs() {
 #[tokio::test]
 async fn sync_output_session_action_count_excludes_no_output_actions() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
     let download_dir = TempDir::new().unwrap();
     let download_root = download_dir.path().to_str().unwrap();
@@ -1584,7 +1584,7 @@ async fn sync_output_session_action_count_excludes_no_output_actions() {
 #[tokio::test]
 async fn sync_output_new_job_prints_manifest_file_system_paths() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
 
     queues::mock_get_queue(&harness.server, "farm-abc", queue_with_attachments()).await;
@@ -1647,7 +1647,7 @@ async fn sync_output_new_job_prints_manifest_file_system_paths() {
 #[tokio::test]
 async fn sync_output_warning_for_session_actions_without_manifests() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
     let download_dir = TempDir::new().unwrap();
     let download_root = download_dir.path().to_str().unwrap();
@@ -1765,7 +1765,7 @@ async fn sync_output_warning_for_session_actions_without_manifests() {
 #[tokio::test]
 async fn sync_output_path_summary_shows_per_file_listing() {
     let harness = TestHarness::new().await;
-    setup_config(&harness).await;
+    setup_config(&harness);
     let checkpoint_dir = TempDir::new().unwrap();
     let download_dir = TempDir::new().unwrap();
     let download_root = download_dir.path().to_str().unwrap();

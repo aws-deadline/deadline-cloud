@@ -184,12 +184,12 @@ fn fast_diff_large_manifest_deleted_detection_is_correct() {
     // Manifest has 10K entries: 5K match disk files, 5K are "deleted" (not on disk)
     let files: Vec<FileEntry> = (0..5_000)
         .map(|i| {
-            let mut e = FileEntry::file(&format!("file_{i:05}.txt"), 1, 1_000_000);
+            let mut e = FileEntry::file(format!("file_{i:05}.txt"), 1, 1_000_000);
             e.hash = Some(format!("{i:032x}"));
             e
         })
         .chain((0..5_000).map(|i| {
-            let mut e = FileEntry::file(&format!("deleted_{i:05}.txt"), 1, 1_000_000);
+            let mut e = FileEntry::file(format!("deleted_{i:05}.txt"), 1, 1_000_000);
             e.hash = Some(format!("{:032x}", i + 50_000));
             e
         }))

@@ -461,6 +461,7 @@ pub fn setting_description(setting_name: &str) -> &'static str {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(unsafe_code, reason = "env var manipulation in serialized tests")]
 mod tests {
     use super::*;
     use serial_test::serial;
@@ -510,6 +511,7 @@ mod tests {
     #[serial]
     fn get_config_file_path_default_no_env() {
         let _guard = EnvGuard::new(CONFIG_FILE_PATH_ENV_VAR);
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe { std::env::remove_var(CONFIG_FILE_PATH_ENV_VAR) };
         let path = get_config_file_path();
         assert!(
@@ -522,6 +524,7 @@ mod tests {
     #[serial]
     fn get_config_file_path_env_override() {
         let _guard = EnvGuard::new(CONFIG_FILE_PATH_ENV_VAR);
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe { std::env::set_var(CONFIG_FILE_PATH_ENV_VAR, "/tmp/my_config") };
         assert_eq!(get_config_file_path(), PathBuf::from("/tmp/my_config"));
     }
@@ -530,6 +533,7 @@ mod tests {
     #[serial]
     fn get_config_file_path_env_tilde() {
         let _guard = EnvGuard::new(CONFIG_FILE_PATH_ENV_VAR);
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe { std::env::set_var(CONFIG_FILE_PATH_ENV_VAR, "~/custom/config") };
         let path = get_config_file_path();
         assert!(
@@ -543,6 +547,7 @@ mod tests {
     #[serial]
     fn get_config_file_path_env_empty_falls_back() {
         let _guard = EnvGuard::new(CONFIG_FILE_PATH_ENV_VAR);
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe { std::env::set_var(CONFIG_FILE_PATH_ENV_VAR, "") };
         let path = get_config_file_path();
         assert!(path.to_str().unwrap().ends_with(".deadline/config"));
@@ -552,8 +557,10 @@ mod tests {
     #[serial]
     fn get_config_file_path_env_unset_mid_session() {
         let _guard = EnvGuard::new(CONFIG_FILE_PATH_ENV_VAR);
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe { std::env::set_var(CONFIG_FILE_PATH_ENV_VAR, "/tmp/custom") };
         assert_eq!(get_config_file_path(), PathBuf::from("/tmp/custom"));
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe { std::env::remove_var(CONFIG_FILE_PATH_ENV_VAR) };
         let path = get_config_file_path();
         assert!(path.to_str().unwrap().ends_with(".deadline/config"));
@@ -1111,7 +1118,9 @@ mod tests {
     impl Drop for EnvGuard {
         fn drop(&mut self) {
             match &self.original {
+                // SAFETY: EnvGuard is only used in #[serial] tests — no concurrent env mutation.
                 Some(val) => unsafe { std::env::set_var(&self.key, val) },
+                // SAFETY: EnvGuard is only used in #[serial] tests — no concurrent env mutation.
                 None => unsafe { std::env::remove_var(&self.key) },
             }
         }

@@ -13,7 +13,7 @@ const WORKER0: &str = "worker-0000000000000000000000000001";
 const WORKER1: &str = "worker-0000000000000000000000000002";
 const FLEET: &str = "fleet-00000000000000000000000000000001";
 
-async fn setup(harness: &TestHarness) {
+fn setup(harness: &TestHarness) {
     harness
         .cli(&["config", "set", "defaults.farm_id", FARM])
         .assert()
@@ -116,7 +116,7 @@ fn make_env_action(
 #[tokio::test]
 async fn trace_schedule_single_session_prints_summary() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     // GetJob
     jobs::mock_get_job(
@@ -175,7 +175,7 @@ async fn trace_schedule_single_session_prints_summary() {
 #[tokio::test]
 async fn trace_schedule_multiple_workers_prints_summary() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -258,7 +258,7 @@ async fn trace_schedule_multiple_workers_prints_summary() {
 #[tokio::test]
 async fn trace_schedule_with_env_actions_prints_summary() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -329,7 +329,7 @@ async fn trace_schedule_with_env_actions_prints_summary() {
 #[tokio::test]
 async fn trace_schedule_job_not_started_errors() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -352,7 +352,7 @@ async fn trace_schedule_job_not_started_errors() {
 #[tokio::test]
 async fn trace_schedule_trace_file_without_format_errors() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -382,7 +382,7 @@ async fn trace_schedule_trace_file_without_format_errors() {
 #[tokio::test]
 async fn trace_schedule_chrome_trace_file_written() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -466,7 +466,7 @@ async fn trace_schedule_chrome_trace_file_written() {
 #[tokio::test]
 async fn trace_schedule_terminal_batch_error_warns_and_continues() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -533,7 +533,7 @@ async fn trace_schedule_terminal_batch_error_warns_and_continues() {
 #[tokio::test]
 async fn trace_schedule_durations_and_overhead_reported() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -607,7 +607,7 @@ async fn trace_schedule_durations_and_overhead_reported() {
 #[tokio::test]
 async fn trace_schedule_zero_counts_for_unused_action_types() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -665,7 +665,7 @@ async fn trace_schedule_zero_counts_for_unused_action_types() {
 #[tokio::test]
 async fn trace_schedule_verbose_prints_trace_data() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -726,7 +726,7 @@ async fn trace_schedule_verbose_prints_trace_data() {
 #[tokio::test]
 async fn trace_schedule_task_with_no_params_shows_placeholder() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     jobs::mock_get_job(
         &harness.server,
@@ -807,7 +807,7 @@ async fn trace_schedule_task_with_no_params_shows_placeholder() {
 #[tokio::test]
 async fn trace_schedule_invalid_trace_format_errors() {
     let harness = TestHarness::new().await;
-    setup(&harness).await;
+    setup(&harness);
 
     assert_cmd_snapshot!(harness.cmd(&[
         "job",

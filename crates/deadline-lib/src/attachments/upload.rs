@@ -856,8 +856,6 @@ mod tests {
         AssetRootGroup, FileSystemLocation, FileSystemLocationType, StorageProfile,
     };
     use std::fs;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicU32, Ordering};
     use tempfile::TempDir;
 
     fn create_test_file(dir: &TempDir, name: &str, content: &[u8]) -> PathBuf {

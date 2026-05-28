@@ -32,8 +32,8 @@ async fn config_show_json_prints_all_settings_as_json() {
         r#""settings.config_file_path": "[CONFIG_PATH]""#,
     );
     settings.add_filter(
-        r#"/.*/\.deadline/job_history/"#,
-        r#"[HOME]/.deadline/job_history/"#,
+        r"/.*/\.deadline/job_history/",
+        r"[HOME]/.deadline/job_history/",
     );
     let _guard = settings.bind_to_scope();
 

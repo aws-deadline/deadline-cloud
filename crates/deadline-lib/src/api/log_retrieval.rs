@@ -349,14 +349,16 @@ async fn auto_select_session(
 }
 
 #[cfg(test)]
+#[allow(unsafe_code, reason = "env var manipulation in serialized tests")]
 mod tests {
     use super::*;
     use serial_test::serial;
     use wiremock::matchers::{header, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    async fn setup_env(server: &MockServer) {
+    fn setup_env(server: &MockServer) {
         let url = format!("http://localhost:{}", server.address().port());
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe {
             std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", &url);
             std::env::set_var("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &url);
@@ -388,7 +390,7 @@ mod tests {
     #[serial]
     async fn get_worker_logs_returns_events_and_metadata() {
         let server = MockServer::start().await;
-        setup_env(&server).await;
+        setup_env(&server);
 
         mock_cw_events(&server, &[
             serde_json::json!({"timestamp": 1_702_857_600_000_i64, "message": "Worker started\n", "ingestionTime": 1_702_857_601_000_i64}),
@@ -420,7 +422,7 @@ mod tests {
     #[serial]
     async fn get_worker_logs_not_found_returns_empty() {
         let server = MockServer::start().await;
-        setup_env(&server).await;
+        setup_env(&server);
 
         Mock::given(method("POST"))
             .and(header("x-amz-target", "Logs_20140328.GetLogEvents"))

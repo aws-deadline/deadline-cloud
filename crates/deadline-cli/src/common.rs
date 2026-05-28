@@ -360,6 +360,7 @@ pub(crate) fn expand_tilde(path: &str) -> std::path::PathBuf {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(unsafe_code, reason = "libc::raise and env var manipulation in serialized tests")]
 mod tests {
     use super::*;
 
@@ -652,6 +653,7 @@ mod tests {
         assert!(should_continue());
 
         // Send SIGINT to ourselves
+        // SAFETY: libc::raise is safe to call with a valid signal number; test is #[serial].
         unsafe {
             libc::raise(libc::SIGINT);
         }

@@ -1080,7 +1080,7 @@ mod tests {
     fn rebuild_manifests_no_mappings_no_filters_returns_initial() {
         let mut initial = HashMap::new();
         initial.insert(
-            "/root".to_string(),
+            "/root".to_owned(),
             vec![make_manifest(&["a.txt", "b.txt"])],
         );
 
@@ -1098,10 +1098,10 @@ mod tests {
     #[test]
     fn rebuild_manifests_applies_root_mapping() {
         let mut initial = HashMap::new();
-        initial.insert("/old".to_string(), vec![make_manifest(&["file.txt"])]);
+        initial.insert("/old".to_owned(), vec![make_manifest(&["file.txt"])]);
 
         let mut mappings = HashMap::new();
-        mappings.insert("/old".to_string(), "/new".to_string());
+        mappings.insert("/old".to_owned(), "/new".to_owned());
 
         let result = rebuild_manifests(&initial, &mappings, &[]);
 
@@ -1113,13 +1113,13 @@ mod tests {
     #[test]
     fn rebuild_manifests_root_collision_merges_manifests() {
         let mut initial = HashMap::new();
-        initial.insert("/a".to_string(), vec![make_manifest(&["one.txt"])]);
-        initial.insert("/b".to_string(), vec![make_manifest(&["two.txt"])]);
+        initial.insert("/a".to_owned(), vec![make_manifest(&["one.txt"])]);
+        initial.insert("/b".to_owned(), vec![make_manifest(&["two.txt"])]);
 
         // Map both to the same root
         let mut mappings = HashMap::new();
-        mappings.insert("/a".to_string(), "/merged".to_string());
-        mappings.insert("/b".to_string(), "/merged".to_string());
+        mappings.insert("/a".to_owned(), "/merged".to_owned());
+        mappings.insert("/b".to_owned(), "/merged".to_owned());
 
         let result = rebuild_manifests(&initial, &mappings, &[]);
 
@@ -1136,11 +1136,11 @@ mod tests {
     fn rebuild_manifests_applies_single_filter_group() {
         let mut initial = HashMap::new();
         initial.insert(
-            "/root".to_string(),
+            "/root".to_owned(),
             vec![make_manifest(&["render.exr", "log.txt"])],
         );
 
-        let filters = vec![vec!["*.exr".to_string()]];
+        let filters = vec![vec!["*.exr".to_owned()]];
 
         let result = rebuild_manifests(&initial, &HashMap::new(), &filters);
 
@@ -1155,13 +1155,13 @@ mod tests {
     fn rebuild_manifests_multiple_filter_groups_applied_sequentially() {
         let mut initial = HashMap::new();
         initial.insert(
-            "/root".to_string(),
+            "/root".to_owned(),
             vec![make_manifest(&["a.exr", "b.exr", "c.txt"])],
         );
 
         // First filter: keep only .exr files (removes c.txt)
         // Second filter: keep only files starting with "a" (removes b.exr)
-        let filters = vec![vec!["*.exr".to_string()], vec!["a*".to_string()]];
+        let filters = vec![vec!["*.exr".to_owned()], vec!["a*".to_owned()]];
 
         let result = rebuild_manifests(&initial, &HashMap::new(), &filters);
 
@@ -1179,9 +1179,9 @@ mod tests {
     #[test]
     fn rebuild_manifests_filter_removes_all_returns_empty() {
         let mut initial = HashMap::new();
-        initial.insert("/root".to_string(), vec![make_manifest(&["file.txt"])]);
+        initial.insert("/root".to_owned(), vec![make_manifest(&["file.txt"])]);
 
-        let filters = vec![vec!["*.nonexistent".to_string()]];
+        let filters = vec![vec!["*.nonexistent".to_owned()]];
 
         let result = rebuild_manifests(&initial, &HashMap::new(), &filters);
 
@@ -1192,15 +1192,15 @@ mod tests {
     fn rebuild_manifests_mapping_then_filter_uses_new_root_in_path() {
         let mut initial = HashMap::new();
         initial.insert(
-            "/old".to_string(),
+            "/old".to_owned(),
             vec![make_manifest(&["sub/file.exr", "sub/file.txt"])],
         );
 
         let mut mappings = HashMap::new();
-        mappings.insert("/old".to_string(), "/new".to_string());
+        mappings.insert("/old".to_owned(), "/new".to_owned());
 
         // Filter matches against full path: /new/sub/file.exr
-        let filters = vec![vec!["*.exr".to_string()]];
+        let filters = vec![vec!["*.exr".to_owned()]];
 
         let result = rebuild_manifests(&initial, &mappings, &filters);
 

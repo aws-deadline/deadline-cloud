@@ -5,7 +5,6 @@
 
 use std::path::Path;
 
-use deadline_lib::attachments::caches::S3CheckCache;
 use deadline_lib::attachments::models::{
     AssetRootGroup, AssetRootManifest, JobAttachmentS3Settings,
 };
@@ -18,6 +17,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 // --- Multipart POST responder ---
 // Returns CreateMultipartUpload response for ?uploads, and
 // CompleteMultipartUpload response for ?uploadId.
+#[allow(dead_code, reason = "prepared for multipart upload tests")]
 struct MultipartPostResponder;
 
 impl wiremock::Respond for MultipartPostResponder {
@@ -67,7 +67,7 @@ fn test_manifest(dir: &Path, files: &[(&str, &[u8])]) -> Snapshot {
     snap
 }
 
-/// Create files on disk and return an AssetRootGroup with those files as inputs.
+/// Create files on disk and return an `AssetRootGroup` with those files as inputs.
 fn test_group(dir: &Path, files: &[(&str, &[u8])]) -> AssetRootGroup {
     let mut inputs = std::collections::BTreeSet::new();
     for (name, content) in files {
@@ -104,6 +104,7 @@ async fn build_uploader(server: &MockServer) -> S3UploadContext {
 
 /// Build an uploader with multiplier=1 (threshold=8MB) and pool=10 (workers=5).
 /// Use with 9MB+ files to exercise the multipart upload path.
+#[allow(dead_code, reason = "prepared for multipart upload tests")]
 async fn build_uploader_low_threshold(server: &MockServer) -> S3UploadContext {
     let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(aws_config::Region::new("us-west-2"))
@@ -116,9 +117,11 @@ async fn build_uploader_low_threshold(server: &MockServer) -> S3UploadContext {
 }
 
 /// 9MB — just over the 8MB threshold when multiplier=1.
+#[allow(dead_code, reason = "prepared for multipart upload tests")]
 const LARGE_FILE_SIZE: usize = 9 * 1024 * 1024;
 
 /// Mount S3 `HeadObject` returning 200 (object exists).
+#[allow(dead_code, reason = "prepared for multipart upload tests")]
 async fn mock_s3_head_object_exists(server: &MockServer) {
     Mock::given(method("HEAD"))
         .respond_with(ResponseTemplate::new(200))
@@ -274,7 +277,7 @@ async fn upload_assets_output_dir_equals_root_uses_dot() {
         .output_relative_directories
         .as_ref()
         .unwrap();
-    assert_eq!(dirs, &vec![".".to_string()]);
+    assert_eq!(dirs, &vec![".".to_owned()]);
 }
 
 // =====================================================================

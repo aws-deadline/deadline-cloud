@@ -74,6 +74,7 @@ impl Intercept for TelemetryInterceptor {
 }
 
 #[cfg(test)]
+#[allow(unsafe_code, reason = "env var manipulation in serialized tests")]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -81,7 +82,8 @@ mod tests {
     use wiremock::matchers::{method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    async fn setup_env(server: &MockServer) {
+    fn setup_env(server: &MockServer) {
+        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe {
             std::env::set_var(
                 "AWS_ENDPOINT_URL_DEADLINE",
@@ -101,7 +103,7 @@ mod tests {
     #[serial]
     async fn telemetry_interceptor_reads_sdk_metadata_as_snake_case() {
         let server = MockServer::start().await;
-        setup_env(&server).await;
+        setup_env(&server);
 
         Mock::given(method("GET"))
             .and(path_regex(".*/farms/farm-abc"))
@@ -139,7 +141,7 @@ mod tests {
     #[serial]
     async fn telemetry_interceptor_emits_one_event_per_call() {
         let server = MockServer::start().await;
-        setup_env(&server).await;
+        setup_env(&server);
 
         Mock::given(method("GET"))
             .and(path_regex(".*/farms/farm-abc"))

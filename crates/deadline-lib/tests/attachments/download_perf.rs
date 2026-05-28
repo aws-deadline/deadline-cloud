@@ -1,6 +1,6 @@
 //! Level 1 performance test for download filter regex caching (Batch C).
 //!
-//! Verifies that filter_manifests with many files completes within a
+//! Verifies that `filter_manifests` with many files completes within a
 //! reasonable time bound. The uncached implementation (compiling a regex
 //! per filter per file) takes ~380ms for 10K files × 5 filters. After
 //! caching, it drops to <1ms. The threshold is generous (50ms) to avoid
@@ -28,7 +28,7 @@ fn make_large_manifest(file_count: usize) -> Snapshot {
     snap
 }
 
-/// Regression test: filter_manifests with 5000 files × 5 filters must
+/// Regression test: `filter_manifests` with 5000 files × 5 filters must
 /// complete in under 50ms. Before caching, this takes ~190ms due to
 /// regex compilation per call. After caching, it takes <1ms.
 #[test]
@@ -62,10 +62,10 @@ fn filter_manifests_5000_files_completes_within_budget() {
     );
 }
 
-/// Smaller correctness + perf test: matches_any_filter called repeatedly
+/// Smaller correctness + perf test: `matches_any_filter` called repeatedly
 /// with the same filters should not degrade linearly with call count.
-/// Note: matches_any_filter is a convenience function that compiles patterns
-/// per call. The hot path (filter_manifests) uses FilterSet internally.
+/// Note: `matches_any_filter` is a convenience function that compiles patterns
+/// per call. The hot path (`filter_manifests`) uses `FilterSet` internally.
 /// This test verifies the per-call overhead is acceptable for small batches.
 #[test]
 fn matches_any_filter_1000_calls_same_filters_within_budget() {

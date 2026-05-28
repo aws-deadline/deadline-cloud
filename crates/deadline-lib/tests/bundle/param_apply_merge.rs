@@ -40,7 +40,7 @@ fn apply_params_path_relative_made_absolute() {
     .unwrap();
     let value = params[0]["value"].as_str().unwrap();
     assert!(
-        std::path::Path::new(value).is_absolute(),
+        Path::new(value).is_absolute(),
         "Expected absolute path, got: {value}"
     );
 }

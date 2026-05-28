@@ -1,8 +1,8 @@
 //! Level 1 tests for download include-path filtering.
 //!
 //! Only tests that can't be reliably asserted through CLI output:
-//! - normalize_filters: preprocessing edge cases (each would need complex S3 setup at L2)
-//! - matches_any_filter: ? wildcard, [seq] class, empty filters, Windows drive letter
+//! - `normalize_filters`: preprocessing edge cases (each would need complex S3 setup at L2)
+//! - `matches_any_filter`: ? wildcard, [seq] class, empty filters, Windows drive letter
 
 use deadline_lib::attachments::download::{matches_any_filter, normalize_filters};
 
@@ -30,7 +30,7 @@ fn normalize_filters_collapses_double_slashes() {
 
 #[test]
 fn normalize_filters_drops_empty_after_normalization() {
-    let result = normalize_filters(&["./".into(), "".into(), "valid.exr".into()]);
+    let result = normalize_filters(&["./".into(), String::new(), "valid.exr".into()]);
     assert_eq!(result, vec!["valid.exr"]);
 }
 

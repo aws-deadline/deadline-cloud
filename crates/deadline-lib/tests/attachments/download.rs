@@ -13,7 +13,7 @@ use deadline_lib::attachments::download::{
 use deadline_lib::attachments::models::{FileConflictResolution, JobAttachmentS3Settings};
 use openjd_snapshots::{FileEntry, HashAlgorithm, Snapshot, WHOLE_FILE_CHUNK_SIZE};
 use tempfile::TempDir;
-use wiremock::matchers::{method, path_regex};
+use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // --- Test helpers ---
@@ -32,6 +32,7 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
     deadline_lib::attachments::s3::build_s3_client(&sdk_config, None)
 }
 
+#[allow(dead_code, reason = "prepared for download tests with real file I/O")]
 fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> Snapshot {
     let mut entries = Vec::new();
     for (name, content) in files {

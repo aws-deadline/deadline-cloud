@@ -1,6 +1,6 @@
 //! Contract tests verifying openjd-snapshots produces output compatible with
 //! the Deadline Cloud service wire format. These tests were originally in our
-//! wrapper layer (asset_manifests.rs) and are retained to catch regressions if
+//! wrapper layer (`asset_manifests.rs`) and are retained to catch regressions if
 //! openjd's behavior changes in ways that break service compatibility.
 
 use openjd_snapshots::{

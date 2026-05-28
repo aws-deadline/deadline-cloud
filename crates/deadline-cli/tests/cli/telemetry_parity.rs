@@ -412,7 +412,7 @@ async fn download_input_failure_emits_telemetry_event() {
 // Batch 4: submission event telemetry (#21h)
 // =========================================================================
 
-/// Bundle submit emits `com.amazon.rum.deadline.submission` event with submitter_name.
+/// Bundle submit emits `com.amazon.rum.deadline.submission` event with `submitter_name`.
 #[tokio::test]
 async fn bundle_submit_emits_submission_event() {
     let harness = TestHarness::new().await;
@@ -472,7 +472,7 @@ async fn bundle_submit_emits_submission_event() {
         .success();
 }
 
-/// Bundle submit emits `com.amazon.rum.deadline.create_job` event with is_success.
+/// Bundle submit emits `com.amazon.rum.deadline.create_job` event with `is_success`.
 #[tokio::test]
 async fn bundle_submit_emits_create_job_event() {
     let harness = TestHarness::new().await;
@@ -1017,7 +1017,7 @@ async fn mcp_tool_succeeds_when_telemetry_endpoint_errors() {
 }
 
 /// sync-output succeeds even when telemetry endpoint returns 500.
-/// Verifies fire-and-forget for the new queue_sync_output_stats event.
+/// Verifies fire-and-forget for the new `queue_sync_output_stats` event.
 #[tokio::test]
 async fn sync_output_succeeds_when_telemetry_endpoint_errors() {
     let harness = TestHarness::new().await;

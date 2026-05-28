@@ -323,6 +323,7 @@ fn logout_inner(profile: Option<&str>, monitor_path: &str) -> Result<String, Str
 // foundation of DCM detection and credential scoping across 7+ call sites.
 
 #[cfg(test)]
+#[allow(unsafe_code, reason = "env var manipulation in serialized tests")]
 mod tests {
     use super::*;
     use serial_test::serial;

@@ -589,7 +589,7 @@ mod tests {
 
     // --- record_success_fail (pure function, no network) ---
 
-    /// On success, emits event with is_success=true and no exception_type.
+    /// On success, emits event with `is_success=true` and no `exception_type`.
     #[test]
     fn record_success_fail_on_ok_emits_success_true() {
         // Create a client that is opted-out so it won't try to send anything,
@@ -600,7 +600,7 @@ mod tests {
         record_success_fail(&client, "test_metric", &result);
     }
 
-    /// On failure, emits event with is_success=false and exception_type set.
+    /// On failure, emits event with `is_success=false` and `exception_type` set.
     #[test]
     fn record_success_fail_on_err_emits_success_false() {
         let client = TelemetryClient::new("test", "1.0.0", true, None);
@@ -646,7 +646,7 @@ mod tests {
         // wiremock verifies expect(1..) on drop of server
     }
 
-    /// Verifies failure event includes exception_type in the body.
+    /// Verifies failure event includes `exception_type` in the body.
     #[tokio::test]
     async fn record_success_fail_failure_includes_exception_type() {
         use wiremock::matchers::{body_string_contains, method, path};
@@ -679,9 +679,9 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    /// #21i: exception_type must contain only the type name (before colon),
+    /// #21i: `exception_type` must contain only the type name (before colon),
     /// matching Python's `type(raised_exception).__name__`.
-    /// "AccessDeniedException: User is not authorized" → "AccessDeniedException"
+    /// "`AccessDeniedException`: User is not authorized" → "`AccessDeniedException`"
     #[tokio::test]
     async fn record_success_fail_exception_type_is_class_name_only() {
         use wiremock::matchers::{method, path};

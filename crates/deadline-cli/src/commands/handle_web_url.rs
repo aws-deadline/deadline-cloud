@@ -467,6 +467,7 @@ pub(crate) fn validate_resource_ids(ids: &HashMap<String, String>) -> Result<(),
 }
 
 #[cfg(test)]
+#[allow(unsafe_code, reason = "env var manipulation in serialized tests")]
 mod tests {
     use super::*;
 
@@ -704,14 +705,17 @@ mod tests {
         )
         .unwrap();
         let old_home = std::env::var("HOME").ok();
+        // SAFETY: test is #[serial] — no concurrent env mutation.
         unsafe {
             std::env::set_var("HOME", dir.path());
         }
         let profiles = read_aws_profile_names();
         match old_home {
+            // SAFETY: test is #[serial] — no concurrent env mutation.
             Some(h) => unsafe {
                 std::env::set_var("HOME", h);
             },
+            // SAFETY: test is #[serial] — no concurrent env mutation.
             None => unsafe {
                 std::env::remove_var("HOME");
             },
