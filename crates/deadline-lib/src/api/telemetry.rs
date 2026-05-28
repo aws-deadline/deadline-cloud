@@ -132,6 +132,13 @@ impl TelemetryClient {
         self.sender = Some(tx);
         self.thread_handle = Some(handle);
         self.initialized = true;
+
+        // Emit process_start event on initialization (matches Python parity)
+        self.record_event(
+            "com.amazon.rum.deadline.process_start",
+            HashMap::new(),
+            false,
+        );
     }
 
     pub fn is_initialized(&self) -> bool {
@@ -160,6 +167,31 @@ impl TelemetryClient {
                 event_details,
             });
         }
+    }
+
+    /// Record an error event with a sanitized stack trace.
+    /// Only emits exception type, scope, and sanitized frame info — no messages.
+    pub fn record_error_with_trace(
+        &self,
+        error: &dyn std::error::Error,
+        exception_scope: &str,
+        from_gui: bool,
+    ) {
+        let mut details = HashMap::new();
+        let type_name = std::any::type_name_of_val(error);
+        let short_name = type_name.rsplit("::").next().unwrap_or(type_name);
+        details.insert(
+            "exception_type".into(),
+            Value::String(short_name.to_owned()),
+        );
+        details.insert(
+            "exception_scope".into(),
+            Value::String(exception_scope.to_owned()),
+        );
+        let bt = std::backtrace::Backtrace::capture();
+        let trace = super::stack_trace_sanitizer::sanitize_backtrace(&bt);
+        details.insert("stack_trace".into(), Value::String(trace));
+        self.record_event("com.amazon.rum.deadline.error", details, from_gui);
     }
 
     pub fn update_common_details(&mut self, details: HashMap<String, Value>) {
@@ -723,6 +755,186 @@ mod tests {
         assert!(
             !body.contains("User is not authorized"),
             "body should NOT contain the full error message after the colon, got: {body}"
+        );
+    }
+
+    // --- process_start event ---
+
+    /// `process_start` event is emitted when the telemetry client initializes.
+    #[tokio::test]
+    async fn process_start_event_emitted_on_initialize() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .and(body_string_contains("com.amazon.rum.deadline.process_start"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1..)
+            .mount(&server)
+            .await;
+        // Catch-all
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
+        client.initialize_with_metadata(&endpoint, None, None, None);
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    // --- record_error_with_trace ---
+
+    /// `record_error_with_trace` emits the correct event type.
+    #[tokio::test]
+    async fn record_error_with_trace_emits_correct_event_type() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .and(body_string_contains("com.amazon.rum.deadline.error"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1..)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
+        client.initialize_with_metadata(&endpoint, None, None, None);
+
+        let err = std::io::Error::new(std::io::ErrorKind::NotFound, "secret file path");
+        client.record_error_with_trace(&err, "on_submit", false);
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    /// `record_error_with_trace` includes `exception_type` and `exception_scope`.
+    #[tokio::test]
+    async fn record_error_with_trace_includes_exception_type_and_scope() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .and(body_string_contains("exception_type"))
+            .and(body_string_contains("exception_scope"))
+            .and(body_string_contains("on_submit"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1..)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
+        client.initialize_with_metadata(&endpoint, None, None, None);
+
+        let err = std::io::Error::other("customer data here");
+        client.record_error_with_trace(&err, "on_submit", false);
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    /// `record_error_with_trace` includes a `stack_trace` field.
+    #[tokio::test]
+    async fn record_error_with_trace_includes_stack_trace_field() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .and(body_string_contains("stack_trace"))
+            .and(body_string_contains("Traceback"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1..)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
+        client.initialize_with_metadata(&endpoint, None, None, None);
+
+        let err = std::io::Error::other("oops");
+        client.record_error_with_trace(&err, "test", false);
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    /// The `stack_trace` field must not contain absolute paths.
+    #[tokio::test]
+    async fn record_error_with_trace_trace_has_no_absolute_paths() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/2023-10-12/telemetry"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let endpoint = format!("http://{}", server.address());
+        let mut client = TelemetryClient::new("deadline-cloud-library", "1.0.0", false, None);
+        client.initialize_with_metadata(&endpoint, None, None, None);
+
+        let err = std::io::Error::other("/home/customer/secret");
+        client.record_error_with_trace(&err, "test", false);
+
+        // Give time to flush
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Inspect what was sent
+        let requests = server.received_requests().await.unwrap();
+        let bodies: Vec<String> = requests
+            .iter()
+            .map(|r| String::from_utf8_lossy(&r.body).to_string())
+            .collect();
+        let error_body = bodies
+            .iter()
+            .find(|b| b.contains("stack_trace"))
+            .expect("should have received an error telemetry event");
+
+        // Must not contain customer paths
+        assert!(
+            !error_body.contains("/home/customer"),
+            "Error message leaked into telemetry: {error_body}"
+        );
+        assert!(
+            !error_body.contains("/Users/"),
+            "Absolute path leaked into telemetry: {error_body}"
         );
     }
 }

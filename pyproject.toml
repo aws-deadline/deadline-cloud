@@ -11,12 +11,18 @@ license = {text = "Apache-2.0"}
 dependencies = ["pyyaml>=6.0"]
 
 [project.optional-dependencies]
+gui = [
+    "PySide6>=6.5",
+    "qtpy>=2.3",
+]
 test = [
     "pytest>=7.0",
     "xa11y",
     "openjd-model>=0.9",
     "pyyaml>=6.0",
     "botocore",
+    "PySide6>=6.5",
+    "qtpy>=2.3",
 ]
 dev = [
     "ruff",

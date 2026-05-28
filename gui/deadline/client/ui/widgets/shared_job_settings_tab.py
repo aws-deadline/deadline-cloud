@@ -17,7 +17,6 @@ from qtpy.QtWidgets import (  # type: ignore
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QRadioButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -37,6 +36,7 @@ from ...config import get_setting
 from .._utils import tr
 from ..controllers import AsyncTaskRunner, DeadlineUIController
 from .openjd_parameters_widget import OpenJDParametersWidget
+from .radio_button_widget import HoverRadioButton
 
 
 class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-methods
@@ -259,8 +259,8 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_worker_count_box_label.setToolTip(tr("Maximum worker count of job."))
         self.max_worker_count_box = QSpinBox()
         self.max_worker_count_box.setRange(1, 2147483647)
-        self.unlimited_max_worker_count = QRadioButton(tr("No max worker count"))
-        self.limited_max_worker_count = QRadioButton(tr("Set max worker count"))
+        self.unlimited_max_worker_count = HoverRadioButton(tr("No max worker count"))
+        self.limited_max_worker_count = HoverRadioButton(tr("Set max worker count"))
         self.limited_max_worker_count.toggled.connect(self.limited_max_worker_count_radio_button_toggled)
         self.max_worker_count_layout = QVBoxLayout()
         self.max_worker_count_layout.addWidget(self.unlimited_max_worker_count)

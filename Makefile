@@ -41,10 +41,10 @@ test-rust:
 test-python: test-ui test-bindings
 
 test-ui: build-python
-	$(PYTHON) -m pytest pytests/ui_accessibility/ -v
+	VIRTUAL_ENV=$(CURDIR)/$(VENV_DIR) $(PYTHON) -m pytest pytests/ui_accessibility/ -v
 
 test-bindings: build-python
-	$(PYTHON) -m pytest pytests/bindings/ -v
+	VIRTUAL_ENV=$(CURDIR)/$(VENV_DIR) $(PYTHON) -m pytest pytests/bindings/ -v
 
 # ── Setup (once after clone or after dependency changes) ──
 

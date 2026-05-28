@@ -11,6 +11,7 @@ pub mod log_retrieval;
 pub mod queue_parameters;
 pub mod responses;
 pub mod session;
+pub mod stack_trace_sanitizer;
 pub mod telemetry;
 pub mod telemetry_interceptor;
 pub mod type_conversions;

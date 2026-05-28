@@ -24,6 +24,8 @@ __all__ = [
     "DeadlineFarmListComboBoxController",
     "DeadlineQueueListComboBoxController",
     "DeadlineStorageProfileListComboBoxController",
+    # Utility widgets
+    "HoverRadioButton",
 ]
 
 from ._deadline_list_combo_boxes import (
@@ -50,6 +52,7 @@ from .path_widgets import (
     InputFilePickerWidget,
     OutputFilePickerWidget,
 )
+from .radio_button_widget import HoverRadioButton
 from .shared_job_settings_tab import (
     DeadlineCloudSettingsWidget,
     SharedJobPropertiesWidget,

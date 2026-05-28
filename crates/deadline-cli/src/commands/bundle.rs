@@ -375,14 +375,8 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
             let job_id = match create_job_from_job_bundle(submit_params).await {
                 Ok(id) => id,
                 Err(e) => {
-                    // F6: Emit error telemetry before flushing
-                    let mut details = std::collections::HashMap::new();
-                    details.insert("exception_scope".into(), serde_json::json!("on_submit"));
-                    details.insert(
-                        "exception_type".into(),
-                        serde_json::json!("DeadlineOperationError"),
-                    );
-                    telemetry.record_event("com.amazon.rum.deadline.error", details, false);
+                    // F6: Emit error telemetry with sanitized stack trace
+                    telemetry.record_error_with_trace(&e, "on_submit", false);
                     drop(telemetry); // Flush telemetry before exit
                     let farm =
                         config_file::get_setting("defaults.farm_id", &config).unwrap_or_default();

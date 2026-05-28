@@ -81,6 +81,36 @@ impl TelemetryClient {
         Ok(())
     }
 
+    /// Record an error telemetry event with a sanitized stack trace.
+    #[pyo3(signature = (exception_type, exception_scope, stack_trace, from_gui=false))]
+    fn record_error_with_trace(
+        &self,
+        exception_type: &str,
+        exception_scope: &str,
+        stack_trace: &str,
+        from_gui: bool,
+    ) -> PyResult<()> {
+        let client = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| DeadlineOperationError::new_err("telemetry client is closed"))?;
+        let mut map = HashMap::new();
+        map.insert(
+            "exception_type".into(),
+            serde_json::Value::String(exception_type.to_owned()),
+        );
+        map.insert(
+            "exception_scope".into(),
+            serde_json::Value::String(exception_scope.to_owned()),
+        );
+        map.insert(
+            "stack_trace".into(),
+            serde_json::Value::String(stack_trace.to_owned()),
+        );
+        client.record_event("com.amazon.rum.deadline.error", map, from_gui);
+        Ok(())
+    }
+
     /// Update common details merged into every future telemetry event.
     fn update_common_details(&mut self, details: &Bound<'_, PyDict>) -> PyResult<()> {
         let client = self

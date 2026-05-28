@@ -3,7 +3,29 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **None — between items**
+Active work item: **Python repo parity — telemetry + UI (2026-05-28)**
+
+**Status: Step 3 complete, awaiting review**
+
+Porting 3 features from deadline-cloud-python (commits 7a68ce1, 53b648d, e90e1e7):
+
+1. `process_start` telemetry event on client init
+2. Stack trace sanitizer + `record_error_with_trace`
+3. `HoverRadioButton` widget
+
+Files created/modified:
+- `crates/deadline-lib/src/api/stack_trace_sanitizer.rs` (new)
+- `crates/deadline-lib/src/api/telemetry.rs` (process_start + record_error_with_trace + 5 tests)
+- `crates/deadline-lib/src/api/mod.rs` (register module)
+- `crates/deadline-cli/src/commands/bundle.rs` (use record_error_with_trace)
+- `crates/deadline-python-bindings/src/telemetry.rs` (PyO3 binding)
+- `gui/deadline/client/ui/widgets/radio_button_widget.py` (new)
+- `gui/deadline/client/ui/widgets/host_requirements_tab.py` (use HoverRadioButton)
+- `gui/deadline/client/ui/widgets/shared_job_settings_tab.py` (use HoverRadioButton)
+- `gui/deadline/client/ui/widgets/__init__.py` (export)
+
+Test results: 1,367 Rust tests pass (12 new). clippy --all-targets clean.
+ruff check + format clean.
 
 ---
 

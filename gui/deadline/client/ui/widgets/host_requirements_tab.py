@@ -34,7 +34,6 @@ from qtpy.QtWidgets import (  # type: ignore
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QRadioButton,
     QSizePolicy,
     QSpacerItem,
     QSpinBox,
@@ -51,6 +50,7 @@ from ..dataclasses import (
     HostRequirements,
     OsRequirements,
 )
+from .radio_button_widget import HoverRadioButton
 
 logger = getLogger(__name__)
 
@@ -202,11 +202,11 @@ class OverrideRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
 
     def _build_ui(self):
         # Use Fleet Default button
-        self.use_default_button = QRadioButton(tr("Run on all available worker hosts"))
+        self.use_default_button = HoverRadioButton(tr("Run on all available worker hosts"))
         self.use_default_button.setChecked(True)
 
         # Use customized settings button + tip
-        self.use_custom_button = QRadioButton(tr("Run on worker hosts that meet the following requirements"))
+        self.use_custom_button = HoverRadioButton(tr("Run on worker hosts that meet the following requirements"))
         self.use_custom_button_tip = QHBoxLayout()
         self.custom_button_tip_text = QLabel(tr("All fields below are optional"))
         custom_button_label_font = self.custom_button_tip_text.font()
@@ -694,9 +694,9 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.name_label = QLabel(tr("Attribute name"))
         self.name_label.setFixedWidth(LABEL_FIXED_WIDTH)
         self.value_label = QLabel(tr("Value(s)"))
-        self.all_of_button = QRadioButton(tr("All"))
+        self.all_of_button = HoverRadioButton(tr("All"))
         self.all_of_button.setChecked(True)
-        self.any_of_button = QRadioButton(tr("Any"))
+        self.any_of_button = HoverRadioButton(tr("Any"))
         self.name_line_edit = QLineEdit()
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
         assert (100 - len(ATTRIBUTE_CAPABILITY_PREFIX)) > 0
