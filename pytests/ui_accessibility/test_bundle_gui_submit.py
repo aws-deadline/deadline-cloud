@@ -66,9 +66,7 @@ class TestQueueSelection:
         farm = backend.create_farm(displayName="TestFarm", description="")
         # Create queues where the configured one sorts AFTER another
         backend.create_queue(farmId=farm["farmId"], displayName="AAA Queue", description="")
-        queue_b = backend.create_queue(
-            farmId=farm["farmId"], displayName="ZZZ Queue", description=""
-        )
+        queue_b = backend.create_queue(farmId=farm["farmId"], displayName="ZZZ Queue", description="")
 
         config_file = tmp_path / "deadline.config"
         config_file.write_text(
@@ -107,11 +105,7 @@ class TestQueueSelection:
                     "steps": [
                         {
                             "name": "Step",
-                            "script": {
-                                "actions": {
-                                    "onRun": {"command": "bash", "args": ["-c", "echo hi"]}
-                                }
-                            },
+                            "script": {"actions": {"onRun": {"command": "bash", "args": ["-c", "echo hi"]}}},
                         }
                     ],
                 }
@@ -133,9 +127,7 @@ class TestFarmSelection:
         # Create farms where the configured one sorts AFTER another
         backend.create_farm(displayName="AAA Farm", description="")
         farm_b = backend.create_farm(displayName="ZZZ Farm", description="")
-        backend.create_queue(
-            farmId=farm_b["farmId"], displayName="MyQueue", description=""
-        )
+        backend.create_queue(farmId=farm_b["farmId"], displayName="MyQueue", description="")
 
         config_file = tmp_path / "deadline.config"
         config_file.write_text(
@@ -174,11 +166,7 @@ class TestFarmSelection:
                     "steps": [
                         {
                             "name": "Step",
-                            "script": {
-                                "actions": {
-                                    "onRun": {"command": "bash", "args": ["-c", "echo hi"]}
-                                }
-                            },
+                            "script": {"actions": {"onRun": {"command": "bash", "args": ["-c", "echo hi"]}}},
                         }
                     ],
                 }

@@ -6,19 +6,20 @@ A UI Widget containing the timeout settings widget.
 
 from __future__ import annotations
 
-from typing import Dict, Optional
 from datetime import timedelta
+from typing import Dict, Optional
 
+from qtpy.QtCore import Signal
 from qtpy.QtWidgets import (  # type: ignore
+    QCheckBox,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QLabel,
     QSpinBox,
-    QCheckBox,
-    QGridLayout,
     QWidget,
 )
-from qtpy.QtCore import Signal
+
 from .._utils import tr
 from ..dataclasses.timeouts import TimeoutTableEntries
 
@@ -280,8 +281,7 @@ class TimeoutTableWidget(QGroupBox):
         Updates the error message label based on validation of all timeout rows.
         """
         any_zero = any(
-            row.get_timeout_seconds() == 0 and row.checkbox.isChecked()
-            for row in self.timeout_rows.values()
+            row.get_timeout_seconds() == 0 and row.checkbox.isChecked() for row in self.timeout_rows.values()
         )
         self.error_label.setText(tr("Error: Timeout cannot be set to zero.") if any_zero else "")
         self.error_label.setVisible(any_zero)

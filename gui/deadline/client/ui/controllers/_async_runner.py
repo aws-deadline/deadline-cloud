@@ -12,7 +12,6 @@ from qtpy.QtCore import QObject, Qt, Signal
 from ._async_task import AsyncTask
 from ._thread_pool import DeadlineThreadPool
 
-
 logger = getLogger(__name__)
 
 

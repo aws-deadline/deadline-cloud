@@ -10,15 +10,11 @@ Example code:
 
 __all__ = ["DeadlineConfigDialog"]
 
+import os
 from configparser import ConfigParser
 from logging import getLogger, root
 from typing import Callable, Dict, List, Optional
 
-from ..._compat import FileConflictResolution, JobAttachmentsFileSystem, str2bool
-from deadline._native import (
-    logout as _native_logout,
-    set_setting as _native_set_setting,
-)
 from qtpy.QtCore import QSize, Qt, Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
@@ -34,25 +30,33 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QListWidget,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpacerItem,
     QStyle,
     QVBoxLayout,
     QWidget,
-    QScrollArea,
 )
 
-import os
+from deadline._native import (
+    logout as _native_logout,
+)
+from deadline._native import (
+    set_setting as _native_set_setting,
+)
 
-from ..deadline_authentication_status import DeadlineAuthenticationStatus
+from ..._compat import FileConflictResolution, JobAttachmentsFileSystem, str2bool
 from ...config import config_file, get_setting_default
 from .._utils import block_signals, tr
-from ..widgets import DirectoryPickerWidget
-from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
+from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from ..widgets import (
     DeadlineFarmListComboBoxController,
     DeadlineQueueListComboBoxController,
     DeadlineStorageProfileListComboBoxController,
+    DirectoryPickerWidget,
+)
+from ..widgets.deadline_authentication_status_widget import (
+    DeadlineAuthenticationStatusWidget,
 )
 from .deadline_login_dialog import DeadlineLoginDialog
 
@@ -71,9 +75,7 @@ class DeadlineConfigDialog(QDialog):
     """
 
     @staticmethod
-    def configure_settings(
-        parent: Optional[QWidget] = None, set_profile_focus: bool = False
-    ) -> bool:
+    def configure_settings(parent: Optional[QWidget] = None, set_profile_focus: bool = False) -> bool:
         """
         Static method that runs the Deadline Config Dialog.
 
@@ -92,9 +94,7 @@ class DeadlineConfigDialog(QDialog):
         return deadline_config.changes_were_applied
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(
-            parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
-        )
+        super().__init__(parent=parent, f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint)
 
         self.setWindowTitle(tr("AWS Deadline Cloud workstation configuration"))
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
@@ -131,14 +131,10 @@ class DeadlineConfigDialog(QDialog):
 
         self.config_box.refreshed.connect(self.on_refresh)
 
-        self.auth_status_box = DeadlineAuthenticationStatusWidget(
-            parent=self, show_profile_switch=False
-        )
+        self.auth_status_box = DeadlineAuthenticationStatusWidget(parent=self, show_profile_switch=False)
         self.layout.addWidget(self.auth_status_box)
         self.deadline_authentication_status.deadline_config_changed.connect(self.config_box.refresh)
-        self.deadline_authentication_status.api_availability_changed.connect(
-            self.on_auth_status_update
-        )
+        self.deadline_authentication_status.api_availability_changed.connect(self.on_auth_status_update)
 
         # We only use a Close button, not OK/Cancel, because we live update the settings.
         self.button_box = QDialogButtonBox(
@@ -323,9 +319,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
             parent=group,
             collapse_user_dir=True,
         )
-        job_history_dir_label = self.labels["settings.job_history_dir"] = QLabel(
-            tr("Job history directory")
-        )
+        job_history_dir_label = self.labels["settings.job_history_dir"] = QLabel(tr("Job history directory"))
         layout.addRow(job_history_dir_label, self.job_history_dir_edit)
         self.job_history_dir_edit.path_changed.connect(self.job_history_dir_changed)
 
@@ -352,18 +346,12 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self._controller.farms_updated.connect(self._on_farms_list_updated, Qt.QueuedConnection)
         self._controller.queues_updated.connect(self._on_queues_list_updated, Qt.QueuedConnection)
 
-        self.default_storage_profile_box = DeadlineStorageProfileListComboBoxController(
-            parent=group
-        )
+        self.default_storage_profile_box = DeadlineStorageProfileListComboBoxController(parent=group)
         default_storage_profile_box_label = self.labels["settings.storage_profile_id"] = QLabel(
             tr("Default storage profile")
         )
-        self.default_storage_profile_box.box.currentIndexChanged.connect(
-            self.default_storage_profile_name_changed
-        )
-        self.default_storage_profile_box.background_exception.connect(
-            self.handle_background_exception
-        )
+        self.default_storage_profile_box.box.currentIndexChanged.connect(self.default_storage_profile_name_changed)
+        self.default_storage_profile_box.background_exception.connect(self.handle_background_exception)
         layout.addRow(default_storage_profile_box_label, self.default_storage_profile_box)
 
         item_name_copied = JobAttachmentsFileSystem.COPIED.value
@@ -456,9 +444,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         # Add refresh callback for locale message
         def refresh_locale_message():
             if "settings.locale" in self.changes:
-                self.locale_change_message.setText(
-                    tr("Language will change next time the submitter is opened")
-                )
+                self.locale_change_message.setText(tr("Language will change next time the submitter is opened"))
                 self.locale_change_message.show()
             else:
                 self.locale_change_message.hide()
@@ -467,9 +453,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         # Known asset paths section
         known_paths_label = QLabel(tr("Known asset paths"))
-        known_paths_label.setToolTip(
-            "Paths that should not generate warnings when outside storage profile locations"
-        )
+        known_paths_label.setToolTip("Paths that should not generate warnings when outside storage profile locations")
         self.labels["settings.known_asset_paths"] = known_paths_label
 
         known_paths_widget = QWidget(parent=group)
@@ -503,9 +487,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         def refresh_known_paths():
             with block_signals(self.known_paths_list):
                 self.known_paths_list.clear()
-                paths_str = config_file.get_setting(
-                    "settings.known_asset_paths", config=self.config
-                )
+                paths_str = config_file.get_setting("settings.known_asset_paths", config=self.config)
                 if paths_str:
                     paths = paths_str.split(os.pathsep)
                     self.known_paths_list.addItems(paths)
@@ -723,6 +705,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
     def _fill_aws_profiles_box(self):
         try:
             import configparser
+
             profiles = set()
             for path in [
                 os.path.expanduser("~/.aws/config"),
@@ -772,9 +755,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.default_storage_profile_box.set_config(self.config)
 
         with block_signals(self.aws_profiles_box):
-            aws_profile_name = config_file.get_setting(
-                "defaults.aws_profile_name", config=self.config
-            )
+            aws_profile_name = config_file.get_setting("defaults.aws_profile_name", config=self.config)
             # Change the values representing the default to the UI value representing the default
             if aws_profile_name in ("(default)", "default", ""):
                 aws_profile_name = "(default)"
@@ -788,9 +769,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
                 self.aws_profiles_box.setCurrentIndex(0)
 
         with block_signals(self.job_history_dir_edit):
-            job_history_dir = config_file.get_setting(
-                "settings.job_history_dir", config=self.config
-            )
+            job_history_dir = config_file.get_setting("settings.job_history_dir", config=self.config)
             self.job_history_dir_edit.setText(job_history_dir)
 
         self.default_farm_box.refresh_selected_id()
@@ -818,9 +797,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         """
 
         # We need to retrieve here as changing Queue's won't update.
-        self.changes["settings.storage_profile_id"] = (
-            self.default_storage_profile_box.box.currentData() or ""
-        )
+        self.changes["settings.storage_profile_id"] = self.default_storage_profile_box.box.currentData() or ""
 
         for setting_name, value in self.changes.items():
             if value and value.startswith(NOT_VALID_MARKER):
@@ -873,9 +850,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
     def job_history_dir_changed(self):
         job_history_dir = self.job_history_dir_edit.text()
         # Only apply the change if the text was actually edited
-        if job_history_dir != config_file.get_setting(
-            "settings.job_history_dir", config=self.config
-        ):
+        if job_history_dir != config_file.get_setting("settings.job_history_dir", config=self.config):
             self.changes["settings.job_history_dir"] = job_history_dir
         self.refresh()
 

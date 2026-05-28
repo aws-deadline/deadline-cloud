@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from qtpy.QtCore import Qt, Signal, QSize
+from qtpy.QtCore import QSize, Qt, Signal
 from qtpy.QtGui import QCloseEvent, QFontMetrics
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
@@ -19,18 +19,18 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QProgressBar,
+    QPushButton,
+    QSizePolicy,
     QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QSizePolicy,
 )
 
-from .._utils import tr
-from ...config import set_setting
 from ..._compat import ProgressReportMetadata
+from ...config import set_setting
+from .._utils import tr
 from ._job_submission_worker import JobSubmissionWorker
 
 __all__ = ["SubmitJobProgressDialog"]
@@ -104,15 +104,9 @@ class SubmitJobProgressDialog(QDialog):
         # Connect worker signals to dialog signals/handlers
         # Using Qt.QueuedConnection ensures thread-safe signal delivery
         self._worker.print_message.connect(self.submission_thread_print.emit, Qt.QueuedConnection)
-        self._worker.hashing_progress.connect(
-            self.submission_thread_hashing_progress.emit, Qt.QueuedConnection
-        )
-        self._worker.upload_progress.connect(
-            self.submission_thread_upload_progress.emit, Qt.QueuedConnection
-        )
-        self._worker.confirmation_requested.connect(
-            self._handle_confirmation_requested, Qt.QueuedConnection
-        )
+        self._worker.hashing_progress.connect(self.submission_thread_hashing_progress.emit, Qt.QueuedConnection)
+        self._worker.upload_progress.connect(self.submission_thread_upload_progress.emit, Qt.QueuedConnection)
+        self._worker.confirmation_requested.connect(self._handle_confirmation_requested, Qt.QueuedConnection)
         self._worker.succeeded.connect(self._handle_worker_succeeded, Qt.QueuedConnection)
         self._worker.failed.connect(self._handle_worker_failed, Qt.QueuedConnection)
 
@@ -153,9 +147,7 @@ class SubmitJobProgressDialog(QDialog):
     def _build_ui(self):
         """Builds job submission progress UI"""
         # Remove help button from title bar
-        self.setWindowFlags(
-            (self.windowFlags() & ~Qt.WindowContextHelpButtonHint) | Qt.WindowCloseButtonHint
-        )
+        self.setWindowFlags((self.windowFlags() & ~Qt.WindowContextHelpButtonHint) | Qt.WindowCloseButtonHint)
         self.lyt = QVBoxLayout(self)
         self.lyt.setContentsMargins(5, 10, 5, 5)
         self.setMinimumWidth(600)
@@ -211,9 +203,7 @@ class SubmitJobProgressDialog(QDialog):
         """
         self.submission_log.append(f"{message}\n")
 
-    def handle_hashing_thread_progress_report(
-        self, progress_metadata: ProgressReportMetadata
-    ) -> None:
+    def handle_hashing_thread_progress_report(self, progress_metadata: ProgressReportMetadata) -> None:
         """
         Handles the signal sent from the background thread when reporting
         hashing progress. Sets the progress bar in the dialog based on
@@ -222,9 +212,7 @@ class SubmitJobProgressDialog(QDialog):
         self.hashing_progress.progress_bar.setValue(int(progress_metadata.progress))
         self.hashing_progress.progress_message.setText(progress_metadata.progress_message)
 
-    def handle_upload_thread_progress_report(
-        self, progress_metadata: ProgressReportMetadata
-    ) -> None:
+    def handle_upload_thread_progress_report(self, progress_metadata: ProgressReportMetadata) -> None:
         """
         Handles the signal sent from the background thread when reporting
         upload progress. Sets the progress bar in the dialog based on
@@ -243,9 +231,7 @@ class SubmitJobProgressDialog(QDialog):
             self.status_label.setText(tr("Submission complete"))
             self.button_box.setStandardButtons(QDialogButtonBox.Ok)
             self.button_box.button(QDialogButtonBox.Ok).setDefault(True)
-            self.button_box.button(QDialogButtonBox.Ok).clicked.connect(
-                self.progress_window_closed.emit
-            )
+            self.button_box.button(QDialogButtonBox.Ok).clicked.connect(self.progress_window_closed.emit)
         else:
             if self._is_canceled() or self._warning_dialog_canceled:
                 self.status_label.setText(tr("Submission canceled"))
@@ -323,9 +309,7 @@ class _JobSumissionWarningDialog(QDialog):
     Simple Dialog which functions similar to a QMessageBox, but with a scrollable text area.
     """
 
-    def __init__(
-        self, message: str, default_response: bool = False, parent: Optional[QWidget] = None
-    ):
+    def __init__(self, message: str, default_response: bool = False, parent: Optional[QWidget] = None):
         """
         Simple Dialog which functions similar to a QMessageBox, but with a scrollable text area.
 

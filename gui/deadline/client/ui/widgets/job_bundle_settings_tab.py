@@ -12,18 +12,21 @@ from typing import Any, Optional
 
 from qtpy.QtCore import Signal  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
-    QVBoxLayout,
-    QWidget,
     QFileDialog,
     QMessageBox,
+    QVBoxLayout,
+    QWidget,
 )
 
+from ...config import config_file
+from ...job_bundle.loader import (
+    read_yaml_or_json_object,
+    validate_directory_symlink_containment,
+)
+from ...job_bundle.parameters import read_job_bundle_parameters
+from ...job_bundle.submission import AssetReferences
 from ..dataclasses import JobBundleSettings
 from .openjd_parameters_widget import OpenJDParametersWidget
-from ...job_bundle.submission import AssetReferences
-from ...job_bundle.loader import read_yaml_or_json_object, validate_directory_symlink_containment
-from ...job_bundle.parameters import read_job_bundle_parameters
-from ...config import config_file
 
 logger = getLogger(__name__)
 
@@ -68,13 +71,9 @@ class JobBundleSettingsWidget(QWidget):
             if widget:
                 widget.deleteLater()
 
-        self.parameters_widget = OpenJDParametersWidget(
-            parameter_definitions=settings.parameters, parent=self
-        )
+        self.parameters_widget = OpenJDParametersWidget(parameter_definitions=settings.parameters, parent=self)
         self.param_layout.addWidget(self.parameters_widget)
-        self.parameters_widget.parameter_changed.connect(
-            lambda message: self.parameter_changed.emit(message)
-        )
+        self.parameters_widget.parameter_changed.connect(lambda message: self.parameter_changed.emit(message))
 
     def on_load_bundle(self):
         """
@@ -82,9 +81,7 @@ class JobBundleSettingsWidget(QWidget):
         """
         # Open the file picker dialog
         bundle_path = os.path.expanduser(config_file.get_setting("settings.job_history_dir"))
-        input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            self, "Choose job bundle directory", bundle_path
-        )
+        input_job_bundle_dir = QFileDialog.getExistingDirectory(self, "Choose job bundle directory", bundle_path)
         if not input_job_bundle_dir:
             return
 
@@ -95,9 +92,7 @@ class JobBundleSettingsWidget(QWidget):
         try:
             validate_directory_symlink_containment(input_job_bundle_dir)
 
-            asset_references_obj = (
-                read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
-            )
+            asset_references_obj = read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
             asset_references = AssetReferences.from_dict(asset_references_obj)
 
             # Load the template to get the bundle name

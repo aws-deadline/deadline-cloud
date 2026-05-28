@@ -9,7 +9,6 @@ in Rust behind the FFI.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class AwsCredentialsSource(str, Enum):

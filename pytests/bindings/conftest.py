@@ -42,9 +42,7 @@ def _find_server_binary() -> str:
     )
     if candidates[0].exists():
         return str(candidates[0])
-    raise FileNotFoundError(
-        "Could not find ffi-test-server binary. Run: cargo build --bin ffi-test-server"
-    )
+    raise FileNotFoundError("Could not find ffi-test-server binary. Run: cargo build --bin ffi-test-server")
 
 
 @pytest.fixture(scope="session")

@@ -10,6 +10,7 @@ import logging
 import webbrowser
 from typing import Optional
 
+from qtpy.QtCore import Qt  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QDialog,
     QHBoxLayout,
@@ -20,10 +21,9 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QVBoxLayout,
     QWidget,
 )
-from qtpy.QtCore import Qt  # pylint: disable=import-error
 
-from .._utils import tr
 from ...config import config_file
+from .._utils import tr
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +94,7 @@ class UpdateAvailableDialog(QDialog):
         headline = QLabel(
             "<b>"
             + tr(
-                "Version {latest_version} of Deadline Cloud for"
-                " {integration_name} submitter is now available."
+                "Version {latest_version} of Deadline Cloud for {integration_name} submitter is now available."
             ).format(
                 latest_version=self.latest_version,
                 integration_name=self.integration_name,
@@ -176,9 +175,9 @@ class UpdateAvailableDialog(QDialog):
         QMessageBox.information(
             self,
             tr("Application Restart Required"),
-            tr(
-                "Please run the installer and then restart {integration_name} to use the new version."
-            ).format(integration_name=self.integration_name),
+            tr("Please run the installer and then restart {integration_name} to use the new version.").format(
+                integration_name=self.integration_name
+            ),
         )
         self.accept()
 

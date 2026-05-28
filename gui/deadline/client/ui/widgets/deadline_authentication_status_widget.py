@@ -1,4 +1,3 @@
-# coding: utf-8
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
@@ -8,28 +7,27 @@ The current status is handled by DeadlineAuthenticationStatus.
 """
 
 import enum
-
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Callable, Union, Dict, Optional
+from typing import Callable, Dict, Optional, Union
 
 from qtpy.QtCore import Signal
-from .._utils import tr
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
+    QApplication,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
-    QApplication,
-    QStyle,
     QMenu,
-    QPushButton,
     QMessageBox,
-    QGroupBox,
+    QPushButton,
+    QStyle,
     QWidget,
 )
 
-from ..._compat import AwsCredentialsSource, AwsAuthenticationStatus
-from ..deadline_authentication_status import DeadlineAuthenticationStatus
+from ..._compat import AwsAuthenticationStatus, AwsCredentialsSource
 from ...config import config_file
+from .._utils import tr
+from ..deadline_authentication_status import DeadlineAuthenticationStatus
 
 logger = getLogger(__name__)
 
@@ -177,9 +175,7 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
         self._auth_menu = RightAlignedQMenu(self._profile_button)
 
         self._show_profile_switch = show_profile_switch
-        self._switch_profile_menu_action = self._auth_menu.addAction(
-            "Switch profile", self.switch_profile_clicked.emit
-        )
+        self._switch_profile_menu_action = self._auth_menu.addAction("Switch profile", self.switch_profile_clicked.emit)
         self._logout_menu_action = self._auth_menu.addAction("Log out", self.logout_clicked.emit)
 
         layout.addWidget(self._profile_button)
@@ -244,17 +240,15 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
             ),
             AuthenticationState.AUTHENTICATED_NO_API: AuthenticationStateConfig(
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
-                text=lambda: tr(
-                    "{profile} doesn't have access permissions to submit a job."
-                ).format(profile=self._get_profile_name()),
+                text=lambda: tr("{profile} doesn't have access permissions to submit a job.").format(
+                    profile=self._get_profile_name()
+                ),
                 logout_visible=self._should_show_logout,
                 more_info_visible=True,
             ),
             AuthenticationState.NEEDS_LOGIN: AuthenticationStateConfig(
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
-                text=tr("{profile}  -  You are logged out.").format(
-                    profile=self._get_profile_name()
-                ),
+                text=tr("{profile}  -  You are logged out.").format(profile=self._get_profile_name()),
                 switch_profile_button_visible=True,
                 login_visible=True,
             ),
@@ -288,15 +282,9 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
 
         if is_refreshing:
             return AuthenticationState.REFRESHING
-        elif (
-            self._status.auth_status == AwsAuthenticationStatus.AUTHENTICATED
-            and self._status.api_availability
-        ):
+        elif self._status.auth_status == AwsAuthenticationStatus.AUTHENTICATED and self._status.api_availability:
             return AuthenticationState.AUTHENTICATED_READY
-        elif (
-            self._status.auth_status == AwsAuthenticationStatus.AUTHENTICATED
-            and not self._status.api_availability
-        ):
+        elif self._status.auth_status == AwsAuthenticationStatus.AUTHENTICATED and not self._status.api_availability:
             return AuthenticationState.AUTHENTICATED_NO_API
         elif self._status.auth_status == AwsAuthenticationStatus.NEEDS_LOGIN:
             return AuthenticationState.NEEDS_LOGIN
@@ -386,17 +374,13 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
 
         # Set visibility states
         # Only one of the switch profile button or menu action are shown at a time
-        self._switch_profile_button.setVisible(
-            config.switch_profile_button_visible and self._show_profile_switch
-        )
+        self._switch_profile_button.setVisible(config.switch_profile_button_visible and self._show_profile_switch)
         self._switch_profile_menu_action.setVisible(
             not config.switch_profile_button_visible and self._show_profile_switch
         )
 
         self._login_button.setVisible(config.login_visible)
-        logout_visible = (
-            config.logout_visible() if callable(config.logout_visible) else config.logout_visible
-        )
+        logout_visible = config.logout_visible() if callable(config.logout_visible) else config.logout_visible
         self._logout_menu_action.setVisible(logout_visible)
         self._more_info_button.setVisible(config.more_info_visible)
 

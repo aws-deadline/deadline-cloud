@@ -115,9 +115,7 @@ class InputFilePickerWidget(_FileWidget):
         collapse_user_dir: bool = False,
         parent: Optional[QWidget] = None,
     ):
-        super().__init__(
-            initial_filename, file_label, filter, selected_filter, collapse_user_dir, parent
-        )
+        super().__init__(initial_filename, file_label, filter, selected_filter, collapse_user_dir, parent)
 
     def file_dialog(self, parent, caption, dir):
         filename, selected_filter = QFileDialog.getOpenFileName(
@@ -162,9 +160,7 @@ class OutputFilePickerWidget(_FileWidget):
         collapse_user_dir: bool = False,
         parent: Optional[QWidget] = None,
     ):
-        super().__init__(
-            initial_filename, file_label, filter, selected_filter, collapse_user_dir, parent
-        )
+        super().__init__(initial_filename, file_label, filter, selected_filter, collapse_user_dir, parent)
 
     def file_dialog(self, parent, caption, dir):
         filename, selected_filter = QFileDialog.getSaveFileName(

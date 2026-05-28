@@ -10,9 +10,16 @@ from typing import Optional
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QColor, QIcon, QPalette
-from qtpy.QtWidgets import QApplication, QFileDialog, QMainWindow, QStyleFactory, QWidget
+from qtpy.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QMainWindow,
+    QStyleFactory,
+    QWidget,
+)
 
 from deadline._native import logout as _native_logout
+
 from .cli_job_submitter import show_cli_job_submitter
 from .dialogs import DeadlineConfigDialog, DeadlineLoginDialog
 from .job_bundle_submitter import show_job_bundle_submitter
@@ -38,9 +45,7 @@ class DevMainWindow(QMainWindow):
         # the most flexibility, since we don't really have a "main" widget.
         self.setCentralWidget(None)  # type: ignore[arg-type]
 
-        self.setDockOptions(
-            QMainWindow.AllowNestedDocks | QMainWindow.AllowTabbedDocks | QMainWindow.AnimatedDocks
-        )
+        self.setDockOptions(QMainWindow.AllowNestedDocks | QMainWindow.AllowTabbedDocks | QMainWindow.AnimatedDocks)
 
     def setup_ui(self):
         submit = self.menuBar().addMenu("&Submit job")
@@ -56,9 +61,7 @@ class DevMainWindow(QMainWindow):
         self.statusBar().showMessage("Testing!")
 
     def submit_job_bundle(self):
-        input_job_bundle_dir = os.path.normpath(
-            os.path.join(__file__, "../resources/cli_job_bundle")
-        )
+        input_job_bundle_dir = os.path.normpath(os.path.join(__file__, "../resources/cli_job_bundle"))
         input_job_bundle_dir = QFileDialog.getExistingDirectory(
             self, "Choose job bundle directory", input_job_bundle_dir
         )

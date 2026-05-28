@@ -25,9 +25,14 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from deadline._native import (
     get_farm as _native_get_farm,
+)
+from deadline._native import (
     get_queue as _native_get_queue,
+)
+from deadline._native import (
     list_storage_profiles_for_queue as _native_list_storage_profiles,
 )
+
 from ...config import get_setting
 from .._utils import tr
 from ..controllers import AsyncTaskRunner, DeadlineUIController
@@ -71,9 +76,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         # override the queue parameter defaults.
         self.initial_shared_parameter_values = initial_shared_parameter_values
 
-        self.shared_job_properties_box = SharedJobPropertiesWidget(
-            initial_settings=initial_settings, parent=self
-        )
+        self.shared_job_properties_box = SharedJobPropertiesWidget(initial_settings=initial_settings, parent=self)
         layout.addWidget(self.shared_job_properties_box)
 
         self.deadline_cloud_settings_box = DeadlineCloudSettingsWidget(parent=self)
@@ -83,9 +86,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             async_loading_state="Loading Queue Environments...", parent=self
         )
         layout.addWidget(self.queue_parameters_box)
-        self.queue_parameters_box.parameter_changed.connect(
-            lambda message: self.parameter_changed.emit(message)
-        )
+        self.queue_parameters_box.parameter_changed.connect(lambda message: self.parameter_changed.emit(message))
 
         # Track current farm/queue IDs for change detection
         self.farm_id = get_setting("defaults.farm_id")
@@ -94,15 +95,9 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
 
         # Connect to the controller for queue parameters
         self._controller = DeadlineUIController.getInstance()
-        self._controller.queue_parameters_updated.connect(
-            self._handle_queue_parameters_update, Qt.QueuedConnection
-        )
-        self._controller.queue_parameters_loading.connect(
-            self._handle_queue_parameters_loading, Qt.QueuedConnection
-        )
-        self._controller.operation_failed.connect(
-            self._handle_operation_failed, Qt.QueuedConnection
-        )
+        self._controller.queue_parameters_updated.connect(self._handle_queue_parameters_update, Qt.QueuedConnection)
+        self._controller.queue_parameters_loading.connect(self._handle_queue_parameters_loading, Qt.QueuedConnection)
+        self._controller.operation_failed.connect(self._handle_operation_failed, Qt.QueuedConnection)
 
         # Start initial load
         self._start_load_queue_parameters()
@@ -136,22 +131,14 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         if not farm_id or not queue_id:
             self.queue_parameters_box.rebuild_ui(async_loading_state="")
             return  # If the user has not selected a farm or queue ID, don't try to load
-        if (
-            self.queue_parameters_box.async_loading_state
-            or queue_id != self.queue_id
-            or load_new_bundle
-        ):
-            self.queue_parameters_box.rebuild_ui(
-                async_loading_state="Reloading Queue Environments..."
-            )
+        if self.queue_parameters_box.async_loading_state or queue_id != self.queue_id or load_new_bundle:
+            self.queue_parameters_box.rebuild_ui(async_loading_state="Reloading Queue Environments...")
             self._start_load_queue_parameters()
 
     def _handle_queue_parameters_loading(self, is_loading: bool) -> None:
         """Handle loading state changes from the controller."""
         if is_loading:
-            self.queue_parameters_box.rebuild_ui(
-                async_loading_state="Loading Queue Environments..."
-            )
+            self.queue_parameters_box.rebuild_ui(async_loading_state="Loading Queue Environments...")
 
     def _handle_operation_failed(self, operation_name: str, error: BaseException) -> None:
         """Handle operation failures from the controller."""
@@ -274,9 +261,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
         self.max_worker_count_box.setRange(1, 2147483647)
         self.unlimited_max_worker_count = QRadioButton(tr("No max worker count"))
         self.limited_max_worker_count = QRadioButton(tr("Set max worker count"))
-        self.limited_max_worker_count.toggled.connect(
-            self.limited_max_worker_count_radio_button_toggled
-        )
+        self.limited_max_worker_count.toggled.connect(self.limited_max_worker_count_radio_button_toggled)
         self.max_worker_count_layout = QVBoxLayout()
         self.max_worker_count_layout.addWidget(self.unlimited_max_worker_count)
         self.max_worker_count_layout.addWidget(self.limited_max_worker_count)
@@ -303,9 +288,7 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
 
         # Set all fields with type checking
         self.initial_status_box.setCurrentText(
-            settings.initial_status
-            if self._has_compatible_attr(settings, "initial_status", str)
-            else "READY"
+            settings.initial_status if self._has_compatible_attr(settings, "initial_status", str) else "READY"
         )
         self.max_failed_tasks_count_box.setValue(
             settings.max_failed_tasks_count
@@ -313,18 +296,12 @@ class SharedJobPropertiesWidget(QGroupBox):  # pylint: disable=too-few-public-me
             else 20
         )
         self.max_retries_per_task_box.setValue(
-            settings.max_retries_per_task
-            if self._has_compatible_attr(settings, "max_retries_per_task", int)
-            else 5
+            settings.max_retries_per_task if self._has_compatible_attr(settings, "max_retries_per_task", int) else 5
         )
-        self.priority_box.setValue(
-            settings.priority if self._has_compatible_attr(settings, "priority", int) else 50
-        )
+        self.priority_box.setValue(settings.priority if self._has_compatible_attr(settings, "priority", int) else 50)
 
         has_limited_max_worker_count = (
-            (settings.max_worker_count > 0)
-            if self._has_compatible_attr(settings, "max_worker_count", int)
-            else False
+            (settings.max_worker_count > 0) if self._has_compatible_attr(settings, "max_worker_count", int) else False
         )
         self.unlimited_max_worker_count.setChecked(not has_limited_max_worker_count)
         self.limited_max_worker_count.setChecked(has_limited_max_worker_count)

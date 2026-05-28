@@ -16,9 +16,7 @@ from helpers import SubmitterDialog, last_json_object
 class TestSubmitJobSuccess:
     """A successful submission hits the mock backend and writes a bundle."""
 
-    def test_submit_creates_job_history_bundle(
-        self, bundle_dir, submitter_env, deadline_env
-    ) -> None:
+    def test_submit_creates_job_history_bundle(self, bundle_dir, submitter_env, deadline_env) -> None:
         backend, _ = deadline_env
         job_history_dir = submitter_env["_JOB_HISTORY_DIR"]
         with SubmitterDialog.open(bundle_dir, env=submitter_env) as app:
@@ -28,9 +26,7 @@ class TestSubmitJobSuccess:
         assert backend.call_counts.get("CreateJob", 0) == 1, backend.call_counts
         assert os.path.isdir(job_history_dir)
         found_template = any(
-            fn.startswith("template.")
-            for root, _dirs, files in os.walk(job_history_dir)
-            for fn in files
+            fn.startswith("template.") for root, _dirs, files in os.walk(job_history_dir) for fn in files
         )
         assert found_template, "No template file found in job-history bundle"
 
@@ -38,9 +34,7 @@ class TestSubmitJobSuccess:
 class TestOutputJsonSuccess:
     """--output json prints SUBMITTED JSON after a successful submission."""
 
-    def test_json_output_contains_submitted_status_and_job_id(
-        self, bundle_dir, submitter_env, deadline_env
-    ) -> None:
+    def test_json_output_contains_submitted_status_and_job_id(self, bundle_dir, submitter_env, deadline_env) -> None:
         backend, _ = deadline_env
         with SubmitterDialog.open(
             bundle_dir,

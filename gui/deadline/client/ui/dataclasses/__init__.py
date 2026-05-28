@@ -19,7 +19,7 @@ __all__ = [
 
 import os
 from dataclasses import dataclass, field
-from typing import Literal, Dict, List, Union
+from typing import Dict, List, Literal, Union
 
 from ...job_bundle.parameters import JobParameter
 
@@ -107,9 +107,7 @@ class OsRequirements:
                 )
         for cpu in self.cpu_archs:
             if cpu not in self.CPU_ARCHITECTURES:
-                raise ValueError(
-                    f"CPU architecture {cpu} is in supported list: {self.CPU_ARCHITECTURES}."
-                )
+                raise ValueError(f"CPU architecture {cpu} is in supported list: {self.CPU_ARCHITECTURES}.")
 
     def serialize(self) -> list:
         requirements: List[dict] = []
@@ -128,9 +126,7 @@ class OsRequirements:
         if self.cpu_archs:
             for cpu in self.cpu_archs:
                 if cpu not in self.CPU_ARCHITECTURES:
-                    raise ValueError(
-                        f"CPU architecture {cpu} is not in supported list: {self.CPU_ARCHITECTURES}."
-                    )
+                    raise ValueError(f"CPU architecture {cpu} is not in supported list: {self.CPU_ARCHITECTURES}.")
             requirements.append(
                 {
                     "name": "attr.worker.cpu.arch",
@@ -162,16 +158,12 @@ class HardwareRequirements:
         self._validate(self.cpu_min, self.cpu_max, "CPU")
         self._validate(self.memory_min, self.memory_max, "Memory")
         self._validate(self.acceleration_min, self.acceleration_max, "Acceleration")
-        self._validate(
-            self.acceleration_memory_min, self.acceleration_memory_max, "Acceleration Memory"
-        )
+        self._validate(self.acceleration_memory_min, self.acceleration_memory_max, "Acceleration Memory")
         self._validate(self.scratch_space_min, self.scratch_space_max, "Scratch Space")
 
     def _validate(self, minimum: int, maximum: int, name: str):
         if minimum != self.DEFAULT_VALUE and maximum != self.DEFAULT_VALUE and minimum > maximum:
-            raise ValueError(
-                f"{name} Minimum cannot be higher than {name} Maximum. {minimum} > {maximum}"
-            )
+            raise ValueError(f"{name} Minimum cannot be higher than {name} Maximum. {minimum} > {maximum}")
 
     def _serialize(self, minimum, maximum, name):
         requirements: List[dict] = []
@@ -189,12 +181,8 @@ class HardwareRequirements:
     def serialize(self) -> list:
         requirements: List[dict] = []
         requirements.extend(self._serialize(self.cpu_min, self.cpu_max, "amount.worker.vcpu"))
-        requirements.extend(
-            self._serialize(self.memory_min, self.memory_max, "amount.worker.memory")
-        )
-        requirements.extend(
-            self._serialize(self.acceleration_min, self.acceleration_max, "amount.worker.gpu")
-        )
+        requirements.extend(self._serialize(self.memory_min, self.memory_max, "amount.worker.memory"))
+        requirements.extend(self._serialize(self.acceleration_min, self.acceleration_max, "amount.worker.gpu"))
         requirements.extend(
             self._serialize(
                 self.acceleration_memory_min,
@@ -203,9 +191,7 @@ class HardwareRequirements:
             )
         )
         requirements.extend(
-            self._serialize(
-                self.scratch_space_min, self.scratch_space_max, "amount.worker.disk.scratch"
-            )
+            self._serialize(self.scratch_space_min, self.scratch_space_max, "amount.worker.disk.scratch")
         )
         return requirements
 
@@ -253,9 +239,7 @@ class CustomAttributeRequirement:
         if not self.name:
             raise ValueError(f"Custom Amount {self} has no name")
         elif not self.option or self.option not in CustomAttributeRequirement.OPTIONS:
-            raise ValueError(
-                f"Custom Amount {self} option is not in {CustomAttributeRequirement.OPTIONS}"
-            )
+            raise ValueError(f"Custom Amount {self} option is not in {CustomAttributeRequirement.OPTIONS}")
 
     def serialize(self) -> dict:
         if not self.name:

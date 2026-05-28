@@ -17,16 +17,16 @@ from configparser import ConfigParser
 from typing import Optional
 
 from qtpy.QtCore import Qt, Signal
-from .._utils import tr
-from ..controllers import AsyncTaskRunner
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QMessageBox,
     QWidget,
 )
 
-from deadline._native import login as _native_login, DeadlineOperationError
-from ..._compat import AwsCredentialsSource
+from deadline._native import login as _native_login
+
+from .._utils import tr
+from ..controllers import AsyncTaskRunner
 
 
 class DeadlineLoginDialog(QMessageBox):
@@ -139,11 +139,7 @@ class DeadlineLoginDialog(QMessageBox):
         """
         self.setStandardButtons(QMessageBox.Close)
         self.setIcon(QMessageBox.Warning)
-        self.setText(
-            tr("Failed to log in to AWS Deadline Cloud:<br/><br/>{error}").format(
-                error=html.escape(str(e))
-            )
-        )
+        self.setText(tr("Failed to log in to AWS Deadline Cloud:<br/><br/>{error}").format(error=html.escape(str(e))))
 
     def handle_login_thread_message(self, message: str) -> None:
         """
@@ -164,9 +160,7 @@ class DeadlineLoginDialog(QMessageBox):
             self.setStandardButtons(QMessageBox.Ok)
             self.setIcon(QMessageBox.Information)
             self.setText(
-                tr("Successfully logged into: <br/><br/>{profile}").format(
-                    profile=html.escape(success_message)
-                )
+                tr("Successfully logged into: <br/><br/>{profile}").format(profile=html.escape(success_message))
             )
 
     def on_button_clicked(self, button):

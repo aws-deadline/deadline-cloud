@@ -1,17 +1,16 @@
-# coding: utf-8
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """UI Components for the Render Submitter"""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
-import json
 from typing import Any, Dict, Optional, Protocol
-import yaml
 
+import yaml
 from qtpy.QtCore import QSize, Qt  # pylint: disable=import-error
 from qtpy.QtGui import QKeyEvent  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -27,29 +26,30 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
-from .submit_job_progress_dialog import SubmitJobProgressDialog
-
-from ..dataclasses import HostRequirements
-from ...dataclasses import SubmitterInfo
 from deadline._native import (
     logout as _native_logout,
-    DeadlineOperationError,
 )
+
 from ...api import session_context as _session_context
-from ..deadline_authentication_status import DeadlineAuthenticationStatus
-from .._utils import block_signals, tr
-from ...config import get_setting, set_setting, config_file
-from ...exceptions import UserInitiatedCancel, NonValidInputError
+from ...config import config_file, get_setting, set_setting
+from ...dataclasses import SubmitterInfo
+from ...exceptions import NonValidInputError, UserInitiatedCancel
 from ...job_bundle import create_job_history_bundle_dir
 from ...job_bundle.parameters import JobParameter
 from ...job_bundle.submission import AssetReferences
-from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
+from .._utils import block_signals, tr
+from ..dataclasses import HostRequirements
+from ..deadline_authentication_status import DeadlineAuthenticationStatus
+from ..widgets.deadline_authentication_status_widget import (
+    DeadlineAuthenticationStatusWidget,
+)
+from ..widgets.host_requirements_tab import HostRequirementsWidget
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
 from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
-from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
-from ._types import JobBundlePurpose
 from ._help_dialog import _HelpDialog
+from ._types import JobBundlePurpose
+from .submit_job_progress_dialog import SubmitJobProgressDialog
 
 logger = logging.getLogger(__name__)
 
@@ -140,9 +140,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.setMinimumSize(400, 400)
 
         self.job_settings_type = type(initial_job_settings)
-        self.submitter_info = submitter_info or SubmitterInfo(
-            submitter_name=self.job_settings_type().submitter_name
-        )
+        self.submitter_info = submitter_info or SubmitterInfo(submitter_name=self.job_settings_type().submitter_name)
         _session_context["submitter-name"] = self.submitter_info.submitter_name
         _session_context["submitter-version"] = self.submitter_info.submitter_package_version
 
@@ -229,9 +227,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.auth_status_box.logout_clicked.connect(self.on_logout)
         self.auth_status_box.login_clicked.connect(self.on_login)
         self.lyt.addWidget(self.auth_status_box)
-        self.deadline_authentication_status.api_availability_changed.connect(
-            self.refresh_deadline_settings
-        )
+        self.deadline_authentication_status.api_availability_changed.connect(self.refresh_deadline_settings)
 
         # Refresh the submit button enable state once queue parameter status changes
         self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
@@ -271,28 +267,16 @@ class SubmitJobToDeadlineDialog(QDialog):
         if not enable:
             issues = []
             if not api_available:
-                issues.append(
-                    tr(
-                        "AWS Deadline Cloud API is not accessible. Check your authentication status."
-                    )
-                )
+                issues.append(tr("AWS Deadline Cloud API is not accessible. Check your authentication status."))
             if not farm_configured:
-                issues.append(
-                    tr("No farm is configured. Click Settings to select a farm for job submission.")
-                )
+                issues.append(tr("No farm is configured. Click Settings to select a farm for job submission."))
             if not queue_configured:
-                issues.append(
-                    tr("No queue is configured. Click Settings to select a queue within your farm.")
-                )
+                issues.append(tr("No queue is configured. Click Settings to select a queue within your farm."))
             if farm_configured and queue_configured and not queue_valid:
-                issues.append(
-                    tr("Queue parameters are not valid. Check Shared job settings tab for details.")
-                )
+                issues.append(tr("Queue parameters are not valid. Check Shared job settings tab for details."))
 
             self.submit_button.setToolTip(
-                tr("Cannot submit job:\n\n\u2022 {issues}").format(
-                    issues="\n\n\u2022 ".join(issues)
-                )
+                tr("Cannot submit job:\n\n\u2022 {issues}").format(issues="\n\n\u2022 ".join(issues))
             )
         else:
             self.submit_button.setToolTip("")
@@ -333,21 +317,15 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.tabs.addTab(self.job_settings_tab, tr("Job-specific settings"))
         self.job_settings_tab.setWidgetResizable(True)
 
-        self.job_settings = job_setup_widget_type(
-            initial_settings=initial_job_settings, parent=self
-        )
+        self.job_settings = job_setup_widget_type(initial_settings=initial_job_settings, parent=self)
         self.job_settings_tab.setWidget(self.job_settings)
         if hasattr(self.job_settings, "parameter_changed"):
             self.job_settings.parameter_changed.connect(self.on_job_template_parameter_changed)
 
-    def _build_job_attachments_tab(
-        self, auto_detected_attachments: AssetReferences, attachments: AssetReferences
-    ):
+    def _build_job_attachments_tab(self, auto_detected_attachments: AssetReferences, attachments: AssetReferences):
         self.job_attachments_tab = QScrollArea()
         self.tabs.addTab(self.job_attachments_tab, tr("Job attachments"))
-        self.job_attachments = JobAttachmentsWidget(
-            auto_detected_attachments, attachments, parent=self
-        )
+        self.job_attachments = JobAttachmentsWidget(auto_detected_attachments, attachments, parent=self)
         self.job_attachments_tab.setWidget(self.job_attachments)
         self.job_attachments_tab.setWidgetResizable(True)
 
@@ -487,12 +465,8 @@ class SubmitJobToDeadlineDialog(QDialog):
                 os.startfile(self.job_history_bundle_dir)
             QMessageBox.information(
                 self,
-                tr("{submitter} job submission").format(
-                    submitter=self.submitter_info.submitter_name
-                ),
-                tr("Saved the submission as a job bundle:\n{path}").format(
-                    path=self.job_history_bundle_dir
-                ),
+                tr("{submitter} job submission").format(submitter=self.submitter_info.submitter_name),
+                tr("Saved the submission as a job bundle:\n{path}").format(path=self.job_history_bundle_dir),
             )
             # Close the submitter window to signal the submission is done
             self.close()
@@ -505,15 +479,11 @@ class SubmitJobToDeadlineDialog(QDialog):
             message = str(exc)
             QMessageBox.critical(
                 self,
-                tr("{submitter} job submission").format(
-                    submitter=self.submitter_info.submitter_name
-                ),
+                tr("{submitter} job submission").format(submitter=self.submitter_info.submitter_name),
                 message,
             )  # type: ignore[call-arg]
 
-    def save_job_parameters_to_job_bundle(
-        self, job_bundle_dir: str, job_parameters: list[JobParameter]
-    ):
+    def save_job_parameters_to_job_bundle(self, job_bundle_dir: str, job_parameters: list[JobParameter]):
         """
         Saves the job parameters to the job bundle. If the job bundle already has a parameter_values file,
         it updates it. Otherwise it creates it.
@@ -522,12 +492,12 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         job_parameters_file = os.path.join(job_bundle_dir, "parameter_values.yaml")
         if os.path.exists(job_parameters_file):
-            with open(job_parameters_file, "r", encoding="utf8") as f:
+            with open(job_parameters_file, encoding="utf8") as f:
                 existing_job_parameters = yaml.safe_load(f).get("parameterValues", [])
         else:
             job_parameters_file = os.path.join(job_bundle_dir, "parameter_values.json")
             if os.path.exists(job_parameters_file):
-                with open(job_parameters_file, "r", encoding="utf8") as f:
+                with open(job_parameters_file, encoding="utf8") as f:
                     existing_job_parameters = json.load(f).get("parameterValues", [])
             else:
                 existing_job_parameters = []
@@ -555,9 +525,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         asset_references = self.job_attachments.get_asset_references()
 
         job_progress_dialog = SubmitJobProgressDialog(parent=self)
-        job_progress_dialog.submission_thread_succeeded.connect(
-            self._submission_succeeded_signal_receiver
-        )
+        job_progress_dialog.submission_thread_succeeded.connect(self._submission_succeeded_signal_receiver)
         job_progress_dialog.progress_window_closed.connect(self._close_event_receiver)
         job_progress_dialog.setModal(True)
         job_progress_dialog.show()
@@ -605,17 +573,14 @@ class SubmitJobToDeadlineDialog(QDialog):
                 config=config_file.read_config(),
                 require_paths_exist=self.job_attachments.get_require_paths_exist(),
                 job_parameters=job_parameters,
-                known_asset_paths=self.known_asset_paths
-                + parameters_from_callback.get("known_asset_paths", []),
+                known_asset_paths=self.known_asset_paths + parameters_from_callback.get("known_asset_paths", []),
             )
 
         except UserInitiatedCancel as uic:
             logger.info("Canceling submission.")
             QMessageBox.information(
                 self,
-                tr("{submitter} job submission").format(
-                    submitter=self.submitter_info.submitter_name
-                ),
+                tr("{submitter} job submission").format(submitter=self.submitter_info.submitter_name),
                 str(uic),
             )
             job_progress_dialog.close()
@@ -626,6 +591,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             logger.exception("error submitting job")
             try:
                 from deadline._native import TelemetryClient
+
                 tc = TelemetryClient()
                 tc.record_event(
                     "com.amazon.rum.deadline.error",
@@ -635,9 +601,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 logger.debug("Failed to record telemetry event", exc_info=True)
             QMessageBox.critical(
                 self,
-                tr("{submitter} job submission").format(
-                    submitter=self.submitter_info.submitter_name
-                ),
+                tr("{submitter} job submission").format(submitter=self.submitter_info.submitter_name),
                 str(exc),
             )  # type: ignore[call-arg]
             job_progress_dialog.close()

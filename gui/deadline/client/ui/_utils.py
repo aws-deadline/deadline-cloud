@@ -1,13 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-from contextlib import contextmanager
-from functools import lru_cache
-from typing import Any, Dict, TYPE_CHECKING
 import json
 import locale as locale_module
+from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict
 
-from ..exceptions import DeadlineOperationError
 from ..config import config_file
+from ..exceptions import DeadlineOperationError
 
 # Import TranslationKey type only during type checking to avoid runtime errors
 # if _translation_keys.py doesn't exist (it's generated during build)
@@ -112,11 +112,11 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
     """
     import importlib
     import os
-    from os.path import basename, dirname, join, normpath
     import shlex
     import shutil
     import subprocess
     import sys
+    from os.path import basename, dirname, join, normpath
     from pathlib import Path
 
     has_pyside6 = importlib.util.find_spec("PySide6")
@@ -167,9 +167,7 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
 
                 subprocess.run([python_executable] + pip_command, env=env)
             else:
-                print(
-                    "Unable to install GUI dependencies, if you have python available you can install it by running:"
-                )
+                print("Unable to install GUI dependencies, if you have python available you can install it by running:")
                 print()
                 print(f"\t{' '.join(shlex.quote(v) for v in ['python'] + pip_command)}")
                 print()
@@ -204,18 +202,14 @@ def gui_context_for_cli(automatically_install_dependencies: bool):
         import os
         import shlex
 
-        command = f"{os.path.basename(sys.argv[0])} " + " ".join(
-            shlex.quote(v) for v in sys.argv[1:]
-        )
+        command = f"{os.path.basename(sys.argv[0])} " + " ".join(shlex.quote(v) for v in sys.argv[1:])
         QMessageBox.warning(None, f'Error running "{command}"', str(e))  # type: ignore[call-overload, call-arg, arg-type]
     except Exception:
         import os
         import shlex
         import traceback
 
-        command = f"{os.path.basename(sys.argv[0])} " + " ".join(
-            shlex.quote(v) for v in sys.argv[1:]
-        )
+        command = f"{os.path.basename(sys.argv[0])} " + " ".join(shlex.quote(v) for v in sys.argv[1:])
         QMessageBox.warning(  # type: ignore[call-overload, call-arg]
             None,  # type: ignore[arg-type]
             f'Error running "{command}"',

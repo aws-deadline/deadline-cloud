@@ -31,9 +31,9 @@ Example usage::
     controller.refresh_farms()
 """
 
+from ._async_runner import AsyncTaskRunner as AsyncTaskRunner
 from ._async_task import AsyncTask as AsyncTask
 from ._async_task import WorkerSignals as WorkerSignals
-from ._async_runner import AsyncTaskRunner as AsyncTaskRunner
 from ._deadline_controller import DeadlineUIController as DeadlineUIController
 from ._thread_pool import DeadlineThreadPool as DeadlineThreadPool
 

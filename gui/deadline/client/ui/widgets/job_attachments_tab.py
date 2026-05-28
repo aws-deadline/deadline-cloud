@@ -5,24 +5,25 @@ UI widgets for the job attachments tab.
 """
 
 from __future__ import annotations
+
 import os
 from logging import getLogger
 from typing import Optional
 
 from qtpy.QtWidgets import (  # type: ignore
     QAbstractItemView,
-    QFileDialog,
-    QHBoxLayout,
     QCheckBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
-    QLabel,
     QVBoxLayout,
     QWidget,
-    QGroupBox,
-    QMessageBox,
 )
 
 from ...job_bundle.submission import AssetReferences
@@ -95,9 +96,7 @@ class JobAttachmentsWidget(QWidget):
 
         # The "Attach Input Files" attachments
         self.input_files_controls = JobAttachmentsControlsWidget(self)
-        self.input_files_controls.show_auto_detected.stateChanged.connect(
-            self.show_auto_detected_change
-        )
+        self.input_files_controls.show_auto_detected.stateChanged.connect(self.show_auto_detected_change)
         self.input_files_controls.add.clicked.connect(self._add_input_files)
         self.input_files_controls.remove_selected.clicked.connect(self._remove_selected_input_files)
         self.input_files = QListWidget(parent=self)
@@ -111,13 +110,9 @@ class JobAttachmentsWidget(QWidget):
 
         # The "Attach input directories" attachments
         self.input_directories_controls = JobAttachmentsControlsWidget(self)
-        self.input_directories_controls.show_auto_detected.stateChanged.connect(
-            self.show_auto_detected_change
-        )
+        self.input_directories_controls.show_auto_detected.stateChanged.connect(self.show_auto_detected_change)
         self.input_directories_controls.add.clicked.connect(self._add_input_directory)
-        self.input_directories_controls.remove_selected.clicked.connect(
-            self._remove_selected_input_directories
-        )
+        self.input_directories_controls.remove_selected.clicked.connect(self._remove_selected_input_directories)
         self.input_directories = QListWidget(parent=self)
         self.input_directories.itemSelectionChanged.connect(self._update_status_messages)
         self.input_directories.setSortingEnabled(False)
@@ -129,13 +124,9 @@ class JobAttachmentsWidget(QWidget):
 
         # The "Specify output directories" attachments
         self.output_directories_controls = JobAttachmentsControlsWidget(self)
-        self.output_directories_controls.show_auto_detected.stateChanged.connect(
-            self.show_auto_detected_change
-        )
+        self.output_directories_controls.show_auto_detected.stateChanged.connect(self.show_auto_detected_change)
         self.output_directories_controls.add.clicked.connect(self._add_output_directory)
-        self.output_directories_controls.remove_selected.clicked.connect(
-            self._remove_selected_output_directories
-        )
+        self.output_directories_controls.remove_selected.clicked.connect(self._remove_selected_output_directories)
         self.output_directories = QListWidget(parent=self)
         self.output_directories.itemSelectionChanged.connect(self._update_status_messages)
         self.output_directories.setSortingEnabled(False)
@@ -185,9 +176,7 @@ class JobAttachmentsWidget(QWidget):
         self.attachments_controls = self._build_attachment_controls()
         self._populate_attachment_lists()
 
-    def _set_attachments_list(
-        self, list_widget: QListWidget, auto_detected_paths: set[str], paths: set[str]
-    ):
+    def _set_attachments_list(self, list_widget: QListWidget, auto_detected_paths: set[str], paths: set[str]):
         with block_signals(list_widget):
             list_widget.clear()
             if auto_detected_paths:
@@ -232,9 +221,7 @@ class JobAttachmentsWidget(QWidget):
             )
 
     def _add_input_files(self) -> None:
-        new_files, _ = QFileDialog.getOpenFileNames(
-            self, "Select input files to attach to your job"
-        )
+        new_files, _ = QFileDialog.getOpenFileNames(self, "Select input files to attach to your job")
 
         if new_files:
             # Normalize the paths
@@ -247,9 +234,7 @@ class JobAttachmentsWidget(QWidget):
 
     def _remove_selected_input_files(self) -> None:
         selected_files = [item.text() for item in self.input_files.selectedItems()]
-        unremoved_files = self.auto_detected_attachments.input_filenames.intersection(
-            selected_files
-        )
+        unremoved_files = self.auto_detected_attachments.input_filenames.intersection(selected_files)
         # Remove the selected items only from the added attachments, not the auto-detected ones
         self.attachments.input_filenames.difference_update(selected_files)
         self._populate_attachment_lists()
@@ -274,9 +259,7 @@ class JobAttachmentsWidget(QWidget):
 
     def _remove_selected_input_directories(self) -> None:
         selected_dirs = [item.text() for item in self.input_directories.selectedItems()]
-        unremoved_dirs = self.auto_detected_attachments.input_directories.intersection(
-            selected_dirs
-        )
+        unremoved_dirs = self.auto_detected_attachments.input_directories.intersection(selected_dirs)
         # Remove the selected items only from the added attachments, not the auto-detected ones
         self.attachments.input_directories.difference_update(selected_dirs)
         self._populate_attachment_lists()
@@ -301,9 +284,7 @@ class JobAttachmentsWidget(QWidget):
 
     def _remove_selected_output_directories(self) -> None:
         selected_dirs = [item.text() for item in self.output_directories.selectedItems()]
-        unremoved_dirs = self.auto_detected_attachments.output_directories.intersection(
-            selected_dirs
-        )
+        unremoved_dirs = self.auto_detected_attachments.output_directories.intersection(selected_dirs)
         # Remove the selected items only from the added attachments, not the auto-detected ones
         self.attachments.output_directories.difference_update(selected_dirs)
         self._populate_attachment_lists()

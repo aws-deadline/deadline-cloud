@@ -14,8 +14,9 @@ import subprocess
 import sys
 import time
 import weakref
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence, TypeVar
+from typing import Optional, TypeVar
 
 import xa11y
 
@@ -27,9 +28,8 @@ def _deadline_binary() -> str:
         candidate = repo_root / "target" / profile / "deadline"
         if candidate.exists():
             return str(candidate)
-    raise FileNotFoundError(
-        "deadline binary not found. Run: cargo build -p deadline-cli"
-    )
+    raise FileNotFoundError("deadline binary not found. Run: cargo build -p deadline-cli")
+
 
 # ---------------------------------------------------------------------------
 # Timeouts (seconds)
@@ -131,7 +131,7 @@ def _dialog_selector(name: str) -> str:
 # Process management
 # ---------------------------------------------------------------------------
 _T = TypeVar("_T", bound="DeadlineApp")
-_LIVE_PROCS: "weakref.WeakSet[subprocess.Popen]" = weakref.WeakSet()
+_LIVE_PROCS: weakref.WeakSet[subprocess.Popen] = weakref.WeakSet()
 
 
 def _register(proc: subprocess.Popen) -> None:
@@ -240,7 +240,7 @@ def _translate_args_to_gui_entry(args: Sequence[str]) -> tuple[str, dict]:
     if "gui-submit" in args_list:
         params: dict = {}
         idx = args_list.index("gui-submit")
-        remaining = args_list[idx + 1:]
+        remaining = args_list[idx + 1 :]
         # Parse known options
         i = 0
         positional = []
@@ -256,7 +256,11 @@ def _translate_args_to_gui_entry(args: Sequence[str]) -> tuple[str, dict]:
             elif arg.startswith("--submitter-info"):
                 if "=" in arg:
                     params.setdefault("submitter_info", {})
-                    k, v = arg.split("=", 1)[1].split("=", 1) if "=" in arg.split("=", 1)[1] else (arg.split("=", 1)[1], "")
+                    k, v = (
+                        arg.split("=", 1)[1].split("=", 1)
+                        if "=" in arg.split("=", 1)[1]
+                        else (arg.split("=", 1)[1], "")
+                    )
                     params["submitter_info"][k] = v
                 else:
                     i += 1
@@ -308,8 +312,12 @@ class DeadlineApp:
         """
         gui_cmd, params = _translate_args_to_gui_entry(args)
         cmd = [
-            sys.executable, "-m", "deadline.client.ui._gui_entry",
-            gui_cmd, "--params-json", json.dumps(params),
+            sys.executable,
+            "-m",
+            "deadline.client.ui._gui_entry",
+            gui_cmd,
+            "--params-json",
+            json.dumps(params),
         ]
         baseline = {a.name for a in xa11y.App.list()}
         popen_kwargs: dict = dict(
@@ -435,7 +443,7 @@ class ConfigDialog(DeadlineApp):
     DIALOG = "AWS Deadline Cloud workstation configuration"
 
     @classmethod
-    def open(cls, env: Optional[dict] = None) -> "ConfigDialog":
+    def open(cls, env: Optional[dict] = None) -> ConfigDialog:
         return cls.launch(["config", "gui"], env=env)
 
     @property
@@ -466,7 +474,7 @@ class SubmitterDialog(DeadlineApp):
         extra_args: Sequence[str] = (),
         dialog_name: Optional[str] = None,
         capture_stdio: bool = False,
-    ) -> "SubmitterDialog":
+    ) -> SubmitterDialog:
         args = ["bundle", "gui-submit", *extra_args, bundle_dir]
         return cls.launch(
             args,
@@ -496,8 +504,7 @@ class SubmitterDialog(DeadlineApp):
             time.sleep(0.25)
         self.dump_tree()
         raise TimeoutError(
-            f"Farm name {farm_name!r} did not appear in the submitter's "
-            f"accessibility tree within {timeout}s"
+            f"Farm name {farm_name!r} did not appear in the submitter's accessibility tree within {timeout}s"
         )
 
     def export_bundle(self) -> None:
@@ -530,8 +537,7 @@ class SubmitterDialog(DeadlineApp):
             raise AssertionError(f"Submission failed: progress dialog status is {status!r}")
         self.dump_tree()
         raise TimeoutError(
-            f"Progress dialog did not reach a terminal state within {timeout}s. "
-            f"Last status_label: {status!r}"
+            f"Progress dialog did not reach a terminal state within {timeout}s. Last status_label: {status!r}"
         )
 
     def _progress_status_label_text(self) -> str:

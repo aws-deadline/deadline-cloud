@@ -26,16 +26,22 @@ from configparser import ConfigParser
 from logging import getLogger
 from typing import Optional
 
-from qtpy.QtCore import QObject, QFileSystemWatcher, Qt, Signal
+from qtpy.QtCore import QFileSystemWatcher, QObject, Qt, Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
-from .._compat import AwsCredentialsSource, AwsAuthenticationStatus
+
 from deadline._native import (
-    get_credentials_source as _native_get_credentials_source,
-    check_auth_status as _native_check_auth_status,
     check_api_available as _native_check_api_available,
 )
+from deadline._native import (
+    check_auth_status as _native_check_auth_status,
+)
+from deadline._native import (
+    get_credentials_source as _native_get_credentials_source,
+)
+
+from .._compat import AwsAuthenticationStatus, AwsCredentialsSource
 from ..config import config_file
 from .controllers import AsyncTaskRunner
 
@@ -77,7 +83,7 @@ class DeadlineAuthenticationStatus(QObject):
         return _deadline_authentication_status
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super(DeadlineAuthenticationStatus, self).__init__(parent)
+        super().__init__(parent)
 
         self.__creds_source: Optional[AwsCredentialsSource] = None
         self.__auth_status: Optional[AwsAuthenticationStatus] = None
@@ -101,13 +107,9 @@ class DeadlineAuthenticationStatus(QObject):
         self.deadline_config_paths = [
             os.path.expanduser(os.path.join("~", ".deadline")),
         ]
-        failed_paths = self.aws_creds_file_watcher.addPaths(
-            self.aws_creds_paths + self.deadline_config_paths
-        )
+        failed_paths = self.aws_creds_file_watcher.addPaths(self.aws_creds_paths + self.deadline_config_paths)
         if failed_paths:
-            logger.error(
-                "Failed to watch these AWS Deadline Cloud configurations: %s", failed_paths
-            )
+            logger.error("Failed to watch these AWS Deadline Cloud configurations: %s", failed_paths)
         self.aws_creds_file_watcher.fileChanged.connect(self.files_changed)
         self.aws_creds_file_watcher.directoryChanged.connect(self.files_changed)
 
@@ -134,9 +136,7 @@ class DeadlineAuthenticationStatus(QObject):
             for setting_name in [
                 "defaults.aws_profile_name",
             ]:
-                if config_file.get_setting(setting_name, self.config) != config_file.get_setting(
-                    setting_name, config
-                ):
+                if config_file.get_setting(setting_name, self.config) != config_file.get_setting(setting_name, config):
                     auth_config_changed = True
         else:
             auth_config_changed = True
@@ -193,7 +193,11 @@ class DeadlineAuthenticationStatus(QObject):
     def _refresh_auth_status(self) -> AwsAuthenticationStatus:
         """Background task to check authentication status."""
         result = _native_check_auth_status()
-        return result.get("auth_status", AwsAuthenticationStatus.CONFIGURATION_ERROR) if isinstance(result, dict) else result
+        return (
+            result.get("auth_status", AwsAuthenticationStatus.CONFIGURATION_ERROR)
+            if isinstance(result, dict)
+            else result
+        )
 
     def _on_auth_status_success(self, result: AwsAuthenticationStatus) -> None:
         """Handle successful authentication status check."""

@@ -1,8 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from typing import Dict, Any
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any, Dict
 
 from ...exceptions import NonValidInputError
 
@@ -109,11 +109,7 @@ class TimeoutTableEntries:
             NonValidInputError: If any activated timeout has a zero duration. The error message
                 includes the specific labels of non valid entries and instructions for correction.
         """
-        zero_timeouts = [
-            label
-            for label, entry in self.entries.items()
-            if entry.is_activated and entry.seconds == 0
-        ]
+        zero_timeouts = [label for label, entry in self.entries.items() if entry.is_activated and entry.seconds == 0]
 
         if zero_timeouts:
             msg = "The following timeout value(s) must be greater than 0: \n"

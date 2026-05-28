@@ -7,34 +7,32 @@ Prerequisites: maturin develop
 """
 
 import pytest
-
 from deadline._native import (
-    # Config
-    get_setting,
-    set_setting,
-    read_config,
-    # Auth
-    get_credentials_source,
-    check_auth_status,
-    check_auth_status_with_progress,
-    check_api_available,
-    login,
-    logout,
-    # Resources
-    list_farms,
-    get_farm,
-    list_queues,
-    get_queue,
-    list_storage_profiles_for_queue,
-    get_queue_parameter_definitions,
-    # Submission
-    create_job_from_job_bundle,
-    # Telemetry
-    TelemetryClient,
     # Exception
     DeadlineOperationError,
+    # Telemetry
+    TelemetryClient,
+    check_api_available,
+    check_auth_status,
+    check_auth_status_with_progress,
+    # Submission
+    create_job_from_job_bundle,
+    # Auth
+    get_credentials_source,
+    get_farm,
+    get_queue,
+    get_queue_parameter_definitions,
+    # Config
+    get_setting,
+    # Resources
+    list_farms,
+    list_queues,
+    list_storage_profiles_for_queue,
+    login,
+    logout,
+    read_config,
+    set_setting,
 )
-
 
 # ── Config ───────────────────────────────────────────────────────
 
@@ -78,8 +76,7 @@ class TestConfig:
 
         config = tmp_path / "config"
         config.write_text(
-            "[defaults]\naws_profile_name = (default)\n\n"
-            "[profile-(default) defaults]\nfarm_id = farm-123\n"
+            "[defaults]\naws_profile_name = (default)\n\n[profile-(default) defaults]\nfarm_id = farm-123\n"
         )
         result = read_config(config_path=str(config))
         cp = ConfigParser()
@@ -306,10 +303,13 @@ class TestExceptionUnification:
     def test_native_error_is_base_for_python_exceptions(self):
         """deadline.client.exceptions subclasses use the native DeadlineOperationError."""
         from deadline.client.exceptions import (
-            DeadlineOperationError as PyDOE,
             DeadlineOperationCanceled,
             UserInitiatedCancel,
         )
+        from deadline.client.exceptions import (
+            DeadlineOperationError as PyDOE,
+        )
+
         # All are the same base or subclass of the native one
         assert issubclass(PyDOE, DeadlineOperationError)
         assert issubclass(DeadlineOperationCanceled, DeadlineOperationError)
@@ -318,5 +318,6 @@ class TestExceptionUnification:
     def test_native_error_caught_by_python_except(self):
         """A native DeadlineOperationError is caught by except DeadlineOperationError from exceptions.py."""
         from deadline.client.exceptions import DeadlineOperationError as PyDOE
+
         with pytest.raises(PyDOE):
             get_setting("nonexistent.setting")

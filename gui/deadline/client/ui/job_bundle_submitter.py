@@ -1,13 +1,12 @@
-# coding: utf-8
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
+
 import copy
 import os
 from logging import getLogger
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
 
 from qtpy.QtCore import Qt  # pylint: disable=import-error
-from ._utils import tr
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QFileDialog,
@@ -16,6 +15,8 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
+from ..api import session_context
+from ..dataclasses import SubmitterInfo
 from ..exceptions import DeadlineOperationError
 from ..job_bundle.loader import (
     parse_yaml_or_json_content,
@@ -23,7 +24,6 @@ from ..job_bundle.loader import (
     read_yaml_or_json_object,
     validate_directory_symlink_containment,
 )
-from ..job_bundle.saver import save_yaml_or_json_to_file
 from ..job_bundle.parameters import (
     JobParameter,
     apply_job_parameters,
@@ -31,15 +31,15 @@ from ..job_bundle.parameters import (
     read_job_bundle_parameters,
     validate_job_parameter_value,
 )
+from ..job_bundle.saver import save_yaml_or_json_to_file
+from ..job_bundle.submission import AssetReferences
+from ._utils import tr
 from .dataclasses import JobBundleSettings
-from ..dataclasses import SubmitterInfo
 from .dialogs.submit_job_to_deadline_dialog import (
-    SubmitJobToDeadlineDialog,
     JobBundlePurpose,
+    SubmitJobToDeadlineDialog,
 )
 from .widgets.job_bundle_settings_tab import JobBundleSettingsWidget
-from ..job_bundle.submission import AssetReferences
-from ..api import session_context
 
 logger = getLogger(__name__)
 
@@ -152,9 +152,7 @@ def show_job_bundle_submitter(
         # Get the main application window so we can parent ours to it
         app = QApplication.instance()
         if app is not None:
-            main_windows = [
-                widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)
-            ]
+            main_windows = [widget for widget in app.topLevelWidgets() if isinstance(widget, QMainWindow)]
             if main_windows:
                 parent = main_windows[0]
 
@@ -185,13 +183,9 @@ def show_job_bundle_submitter(
                 construction and the user's input in the Job Attachments tab.
         """
         # Copy the template
-        file_contents, file_type = read_yaml_or_json(
-            settings.input_job_bundle_dir, "template", True
-        )
+        file_contents, file_type = read_yaml_or_json(settings.input_job_bundle_dir, "template", True)
 
-        template = parse_yaml_or_json_content(
-            file_contents, file_type, settings.input_job_bundle_dir, "template"
-        )
+        template = parse_yaml_or_json_content(file_contents, file_type, settings.input_job_bundle_dir, "template")
         template["name"] = settings.name
         if settings.description:
             template["description"] = settings.description
@@ -214,9 +208,7 @@ def show_job_bundle_submitter(
             for param in queue_parameters
             if param["name"] not in job_parameter_names
         ]
-        parameter_values.extend(
-            {"name": param["name"], "value": param["value"]} for param in settings.parameters
-        )
+        parameter_values.extend({"name": param["name"], "value": param["value"]} for param in settings.parameters)
 
         parameters = merge_queue_job_parameters(
             queue_parameters=queue_parameters,
@@ -230,9 +222,7 @@ def show_job_bundle_submitter(
             AssetReferences(),
         )
 
-        save_yaml_or_json_to_file(
-            bundle_dir=job_bundle_dir, filename="template", file_type=file_type, data=template
-        )
+        save_yaml_or_json_to_file(bundle_dir=job_bundle_dir, filename="template", file_type=file_type, data=template)
         save_yaml_or_json_to_file(
             bundle_dir=job_bundle_dir,
             filename="asset_references",
@@ -267,9 +257,7 @@ def show_job_bundle_submitter(
     # Load the template to get the starting name
     template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
 
-    asset_references_obj = (
-        read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
-    )
+    asset_references_obj = read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
     asset_references = AssetReferences.from_dict(asset_references_obj)
 
     if name is None:
@@ -302,9 +290,7 @@ def show_job_bundle_submitter(
 
         # Populate the initial queue parameter values based on the job template parameter values
         if "default" in parameter or "value" in parameter:
-            initial_shared_parameter_values[parameter["name"]] = parameter.get(
-                "value", parameter.get("default")
-            )
+            initial_shared_parameter_values[parameter["name"]] = parameter.get("value", parameter.get("default"))
     # Put the job_parameter values that weren't for the template in the shared parameter values
     for parameter in job_parameters_dict.values():
         initial_shared_parameter_values[parameter["name"]] = parameter["value"]
@@ -335,9 +321,7 @@ def show_job_bundle_submitter(
                 submitter_dialog.close()
 
         # Connect to the queue parameters update signal
-        submitter_dialog.shared_job_settings._queue_parameters_update.connect(
-            validate_parameters_after_queue_load
-        )
+        submitter_dialog.shared_job_settings._queue_parameters_update.connect(validate_parameters_after_queue_load)
 
     submitter_dialog.show()
     return submitter_dialog

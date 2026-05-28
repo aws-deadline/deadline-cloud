@@ -8,7 +8,6 @@ import os
 from typing import Optional
 
 from qtpy.QtCore import Qt  # type: ignore
-from .._utils import tr
 from qtpy.QtWidgets import (  # type: ignore
     QCheckBox,
     QComboBox,
@@ -20,6 +19,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QWidget,
 )
 
+from .._utils import tr
 from ..dataclasses import CliJobSettings
 from .path_widgets import DirectoryPickerWidget
 

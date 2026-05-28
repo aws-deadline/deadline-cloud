@@ -24,9 +24,7 @@ class TestConfigGuiSettingsSections:
                 "Farm settings",
                 "General settings",
             ):
-                assert app.locator(f'group[name="{group_name}"]').exists(), (
-                    f"{group_name!r} group missing"
-                )
+                assert app.locator(f'group[name="{group_name}"]').exists(), f"{group_name!r} group missing"
 
     def test_auth_status_widget_shows_default_profile(self, deadline_env):
         _, env = deadline_env

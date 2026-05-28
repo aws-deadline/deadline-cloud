@@ -11,12 +11,13 @@ __all__ = [
 
 import os
 from collections import namedtuple
-from typing import Any, TYPE_CHECKING, cast, Union
+from typing import TYPE_CHECKING, Any, Union, cast
 
 # typing_extensions is only needed for type-checking. It fails to import at run-time in Python 3.7
 # so provide stubs at run-time.
 if TYPE_CHECKING:
     from typing_extensions import NotRequired, TypedDict
+
     from ..job_bundle.submission import AssetReferences
 else:
     NotRequired = object
@@ -148,9 +149,7 @@ def validate_job_parameter(
         typ = input["type"]
         if typ not in _VALID_PARAMETER_TYPES:
             quoted = (f'"{valid_param_type}"' for valid_param_type in _VALID_PARAMETER_TYPES)
-            raise ValueError(
-                f'Job parameter "{name}" had "type" {typ} but expected one of ({", ".join(quoted)})'
-            )
+            raise ValueError(f'Job parameter "{name}" had "type" {typ} but expected one of ({", ".join(quoted)})')
     elif type_required:
         raise ValueError(f'Job parameter "{name}" is missing required key "type"')
 
@@ -181,9 +180,7 @@ def validate_job_parameter(
     if "minLength" in input:
         min_length = input["minLength"]
         if type(min_length) is not int:  # noqa: E721
-            raise TypeError(
-                f'Job parameter "{name}" got {type(min_length).__name__} for "minLength" but expected int'
-            )
+            raise TypeError(f'Job parameter "{name}" got {type(min_length).__name__} for "minLength" but expected int')
         if min_length < 0:
             raise ValueError(
                 f'Job parameter "{name}" got {min_length} for "minLength" but the value must be non-negative'
@@ -208,13 +205,9 @@ def validate_job_parameter(
             try:
                 float(min_value)
             except ValueError:
-                raise ValueError(
-                    f'Job parameter "{name}" has a non-numeric string value for "minValue": {min_value}'
-                )
+                raise ValueError(f'Job parameter "{name}" has a non-numeric string value for "minValue": {min_value}')
         elif type(min_value) not in (int, float):  # noqa: E721
-            raise TypeError(
-                f'Job parameter "{name}" got {type(min_value).__name__} for "minValue" but expected int'
-            )
+            raise TypeError(f'Job parameter "{name}" got {type(min_value).__name__} for "minValue" but expected int')
 
     # Validate "maxValue"
     if "maxValue" in input:
@@ -223,13 +216,9 @@ def validate_job_parameter(
             try:
                 float(max_value)
             except ValueError:
-                raise ValueError(
-                    f'Job parameter "{name}" has a non-numeric string value for "maxValue": {max_value}'
-                )
+                raise ValueError(f'Job parameter "{name}" has a non-numeric string value for "maxValue": {max_value}')
         elif type(max_value) not in (int, float):  # noqa: E721
-            raise TypeError(
-                f'Job parameter "{name}" got {type(max_value).__name__} for "maxValue" but expected int'
-            )
+            raise TypeError(f'Job parameter "{name}" got {type(max_value).__name__} for "maxValue" but expected int')
 
     # Validate "objectType"
     if "objectType" in input:
@@ -288,9 +277,7 @@ def validate_job_parameter_value(
                     value = original_value
                     raise ValueError()
         except ValueError:
-            raise ValueError(
-                f"Job parameter {name!r} has type INT but got value {value!r} which is not an integer."
-            )
+            raise ValueError(f"Job parameter {name!r} has type INT but got value {value!r} which is not an integer.")
     elif param_type == "FLOAT":
         try:
             value = float(value)
@@ -299,9 +286,7 @@ def validate_job_parameter_value(
                 f"Job parameter {name!r} has type FLOAT but got value {value!r} which is not floating point."
             )
     else:
-        raise TypeError(
-            f"The definition for job parameter {name!r} has unsupported type {param_type!r}"
-        )
+        raise TypeError(f"The definition for job parameter {name!r} has unsupported type {param_type!r}")
 
     # Then ensure the value satisfies the constraints in the parameter definition.
     # Assumes the parameter definition is already validated, so the existence or not
@@ -309,30 +294,22 @@ def validate_job_parameter_value(
     min_length = job_parameter.get("minLength")
     if min_length is not None:
         if len(value) < min_length:  # type: ignore
-            raise ValueError(
-                f"Job parameter {name!r} value {value!r} is shorter than minLength {min_length}."
-            )
+            raise ValueError(f"Job parameter {name!r} value {value!r} is shorter than minLength {min_length}.")
 
     max_length = job_parameter.get("maxLength")
     if max_length is not None:
         if len(value) > max_length:  # type: ignore
-            raise ValueError(
-                f"Job parameter {name!r} value {value!r} is longer than maxLength {max_length}."
-            )
+            raise ValueError(f"Job parameter {name!r} value {value!r} is longer than maxLength {max_length}.")
 
     min_value = job_parameter.get("minValue")
     if min_value is not None:
         if value < min_value:  # type: ignore
-            raise ValueError(
-                f"Job parameter {name!r} value {value!r} is less than minValue {min_value}."
-            )
+            raise ValueError(f"Job parameter {name!r} value {value!r} is less than minValue {min_value}.")
 
     max_value = job_parameter.get("maxValue")
     if max_value is not None:
         if value > max_value:  # type: ignore
-            raise ValueError(
-                f"Job parameter {name!r} value {value!r} is greater than maxValue {max_value}."
-            )
+            raise ValueError(f"Job parameter {name!r} value {value!r} is greater than maxValue {max_value}.")
 
     allowed_values = job_parameter.get("allowedValues")
     if allowed_values is not None:
@@ -515,9 +492,7 @@ def validate_user_interface_file_filter(
 
     # Validation for "label"
     if "label" not in input:
-        raise ValueError(
-            f'Job parameter "{parameter_name}" is missing required key {field_path} -> "label"'
-        )
+        raise ValueError(f'Job parameter "{parameter_name}" is missing required key {field_path} -> "label"')
     else:
         label = input["label"]
         if not isinstance(label, str):
@@ -527,9 +502,7 @@ def validate_user_interface_file_filter(
 
     # Validation for "patterns"
     if "patterns" not in input:
-        raise ValueError(
-            f'Job parameter "{parameter_name}" is missing required key {field_path} -> "patterns"'
-        )
+        raise ValueError(f'Job parameter "{parameter_name}" is missing required key {field_path} -> "patterns"')
     else:
         patterns = input["patterns"]
         if not isinstance(patterns, list):
@@ -583,9 +556,7 @@ def merge_queue_job_parameters(
 
     # Make a dict structure of the queue parameters for easy lookup by name.
     # We later mutate the values, so the values are shallow copies of the queue's parameter dicts
-    collected_parameters: dict[str, JobParameter] = {
-        param["name"]: param.copy() for param in queue_parameters
-    }
+    collected_parameters: dict[str, JobParameter] = {param["name"]: param.copy() for param in queue_parameters}
 
     ParameterTypeMismatch = namedtuple("ParameterTypeMismatch", ("param_name", "differences"))
 
@@ -614,9 +585,7 @@ def merge_queue_job_parameters(
             differences = [name for name in differences if name != "default"]
 
             if differences:
-                param_mismatches.append(
-                    ParameterTypeMismatch(param_name=job_parameter_name, differences=differences)
-                )
+                param_mismatches.append(ParameterTypeMismatch(param_name=job_parameter_name, differences=differences))
         else:
             # app-specific parameters have implicit definitions based on their "name"
             if {"name", "value"} == job_parameter.keys() and ":" not in job_parameter_name:
@@ -632,8 +601,7 @@ def merge_queue_job_parameters(
         ]
         queue_str = f"queue ({queue_id})" if queue_id else "queue"
         raise DeadlineOperationError(
-            f"The target {queue_str} and job bundle have conflicting parameter definitions:\n\n"
-            + "\n".join(param_strs)
+            f"The target {queue_str} and job bundle have conflicting parameter definitions:\n\n" + "\n".join(param_strs)
         )
 
     return list(collected_parameters.values())
@@ -660,9 +628,7 @@ def apply_job_parameters(
       added to the appropriate asset_references entries.
     """
     # Convert the job_parameters to a dict for efficient lookup
-    param_dict: dict[str, Any] = {
-        parameter["name"]: parameter["value"] for parameter in job_parameters
-    }
+    param_dict: dict[str, Any] = {parameter["name"]: parameter["value"] for parameter in job_parameters}
 
     for parameter in parameters:
         # Get the definition from the job bundle
@@ -740,9 +706,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
     """
 
     template = read_yaml_or_json_object(bundle_dir=bundle_dir, filename="template", required=True)
-    parameter_values = read_yaml_or_json_object(
-        bundle_dir=bundle_dir, filename="parameter_values", required=False
-    )
+    parameter_values = read_yaml_or_json_object(bundle_dir=bundle_dir, filename="parameter_values", required=False)
 
     if not isinstance(template, dict):
         raise DeadlineOperationError(
@@ -785,11 +749,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
     # Make valueless PATH parameters with 'default' (but not constrained
     # by allowedValues) absolute by joining with the job bundle directory
     for name, parameter in template_parameters.items():
-        if (
-            "value" not in parameter
-            and parameter["type"] == "PATH"
-            and "allowedValues" not in parameter
-        ):
+        if "value" not in parameter and parameter["type"] == "PATH" and "allowedValues" not in parameter:
             default = parameter.get("default")
             if default:
                 if os.path.isabs(default):
@@ -804,16 +764,11 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
                         f"Job Template for job bundle {bundle_dir}:\nDefault PATH '{default_real_path}' for parameter '{name}' specifies files outside of Job Bundle directory '{bundle_real_path}'.\nPATH values must be relative, and must resolve within the Job Bundle directory."
                     )
 
-                default_absolute = os.path.normpath(
-                    os.path.abspath(os.path.join(bundle_dir, default))
-                )
+                default_absolute = os.path.normpath(os.path.abspath(os.path.join(bundle_dir, default)))
                 parameter["value"] = default_absolute
 
     # Rearrange the dict from the template into a list
-    parameters = [
-        validate_job_parameter({"name": name, **values})
-        for name, values in template_parameters.items()
-    ]
+    parameters = [validate_job_parameter({"name": name, **values}) for name, values in template_parameters.items()]
 
     # Validate hidden parameters have values
     invalid_params = []
@@ -827,11 +782,11 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
             message = f'Job bundle validation failed:\nHidden parameter "{invalid_params[0]}" is missing a value.'
         else:
             param_list = ", ".join(f'"{name}"' for name in invalid_params)
-            message = (
-                f"Job bundle validation failed:\nHidden parameters {param_list} are missing values."
-            )
+            message = f"Job bundle validation failed:\nHidden parameters {param_list} are missing values."
 
-        message += " Hidden parameters must have either a default value in the template or a value in parameter_values.yaml."
+        message += (
+            " Hidden parameters must have either a default value in the template or a value in parameter_values.yaml."
+        )
         raise DeadlineOperationError(message)
 
     return parameters
@@ -909,9 +864,7 @@ def _parameter_definition_fields_equivalent(
         return lhs_value == rhs_value
 
 
-def parameter_definition_difference(
-    lhs: JobParameter, rhs: JobParameter, *, ignore_missing: bool = False
-) -> list[str]:
+def parameter_definition_difference(lhs: JobParameter, rhs: JobParameter, *, ignore_missing: bool = False) -> list[str]:
     """Compares the two parameter definitions, returning a list of fields which differ.
     Does not compare the userInterface properties.
 

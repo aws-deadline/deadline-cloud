@@ -27,9 +27,7 @@ def validate_directory_symlink_containment(job_bundle_dir: str) -> None:
     # The job bundle could itself be a symlink dir
     resolved_root = os.path.realpath(job_bundle_dir)
     if not os.path.isdir(resolved_root):
-        raise DeadlineOperationError(
-            f"Job bundle path provided is not a directory:\n{job_bundle_dir}"
-        )
+        raise DeadlineOperationError(f"Job bundle path provided is not a directory:\n{job_bundle_dir}")
     for root_dir, dir_names, file_names in os.walk(resolved_root):
         for path in chain(dir_names, file_names):
             norm_path = os.path.normpath(os.path.join(root_dir, path))
@@ -98,9 +96,7 @@ def parse_yaml_or_json_content(file_contents: str, file_type: str, bundle_dir: s
         raise RuntimeError(f"Unexpected file type '{file_type}' in job bundle:\n{bundle_dir}")
 
 
-def read_yaml_or_json_object(
-    bundle_dir: str, filename: str, required: bool
-) -> Optional[Dict[str, Any]]:
+def read_yaml_or_json_object(bundle_dir: str, filename: str, required: bool) -> Optional[Dict[str, Any]]:
     """
     Checks whether {filename}.json or {filename}.yaml exist in the provided
     job bundle directory, and returns the file parsed into an object.

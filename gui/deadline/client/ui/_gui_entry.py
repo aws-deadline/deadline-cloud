@@ -71,8 +71,8 @@ def run_gui_submit(
     """Run the job bundle submission GUI and return the result string."""
     from ..dataclasses import SubmitterInfo
     from ..exceptions import DeadlineOperationError
-    from .job_bundle_submitter import show_job_bundle_submitter
     from ._utils import tr
+    from .job_bundle_submitter import show_job_bundle_submitter
 
     submitter_info = None
     if submitter_info_dict:
@@ -108,9 +108,7 @@ def run_gui_submit(
 
     QApplication.instance().exec()
 
-    return _format_response(
-        output, submitter.job_id, job_bundle_dir, submitter.job_history_bundle_dir
-    )
+    return _format_response(output, submitter.job_id, job_bundle_dir, submitter.job_history_bundle_dir)
 
 
 def run_config_gui(auto_close: bool = False) -> Optional[str]:
@@ -134,16 +132,18 @@ def _format_response(
     """Format the GUI result for stdout."""
     if output == "json":
         if job_id:
-            return json.dumps({
-                "status": "SUBMITTED",
-                "jobId": job_id,
-                "jobHistoryBundleDirectory": job_history_bundle_dir,
-            })
+            return json.dumps(
+                {
+                    "status": "SUBMITTED",
+                    "jobId": job_id,
+                    "jobHistoryBundleDirectory": job_history_bundle_dir,
+                }
+            )
         else:
             return json.dumps({"status": "CANCELED"})
     else:
         if job_id:
-            lines = [f"Submitted job bundle:", f"   {job_bundle_dir}", f"Job ID: {job_id}"]
+            lines = ["Submitted job bundle:", f"   {job_bundle_dir}", f"Job ID: {job_id}"]
             return "\n".join(lines)
         else:
             return "Job submission canceled."

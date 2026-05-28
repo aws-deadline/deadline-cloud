@@ -11,16 +11,20 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Generator, Iterator
 from pathlib import Path
-from typing import Generator, Iterator
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from _common.mock_deadline_backend import MockDeadlineBackend, start_server  # noqa: E402
 from helpers import SAMPLE_TEMPLATE, SubmitterDialog, reap_all  # noqa: E402
+
+from _common.mock_deadline_backend import (  # noqa: E402
+    MockDeadlineBackend,
+    start_server,
+)
 
 
 @pytest.fixture(autouse=True)

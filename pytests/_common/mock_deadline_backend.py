@@ -7,6 +7,7 @@ See docs/design/deadline-tests-mock-backend.md for design details.
 """
 
 from __future__ import annotations
+
 import json as _json
 import re as _re
 import sys as _sys
@@ -25,7 +26,6 @@ import botocore.session
 from botocore.exceptions import ClientError
 from botocore.model import ServiceModel
 from botocore.validate import ParamValidator
-
 
 API_PREFIX = "/2023-10-12"
 
@@ -155,8 +155,12 @@ class MockDeadlineBackend:
     def _parse_template(self, template: str) -> Any:
         """Parse a job template string using openjd-model and return instantiated Job."""
         import yaml
-        from openjd.model import create_job, decode_job_template
-        from openjd.model import DecodeValidationError, UnsupportedSchema
+        from openjd.model import (
+            DecodeValidationError,
+            UnsupportedSchema,
+            create_job,
+            decode_job_template,
+        )
 
         try:
             template_dict = yaml.safe_load(template)
@@ -164,9 +168,7 @@ class MockDeadlineBackend:
             raise _validation_exception(f"Could not decode job template. Error: '{e}'", "CreateJob")
 
         try:
-            job_template = decode_job_template(
-                template=template_dict, supported_extensions=["TASK_CHUNKING"]
-            )
+            job_template = decode_job_template(template=template_dict, supported_extensions=["TASK_CHUNKING"])
             return create_job(job_template=job_template, job_parameter_values={})
         except (DecodeValidationError, UnsupportedSchema, TypeError) as e:
             raise _validation_exception(str(e), "CreateJob")
@@ -203,9 +205,7 @@ class MockDeadlineBackend:
 
         return space.model_copy(update={"taskParameterDefinitions": new_defs})
 
-    def _create_steps_from_template(
-        self, farm_id: str, queue_id: str, job_id: str, job: Any, now: datetime
-    ) -> None:
+    def _create_steps_from_template(self, farm_id: str, queue_id: str, job_id: str, job: Any, now: datetime) -> None:
         """Create steps and tasks from an instantiated Job."""
         from openjd.model import StepParameterSpaceIterator
 
@@ -228,9 +228,7 @@ class MockDeadlineBackend:
             }
 
             # Store step environments
-            self._step_environments[(job_id, step_id)] = [
-                env.name for env in (step.stepEnvironments or [])
-            ]
+            self._step_environments[(job_id, step_id)] = [env.name for env in (step.stepEnvironments or [])]
 
             # Normalize parameter space and iterate with 1 value per task
             space = self._normalize_parameter_space(step.parameterSpace)
@@ -314,9 +312,7 @@ class MockDeadlineBackend:
         return self.queues[key]
 
     @route("GET", "/farms/{farmId}/queues", "ListQueues")
-    def list_queues(
-        self, *, farmId: str, maxResults: int = 100, nextToken: str | None = None, **kwargs
-    ) -> dict:
+    def list_queues(self, *, farmId: str, maxResults: int = 100, nextToken: str | None = None, **kwargs) -> dict:
         params: dict = {"farmId": farmId, "maxResults": maxResults}
         if nextToken is not None:
             params["nextToken"] = nextToken
@@ -347,15 +343,11 @@ class MockDeadlineBackend:
         items = [
             qfa
             for (f, q, fl), qfa in qfas.items()
-            if f == farmId
-            and (queueId is None or q == queueId)
-            and (fleetId is None or fl == fleetId)
+            if f == farmId and (queueId is None or q == queueId) and (fleetId is None or fl == fleetId)
         ]
         return {"queueFleetAssociations": items}
 
-    @route(
-        "GET", "/farms/{farmId}/queues/{queueId}/storage-profiles", "ListStorageProfilesForQueue"
-    )
+    @route("GET", "/farms/{farmId}/queues/{queueId}/storage-profiles", "ListStorageProfilesForQueue")
     def list_storage_profiles_for_queue(
         self, *, farmId: str, queueId: str, nextToken: str | None = None, **kwargs
     ) -> dict:
@@ -365,18 +357,14 @@ class MockDeadlineBackend:
         params.update(kwargs)
         self._validate("ListStorageProfilesForQueue", params)
         sps = getattr(self, "storage_profiles", {})
-        return {
-            "storageProfiles": [sp for (f, q, _), sp in sps.items() if f == farmId and q == queueId]
-        }
+        return {"storageProfiles": [sp for (f, q, _), sp in sps.items() if f == farmId and q == queueId]}
 
     @route(
         "GET",
         "/farms/{farmId}/queues/{queueId}/storage-profiles/{storageProfileId}",
         "GetStorageProfileForQueue",
     )
-    def get_storage_profile_for_queue(
-        self, *, farmId: str, queueId: str, storageProfileId: str
-    ) -> dict:
+    def get_storage_profile_for_queue(self, *, farmId: str, queueId: str, storageProfileId: str) -> dict:
         self._validate(
             "GetStorageProfileForQueue",
             {"farmId": farmId, "queueId": queueId, "storageProfileId": storageProfileId},
@@ -384,9 +372,7 @@ class MockDeadlineBackend:
         sps = getattr(self, "storage_profiles", {})
         key = (farmId, queueId, storageProfileId)
         if key not in sps:
-            raise _resource_not_found(
-                "storageProfile", storageProfileId, "GetStorageProfileForQueue"
-            )
+            raise _resource_not_found("storageProfile", storageProfileId, "GetStorageProfileForQueue")
         return sps[key]
 
     def create_storage_profile(
@@ -419,9 +405,7 @@ class MockDeadlineBackend:
         return {"credentials": creds}
 
     @route("GET", "/farms/{farmId}/queues/{queueId}/environments", "ListQueueEnvironments")
-    def list_queue_environments(
-        self, *, farmId: str, queueId: str, nextToken: str | None = None, **kwargs
-    ) -> dict:
+    def list_queue_environments(self, *, farmId: str, queueId: str, nextToken: str | None = None, **kwargs) -> dict:
         params: dict = {"farmId": farmId, "queueId": queueId}
         if nextToken is not None:
             params["nextToken"] = nextToken
@@ -438,9 +422,7 @@ class MockDeadlineBackend:
         }
 
     @route("GET", "/farms/{farmId}/queues/{queueId}/environments/{queueEnvironmentId}", "GetQueueEnvironment")
-    def get_queue_environment(
-        self, *, farmId: str, queueId: str, queueEnvironmentId: str, **kwargs
-    ) -> dict:
+    def get_queue_environment(self, *, farmId: str, queueId: str, queueEnvironmentId: str, **kwargs) -> dict:
         envs = self.queue_environments.get((farmId, queueId), [])
         for env in envs:
             if env["queueEnvironmentId"] == queueEnvironmentId:
@@ -526,9 +508,7 @@ class MockDeadlineBackend:
         return dict(self.fleets[key])
 
     @route("GET", "/farms/{farmId}/fleets", "ListFleets")
-    def list_fleets(
-        self, *, farmId: str, maxResults: int = 100, nextToken: str | None = None, **kwargs
-    ) -> dict:
+    def list_fleets(self, *, farmId: str, maxResults: int = 100, nextToken: str | None = None, **kwargs) -> dict:
         params = {"farmId": farmId, "maxResults": maxResults}
         if nextToken is not None:
             params["nextToken"] = nextToken
@@ -594,9 +574,7 @@ class MockDeadlineBackend:
     # ========== Job APIs ==========
 
     @route("POST", "/farms/{farmId}/queues/{queueId}/jobs", "CreateJob")
-    def create_job(
-        self, *, farmId: str, queueId: str, template: str, priority: int = 50, **kwargs
-    ) -> dict:
+    def create_job(self, *, farmId: str, queueId: str, template: str, priority: int = 50, **kwargs) -> dict:
         params = {
             "farmId": farmId,
             "queueId": queueId,
@@ -672,9 +650,7 @@ class MockDeadlineBackend:
         "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}/tasks/{taskId}",
         "UpdateTask",
     )
-    def update_task(
-        self, *, farmId: str, queueId: str, jobId: str, stepId: str, taskId: str, **kwargs
-    ) -> dict:
+    def update_task(self, *, farmId: str, queueId: str, jobId: str, stepId: str, taskId: str, **kwargs) -> dict:
         params = {
             "farmId": farmId,
             "queueId": queueId,
@@ -693,9 +669,7 @@ class MockDeadlineBackend:
         return {}
 
     @route("GET", "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps", "ListSteps")
-    def list_steps(
-        self, *, farmId: str, queueId: str, jobId: str, nextToken: str | None = None, **kwargs
-    ) -> dict:
+    def list_steps(self, *, farmId: str, queueId: str, jobId: str, nextToken: str | None = None, **kwargs) -> dict:
         params: dict = {"farmId": farmId, "queueId": queueId, "jobId": jobId}
         if nextToken is not None:
             params["nextToken"] = nextToken
@@ -777,9 +751,7 @@ class MockDeadlineBackend:
 
     @route("GET", "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/steps/{stepId}", "GetStep")
     def get_step(self, *, farmId: str, queueId: str, jobId: str, stepId: str) -> dict:
-        self._validate(
-            "GetStep", {"farmId": farmId, "queueId": queueId, "jobId": jobId, "stepId": stepId}
-        )
+        self._validate("GetStep", {"farmId": farmId, "queueId": queueId, "jobId": jobId, "stepId": stepId})
         key = (farmId, queueId, jobId, stepId)
         if key not in self.steps:
             raise _resource_not_found("step", stepId, "GetStep")
@@ -811,9 +783,7 @@ class MockDeadlineBackend:
     # ========== Session APIs ==========
 
     @route("GET", "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/sessions", "ListSessions")
-    def list_sessions(
-        self, *, farmId: str, queueId: str, jobId: str, nextToken: str | None = None
-    ) -> dict:
+    def list_sessions(self, *, farmId: str, queueId: str, jobId: str, nextToken: str | None = None) -> dict:
         params = {"farmId": farmId, "queueId": queueId, "jobId": jobId}
         if nextToken:
             params["nextToken"] = nextToken
@@ -842,9 +812,7 @@ class MockDeadlineBackend:
         "/farms/{farmId}/queues/{queueId}/jobs/{jobId}/session-actions/{sessionActionId}",
         "GetSessionAction",
     )
-    def get_session_action(
-        self, *, farmId: str, queueId: str, jobId: str, sessionActionId: str
-    ) -> dict:
+    def get_session_action(self, *, farmId: str, queueId: str, jobId: str, sessionActionId: str) -> dict:
         self._validate(
             "GetSessionAction",
             {
@@ -893,9 +861,7 @@ class MockDeadlineBackend:
     def _get_env_ids(self, job_id: str, step_id: str) -> list[str]:
         """Get environment IDs for a step (job envs + step envs)."""
         job_envs = [f"jobenv:{name}" for name in self._job_environments.get(job_id, [])]
-        step_envs = [
-            f"stepenv:{name}" for name in self._step_environments.get((job_id, step_id), [])
-        ]
+        step_envs = [f"stepenv:{name}" for name in self._step_environments.get((job_id, step_id), [])]
         return job_envs + step_envs
 
     def simulate_task_runs(
@@ -919,11 +885,7 @@ class MockDeadlineBackend:
 
         # Default to all tasks in the step
         if task_ids is None:
-            task_ids = [
-                self.tasks[k]["taskId"]
-                for k in self.tasks
-                if k[:4] == (farm_id, queue_id, job_id, step_id)
-            ]
+            task_ids = [self.tasks[k]["taskId"] for k in self.tasks if k[:4] == (farm_id, queue_id, job_id, step_id)]
 
         env_ids = self._get_env_ids(job_id, step_id)
 
@@ -1021,8 +983,7 @@ class MockDeadlineBackend:
                     {
                         **{k: ident[k] for k in id_fields},
                         "code": "ResourceNotFoundException",
-                        "message": f"Resource of type {resource_type} with id "
-                        f"{ident[id_fields[-1]]} does not exist.",
+                        "message": f"Resource of type {resource_type} with id {ident[id_fields[-1]]} does not exist.",
                     }
                 )
         return {items_field: items, "errors": errors}
@@ -1112,9 +1073,7 @@ class MockDeadlineBackend:
         deadline_mock.search_workers.side_effect = self.search_workers
         deadline_mock.list_farms.side_effect = self.list_farms
         deadline_mock.list_queues.side_effect = self.list_queues
-        deadline_mock.list_storage_profiles_for_queue.side_effect = (
-            self.list_storage_profiles_for_queue
-        )
+        deadline_mock.list_storage_profiles_for_queue.side_effect = self.list_storage_profiles_for_queue
 
 
 # ========== HTTP Server ==========
@@ -1202,9 +1161,7 @@ class _ResponseValidator:
         filtered = self._filter(output_shape, response)
         report = self._validator.validate(filtered, output_shape)
         if report.has_errors():
-            raise ValueError(
-                f"Mock response for {operation_name} failed validation: {report.generate_report()}"
-            )
+            raise ValueError(f"Mock response for {operation_name} failed validation: {report.generate_report()}")
         return filtered
 
 
@@ -1239,9 +1196,7 @@ def _make_handler(routes, validator, backend):
                 if length:
                     kwargs.update(_json.loads(self.rfile.read(length)))
                 if "identifiers" in kwargs and isinstance(kwargs["identifiers"], list):
-                    backend.batch_call_sizes.setdefault(op_name, []).append(
-                        len(kwargs["identifiers"])
-                    )
+                    backend.batch_call_sizes.setdefault(op_name, []).append(len(kwargs["identifiers"]))
                 try:
                     result = handler_fn(**kwargs)
                     result = validator.filter_and_validate(op_name, result)
@@ -1253,9 +1208,7 @@ def _make_handler(routes, validator, backend):
                     self._send_json(status, {"message": err.get("Message", "")}, error_code=code)
                 except Exception as exc:  # noqa: BLE001
                     _traceback.print_exc()
-                    self._send_json(
-                        500, {"message": str(exc)}, error_code="InternalServerException"
-                    )
+                    self._send_json(500, {"message": str(exc)}, error_code="InternalServerException")
                 return
             # Handle STS GetCallerIdentity (POST / with form-encoded body)
             if method == "POST" and parsed.path == "/":
@@ -1302,7 +1255,7 @@ def _make_handler(routes, validator, backend):
     return _Handler
 
 
-def start_server(backend: "MockDeadlineBackend", port: int = 0):
+def start_server(backend: MockDeadlineBackend, port: int = 0):
     """Start the HTTP server in a daemon thread. Returns (server, base_url, thread).
 
     Binds to 127.0.0.1. Callers pointing the ``deadline`` CLI at this server via

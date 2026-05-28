@@ -6,9 +6,9 @@ UI widgets for the Scene Settings tab.
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from copy import deepcopy
 
 from qtpy.QtCore import QRegularExpression, Qt, Signal  # type: ignore
 from qtpy.QtGui import QValidator
@@ -29,7 +29,10 @@ from qtpy.QtWidgets import (  # type: ignore
 )
 
 from ...job_bundle.job_template import ControlType
-from ...job_bundle.parameters import JobParameter, get_ui_control_for_parameter_definition
+from ...job_bundle.parameters import (
+    JobParameter,
+    get_ui_control_for_parameter_definition,
+)
 from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
@@ -67,9 +70,7 @@ class OpenJDParametersWidget(QWidget):
     ):
         super().__init__(parent=parent)
 
-        self.rebuild_ui(
-            parameter_definitions=parameter_definitions, async_loading_state=async_loading_state
-        )
+        self.rebuild_ui(parameter_definitions=parameter_definitions, async_loading_state=async_loading_state)
 
     def rebuild_ui(
         self,
@@ -226,9 +227,7 @@ class _JobTemplateLineEditValidator(QValidator):
             return (QValidator.Invalid, s, pos)
 
         if self.allowed_pattern is not None:
-            match = self.allowed_pattern.match(
-                s, matchType=QRegularExpression.PartialPreferFirstMatch
-            )
+            match = self.allowed_pattern.match(s, matchType=QRegularExpression.PartialPreferFirstMatch)
             if match.hasPartialMatch():
                 return (QValidator.Intermediate, s, pos)
             elif not match.hasMatch():
@@ -335,9 +334,7 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
         callback(message)
 
     def connect_parameter_changed(self, callback):
-        self.edit_control.textChanged.connect(
-            lambda text: self._handle_text_changed(text, callback)
-        )
+        self.edit_control.textChanged.connect(lambda text: self._handle_text_changed(text, callback))
 
 
 class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
@@ -389,9 +386,7 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
         callback(message)
 
     def connect_parameter_changed(self, callback):
-        self.edit_control.textChanged.connect(
-            lambda: self._handle_text_changed(self.value(), callback)
-        )
+        self.edit_control.textChanged.connect(lambda: self._handle_text_changed(self.value(), callback))
 
 
 class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
@@ -468,9 +463,7 @@ class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
         callback(message)
 
     def connect_parameter_changed(self, callback):
-        self.edit_control.valueChanged.connect(
-            lambda value: self._handle_value_changed(value, callback)
-        )
+        self.edit_control.valueChanged.connect(lambda value: self._handle_value_changed(value, callback))
 
 
 class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
@@ -554,9 +547,7 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
         callback(message)
 
     def connect_parameter_changed(self, callback):
-        self.edit_control.valueChanged.connect(
-            lambda value: self._handle_value_changed(value, callback)
-        )
+        self.edit_control.valueChanged.connect(lambda value: self._handle_value_changed(value, callback))
 
 
 class _JobTemplateDropdownListWidget(_JobTemplateWidget):
@@ -607,9 +598,7 @@ class _JobTemplateDropdownListWidget(_JobTemplateWidget):
         callback(message)
 
     def connect_parameter_changed(self, callback):
-        self.edit_control.currentIndexChanged.connect(
-            lambda _: self._handle_index_changed(self.value(), callback)
-        )
+        self.edit_control.currentIndexChanged.connect(lambda _: self._handle_index_changed(self.value(), callback))
 
 
 class _JobTemplateBaseFileWidget(_JobTemplateWidget):
@@ -626,14 +615,11 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
             file_filter_list = parameter["userInterface"].get("fileFilters")
             if file_filter_list:
                 filetype_filter = ";;".join(
-                    f"{file_filter['label']} ({' '.join(file_filter['patterns'])})"
-                    for file_filter in file_filter_list
+                    f"{file_filter['label']} ({' '.join(file_filter['patterns'])})" for file_filter in file_filter_list
                 )
             file_filter_default = parameter["userInterface"].get("fileFilterDefault")
             if file_filter_default:
-                selected_filter = (
-                    f"{file_filter_default['label']} ({' '.join(file_filter_default['patterns'])})"
-                )
+                selected_filter = f"{file_filter_default['label']} ({' '.join(file_filter_default['patterns'])})"
 
         if not selected_filter:
             selected_filter = filetype_filter.split(";", 1)[0]
@@ -671,9 +657,7 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
         callback(message)
 
     def connect_parameter_changed(self, callback):
-        self.edit_control.path_changed.connect(
-            lambda path: self._handle_path_changed(path, callback)
-        )
+        self.edit_control.path_changed.connect(lambda path: self._handle_path_changed(path, callback))
 
 
 class _JobTemplateInputFileWidget(_JobTemplateBaseFileWidget):
@@ -698,9 +682,7 @@ class _JobTemplateDirectoryWidget(_JobTemplateWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         self.label = QLabel(_get_parameter_label(parameter))
-        self.edit_control = DirectoryPickerWidget(
-            initial_directory="", directory_label=parameter["name"], parent=self
-        )
+        self.edit_control = DirectoryPickerWidget(initial_directory="", directory_label=parameter["name"], parent=self)
         self.edit_control.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         layout.addWidget(self.label)
         layout.addWidget(self.edit_control)
@@ -723,9 +705,7 @@ class _JobTemplateDirectoryWidget(_JobTemplateWidget):
         callback(message)
 
     def connect_parameter_changed(self, callback):
-        self.edit_control.path_changed.connect(
-            lambda path: self._handle_path_changed(path, callback)
-        )
+        self.edit_control.path_changed.connect(lambda path: self._handle_path_changed(path, callback))
 
 
 # These are the permitted sets of values that can be in a string job parameter 'allowedValues'
@@ -794,9 +774,7 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
         callback(message)
 
     def connect_parameter_changed(self, callback):
-        self.edit_control.stateChanged.connect(
-            lambda _: self._handle_value_changed(self.value(), callback)
-        )
+        self.edit_control.stateChanged.connect(lambda _: self._handle_value_changed(self.value(), callback))
 
 
 class _JobTemplateHiddenWidget(_JobTemplateWidget):

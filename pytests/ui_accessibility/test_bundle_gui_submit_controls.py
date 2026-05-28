@@ -16,23 +16,17 @@ class TestSharedJobSettingsControls:
     """Priority and initial state controls exist and have expected defaults."""
 
     def test_priority_spin_box_is_present(self, gui_submit: SubmitterDialog) -> None:
-        assert gui_submit.locator('static_text[name="Priority"]').exists(), (
-            "Priority label not found"
+        assert gui_submit.locator('static_text[name="Priority"]').exists(), "Priority label not found"
+        assert any((getattr(sb, "value", "") or "") == "50" for sb in gui_submit.elements_by_role("spin_button")), (
+            "No spin_button with the default Priority value of 50 found"
         )
-        assert any(
-            (getattr(sb, "value", "") or "") == "50"
-            for sb in gui_submit.elements_by_role("spin_button")
-        ), "No spin_button with the default Priority value of 50 found"
 
     def test_initial_state_combo_is_present(self, gui_submit: SubmitterDialog) -> None:
-        assert gui_submit.locator('static_text[name="Initial state"]').exists(), (
-            "Initial state label not found"
-        )
+        assert gui_submit.locator('static_text[name="Initial state"]').exists(), "Initial state label not found"
         valid_states = {"READY", "SUSPENDED"}
         combos = gui_submit.elements_by_role("combo_box")
         assert any(
-            (getattr(c, "name", None) or "") in valid_states
-            or (getattr(c, "value", None) or "") in valid_states
+            (getattr(c, "name", None) or "") in valid_states or (getattr(c, "value", None) or "") in valid_states
             for c in combos
         ), f"No combo_box with Initial state value (READY/SUSPENDED) among {len(combos)} combos"
 

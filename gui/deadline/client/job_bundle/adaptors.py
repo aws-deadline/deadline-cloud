@@ -12,9 +12,7 @@ def parse_frame_range(frame_string: str) -> list[int]:
 
     start = int(match.group("start"))
     stop = int(match.group("stop")) if match.group("stop") is not None else start
-    frame_step = (
-        int(match.group("step")) if match.group("step") is not None else 1 if start < stop else -1
-    )
+    frame_step = int(match.group("step")) if match.group("step") is not None else 1 if start < stop else -1
 
     if frame_step == 0:
         raise ValueError("Frame step cannot be zero")

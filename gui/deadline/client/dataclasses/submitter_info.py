@@ -9,7 +9,7 @@ from __future__ import annotations
 __all__ = ["SubmitterInfo"]
 
 from dataclasses import dataclass
-from typing import Optional, Union, Dict, List
+from typing import Dict, List, Optional, Union
 
 # Type alias for YAML-safe values that can be arbitrarily nested
 YamlValue = Union[str, int, float, bool, None, Dict[str, "YamlValue"], List["YamlValue"]]
@@ -66,5 +66,5 @@ class SubmitterInfo:
     """Version of the host application (optional)"""
 
     additional_info: Optional[Dict[str, YamlValue]] = None
-    """Optional dictionary for arbitrary nested data that integrations can use to pass additional metadata (optional). 
+    """Optional dictionary for arbitrary nested data that integrations can use to pass additional metadata (optional).
     Supports nested structures with YAML-safe types: str, int, float, bool, dicts, lists and None."""

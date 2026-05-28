@@ -10,11 +10,15 @@ Python threading approach with Qt's native threading model.
 from __future__ import annotations
 
 import threading as _threading
-from typing import Any as _Any, Optional as _Optional
+from typing import Any as _Any
+from typing import Optional as _Optional
 
-from qtpy.QtCore import QThread as _QThread, Signal as _Signal, QObject
+from qtpy.QtCore import QObject
+from qtpy.QtCore import QThread as _QThread
+from qtpy.QtCore import Signal as _Signal
 
 from deadline._native import create_job_from_job_bundle as _native_create_job
+
 from ..._compat import ProgressReportMetadata as _ProgressReportMetadata
 
 __all__ = ["JobSubmissionWorker"]

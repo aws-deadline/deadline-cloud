@@ -40,9 +40,7 @@ def create_job_history_bundle_dir(submitter_name: str, job_name: str) -> str:
     job_history_dir = os.path.expanduser(job_history_dir)
 
     # Clean the submitter_name's characters
-    submitter_name_cleaned = "".join(
-        char for char in submitter_name if char.isalnum() or char in " -_"
-    )
+    submitter_name_cleaned = "".join(char for char in submitter_name if char.isalnum() or char in " -_")
 
     # Clean the job_name's characters and truncate for the filename
     job_name_cleaned = "".join(char for char in job_name if char.isalnum() or char in " -_")
@@ -68,8 +66,6 @@ def create_job_history_bundle_dir(submitter_name: str, job_name: str) -> str:
                 # Skip if this dir has no number
                 pass
 
-    result = os.path.join(
-        month_dir, f"{date_tag}-{number:02}-{submitter_name_cleaned}-{job_name_cleaned}"
-    )
+    result = os.path.join(month_dir, f"{date_tag}-{number:02}-{submitter_name_cleaned}-{job_name_cleaned}")
     os.makedirs(result)
     return result

@@ -1,12 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
 
+import copy
 import json
 import os
 from importlib import reload
 from logging import getLogger
 from typing import Any, Dict, Optional
-import copy
 
 from qtpy.QtCore import Qt  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -17,13 +17,13 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
 
 from ..job_bundle import deadline_yaml_dump
 from ..job_bundle.parameters import JobParameter
+from ..job_bundle.submission import AssetReferences
 from .dataclasses import CliJobSettings
 from .dialogs.submit_job_to_deadline_dialog import (
-    SubmitJobToDeadlineDialog,
     JobBundlePurpose,
+    SubmitJobToDeadlineDialog,
 )
 from .widgets.cli_job_settings_tab import CliJobSettingsWidget
-from ..job_bundle.submission import AssetReferences
 
 logger = getLogger(__name__)
 
@@ -140,9 +140,7 @@ def show_cli_job_submitter(parent: Optional[QWidget] = None, f=Qt.WindowFlags())
                 json.dump(job_template, f, sort_keys=False, indent=1)
 
         # Filter the provided queue parameters to just their values
-        parameters_values = [
-            {"name": param["name"], "value": param["value"]} for param in queue_parameters
-        ]
+        parameters_values = [{"name": param["name"], "value": param["value"]} for param in queue_parameters]
 
         with open(
             os.path.join(job_bundle_dir, f"parameter_values.{settings.file_format.lower()}"),
@@ -202,9 +200,7 @@ def _reload_modules(mod):
     child_mods = [
         m
         for m in mod.__dict__.values()
-        if isinstance(m, types.ModuleType)
-        and m.__package__
-        and m.__package__.startswith(mod.__package__)
+        if isinstance(m, types.ModuleType) and m.__package__ and m.__package__.startswith(mod.__package__)
     ]
 
     for child in child_mods:

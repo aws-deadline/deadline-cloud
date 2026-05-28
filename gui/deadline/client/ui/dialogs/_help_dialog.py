@@ -7,10 +7,11 @@ Provides a modal dialog box for displaying submitter and environment information
 from __future__ import annotations
 
 import logging
-import yaml
-
 from dataclasses import asdict
-from typing import List, Dict
+from typing import Dict, List
+
+import yaml
+from qtpy.QtCore import Qt  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QDialog,
@@ -21,11 +22,10 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QTextEdit,
     QVBoxLayout,
 )
-from qtpy.QtCore import Qt  # pylint: disable=import-error
 
 from ...dataclasses import SubmitterInfo
-from ..dataclasses._environment_info import _EnvironmentInfo
 from .._utils import tr
+from ..dataclasses._environment_info import _EnvironmentInfo
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +66,7 @@ class _HelpDialog(QDialog):
         self.submitter_info = submitter_info
         self.environment_info = _EnvironmentInfo.collect()
 
-        self.setWindowTitle(
-            f"{tr('About')} Deadline Cloud {submitter_info.submitter_name} {tr('Submitter')}"
-        )
+        self.setWindowTitle(f"{tr('About')} Deadline Cloud {submitter_info.submitter_name} {tr('Submitter')}")
         self.setModal(True)
         self.setMinimumWidth(500)
 
@@ -122,10 +120,7 @@ class _HelpDialog(QDialog):
             The data structure with all dictionary keys made human-readable
         """
         if isinstance(data, dict):
-            return {
-                k.replace("_", " "): _HelpDialog._make_keys_human_readable(v)
-                for k, v in data.items()
-            }
+            return {k.replace("_", " "): _HelpDialog._make_keys_human_readable(v) for k, v in data.items()}
         elif isinstance(data, list):
             return [_HelpDialog._make_keys_human_readable(item) for item in data]
         else:

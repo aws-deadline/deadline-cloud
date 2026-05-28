@@ -7,19 +7,26 @@ This controller manages all async API operations, ensuring proper
 ordering of dependent calls and preventing race conditions.
 """
 
+import sys
 from configparser import ConfigParser
 from logging import getLogger
 from typing import List, Optional, Tuple
-import sys
 
 from qtpy.QtCore import QObject, Qt, Signal
 
 from deadline._native import (
-    list_farms as _native_list_farms,
-    list_queues as _native_list_queues,
-    list_storage_profiles_for_queue as _native_list_storage_profiles,
     get_queue_parameter_definitions as _native_get_queue_params,
 )
+from deadline._native import (
+    list_farms as _native_list_farms,
+)
+from deadline._native import (
+    list_queues as _native_list_queues,
+)
+from deadline._native import (
+    list_storage_profiles_for_queue as _native_list_storage_profiles,
+)
+
 from ...job_bundle.parameters import JobParameter
 from ._async_runner import AsyncTaskRunner
 
@@ -299,9 +306,7 @@ class DeadlineUIController(QObject):
         else:
             current_os = "unknown"
 
-        response = _native_list_storage_profiles(
-            farm_id=farm_id, queue_id=queue_id
-        )
+        response = _native_list_storage_profiles(farm_id=farm_id, queue_id=queue_id)
 
         profiles: ResourceList = []
         for item in response.get("storageProfiles", []):
@@ -367,9 +372,7 @@ class DeadlineUIController(QObject):
 
     def _fetch_queue_parameters(self, farm_id: str, queue_id: str) -> List[JobParameter]:
         """Fetch queue parameters from API. Runs in background thread."""
-        return _native_get_queue_params(
-            farm_id=farm_id, queue_id=queue_id
-        )
+        return _native_get_queue_params(farm_id=farm_id, queue_id=queue_id)
 
     def _on_queue_parameters_success(self, parameters: List[JobParameter]) -> None:
         """Handle successful queue parameters fetch."""

@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from qtpy.QtCore import Qt  # type: ignore
-from .._utils import tr
 from qtpy.QtGui import (  # type: ignore
     QBrush,
     QDoubleValidator,
@@ -45,7 +44,13 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from deadline.client.exceptions import NonValidInputError
 
-from ..dataclasses import CustomRequirements, HardwareRequirements, HostRequirements, OsRequirements
+from .._utils import tr
+from ..dataclasses import (
+    CustomRequirements,
+    HardwareRequirements,
+    HostRequirements,
+    OsRequirements,
+)
 
 logger = getLogger(__name__)
 
@@ -106,9 +111,7 @@ class HostRequirementsWidget(QWidget):  # pylint: disable=too-few-public-methods
         parent: The parent Qt Widget.
     """
 
-    def __init__(
-        self, requirements: Optional[HostRequirements] = None, parent: Optional[QWidget] = None
-    ):
+    def __init__(self, requirements: Optional[HostRequirements] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
 
@@ -129,9 +132,7 @@ class HostRequirementsWidget(QWidget):  # pylint: disable=too-few-public-methods
 
         layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        self.mode_selection_box.use_custom_button.toggled.connect(
-            self._on_mode_selection_use_custom_button_toggled
-        )
+        self.mode_selection_box.use_custom_button.toggled.connect(self._on_mode_selection_use_custom_button_toggled)
         if requirements is not None:
             self.set_requirements(requirements)
 
@@ -205,9 +206,7 @@ class OverrideRequirementsWidget(QGroupBox):  # pylint: disable=too-few-public-m
         self.use_default_button.setChecked(True)
 
         # Use customized settings button + tip
-        self.use_custom_button = QRadioButton(
-            tr("Run on worker hosts that meet the following requirements")
-        )
+        self.use_custom_button = QRadioButton(tr("Run on worker hosts that meet the following requirements"))
         self.use_custom_button_tip = QHBoxLayout()
         self.custom_button_tip_text = QLabel(tr("All fields below are optional"))
         custom_button_label_font = self.custom_button_tip_text.font()
@@ -377,9 +376,7 @@ class CustomRequirementsWidget(QGroupBox):
 
     def _build_ui(self):
         # Add a label that will display tool tip when hovered above
-        self.info = QLabel(
-            f"<html><img src={INFO_ICON_PATH} width='10' height='10'> More info</html>"
-        )
+        self.info = QLabel(f"<html><img src={INFO_ICON_PATH} width='10' height='10'> More info</html>")
         info_font = self.info.font()
         info_font.setPointSize(10)
         self.info.setFont(info_font)
@@ -496,9 +493,7 @@ class CustomRequirementsWidget(QGroupBox):
                 elif isinstance(widget, CustomAttributeWidget):
                     requirements["attributes"].append(widget_requirement)
                 else:
-                    logger.warning(
-                        f"Widget requirement is not a valid expected type: {type(widget)}"
-                    )
+                    logger.warning(f"Widget requirement is not a valid expected type: {type(widget)}")
 
         return requirements
 
@@ -562,9 +557,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
     UI element to hold a single custom attribute.
     """
 
-    def __init__(
-        self, list_item: QListWidgetItem, item_number: int, parent: Optional[QWidget] = None
-    ):
+    def __init__(self, list_item: QListWidgetItem, item_number: int, parent: Optional[QWidget] = None):
         if not parent or not isinstance(parent, CustomRequirementsWidget):
             raise TypeError("CustomAmountWidget parent must be a CustomRequirementsWidget")
         super().__init__(AMOUNT, list_item, item_number, parent)
@@ -585,13 +578,9 @@ class CustomAmountWidget(CustomCapabilityWidget):
         self.min_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.max_label = QLabel(tr("Max"))
         self.max_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.min_spin_box = OptionalDoubleSpinBox(
-            min=0, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
-        )
+        self.min_spin_box = OptionalDoubleSpinBox(min=0, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self)
         self.min_spin_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.max_spin_box = OptionalDoubleSpinBox(
-            min=0, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self
-        )
+        self.max_spin_box = OptionalDoubleSpinBox(min=0, max=MAX_INT_VALUE, decimal=DECIMAL_VALUE, parent=self)
         self.max_spin_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.min_max_row = QHBoxLayout()
@@ -684,9 +673,7 @@ class CustomAmountWidget(CustomCapabilityWidget):
                     + str(RESERVED_FIRST_IDENTIFIERS)
                 )
         else:
-            raise NonValidInputError(
-                "Please fill out all custom amount names in the custom host requirement options!"
-            )
+            raise NonValidInputError("Please fill out all custom amount names in the custom host requirement options!")
         return requirement
 
 
@@ -698,9 +685,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
     ANY_OF = "anyOf"
     ALL_OF = "allOf"
 
-    def __init__(
-        self, list_item: QListWidgetItem, item_number: int, parent=CustomRequirementsWidget
-    ):
+    def __init__(self, list_item: QListWidgetItem, item_number: int, parent=CustomRequirementsWidget):
         super().__init__(ATTRIBUTE, list_item, item_number, parent)
         self._build_ui()
 
@@ -716,9 +701,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         self.name_line_edit.setFixedWidth(LABEL_FIXED_WIDTH)
         assert (100 - len(ATTRIBUTE_CAPABILITY_PREFIX)) > 0
         self.name_line_edit.setMaxLength(100 - len(ATTRIBUTE_CAPABILITY_PREFIX))
-        self.name_line_edit.setValidator(
-            QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_NAME_REGEX)
-        )
+        self.name_line_edit.setValidator(QRegularExpressionValidator(ATTRIBUTE_CAPABILITY_NAME_REGEX))
         self.add_value_button = None
 
         self.top_row = QHBoxLayout()
@@ -787,8 +770,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         # Resize the list widget as well as parents to based on the size of the contents
         self.value_column_widget.setFixedHeight(
             self.value_column_widget.height()
-            + item_count_change
-            * self.value_list_widget.itemWidget(self.value_list_widget.item(0)).height()
+            + item_count_change * self.value_list_widget.itemWidget(self.value_list_widget.item(0)).height()
         )
         self.columns_widget.adjustSize()
         self.adjustSize()
@@ -803,16 +785,12 @@ class CustomAttributeWidget(CustomCapabilityWidget):
         else:
             self.add_value_button = QPushButton(tr("Add"))
             self.add_value_button.setStyleSheet("border-width: 0px")
-            self.add_value_button.setToolTip(
-                "Add a new value to evaluate against for this attribute"
-            )
+            self.add_value_button.setToolTip("Add a new value to evaluate against for this attribute")
             self.add_value_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
             self.add_value_button.clicked.connect(self._add_value)
 
-        last_item = self.value_list_widget.itemWidget(
-            self.value_list_widget.item(self.value_list_widget.count() - 1)
-        )
+        last_item = self.value_list_widget.itemWidget(self.value_list_widget.item(self.value_list_widget.count() - 1))
         last_item.layout.insertWidget(last_item.layout.count() - 2, self.add_value_button)
 
     def _set_remove_button_for_first_item(self):
@@ -850,9 +828,7 @@ class CustomAttributeWidget(CustomCapabilityWidget):
     def values(self) -> List[str]:
         values = []
         for i in range(self.value_list_widget.count()):
-            value: CustomAttributeValueWidget = self.value_list_widget.itemWidget(
-                self.value_list_widget.item(i)
-            )
+            value: CustomAttributeValueWidget = self.value_list_widget.itemWidget(self.value_list_widget.item(i))
             if value.line_edit.text():
                 values.append(value.line_edit.text())
             else:
@@ -863,19 +839,14 @@ class CustomAttributeWidget(CustomCapabilityWidget):
     def values(self, values: List[str]):
         value_widgets_by_value = {}
         for i in range(self.value_list_widget.count()):
-            value_widget: CustomAttributeValueWidget = self.value_list_widget.itemWidget(
-                self.value_list_widget.item(i)
-            )
+            value_widget: CustomAttributeValueWidget = self.value_list_widget.itemWidget(self.value_list_widget.item(i))
             if value_widget.line_edit.text():
                 value_widgets_by_value[value_widget.line_edit.text()] = value_widget
             else:
                 value_widgets_by_value["EMPTY"] = value_widget
 
         has_only_empty_value = False
-        if (
-            len(value_widgets_by_value.keys()) == 1
-            and list(value_widgets_by_value.keys())[0] == "EMPTY"
-        ):
+        if len(value_widgets_by_value.keys()) == 1 and list(value_widgets_by_value.keys())[0] == "EMPTY":
             has_only_empty_value = True
 
         for value in values:
@@ -1141,9 +1112,7 @@ class OptionalSpinBox(QSpinBox):
     A custom QSpinBox that set min - 1 value as "-" to represent value not set.
     """
 
-    def __init__(
-        self, min: int = MIN_INT_VALUE, max: int = MAX_INT_VALUE, parent: Optional[QWidget] = None
-    ) -> None:
+    def __init__(self, min: int = MIN_INT_VALUE, max: int = MAX_INT_VALUE, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.min = min
         self.max = max
@@ -1198,11 +1167,7 @@ class OptionalSpinBox(QSpinBox):
     def stepBy(self, steps: int) -> None:
         current_value: int = self.value()
         result_value = self.value() + steps
-        if (
-            result_value == self.no_input_value
-            or result_value > self.maximum()
-            or result_value < self.minimum()
-        ):
+        if result_value == self.no_input_value or result_value > self.maximum() or result_value < self.minimum():
             # If result value is not a valid value, do not go to that value
             return
 
@@ -1283,11 +1248,7 @@ class OptionalDoubleSpinBox(QDoubleSpinBox):
     def stepBy(self, steps: int) -> None:
         current_value: int = self.value()
         result_value = self.value() + steps
-        if (
-            result_value == self.no_input_value
-            or result_value > self.maximum()
-            or result_value < self.minimum()
-        ):
+        if result_value == self.no_input_value or result_value > self.maximum() or result_value < self.minimum():
             # If result value is not a valid value, do not go to that value
             return
 

@@ -10,7 +10,6 @@ via the accessibility API, so we mutate the config value with
 from __future__ import annotations
 
 import pytest
-
 from helpers import ConfigDialog, cli_get, cli_set
 
 

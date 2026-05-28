@@ -8,8 +8,12 @@ go through the Rust deadline-config crate via deadline._native.
 
 from deadline._native import (
     get_setting as _native_get_setting,
-    set_setting as _native_set_setting,
+)
+from deadline._native import (
     read_config as _native_read_config,
+)
+from deadline._native import (
+    set_setting as _native_set_setting,
 )
 
 _TRUE_VALUES = {"yes", "on", "true", "1"}
@@ -119,6 +123,7 @@ def get_setting_default(setting_name: str, config=None) -> str:
 def read_config():
     """Read the config file. Returns a ConfigParser populated from FFI data."""
     from configparser import ConfigParser
+
     config = ConfigParser()
     data = _native_read_config()
     if data:

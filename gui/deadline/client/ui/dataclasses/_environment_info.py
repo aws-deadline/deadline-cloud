@@ -14,7 +14,8 @@ import logging
 import platform
 import re
 from dataclasses import dataclass
-from importlib.metadata import requires, version as package_version
+from importlib.metadata import requires
+from importlib.metadata import version as package_version
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class _EnvironmentInfo:
     """Qt framework version"""
 
     @staticmethod
-    def collect() -> "_EnvironmentInfo":
+    def collect() -> _EnvironmentInfo:
         """
         Collect runtime environment information such as Python version, dependency versions
         and more.

@@ -2,18 +2,34 @@
 
 from deadline._native import (
     TelemetryClient,
-    create_job_from_job_bundle as _native_create_job,
     get_queue_parameter_definitions,
 )
 from deadline._native import (
-    get_credentials_source as _native_get_credentials_source,
-    check_auth_status as _native_check_auth_status,
     check_api_available as _native_check_api_available,
-    login as _native_login,
-    logout as _native_logout,
+)
+from deadline._native import (
+    check_auth_status as _native_check_auth_status,
+)
+from deadline._native import (
+    create_job_from_job_bundle as _native_create_job,
+)
+from deadline._native import (
+    get_credentials_source as _native_get_credentials_source,
+)
+from deadline._native import (
     list_farms as _native_list_farms,
+)
+from deadline._native import (
     list_queues as _native_list_queues,
+)
+from deadline._native import (
     list_storage_profiles_for_queue as _native_list_storage_profiles,
+)
+from deadline._native import (
+    login as _native_login,
+)
+from deadline._native import (
+    logout as _native_logout,
 )
 from deadline.client._compat import AwsAuthenticationStatus, AwsCredentialsSource
 
@@ -139,11 +155,13 @@ def create_job_from_job_bundle(
     # Wrap hashing/upload callbacks to convert dict → ProgressReportMetadata
     on_hashing = None
     if hashing_progress_callback is not None:
+
         def on_hashing(raw_dict):
             return hashing_progress_callback(ProgressReportMetadata.from_dict(raw_dict))
 
     on_upload = None
     if upload_progress_callback is not None:
+
         def on_upload(raw_dict):
             return upload_progress_callback(ProgressReportMetadata.from_dict(raw_dict))
 

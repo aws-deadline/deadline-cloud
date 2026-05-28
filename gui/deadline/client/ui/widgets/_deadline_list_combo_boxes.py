@@ -8,9 +8,9 @@ ensuring proper ordering and automatic cancellation of superseded requests.
 """
 
 from configparser import ConfigParser
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, List, Optional
 
-from qtpy.QtCore import Qt, QSize, Signal
+from qtpy.QtCore import QSize, Qt, Signal
 from qtpy.QtWidgets import (
     QApplication,
     QComboBox,
@@ -85,9 +85,7 @@ class _DeadlineResourceListComboBoxController(QWidget):
         self._get_loading_signal().connect(self._handle_loading_state, Qt.QueuedConnection)
 
         # Connect to the error signal
-        self._controller.operation_failed.connect(
-            self._handle_operation_failed, Qt.QueuedConnection
-        )
+        self._controller.operation_failed.connect(self._handle_operation_failed, Qt.QueuedConnection)
 
     def _get_controller_signal(self) -> Any:
         """Return the controller signal that provides the resource list."""
