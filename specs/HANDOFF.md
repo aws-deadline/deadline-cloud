@@ -32,6 +32,13 @@ plugin integration before committing to the architecture.
 
 ## Completed items
 
+- **#28d — Python linting + collect() audit (2026-05-27)** —
+  Added ruff linter/formatter for `gui/` and `pytests/`. Fixed 5 clippy
+  violations (unsafe impl comments, to_string on &str, collapsible if).
+  Audited all collect() sites — zero needless collects found. `make lint`
+  now includes `lint-python`; `make fmt` includes `fmt-python-check`.
+  37 xa11y tests pass, 1,355 Rust tests pass.
+
 - **Fix SIGBUS crash in _native.abi3.so (2026-05-27)** —
   Stack overflow on QThread (512KB) during webpki cert parsing. Fixed
   with `on_large_stack` (scoped thread, 8MB) + `py.allow_threads()`.

@@ -92,6 +92,7 @@ pick and execute work items.
 | 28 | CLI feature parity audit fixes (AUDIT-101,103,106,107) | ✅ Done | — | — |
 | 28b | CLI feature parity: remove Rust-only features (AUDIT-108,109) | ✅ Done | — | — |
 | 28c | Strict clippy lint resolution (2064 → 0 warnings) | ✅ Done | — | — |
+| 28d | Python linting (ruff) and collect() audit | ✅ Done | — | — |
 | 29 | Investigate Python `--save-debug-snapshot` bug on no-attachment bundles | Not started | — | — |
 | 30 | Rust tooling and optimization setup | ✅ Done | — | — |
 | 24 | Production distribution (Rust binary + Qt libs) | Not started | — | 35 |

@@ -16,7 +16,7 @@ else
   PIP := pip
 endif
 
-.PHONY: build build-rust build-python test test-rust test-ui test-bindings setup setup-rust setup-python lint lint-python fmt fmt-python check clean
+.PHONY: build build-rust build-python test test-rust test-python test-ui test-bindings setup setup-rust setup-python lint lint-rust lint-python fmt fmt-rust fmt-python check clean
 
 # ── Build ──
 
@@ -30,10 +30,12 @@ build-python:
 
 # ── Test ──
 
-test: test-rust test-ui test-bindings
+test: test-rust test-python
 
 test-rust:
 	cargo test
+
+test-python: test-ui test-bindings
 
 test-ui: build-python
 	$(PYTHON) -m pytest pytests/ui_accessibility/ -v
@@ -53,17 +55,21 @@ setup-python:
 
 # ── Quality ──
 
-lint:
+lint: lint-rust lint-python
+
+lint-rust:
 	cargo clippy --workspace --all-targets -- -D warnings
 
 lint-python:
 	ruff check gui/ pytests/
 
-fmt:
+fmt: fmt-rust fmt-python
+
+fmt-rust:
 	cargo fmt --check
 
 fmt-python:
-	ruff format gui/ pytests/
+	ruff format --check gui/ pytests/
 
 check:
 	cargo check --workspace
