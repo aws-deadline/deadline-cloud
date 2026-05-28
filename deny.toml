@@ -13,7 +13,6 @@ ignore = [
     # TODO: Remove once AWS SDK drops hyper-rustls 0.24 dependency.
     { id = "RUSTSEC-2026-0098", reason = "pinned by transitive dep hyper-rustls 0.24" },
     { id = "RUSTSEC-2026-0099", reason = "pinned by transitive dep hyper-rustls 0.24" },
-    { id = "RUSTSEC-2026-0100", reason = "pinned by transitive dep hyper-rustls 0.24" },
     { id = "RUSTSEC-2026-0104", reason = "pinned by transitive dep hyper-rustls 0.24" },
 ]
 
@@ -30,6 +29,7 @@ allow = [
     "CC0-1.0",
     "MIT-0",
     "Unicode-3.0",
+    "Unicode-DFS-2016",
     "Unlicense",
     "CDLA-Permissive-2.0",
 ]
