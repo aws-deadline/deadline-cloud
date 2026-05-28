@@ -8,19 +8,19 @@ pub fn list_farms<'py>(py: Python<'py>, config_path: Option<&str>) -> PyResult<B
     let config = crate::load_config(config_path)?;
     let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_lib::api::session::deadline_client(
-        profile.as_deref(),
-    ));
-    let builder =
-        deadline_lib::api::client::apply_dcm_principal(dl.list_farms(), profile.as_deref());
-    let pages = rt
-        .block_on(deadline_lib::api::client::collect_paginated(
+    let result = crate::on_large_stack(|| {
+        let dl = rt.block_on(deadline_lib::api::session::deadline_client(
+            profile.as_deref(),
+        ));
+        let builder =
+            deadline_lib::api::client::apply_dcm_principal(dl.list_farms(), profile.as_deref());
+        rt.block_on(deadline_lib::api::client::collect_paginated(
             builder.into_paginator().send(),
         ))
-        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
-    // AWS SDK method references (e.g. ListFarmsOutput::farms) are unreadably long
+    })?
+    .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     #[allow(clippy::redundant_closure_for_method_calls, reason = "AWS SDK method references are unreadably long")]
-    let farms: Vec<serde_json::Value> = pages
+    let farms: Vec<serde_json::Value> = result
         .iter()
         .flat_map(|p| p.farms())
         .map(|f| serde_json::json!({"farmId": f.farm_id(), "displayName": f.display_name(), "createdAt": f.created_at().to_string(), "createdBy": f.created_by()}))
@@ -39,14 +39,15 @@ pub fn get_farm<'py>(
     let config = crate::load_config(config_path)?;
     let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_lib::api::session::deadline_client(
-        profile.as_deref(),
-    ));
-    let output = rt
-        .block_on(dl.get_farm().farm_id(farm_id).send())
-        .map_err(|e| {
-            DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e))
-        })?;
+    let output = crate::on_large_stack(|| {
+        let dl = rt.block_on(deadline_lib::api::session::deadline_client(
+            profile.as_deref(),
+        ));
+        rt.block_on(dl.get_farm().farm_id(farm_id).send())
+    })?
+    .map_err(|e| {
+        DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e))
+    })?;
     let resp = deadline_lib::api::responses::FarmResponse::from(output);
     let result =
         serde_json::to_value(&resp).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
@@ -63,20 +64,21 @@ pub fn list_queues<'py>(
     let config = crate::load_config(config_path)?;
     let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_lib::api::session::deadline_client(
-        profile.as_deref(),
-    ));
-    let builder = deadline_lib::api::client::apply_dcm_principal(
-        dl.list_queues().farm_id(farm_id),
-        profile.as_deref(),
-    );
-    let pages = rt
-        .block_on(deadline_lib::api::client::collect_paginated(
+    let result = crate::on_large_stack(|| {
+        let dl = rt.block_on(deadline_lib::api::session::deadline_client(
+            profile.as_deref(),
+        ));
+        let builder = deadline_lib::api::client::apply_dcm_principal(
+            dl.list_queues().farm_id(farm_id),
+            profile.as_deref(),
+        );
+        rt.block_on(deadline_lib::api::client::collect_paginated(
             builder.into_paginator().send(),
         ))
-        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    })?
+    .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     #[allow(clippy::redundant_closure_for_method_calls, reason = "AWS SDK method references are unreadably long")]
-    let queues: Vec<serde_json::Value> = pages
+    let queues: Vec<serde_json::Value> = result
         .iter()
         .flat_map(|p| p.queues())
         .map(|q| serde_json::json!({"queueId": q.queue_id(), "displayName": q.display_name(), "status": q.status().as_str(), "createdAt": q.created_at().to_string(), "createdBy": q.created_by()}))
@@ -96,14 +98,15 @@ pub fn get_queue<'py>(
     let config = crate::load_config(config_path)?;
     let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let dl = rt.block_on(deadline_lib::api::session::deadline_client(
-        profile.as_deref(),
-    ));
-    let output = rt
-        .block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id).send())
-        .map_err(|e| {
-            DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e))
-        })?;
+    let output = crate::on_large_stack(|| {
+        let dl = rt.block_on(deadline_lib::api::session::deadline_client(
+            profile.as_deref(),
+        ));
+        rt.block_on(dl.get_queue().farm_id(farm_id).queue_id(queue_id).send())
+    })?
+    .map_err(|e| {
+        DeadlineOperationError::new_err(deadline_lib::api::client::format_sdk_error(&e))
+    })?;
     let resp = deadline_lib::api::responses::QueueResponse::from(output);
     let result =
         serde_json::to_value(&resp).map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
@@ -121,8 +124,8 @@ pub fn list_storage_profiles_for_queue<'py>(
     let config = crate::load_config(config_path)?;
     let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let result = rt
-        .block_on(async {
+    let result = crate::on_large_stack(|| {
+        rt.block_on(async {
             let client = deadline_lib::api::session::deadline_client(profile.as_deref()).await;
             let pages = deadline_lib::api::client::collect_paginated(
                 client
@@ -152,7 +155,8 @@ pub fn list_storage_profiles_for_queue<'py>(
                 serde_json::json!({"storageProfiles": profiles}),
             )
         })
-        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    })?
+    .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result).map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }
 
@@ -167,14 +171,15 @@ pub fn get_queue_parameter_definitions<'py>(
     let config = crate::load_config(config_path)?;
     let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let result = rt
-        .block_on(
+    let result = crate::on_large_stack(|| {
+        rt.block_on(
             deadline_lib::api::queue_parameters::get_queue_parameter_definitions(
                 farm_id,
                 queue_id,
                 profile.as_deref(),
             ),
         )
-        .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
+    })?
+    .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
     pythonize::pythonize(py, &result).map_err(|e| DeadlineOperationError::new_err(e.to_string()))
 }

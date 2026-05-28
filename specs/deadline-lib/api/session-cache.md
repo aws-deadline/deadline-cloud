@@ -4,12 +4,26 @@
 
 The session cache is a process-wide store that avoids re-creating AWS SDK
 clients on every API call. It holds a base SDK config (built from the
-user's AWS profile) and a map of queue-scoped configs (for DCM users
-accessing S3 or CloudWatch via queue role assumption).
+user's AWS profile), a cached account ID (from STS GetCallerIdentity),
+and a map of queue-scoped configs (for DCM users accessing S3 or
+CloudWatch via queue role assumption).
 
 The base config is keyed by profile name — if the user switches profiles,
 the cache is invalidated and rebuilt. Queue configs are keyed by
 `(farm_id, queue_id)` and invalidated alongside the base session.
+
+## Account ID Caching
+
+The account ID is resolved once via STS `GetCallerIdentity` (with a 2s
+timeout) and cached in the session. Subsequent `deadline_client()` calls
+reuse the cached value without additional STS calls.
+
+Three states: not yet resolved → resolved to `Some("123...")` → resolved
+to `None` (STS unavailable/timed out). Cleared on session invalidation.
+
+This matches the Python behavior where the boto3 session identity was
+cached via `@lru_cache`. The account ID is used only for telemetry
+enrichment — failure to resolve it is non-fatal.
 
 ## SessionContext
 

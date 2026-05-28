@@ -1257,6 +1257,28 @@ def _make_handler(routes, validator, backend):
                         500, {"message": str(exc)}, error_code="InternalServerException"
                     )
                 return
+            # Handle STS GetCallerIdentity (POST / with form-encoded body)
+            if method == "POST" and parsed.path == "/":
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length).decode() if length else ""
+                if "Action=GetCallerIdentity" in body:
+                    xml = (
+                        "<GetCallerIdentityResponse>"
+                        "<GetCallerIdentityResult>"
+                        "<Account>123456789012</Account>"
+                        "<Arn>arn:aws:sts::123456789012:assumed-role/TestRole/session</Arn>"
+                        "<UserId>AROA1234567890EXAMPLE:session</UserId>"
+                        "</GetCallerIdentityResult>"
+                        "</GetCallerIdentityResponse>"
+                    )
+                    data = xml.encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/xml")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+
             # Log 404s at stderr so a debugging CI run surfaces which path
             # the client hit without going through the mock's HTTP response
             # (which BrokenPipes if the client already disconnected).

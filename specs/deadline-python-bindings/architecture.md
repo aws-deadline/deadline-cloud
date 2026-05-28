@@ -74,17 +74,39 @@ Qt GUI applications require that only the main thread touches widgets.
 All Rust calls happen on a Python `QThread` worker thread:
 
 ```
-MAIN THREAD (Qt event loop)          WORKER THREAD
-════════════════════════════          ═════════════
+MAIN THREAD (Qt event loop)          WORKER THREAD (QThread, 512KB stack)
+════════════════════════════          ══════════════════════════════════════
 
 QDialog                              QThread
-  status label  ◄──── Qt signal ──── 1. Call deadline._native.check_auth_status()
-  updates widget      (queued)       2. PyO3 converts args, calls Rust
-                                     3. Rust creates tokio runtime
-                                     4. Rust does async work (STS, API)
-                                     5. pythonize converts result → Python dict
-                                     6. Python emits Qt signal with result
+  status label  ◄──── Qt signal ──── 1. Call deadline._native.create_job_from_job_bundle()
+  updates widget      (queued)       2. PyO3 trampoline enters Rust
+                                     3. py.allow_threads() releases GIL
+                                     4. on_large_stack() spawns scoped thread (8MB stack)
+                                     5. Scoped thread: tokio block_on(async work)
+                                     6. Callbacks: Python::with_gil() re-acquires GIL
+                                     7. Result returned to Python
 ```
+
+### Stack Overflow Protection
+
+QThread on macOS defaults to 512KB stack. The rustls/webpki certificate
+parsing chain uses deep recursion (~50+ frames for `Cert::from_der` →
+`nested_of_mut` → `nested_limited`) that overflows this small stack.
+
+**Fix:** `on_large_stack(|| ...)` wraps `rt.block_on()` in a
+`std::thread::scope` spawned thread. Scoped threads get the OS default
+stack (8MB on macOS/Linux). The closure can borrow from the caller's
+stack frame because `scope` guarantees the thread completes before
+returning.
+
+**GIL release:** `py.allow_threads()` releases the GIL before entering
+`on_large_stack`, so callbacks on the scoped thread can re-acquire it
+via `Python::with_gil()` without deadlocking.
+
+This pattern is applied to all PyO3 entry points that call async Rust
+code: `create_job_from_job_bundle`, `check_auth_status`, `login`,
+`list_farms`, `get_farm`, `list_queues`, `get_queue`,
+`list_storage_profiles_for_queue`, `get_queue_parameter_definitions`.
 
 ## Callback Flow (Submission)
 

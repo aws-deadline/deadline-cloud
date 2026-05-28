@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Shared fixtures for ``test/ui/`` — launches the real ``deadline`` GUI as a
+Shared fixtures for ``pytests/ui_accessibility/`` — launches the real GUI as a
 subprocess pointed at an in-process MockDeadlineBackend and drives it
 through the accessibility tree via xa11y.
 """
@@ -25,24 +25,86 @@ from helpers import SAMPLE_TEMPLATE, SubmitterDialog, reap_all  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _reap_ui_subprocesses() -> Iterator[None]:
-    """Kill any GUI subprocesses still alive at test end and clear macOS crash state."""
-    import shutil
+    """Kill any GUI subprocesses still alive at test end."""
     yield
     reap_all()
-    # Clear macOS "unexpectedly quit" saved state to prevent recovery dialogs
-    # from blocking subsequent test launches after a crash (e.g. xfail tests).
-    saved_state = Path.home() / "Library/Saved Application State/org.python.python.savedState"
-    if saved_state.exists():
-        shutil.rmtree(saved_state, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
-# Subprocess shim
+# Subprocess shim — injected via PYTHONPATH/sitecustomize.py
 # ---------------------------------------------------------------------------
-# The Rust binary reads AWS_ENDPOINT_URL_DEADLINE directly (no botocore
-# host-prefix patching needed). Qt handles SIGTERM natively on POSIX.
-# We keep a minimal sitecustomize only for the edge case where Python
-# tests also exercise the Python GUI (not the primary path).
+# Two responsibilities:
+#
+#   1. Strip botocore's ``management.`` host-prefix so the Python GUI
+#      subprocess talks directly to localhost (the Rust CLI doesn't need
+#      this, but the Python GUI subprocess uses boto3 internally for
+#      some operations).
+#   2. Install a POSIX ``SIGTERM`` handler that calls
+#      ``QApplication.quit()`` so tests can ask a running GUI subprocess
+#      to unwind cleanly (run ``_format_response``, flush stdout) before
+#      exiting. A no-op QTimer ensures Python's signal handler fires
+#      inside Qt's C++ event loop.
+#
+# Telemetry is disabled via DEADLINE_CLOUD_TELEMETRY_OPT_OUT=true in the
+# env (see ``deadline_env`` below), so no telemetry patching is needed.
+_SITECUSTOMIZE = """
+import signal as _signal
+
+
+def _on_sigterm(signum, frame):
+    try:
+        from qtpy.QtWidgets import QApplication as _QApp
+        _inst = _QApp.instance()
+        if _inst is not None:
+            _inst.quit()
+            return
+    except Exception:
+        pass
+    import sys as _sys
+    _sys.exit(0)
+
+
+try:
+    _signal.signal(_signal.SIGTERM, _on_sigterm)
+except (ValueError, OSError):
+    pass
+
+# Qt's event loop blocks in C++, so Python signal handlers only fire at
+# bytecode boundaries. A no-op QTimer gives Python a regular chance to
+# run pending signal handlers inside app.exec(). Deferred via
+# sys.meta_path so non-GUI subprocesses don't pay the Qt import cost.
+import sys as _sys
+
+
+class _QtPyPostImportPatcher:
+    def find_spec(self, fullname, path, target=None):
+        if fullname != "qtpy.QtWidgets":
+            return None
+        try:
+            _sys.meta_path.remove(self)
+        except ValueError:
+            return None
+        try:
+            from qtpy import QtCore as _qc
+            from qtpy import QtWidgets as _qw
+        except ImportError:
+            return None
+
+        _orig_qa_init = _qw.QApplication.__init__
+
+        def _qa_init(self, *args, **kwargs):
+            _orig_qa_init(self, *args, **kwargs)
+            self._sigterm_pulse = _qc.QTimer(self)
+            self._sigterm_pulse.setInterval(100)
+            self._sigterm_pulse.timeout.connect(lambda: None)
+            self._sigterm_pulse.start()
+
+        _qw.QApplication.__init__ = _qa_init
+        return None
+
+
+_sys.meta_path.insert(0, _QtPyPostImportPatcher())
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -81,19 +143,23 @@ def deadline_env(tmp_path: Path, mock_backend) -> tuple[MockDeadlineBackend, dic
 
     config_file = tmp_path / "deadline.config"
     config_file.write_text("")
+    shim_dir = tmp_path / "shim"
+    shim_dir.mkdir()
+    (shim_dir / "sitecustomize.py").write_text(_SITECUSTOMIZE)
     fake_home = tmp_path / "home"
     fake_home.mkdir()
 
     env = {
         **os.environ,
         "HOME": str(fake_home),
-        "AWS_ENDPOINT_URL": deadline_url,
         "AWS_ENDPOINT_URL_DEADLINE": deadline_url,
         "AWS_ACCESS_KEY_ID": "testing",
         "AWS_SECRET_ACCESS_KEY": "testing",
         "AWS_DEFAULT_REGION": "us-west-2",
         "DEADLINE_CONFIG_FILE_PATH": str(config_file),
         "DEADLINE_CLOUD_TELEMETRY_OPT_OUT": "true",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": str(shim_dir) + os.pathsep + os.environ.get("PYTHONPATH", ""),
     }
     return backend, env
 

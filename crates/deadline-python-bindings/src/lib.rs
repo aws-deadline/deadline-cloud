@@ -7,6 +7,10 @@
 // cdylib (shared library loaded by Python) — no Rust code links to it, so
 // every `pub fn` appears unreachable from Rust's perspective.
 #![allow(unreachable_pub, reason = "PyO3 #[pyfunction] requires pub visibility")]
+#![allow(
+    clippy::result_large_err,
+    reason = "AWS SDK error types (SdkError<...>) are 464+ bytes; can't box without changing SDK API"
+)]
 
 use pyo3::prelude::*;
 
@@ -24,8 +28,26 @@ mod telemetry;
 
 /// Create a tokio runtime for async operations.
 fn make_runtime() -> PyResult<tokio::runtime::Runtime> {
-    tokio::runtime::Runtime::new()
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
         .map_err(|e| DeadlineOperationError::new_err(format!("Failed to create runtime: {e}")))
+}
+
+/// Run a closure on a scoped thread with the platform default stack size (8 MB
+/// on macOS/Linux), returning its result.
+///
+/// `QThread` on macOS defaults to only 512 KB stack, which is insufficient for
+/// the deep call chains in rustls/webpki certificate parsing. By running on a
+/// scoped thread we get the OS default (8 MB) while still allowing the closure
+/// to borrow from the caller's stack frame.
+fn on_large_stack<F, T>(f: F) -> PyResult<T>
+where
+    F: FnOnce() -> T + Send,
+    T: Send,
+{
+    std::thread::scope(|s| s.spawn(f).join())
+        .map_err(|_| DeadlineOperationError::new_err("Worker thread panicked"))
 }
 
 /// Load config from a path or the default location.

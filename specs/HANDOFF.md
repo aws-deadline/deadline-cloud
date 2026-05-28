@@ -32,6 +32,13 @@ plugin integration before committing to the architecture.
 
 ## Completed items
 
+- **Fix SIGBUS crash in _native.abi3.so (2026-05-27)** —
+  Stack overflow on QThread (512KB) during webpki cert parsing. Fixed
+  with `on_large_stack` (scoped thread, 8MB) + `py.allow_threads()`.
+  Cached STS account ID in SessionCache. Aligned xa11y test infra with
+  Python repo (SIGTERM handler, PYTHONUNBUFFERED, App.by_name). 37 xa11y
+  tests pass (was 31 + 4 xfailed/crashing).
+
 - **#35 Batch 2b — Queue Parameters + Attachments UI (2026-05-25)** —
   ParameterListModel, AttachmentModel, QML dynamic parameter form,
   attachment lists, ComboBox accessibility fix, farm/queue race fix,

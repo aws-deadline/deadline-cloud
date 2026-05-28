@@ -296,10 +296,14 @@ pub fn create_job_from_job_bundle(
     };
 
     let rt = crate::make_runtime()?;
-    let job_id = rt
-        .block_on(deadline_lib::bundle::create_job_from_job_bundle(
-            submit_params,
-        ))
+    let job_id = py
+        .allow_threads(|| {
+            crate::on_large_stack(|| {
+                rt.block_on(deadline_lib::bundle::create_job_from_job_bundle(
+                    submit_params,
+                ))
+            })
+        })?
         .map_err(|e| DeadlineOperationError::new_err(e.to_string()))?;
 
     let dict = PyDict::new(py);

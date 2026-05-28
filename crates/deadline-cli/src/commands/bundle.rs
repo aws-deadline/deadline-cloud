@@ -626,9 +626,7 @@ pub(crate) fn launch_python_gui(
         .stderr(std::process::Stdio::inherit())
         .output()
         .map_err(|e| {
-            CliError::Operation(format!(
-                "Failed to launch GUI subprocess ({python}): {e}"
-            ))
+            CliError::Operation(format!("Failed to launch GUI subprocess ({python}): {e}"))
         })?;
 
     if !output.status.success() {

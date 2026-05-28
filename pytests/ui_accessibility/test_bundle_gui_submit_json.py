@@ -10,46 +10,9 @@ from __future__ import annotations
 
 import os
 
-import pytest
-
 from helpers import SubmitterDialog, last_json_object
 
-_xfail_stack_overflow = pytest.mark.xfail(
-    reason="Stack overflow in _native.abi3.so (webpki cert parsing on QThread small stack). See HANDOFF.md.",
-)
 
-
-class TestSubmitterName:
-    """--submitter-name changes the window title and auto-closes on submit."""
-
-    def test_window_title_includes_submitter_name(self, bundle_dir, submitter_env) -> None:
-        dialog_title = "Deadline Cloud Testing Submitter"
-        with SubmitterDialog.open(
-            bundle_dir,
-            env=submitter_env,
-            extra_args=["--submitter-name", "Testing"],
-            dialog_name=dialog_title,
-        ) as app:
-            assert app.dialog().element().visible
-            assert app.dialog_name == dialog_title
-
-    @_xfail_stack_overflow
-    def test_submit_exits_process(self, bundle_dir, submitter_env) -> None:
-        """With --submitter-name set, close-on-success is enabled."""
-        dialog_title = "Deadline Cloud Testing Submitter"
-        with SubmitterDialog.open(
-            bundle_dir,
-            env=submitter_env,
-            extra_args=["--submitter-name", "Testing"],
-            dialog_name=dialog_title,
-        ) as app:
-            app.wait_farm_resolved()
-            app.submit_and_ok()
-            rc = app.proc.wait(timeout=5)
-            assert rc == 0, f"unexpected exit code {rc}"
-
-
-@_xfail_stack_overflow
 class TestSubmitJobSuccess:
     """A successful submission hits the mock backend and writes a bundle."""
 
@@ -72,7 +35,6 @@ class TestSubmitJobSuccess:
         assert found_template, "No template file found in job-history bundle"
 
 
-@_xfail_stack_overflow
 class TestOutputJsonSuccess:
     """--output json prints SUBMITTED JSON after a successful submission."""
 
@@ -89,7 +51,7 @@ class TestOutputJsonSuccess:
             app.wait_farm_resolved()
             app.submit_and_ok()
             app.close("Cancel")
-            stdout, _ = app.proc.communicate(timeout=3)
+            stdout, _ = app.proc.communicate(timeout=5)
 
         text = stdout.decode() if isinstance(stdout, bytes) else stdout
         payload = last_json_object(text)
@@ -99,13 +61,12 @@ class TestOutputJsonSuccess:
         assert backend.call_counts.get("CreateJob", 0) == 1
 
 
-@_xfail_stack_overflow
 class TestOutputJsonCancel:
     """--output json prints CANCELED JSON when submission is canceled."""
 
     def test_json_output_reports_canceled(self, bundle_dir, submitter_env, deadline_env) -> None:
         backend, _ = deadline_env
-        backend.create_job_delay = 3.0
+        backend.create_job_delay = 1.0
         with SubmitterDialog.open(
             bundle_dir,
             env=submitter_env,
@@ -121,3 +82,32 @@ class TestOutputJsonCancel:
         text = stdout.decode() if isinstance(stdout, bytes) else stdout
         payload = last_json_object(text)
         assert payload == {"status": "CANCELED"}, payload
+
+
+class TestSubmitterName:
+    """--submitter-name changes the window title and auto-closes on submit."""
+
+    def test_window_title_includes_submitter_name(self, bundle_dir, submitter_env) -> None:
+        dialog_title = "Deadline Cloud Testing Submitter"
+        with SubmitterDialog.open(
+            bundle_dir,
+            env=submitter_env,
+            extra_args=["--submitter-name", "Testing"],
+            dialog_name=dialog_title,
+        ) as app:
+            assert app.dialog().element().visible
+            assert app.dialog_name == dialog_title
+
+    def test_submit_exits_process(self, bundle_dir, submitter_env) -> None:
+        """With --submitter-name set, close-on-success is enabled."""
+        dialog_title = "Deadline Cloud Testing Submitter"
+        with SubmitterDialog.open(
+            bundle_dir,
+            env=submitter_env,
+            extra_args=["--submitter-name", "Testing"],
+            dialog_name=dialog_title,
+        ) as app:
+            app.wait_farm_resolved()
+            app.submit_and_ok()
+            rc = app.proc.wait(timeout=5)
+            assert rc == 0, f"unexpected exit code {rc}"

@@ -72,15 +72,52 @@ async fn farm_list_shows_farms_in_yaml() {
 }
 ```
 
+### Level 2: GUI Accessibility Tests (xa11y)
+
+The Python Qt GUI subprocess runs against a `MockDeadlineBackend` HTTP
+server. Tests drive the real GUI through the accessibility tree using
+`xa11y` and assert on widget state, process output, and side effects.
+
+Same principle as CLI Level 2: invoke the top-level interface (GUI
+instead of CLI), mock the backend, validate behavior from the outside.
+
+**When to use:** GUI behavior that can't be tested through the CLI —
+dialog layout, widget interactions, submission flows, JSON output.
+
+**Location:** `pytests/ui_accessibility/`
+
+**Infrastructure:**
+- Session-scoped `MockDeadlineBackend` HTTP server (same mock as CLI tests)
+- `sitecustomize.py` shim injected via `PYTHONPATH`:
+  - SIGTERM handler → `QApplication.quit()` for clean process shutdown
+  - QTimer pulse (100ms) so Python signal handlers fire inside Qt's C++ loop
+- `PYTHONUNBUFFERED=1` ensures stdout flushes before exit
+- `AWS_ENDPOINT_URL_DEADLINE` points at mock (not `AWS_ENDPOINT_URL` —
+  STS calls use the cached account ID, not the mock)
+
+**Constraints:**
+- Requires real display (no headless mode on macOS)
+- Don't interact with the screen during test runs
+- Tests run sequentially (one GUI process at a time)
+
+**Pattern:**
+```python
+with SubmitterDialog.open(bundle_dir, env=submitter_env) as app:
+    app.wait_farm_resolved()
+    app.submit_and_ok()
+    # close() sends SIGTERM → QApplication.quit() → exec() returns → print(result)
+```
+
 ### Choosing the Right Level
 
 Test at the highest interface that reliably exercises the behavior.
 
-1. CLI can exercise it → Level 2. (output, exit code, file side effects)
-2. CLI can't reach it → Level 1, at the highest consumer-facing entry point. (PyO3 bindings, library-only APIs)
-3. Higher entry point can't reliably assert it → test the function directly. (internal caching, atomicity, error variants swallowed by callers)
+1. CLI can exercise it → Level 2 CLI. (output, exit code, file side effects)
+2. GUI behavior (dialogs, widgets, signals) → Level 2 GUI. (accessibility-driven)
+3. Neither CLI nor GUI can reach it → Level 1, at the highest consumer-facing entry point. (PyO3 bindings, library-only APIs)
+4. Higher entry point can't reliably assert it → test the function directly. (internal caching, atomicity, error variants swallowed by callers)
 
-Repeat rule 3 recursively: only drop to a lower function when its
+Repeat rule 4 recursively: only drop to a lower function when its
 behavior can't be verified through a caller above it.
 
 ### When Both Levels Add Value

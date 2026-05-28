@@ -25,13 +25,16 @@ pub fn check_auth_status(py: Python<'_>, config_path: Option<&str>) -> PyResult<
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
     let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let result = rt.block_on(async {
-        let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
-        let status = deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
-        let api_available =
-            status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
-        (source.to_string(), status.to_string(), api_available)
-    });
+    let result = crate::on_large_stack(|| {
+        rt.block_on(async {
+            let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
+            let status =
+                deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
+            let api_available =
+                status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
+            (source.to_string(), status.to_string(), api_available)
+        })
+    })?;
     let dict = pyo3::types::PyDict::new(py);
     dict.set_item("credentials_source", result.0)?;
     dict.set_item("auth_status", result.1)?;
@@ -57,16 +60,19 @@ pub fn check_auth_status_with_progress(
         }
     };
     let rt = crate::make_runtime()?;
-    let result = rt.block_on(async {
-        notify("Checking credentials source...");
-        let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
-        notify("Checking authentication status...");
-        let status = deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
-        let api_available =
-            status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
-        notify("Done");
-        (source.to_string(), status.to_string(), api_available)
-    });
+    let result = crate::on_large_stack(|| {
+        rt.block_on(async {
+            notify("Checking credentials source...");
+            let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
+            notify("Checking authentication status...");
+            let status =
+                deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
+            let api_available =
+                status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
+            notify("Done");
+            (source.to_string(), status.to_string(), api_available)
+        })
+    })?;
     let dict = pyo3::types::PyDict::new(py);
     dict.set_item("credentials_source", result.0)?;
     dict.set_item("auth_status", result.1)?;
@@ -81,9 +87,11 @@ pub fn check_api_available(config_path: Option<&str>) -> PyResult<bool> {
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
     let profile = crate::extract_profile(&config);
     let rt = crate::make_runtime()?;
-    let status = rt.block_on(deadline_lib::api::auth::check_authentication_status(
-        profile.as_deref(),
-    ));
+    let status = crate::on_large_stack(|| {
+        rt.block_on(deadline_lib::api::auth::check_authentication_status(
+            profile.as_deref(),
+        ))
+    })?;
     Ok(status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated)
 }
 
@@ -130,15 +138,17 @@ pub fn login(
     });
 
     let rt = crate::make_runtime()?;
-    rt.block_on(deadline_lib::api::auth::login(
-        pending_cb
-            .as_ref()
-            .map(|f| f as &dyn Fn(deadline_lib::api::auth::AwsCredentialsSource)),
-        cancel_cb.as_ref().map(|f| f as &dyn Fn() -> bool),
-        profile.as_deref(),
-        &monitor_path,
-        &telemetry,
-    ))
+    crate::on_large_stack(|| {
+        rt.block_on(deadline_lib::api::auth::login(
+            pending_cb
+                .as_ref()
+                .map(|f| f as &dyn Fn(deadline_lib::api::auth::AwsCredentialsSource)),
+            cancel_cb.as_ref().map(|f| f as &dyn Fn() -> bool),
+            profile.as_deref(),
+            &monitor_path,
+            &telemetry,
+        ))
+    })?
     .map_err(DeadlineOperationError::new_err)
 }
 

@@ -49,9 +49,10 @@ Houdini, etc. — indirectly via the `gui/` package).
   from Rust, same name as the original Python exception
 - **`TelemetryClient` pyclass** — Python-owned with automatic cleanup
   on drop (no manual `free_telemetry` call needed)
-- **Per-call tokio runtime** — each async function creates a fresh
-  `Runtime::new()` and blocks on it. Safe because calls happen on
-  Qt worker threads. Cost (~1ms) negligible vs network I/O.
+- **Per-call tokio runtime on scoped thread** — each async function
+  creates a `current_thread` runtime and blocks on it inside a
+  `std::thread::scope` spawned thread (8MB stack). This avoids stack
+  overflow on QThread's 512KB stack while keeping the runtime lightweight.
 
 ## Build & Development
 

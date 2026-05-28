@@ -67,6 +67,14 @@ pub struct SessionCache {
         reason = "intentional three-state cache: uncached / default profile / named profile"
     )]
     cached_profile: Option<Option<String>>,
+    /// Cached account ID from STS `GetCallerIdentity`. Three states:
+    /// `None` = not resolved yet, `Some(None)` = resolved but unavailable,
+    /// `Some(Some("123..."))` = resolved successfully.
+    #[allow(
+        clippy::option_option,
+        reason = "intentional three-state cache: unresolved / resolved-none / resolved-some"
+    )]
+    cached_account_id: Option<Option<String>>,
     /// Queue user configs cached by (`farm_id`, `queue_id`).
     /// Python equivalent: `@lru_cache` on `_get_queue_user_boto3_session`.
     cached_queue_configs: HashMap<(String, String), SdkConfig>,
@@ -84,6 +92,7 @@ impl SessionCache {
         Self {
             cached_config: None,
             cached_profile: None,
+            cached_account_id: None,
             cached_queue_configs: HashMap::new(),
             context: SessionContext::default(),
         }
@@ -93,6 +102,7 @@ impl SessionCache {
     pub fn invalidate(&mut self) {
         self.cached_config = None;
         self.cached_profile = None;
+        self.cached_account_id = None;
         self.cached_queue_configs.clear();
     }
 
@@ -299,10 +309,18 @@ pub async fn deadline_client(profile: Option<&str>) -> DeadlineClient {
     if let Ok(app_name) = aws_sdk_deadline::config::AppName::new(ua) {
         builder = builder.app_name(app_name);
     }
-    // Telemetry reads config from disk (decoupled — explicit params)
+    // Telemetry: resolve account ID once and cache it (matches Python's
+    // behavior where the boto3 session identity was cached via @lru_cache).
+    let account_id = {
+        let mut cache = SESSION.lock().await;
+        if cache.cached_account_id.is_none() {
+            let resolved = crate::api::telemetry::resolve_account_id(&sdk_config).await;
+            cache.cached_account_id = Some(resolved);
+        }
+        cache.cached_account_id.as_ref().expect("set above").clone()
+    };
     let config = config_file::read_config().unwrap_or_default();
     let (opt_out, identifier) = crate::api::telemetry::resolve_telemetry_params(&config);
-    let account_id = crate::api::telemetry::resolve_account_id(&sdk_config).await;
     let telemetry = crate::api::telemetry::create_telemetry_with_metadata(
         opt_out,
         Some(&identifier),
