@@ -28,3 +28,15 @@ features = ["extension-module"]
 
 [tool.pytest.ini_options]
 testpaths = ["pytests"]
+
+[tool.ruff]
+target-version = "py39"
+src = ["gui", "pytests"]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
