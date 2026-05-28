@@ -333,7 +333,10 @@ mod tests {
     use serde_json::json;
     use tempfile::TempDir;
 
-    #[allow(clippy::many_single_char_names, reason = "y/m/d/h/s are clear date components")]
+    #[allow(
+        clippy::many_single_char_names,
+        reason = "y/m/d/h/s are clear date components"
+    )]
     fn utc(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Utc> {
         chrono::NaiveDate::from_ymd_opt(y, m, d)
             .unwrap()

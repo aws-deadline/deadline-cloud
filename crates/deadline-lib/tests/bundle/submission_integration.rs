@@ -56,7 +56,7 @@ impl SubmissionHandler for TestHandler {
 // ── Helpers ─────────────────────────────────────────────────────────
 
 fn setup_env(server: &MockServer) {
-        // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
+    // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
     unsafe {
         std::env::set_var(
             "AWS_ENDPOINT_URL_DEADLINE",

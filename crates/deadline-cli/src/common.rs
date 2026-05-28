@@ -360,7 +360,10 @@ pub(crate) fn expand_tilde(path: &str) -> std::path::PathBuf {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
-#[allow(unsafe_code, reason = "libc::raise and env var manipulation in serialized tests")]
+#[allow(
+    unsafe_code,
+    reason = "libc::raise and env var manipulation in serialized tests"
+)]
 mod tests {
     use super::*;
 

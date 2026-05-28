@@ -5,7 +5,6 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 
 use deadline_lib::attachments::download::{
     download_files_from_manifests, get_output_manifests_by_asset_root, merge_asset_manifests,
@@ -30,27 +29,6 @@ async fn build_s3_client(server: &MockServer) -> aws_sdk_s3::Client {
         .load()
         .await;
     deadline_lib::attachments::s3::build_s3_client(&sdk_config, None)
-}
-
-#[allow(dead_code, reason = "prepared for download tests with real file I/O")]
-fn make_manifest(files: &[(&str, &[u8])], dir: &Path) -> Snapshot {
-    let mut entries = Vec::new();
-    for (name, content) in files {
-        let file_path = dir.join(name);
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(&file_path, content).unwrap();
-        let hash = openjd_snapshots::hash::hash_data(content);
-        let mut e = FileEntry::file(*name, content.len() as u64, 1_700_000_000_000_000);
-        e.hash = Some(hash);
-        entries.push(e);
-    }
-    let total_size: u64 = entries.iter().map(|f| f.size.unwrap_or(0)).sum();
-    let mut snap = Snapshot::new(HashAlgorithm::Xxh128, WHOLE_FILE_CHUNK_SIZE);
-    snap.files = entries;
-    snap.total_size = total_size;
-    snap
 }
 
 fn make_manifest_no_files(entries: &[(&str, &str, u64)]) -> Snapshot {

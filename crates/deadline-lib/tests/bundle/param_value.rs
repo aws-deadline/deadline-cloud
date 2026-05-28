@@ -11,7 +11,10 @@ use test_case::test_case;
 #[test_case("INT",    serde_json::json!("19"),     serde_json::json!(19)      ; "int_from_string")]
 #[test_case("FLOAT",  serde_json::json!(3.14),    serde_json::json!(3.14)    ; "float_float")]
 #[test_case("FLOAT",  serde_json::json!("3.14"),   serde_json::json!(3.14)    ; "float_from_string")]
-#[allow(clippy::approx_constant, reason = "3.14 is a test value, not an approximation of PI")]
+#[allow(
+    clippy::approx_constant,
+    reason = "3.14 is a test value, not an approximation of PI"
+)]
 fn validate_value_coercion_succeeds(
     param_type: &str,
     input: serde_json::Value,

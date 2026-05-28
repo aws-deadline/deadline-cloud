@@ -1079,10 +1079,7 @@ mod tests {
     #[test]
     fn rebuild_manifests_no_mappings_no_filters_returns_initial() {
         let mut initial = HashMap::new();
-        initial.insert(
-            "/root".to_owned(),
-            vec![make_manifest(&["a.txt", "b.txt"])],
-        );
+        initial.insert("/root".to_owned(), vec![make_manifest(&["a.txt", "b.txt"])]);
 
         let result = rebuild_manifests(&initial, &HashMap::new(), &[]);
 

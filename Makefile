@@ -8,12 +8,15 @@ VENV_DIR := .venv
 ifdef VIRTUAL_ENV
   PYTHON := python3
   PIP := pip
+  RUFF := ruff
 else ifneq (,$(wildcard $(VENV_DIR)/bin/python3))
   PYTHON := $(VENV_DIR)/bin/python3
   PIP := $(VENV_DIR)/bin/pip
+  RUFF := $(VENV_DIR)/bin/ruff
 else
   PYTHON := python3
   PIP := pip
+  RUFF := ruff
 endif
 
 .PHONY: build build-rust build-python test test-rust test-python test-ui test-bindings setup setup-rust setup-python lint lint-rust lint-python fmt fmt-rust fmt-python check clean
@@ -51,25 +54,29 @@ setup-rust:
 	cargo install cargo-insta cargo-deny cargo-outdated cargo-bloat
 
 setup-python:
-	$(PIP) install -e ".[test]" --quiet
+	python3 -m venv $(VENV_DIR)
+	$(VENV_DIR)/bin/pip install -e ".[test,dev]" --quiet
 
 # ── Quality ──
 
 lint: lint-rust lint-python
+	cargo fmt --check
+	$(RUFF) format --check gui/ pytests/
 
 lint-rust:
 	cargo clippy --workspace --all-targets -- -D warnings
 
 lint-python:
-	ruff check gui/ pytests/
+	$(RUFF) check gui/ pytests/
 
 fmt: fmt-rust fmt-python
 
 fmt-rust:
-	cargo fmt --check
+	cargo fmt
 
 fmt-python:
-	ruff format --check gui/ pytests/
+	$(RUFF) format gui/ pytests/
+	$(RUFF) check --fix gui/ pytests/
 
 check:
 	cargo check --workspace

@@ -14,38 +14,6 @@ use tempfile::TempDir;
 use wiremock::matchers::{header_exists, method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-// --- Multipart POST responder ---
-// Returns CreateMultipartUpload response for ?uploads, and
-// CompleteMultipartUpload response for ?uploadId.
-#[allow(dead_code, reason = "prepared for multipart upload tests")]
-struct MultipartPostResponder;
-
-impl wiremock::Respond for MultipartPostResponder {
-    fn respond(&self, request: &wiremock::Request) -> ResponseTemplate {
-        let url = request.url.to_string();
-        if url.contains("uploads") && !url.contains("uploadId") {
-            ResponseTemplate::new(200).set_body_string(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
-<InitiateMultipartUploadResult>
-  <Bucket>test-bucket</Bucket>
-  <Key>key</Key>
-  <UploadId>test-upload-id</UploadId>
-</InitiateMultipartUploadResult>"#,
-            )
-        } else {
-            ResponseTemplate::new(200).set_body_string(
-                r#"<?xml version="1.0" encoding="UTF-8"?>
-<CompleteMultipartUploadResult>
-  <Location>https://test-bucket.s3.amazonaws.com/key</Location>
-  <Bucket>test-bucket</Bucket>
-  <Key>key</Key>
-  <ETag>"abc123"</ETag>
-</CompleteMultipartUploadResult>"#,
-            )
-        }
-    }
-}
-
 fn test_manifest(dir: &Path, files: &[(&str, &[u8])]) -> Snapshot {
     let mut entries = Vec::new();
     for (name, content) in files {
@@ -100,33 +68,6 @@ async fn build_uploader(server: &MockServer) -> S3UploadContext {
         .await;
     let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, None);
     S3UploadContext::new(s3_client, "123456789012".into()).unwrap()
-}
-
-/// Build an uploader with multiplier=1 (threshold=8MB) and pool=10 (workers=5).
-/// Use with 9MB+ files to exercise the multipart upload path.
-#[allow(dead_code, reason = "prepared for multipart upload tests")]
-async fn build_uploader_low_threshold(server: &MockServer) -> S3UploadContext {
-    let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-        .region(aws_config::Region::new("us-west-2"))
-        .endpoint_url(server.uri())
-        .test_credentials()
-        .load()
-        .await;
-    let s3_client = deadline_lib::attachments::s3::build_s3_client(&sdk_config, Some(10));
-    S3UploadContext::new(s3_client, "123456789012".into()).unwrap()
-}
-
-/// 9MB — just over the 8MB threshold when multiplier=1.
-#[allow(dead_code, reason = "prepared for multipart upload tests")]
-const LARGE_FILE_SIZE: usize = 9 * 1024 * 1024;
-
-/// Mount S3 `HeadObject` returning 200 (object exists).
-#[allow(dead_code, reason = "prepared for multipart upload tests")]
-async fn mock_s3_head_object_exists(server: &MockServer) {
-    Mock::given(method("HEAD"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(server)
-        .await;
 }
 
 /// Mount S3 `HeadObject` returning 404 (object does not exist).

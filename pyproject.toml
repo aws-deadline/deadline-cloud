@@ -18,6 +18,9 @@ test = [
     "pyyaml>=6.0",
     "botocore",
 ]
+dev = [
+    "ruff",
+]
 
 [tool.maturin]
 manifest-path = "crates/deadline-python-bindings/Cargo.toml"

@@ -1110,19 +1110,6 @@ mod tests {
         if cfg!(windows) { "cmd.exe" } else { "sh" }
     }
 
-    /// Write a shell script that exits 0 with no output.
-    #[allow(dead_code, reason = "prepared for hook execution tests")]
-    fn write_noop_hook(dir: &Path) -> String {
-        let script = dir.join("noop.sh");
-        std::fs::write(&script, "#!/bin/sh\nexit 0\n").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
-        script.to_str().unwrap().to_owned()
-    }
-
     fn write_hooks_yaml(dir: &Path, content: &str) {
         std::fs::write(dir.join("hooks.yaml"), content).unwrap();
     }
