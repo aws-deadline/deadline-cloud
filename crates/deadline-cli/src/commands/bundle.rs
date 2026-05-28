@@ -612,7 +612,7 @@ pub(crate) fn launch_python_gui(
     install_gui: bool,
 ) -> Result<String, CliError> {
     let python = find_python()?;
-    let params_json = serde_json::to_string(params).unwrap_or_else(|_| "{}".to_string());
+    let params_json = serde_json::to_string(params).unwrap_or_else(|_| "{}".to_owned());
 
     let mut cmd = std::process::Command::new(&python);
     cmd.args(["-m", "deadline.client.ui._gui_entry", command]);
@@ -668,10 +668,10 @@ pub(crate) fn find_python() -> Result<String, CliError> {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
-        if let Ok(status) = result {
-            if status.success() {
-                return Ok((*name).to_string());
-            }
+        if let Ok(status) = result
+            && status.success()
+        {
+            return Ok((*name).to_owned());
         }
     }
 
