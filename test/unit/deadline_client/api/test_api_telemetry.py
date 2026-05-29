@@ -524,6 +524,35 @@ def test_get_telemetry_client_caches_by_package_name(fresh_deadline_config):
     telemetry_mod.__cached_telemetry_clients = {}
 
 
+def test_process_start_event_emitted_on_start_threads(fresh_deadline_config):
+    """Tests that a process_start event is emitted when _start_threads is called"""
+    config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
+    with patch.object(api._telemetry, "get_monitor_id", side_effect=[None]), patch.object(
+        api._telemetry,
+        "get_user_and_identity_store_id",
+        side_effect=[("user-id", "identity-store-id")],
+    ), patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ):
+        client = TelemetryClient(
+            package_name="deadline-cloud-library",
+            package_ver="0.1.2.1234",
+            config=config.config_file.read_config(),
+        )
+        assert client.is_initialized
+        expected_event = TelemetryEvent(
+            event_type="com.amazon.rum.deadline.process_start",
+            event_details={},
+        )
+        # Drain the queue to find the session_start event
+        events = []
+        while not client.event_queue.empty():
+            event = client.event_queue.get_nowait()
+            if event is not None:
+                events.append(event)
+        assert expected_event in events
+
+
 class TestSwallowExceptionsDecorator:
     """Tests for the _swallow_exceptions decorator"""
 

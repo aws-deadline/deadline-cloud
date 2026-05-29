@@ -77,8 +77,8 @@ class TestTimeoutEntryWidget:
         assert widget.hours_box.isEnabled()
         assert widget.minutes_box.isEnabled()
 
-    def test_zero_timeout_shows_error_icon(self, qtbot):
-        """Verify error icon appears when timeout is zero and checkbox is checked."""
+    def test_zero_timeout_does_not_show_error_immediately(self, qtbot):
+        """Verify error icon does NOT appear immediately when timeout becomes zero."""
         widget = TimeoutEntryWidget("Test timeout", "A test tooltip")
         qtbot.addWidget(widget)
 
@@ -87,7 +87,36 @@ class TestTimeoutEntryWidget:
         widget.minutes_box.setValue(0)
         widget.update_state()
 
+        assert widget.status_icon.text() != ERROR_ICON
+
+    def test_zero_timeout_shows_error_after_focus_leave(self, qtbot):
+        """Verify error icon appears after _update_error_state is called (focus left)."""
+        widget = TimeoutEntryWidget("Test timeout", "A test tooltip")
+        qtbot.addWidget(widget)
+
+        widget.days_box.setValue(0)
+        widget.hours_box.setValue(0)
+        widget.minutes_box.setValue(0)
+        widget._update_error_state()
+
         assert widget.status_icon.text() == ERROR_ICON
+
+    def test_nonzero_timeout_clears_error_immediately(self, qtbot):
+        """Verify error clears as soon as the value becomes non-zero."""
+        widget = TimeoutEntryWidget("Test timeout", "A test tooltip")
+        qtbot.addWidget(widget)
+
+        # First, put into error state
+        widget.days_box.setValue(0)
+        widget.hours_box.setValue(0)
+        widget.minutes_box.setValue(0)
+        widget._update_error_state()
+        assert widget.status_icon.text() == ERROR_ICON
+
+        # Now set a valid value - error should clear immediately via update_state
+        widget.minutes_box.setValue(30)
+        widget.update_state()
+        assert widget.status_icon.text() == ""
 
     def test_unchecked_shows_warning_icon(self, qtbot):
         """Verify warning icon appears when checkbox is unchecked."""
@@ -147,23 +176,61 @@ class TestTimeoutTableWidget:
 
         assert row.get_timeout_seconds() == 7200
 
-    def test_error_label_visible_for_zero_timeout(self, qtbot):
-        """Verify error message appears when an active timeout is zero."""
+    def test_error_label_not_visible_on_zero_without_focus_leave(self, qtbot):
+        """Verify error message does NOT appear when timeout is set to zero mid-edit."""
         timeouts = _make_timeouts(**{"Task timeout": {"seconds": 3600}})
         widget = TimeoutTableWidget(timeouts=timeouts)
         qtbot.addWidget(widget)
         widget.show()
 
-        # Set timeout to zero while checked
+        row = widget.timeout_rows["Task timeout"]
+        row.days_box.setValue(0)
+        row.hours_box.setValue(0)
+        row.minutes_box.setValue(0)
+
+        assert not widget.error_label.isVisible()
+
+    def test_error_label_visible_after_focus_leave(self, qtbot):
+        """Verify error message appears when focus leaves a row with zero timeout."""
+        timeouts = _make_timeouts(**{"Task timeout": {"seconds": 3600}})
+        widget = TimeoutTableWidget(timeouts=timeouts)
+        qtbot.addWidget(widget)
+        widget.show()
+
         row = widget.timeout_rows["Task timeout"]
         row.days_box.setValue(0)
         row.hours_box.setValue(0)
         row.minutes_box.setValue(0)
         row.checkbox.setChecked(True)
-        row._on_change()
+
+        # Simulate focus leaving the row
+        widget._update_error_states()
 
         assert widget.error_label.isVisible()
         assert "zero" in widget.error_label.text().lower()
+
+    def test_error_label_clears_when_value_becomes_valid(self, qtbot):
+        """Verify error message clears immediately when timeout becomes non-zero."""
+        timeouts = _make_timeouts(**{"Task timeout": {"seconds": 3600}})
+        widget = TimeoutTableWidget(timeouts=timeouts)
+        qtbot.addWidget(widget)
+        widget.show()
+
+        row = widget.timeout_rows["Task timeout"]
+        row.days_box.setValue(0)
+        row.hours_box.setValue(0)
+        row.minutes_box.setValue(0)
+        row.checkbox.setChecked(True)
+
+        # Put into error state
+        widget._update_error_states()
+        assert widget.error_label.isVisible()
+
+        # Fix the value - error should clear immediately via _on_row_changed
+        row.minutes_box.setValue(30)
+        row._on_change()
+
+        assert not widget.error_label.isVisible()
 
     def test_warning_label_visible_when_deactivated(self, qtbot):
         """Verify warning message appears when a timeout is deactivated."""

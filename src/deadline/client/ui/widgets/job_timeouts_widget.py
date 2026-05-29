@@ -10,6 +10,7 @@ from typing import Dict, Optional
 from datetime import timedelta
 
 from qtpy.QtWidgets import (  # type: ignore
+    QApplication as _QApplication,
     QFormLayout,
     QGroupBox,
     QLabel,
@@ -18,7 +19,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QGridLayout,
     QWidget,
 )
-from qtpy.QtCore import Signal
+from qtpy.QtCore import QEvent as _QEvent, Signal, QTimer as _QTimer
 from .._utils import tr
 from ..dataclasses.timeouts import TimeoutTableEntries
 
@@ -39,6 +40,8 @@ class TimeoutEntryWidget(QWidget):
 
     # Signal to indicate any change in the widget
     changed = Signal()
+    # Signal emitted when focus leaves all spinboxes in this row
+    _focus_left = Signal()
 
     def __init__(self, label: str, tooltip: str):
         super().__init__()
@@ -53,14 +56,22 @@ class TimeoutEntryWidget(QWidget):
         self.days_box = QSpinBox(self, minimum=0, maximum=365)
         self.days_box.setSuffix(" days")
         self.days_box.setFixedWidth(90)
+        self.days_box.setKeyboardTracking(False)
 
         self.hours_box = QSpinBox(self, minimum=0, maximum=23)
         self.hours_box.setSuffix(" hours")
         self.hours_box.setFixedWidth(90)
+        self.hours_box.setKeyboardTracking(False)
 
         self.minutes_box = QSpinBox(self, minimum=0, maximum=59)
         self.minutes_box.setSuffix(" minutes")
         self.minutes_box.setFixedWidth(90)
+        self.minutes_box.setKeyboardTracking(False)
+
+        self._spin_boxes = [self.days_box, self.hours_box, self.minutes_box]
+
+        for box in self._spin_boxes:
+            box.installEventFilter(self)
 
         self._build_ui()
         self._connect_signals()
@@ -94,6 +105,23 @@ class TimeoutEntryWidget(QWidget):
         """
         self.update_state()
         self.changed.emit()
+
+    def eventFilter(self, obj, event):
+        """
+        Watches for focus-out on child spinboxes. When focus leaves a spinbox,
+        checks (after Qt processes the focus change) whether the new focus target
+        is still within this row. If not, emits focus_left.
+        """
+        if event.type() == _QEvent.FocusOut and obj in self._spin_boxes:
+            _QTimer.singleShot(0, self._check_focus_left)
+        return super().eventFilter(obj, event)
+
+    def _check_focus_left(self):
+        focus_widget = _QApplication.focusWidget()
+        for box in self._spin_boxes:
+            if focus_widget is box or focus_widget is box.lineEdit():
+                return
+        self._focus_left.emit()
 
     def set_enabled(self, enabled: bool):
         """
@@ -174,21 +202,29 @@ class TimeoutEntryWidget(QWidget):
 
     def update_state(self):
         """
-        Updates the complete state of the row including enabled state, validation indicators,
-        and suffixes based on current values and checkbox state.
+        Updates the non-error state of the row: enabled state, warning icon, and suffixes.
+        Error indicators are cleared immediately when the value becomes valid, but only
+        shown when focus leaves the row (managed by the parent TimeoutTableWidget).
         """
         is_checked = self.checkbox.isChecked()
         if not is_checked:
             self.set_status_icon(WARNING_ICON)
             self.set_error_style(False)
-        elif self.get_timeout_seconds() == 0:
-            self.set_status_icon(ERROR_ICON)
-            self.set_error_style(True)
-        else:
+        elif self.get_timeout_seconds() != 0:
             self.set_status_icon("")
             self.set_error_style(False)
         self.set_enabled(is_checked)
         self.update_suffix()
+
+    def _update_error_state(self):
+        """
+        Updates error indicators based on the current value.
+        Called by the parent widget when focus leaves the row.
+        """
+        is_checked = self.checkbox.isChecked()
+        if is_checked and self.get_timeout_seconds() == 0:
+            self.set_status_icon(ERROR_ICON)
+            self.set_error_style(True)
 
 
 class TimeoutTableWidget(QGroupBox):
@@ -204,7 +240,7 @@ class TimeoutTableWidget(QGroupBox):
     - Individual timeout rows with checkbox activation
     - Time input fields for days, hours, and minutes
     - Visual indicators for warnings and errors
-    - Real-time validation and feedback
+    - Validation on focus-out to avoid premature error display
     - Automatic suffix updates (singular/plural)
     - Comprehensive error messaging
 
@@ -236,7 +272,8 @@ class TimeoutTableWidget(QGroupBox):
             timeout_row = TimeoutEntryWidget(label, entry.tooltip)
             timeouts_layout.addWidget(timeout_row, index, 0, 1, 4)
             self.timeout_rows[label] = timeout_row
-            timeout_row.changed.connect(self._update_ui_state)
+            timeout_row.changed.connect(self._on_row_changed)
+            timeout_row._focus_left.connect(self._update_error_states)
 
         self.error_label = self._create_message_label(ERROR_BG_COLOR)
         self.warning_label = self._create_message_label(WARNING_BG_COLOR)
@@ -268,17 +305,28 @@ class TimeoutTableWidget(QGroupBox):
         label.setWordWrap(True)
         return label
 
-    def _update_ui_state(self):
+    def _on_row_changed(self):
         """
-        Updates the UI state for error and warning messages.
+        Called when any row value changes. Clears errors immediately if the value
+        is now valid, but does not show new errors (that happens on focus-out).
         """
-        self._update_error_states()
+        any_zero = any(
+            row.get_timeout_seconds() == 0 and row.checkbox.isChecked()
+            for row in self.timeout_rows.values()
+        )
+        if not any_zero:
+            self.error_label.setText("")
+            self.error_label.setVisible(False)
         self._update_warning_states()
 
     def _update_error_states(self):
         """
-        Updates the error message label based on validation of all timeout rows.
+        Updates the error message label and per-row error indicators.
+        Called when focus leaves a timeout row.
         """
+        for row in self.timeout_rows.values():
+            row._update_error_state()
+
         any_zero = any(
             row.get_timeout_seconds() == 0 and row.checkbox.isChecked()
             for row in self.timeout_rows.values()
@@ -311,7 +359,8 @@ class TimeoutTableWidget(QGroupBox):
                 row = self.timeout_rows[label]
                 row.checkbox.setChecked(entry.is_activated)
                 row.set_timeout(entry.seconds)
-        self._update_ui_state()
+        self._update_error_states()
+        self._update_warning_states()
 
     def update_settings(self, timeouts: TimeoutTableEntries):
         """
