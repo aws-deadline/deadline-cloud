@@ -52,8 +52,8 @@ from ..api._session import session_context
 logger = getLogger(__name__)
 
 
-def _make_pre_ui_metadata(initial_settings: Any, job_bundle_dir: str) -> _HookMetadata:
-    """Build minimal HookMetadata for the pre-UI phase."""
+def _make_pre_gui_metadata(initial_settings: Any, job_bundle_dir: str) -> _HookMetadata:
+    """Build minimal HookMetadata for the pre-GUI phase."""
     farm_id = _get_setting("defaults.farm_id") or ""
     queue_id = _get_setting("defaults.queue_id") or ""
     storage_profile_id = _get_setting("settings.storage_profile_id") or None
@@ -313,18 +313,18 @@ def show_job_bundle_submitter(
     initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
     initial_settings.browse_enabled = browse
 
-    # Run pre-UI hooks to allow studios to pre-populate dialog fields.
-    pre_ui_output: dict[str, Any] = {}
+    # Run pre-GUI hooks to allow studios to pre-populate dialog fields.
+    pre_gui_output: dict[str, Any] = {}
     allow_env_hooks = _config_file.str2bool(_get_setting("settings.allow_environment_hooks"))
     allow_bundle_hooks = _config_file.str2bool(_get_setting("settings.allow_bundle_hooks"))
     hook_manager = _HookManager(input_job_bundle_dir, logger.info)
     hooks = hook_manager.load_hooks()
-    if hooks and hooks.pre_ui and not allow_bundle_hooks and not allow_env_hooks:
+    if hooks and hooks.pre_gui and not allow_bundle_hooks and not allow_env_hooks:
         logger.warning(
-            "Note: Job bundle contains preUI hooks but bundle hooks are disabled.\n"
+            "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
             "Enable with: deadline config set settings.allow_bundle_hooks true"
         )
-    if (allow_env_hooks or allow_bundle_hooks) and hooks and hooks.pre_ui:
+    if (allow_env_hooks or allow_bundle_hooks) and hooks and hooks.pre_gui:
         if not _config_file.str2bool(_get_setting("settings.auto_accept")):
             confirmation_msg = (
                 _generate_hooks_confirmation_message(hooks, input_job_bundle_dir)
@@ -339,8 +339,8 @@ def show_job_bundle_submitter(
             )
             if reply != QMessageBox.Yes:
                 raise _DeadlineOperationCanceled("Job submission canceled (user declined hooks).")
-        hook_metadata = _make_pre_ui_metadata(initial_settings, input_job_bundle_dir)
-        pre_ui_output = hook_manager.execute_pre_ui_hooks(hook_metadata)
+        hook_metadata = _make_pre_gui_metadata(initial_settings, input_job_bundle_dir)
+        pre_gui_output = hook_manager.execute_pre_gui_hooks(hook_metadata)
 
     initial_shared_parameter_values = {}
 
@@ -370,9 +370,9 @@ def show_job_bundle_submitter(
     for parameter in job_parameters_dict.values():
         initial_shared_parameter_values[parameter["name"]] = parameter["value"]
 
-    # Merge pre-UI hook output. CLI-supplied parameters take precedence over hook values.
-    if pre_ui_output:
-        hook_params = pre_ui_output.get("parameters", {})
+    # Merge pre-GUI hook output. CLI-supplied parameters take precedence over hook values.
+    if pre_gui_output:
+        hook_params = pre_gui_output.get("parameters", {})
         template_param_names = {p["name"] for p in initial_settings.parameters}
         for param_name, param_value in hook_params.items():
             if param_name in (job_parameters_dict or {}):
@@ -386,10 +386,10 @@ def show_job_bundle_submitter(
             else:
                 # Shared job property (deadline: keys, queue parameters, etc.)
                 initial_shared_parameter_values[param_name] = param_value
-        if "name" in pre_ui_output:
-            initial_settings.name = pre_ui_output["name"]
-        if "description" in pre_ui_output:
-            initial_settings.description = pre_ui_output["description"]
+        if "name" in pre_gui_output:
+            initial_settings.name = pre_gui_output["name"]
+        if "description" in pre_gui_output:
+            initial_settings.description = pre_gui_output["description"]
 
     submitter_dialog = SubmitJobToDeadlineDialog(
         job_setup_widget_type=JobBundleSettingsWidget,

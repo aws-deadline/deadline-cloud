@@ -33,7 +33,7 @@ class HookConfiguration:
     """Complete hook configuration from hooks.yaml/json."""
 
     version: str
-    pre_ui: _List[HookDefinition]
+    pre_gui: _List[HookDefinition]
     pre_submission: _List[HookDefinition]
     post_submission: _List[HookDefinition]
 
@@ -41,7 +41,7 @@ class HookConfiguration:
     def from_dict(cls, data: _Dict[str, _Any]) -> HookConfiguration:
         return cls(
             version=data.get("version", "1.0"),
-            pre_ui=[HookDefinition.from_dict(h) for h in data.get("preUI", [])],
+            pre_gui=[HookDefinition.from_dict(h) for h in data.get("preGUI", [])],
             pre_submission=[HookDefinition.from_dict(h) for h in data.get("preSubmission", [])],
             post_submission=[HookDefinition.from_dict(h) for h in data.get("postSubmission", [])],
         )

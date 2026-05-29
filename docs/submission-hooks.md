@@ -12,7 +12,7 @@ Place a `hooks.yaml` (or `hooks.json`) in your job bundle directory alongside `t
 
 ```yaml
 version: "1.0"
-preUI:
+preGUI:
   - command: python3
     args: [prefill.py]
     timeout: 10
@@ -42,14 +42,14 @@ Requires `settings.allow_environment_hooks` to be enabled. Both sources can be a
 
 ## Hook Types
 
-### Pre-UI Hooks
+### Pre-GUI Hooks
 
 Run **before** the submission dialog opens. Use these to:
 - Pre-populate job name, description, and priority
 - Set parameter defaults based on the current scene or pipeline context
 - Query a project management system for task metadata
 
-Pre-UI hooks **block the dialog from opening** if they fail (non-zero exit code or timeout).
+Pre-GUI hooks **block the dialog from opening** if they fail (non-zero exit code or timeout).
 
 Output JSON to stdout to modify the initial dialog state:
 
@@ -124,7 +124,7 @@ The `version` field is required and must be `"1.0"`.
 **YAML format:**
 ```yaml
 version: "1.0"
-preUI:
+preGUI:
   - command: python3
     args: [scripts/prefill_from_shotgrid.py]
     timeout: 10
@@ -382,12 +382,12 @@ This is useful for studios that want to enforce hooks across all submissions wit
 
 ### Confirmation Prompt
 
-When hooks are enabled, you'll be prompted to confirm before they run. Pre-UI hooks show a prompt before the dialog opens; pre- and post-submission hooks show a prompt when you click Submit.
+When hooks are enabled, you'll be prompted to confirm before they run. Pre-GUI hooks show a prompt before the dialog opens; pre- and post-submission hooks show a prompt when you click Submit.
 
 ```
 This job bundle contains submission hooks that will execute on your machine:
 
-  Pre-UI hooks:
+  Pre-GUI hooks:
     [1] python3 prefill_from_shotgrid.py
 
   Pre-submission hooks:

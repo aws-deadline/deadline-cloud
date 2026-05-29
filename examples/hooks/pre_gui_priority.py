@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Pre-UI hook: set job priority based on deadline proximity.
+"""Pre-GUI hook: set job priority based on deadline proximity.
 
 Place this script alongside a hooks.yaml in your job bundle:
 
     hooks.yaml
     ----------
     version: "1.0"
-    preUI:
+    preGUI:
       - command: python3
-        args: [pre_ui_priority.py]
+        args: [pre_gui_priority.py]
         timeout: 5
 
 The hook reads the current date and sets priority 90 if a deadline is
