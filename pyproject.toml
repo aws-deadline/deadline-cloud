@@ -53,7 +53,7 @@ Source = "https://github.com/aws-deadline/deadline-cloud"
 [project.optional-dependencies]
 gui = [
   # If the version changes, update the version in deadline/client/ui/__init__.py
-  "PySide6-essentials >= 6.6,< 6.11",
+  "PySide6-essentials >= 6.6,< 6.11; python_version >= '3.9'",
 ]
 mcp = [
   "mcp >= 1.13.0",
@@ -155,7 +155,6 @@ disable_warnings = ["module-not-measured"]
 branch = true
 parallel = true
 source_pkgs = ["deadline"]
-omit = ["*/deadline/client/ui/*"]
 plugins = ["coverage_conditional_plugin"]
 
 [tool.coverage.paths]

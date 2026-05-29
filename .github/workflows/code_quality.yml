@@ -39,8 +39,8 @@ jobs:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
       ref: ${{inputs.tag}}
-      # The incremental output download and mcp feature doesn't run on Python 3.8, so test coverage is lower
-      cov-fail-under: "63"
+      # UI, MCP, and incremental download features require Python >= 3.9, so coverage is lower on 3.8
+      cov-fail-under: "47"
 
   Attributions:
     name: Attributions

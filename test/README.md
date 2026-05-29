@@ -26,9 +26,9 @@ Run: `hatch run test`
 
 GUI unit tests validate the Qt-based submitter and settings dialogs
 using [pytest-qt](https://pytest-qt.readthedocs.io/) with an offscreen
-Qt platform (no display required). They are tracked under a separate
-coverage configuration (`pyproject-gui-coverage.toml`) that measures
-only the `deadline.client.ui` package.
+Qt platform (no display required). They run alongside all other unit
+tests as part of `hatch run test` and contribute to the unified coverage
+measurement.
 
 **When to write a GUI unit test:**
 
@@ -44,26 +44,27 @@ GUI unit tests are *not* required for cosmetic-only changes
 **How to run:**
 
 ```sh
-# Run all GUI unit tests with coverage
-$ hatch run gui:test
+# Run all tests (includes GUI unit tests)
+$ hatch run test
+
+# Run only GUI unit tests
+$ hatch run test test/unit/deadline_client/ui/gui
 
 # Run a specific test file
-$ hatch run gui:test test/unit/deadline_client/ui/gui/test_settings_dialogue.py
+$ hatch run test test/unit/deadline_client/ui/gui/test_settings_dialogue.py
 
 # Run a specific test by name
-$ hatch run gui:test -k "test_host_requirements"
+$ hatch run test -k "test_host_requirements"
 ```
 
 **Expectations:**
 
 - Tests must pass in offscreen mode (`QT_QPA_PLATFORM=offscreen`) — no
   real display or user interaction.
-- The GUI coverage threshold is currently **50%** of
-  `deadline.client.ui`. This will increase as coverage improves.
 - Tests should use the `mock_deadline_backend` fixture (see
   `test/unit/deadline_client/ui/gui/conftest.py`) instead of mocking
   individual API calls, to ensure realistic service behavior.
-- Coverage reports are written to `build/coverage-gui/`.
+- Coverage reports are written to `build/coverage/`.
 
 ## `test/cli_e2e/` — CLI end-to-end tests
 
