@@ -247,12 +247,20 @@ story. See `specs/HANDOFF.md` for detailed analysis.
   clearing. Would unify the Rust L2 tests and xa11y GUI tests on a
   single mock backend instead of maintaining two (Rust wiremock +
   Python `MockDeadlineBackend`).
-- **Stabilize xa11y GUI tests**: Several tests are flaky due to timing
-  issues — `resolve_account_id` adds a 2-second STS timeout when the
-  mock returns 404, and tests that reopen dialogs hit 15-second
-  visibility timeouts. Fix: add STS route to the Python mock (return
-  a canned response), increase dialog wait timeouts, or skip the STS
-  call entirely when endpoint is HTTP (non-TLS).
+- **Stabilize xa11y GUI tests**: Tests are flaky due to two issues:
+  1. **`_find_app` name-fallback matches wrong app** (root cause of most
+     failures): The name-based fallback in `_find_app` matches any new
+     accessibility app not in the baseline. Transient macOS system
+     services (e.g. `ThemeWidgetControlViewService`) appear between
+     baseline capture and GUI startup, causing the test to attach to the
+     wrong app. Fix applied in Rust repo: filter the fallback to only
+     match apps whose names contain "python"/"deadline". Same fix needed
+     in `deadline-cloud-python/test/ui/helpers.py` (identical bug).
+  2. `resolve_account_id` adds a 2-second STS timeout when the mock
+     returns 404, and tests that reopen dialogs hit 15-second visibility
+     timeouts. Fix: add STS route to the Python mock (return a canned
+     response), increase dialog wait timeouts, or skip the STS call
+     entirely when endpoint is HTTP (non-TLS).
 - **Reduce `serde_json::Value` usage** — 108 references in CLI code.
   Address incrementally when touching those files.
 - **Audit `collect()` then iterate** — 18 sites. Quick fixes when

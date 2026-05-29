@@ -769,7 +769,9 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/2023-10-12/telemetry"))
-            .and(body_string_contains("com.amazon.rum.deadline.process_start"))
+            .and(body_string_contains(
+                "com.amazon.rum.deadline.process_start",
+            ))
             .respond_with(ResponseTemplate::new(200))
             .expect(1..)
             .mount(&server)

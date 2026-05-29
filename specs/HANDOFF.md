@@ -54,6 +54,12 @@ plugin integration before committing to the architecture.
 
 ## Completed items
 
+- **Fix xa11y GUI test flakiness — `_find_app` false match (2026-05-28)** —
+  `_find_app` name-based fallback matched transient macOS system services
+  (e.g. `ThemeWidgetControlViewService`) instead of the test's GUI. Fixed
+  by filtering fallback to only match apps containing "python"/"deadline".
+  Same bug exists in `deadline-cloud-python/test/ui/helpers.py`.
+
 - **#28d — Python linting + collect() audit (2026-05-27)** —
   Added ruff linter/formatter for `gui/` and `pytests/`. Fixed 5 clippy
   violations (unsafe impl comments, to_string on &str, collapsible if).

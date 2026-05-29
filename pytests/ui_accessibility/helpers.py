@@ -208,14 +208,22 @@ def _find_app(pid: int, baseline_names: set, timeout: float) -> xa11y.App:
     Linux, which sometimes reports the wrong PID (typically 1) for child
     processes.
     """
+    # Known names our GUI subprocess registers under in the accessibility tree.
+    _EXPECTED_APP_NAMES = ("python", "Python", "deadline", "Deadline")
+
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         apps = xa11y.App.list()
         for a in apps:
             if a.pid == pid:
                 return xa11y.App.by_name(a.name)
+        # Fallback: match by name for platforms that misreport PIDs (Linux
+        # AT-SPI). Filter to names that look like our app to avoid matching
+        # transient system services (e.g. ThemeWidgetControlViewService).
         for a in apps:
-            if a.name not in baseline_names:
+            if a.name not in baseline_names and any(
+                n in (a.name or "") for n in _EXPECTED_APP_NAMES
+            ):
                 return xa11y.App.by_name(a.name)
         time.sleep(0.25)
     raise TimeoutError(f"No accessibility app found for PID {pid}")

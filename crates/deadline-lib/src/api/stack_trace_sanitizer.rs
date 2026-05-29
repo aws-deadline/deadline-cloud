@@ -131,8 +131,7 @@ mod tests {
         );
         // Must contain a frame from this crate
         assert!(
-            sanitized.contains("deadline_lib")
-                || sanitized.contains("stack_trace_sanitizer"),
+            sanitized.contains("deadline_lib") || sanitized.contains("stack_trace_sanitizer"),
             "Expected our crate in sanitized output:\n{sanitized}"
         );
     }
