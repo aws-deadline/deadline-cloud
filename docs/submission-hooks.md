@@ -12,6 +12,11 @@ Place a `hooks.yaml` (or `hooks.json`) in your job bundle directory alongside `t
 
 ```yaml
 version: "1.0"
+preGUI:
+  - command: python3
+    args: [prefill.py]
+    timeout: 10
+
 preSubmission:
   - command: python3
     args: [validate.py]
@@ -36,6 +41,58 @@ export DEADLINE_HOOKS_DIR=/studio/pipeline/hooks/maya
 Requires `settings.allow_environment_hooks` to be enabled. Both sources can be active simultaneously — environment hooks run first, then bundle hooks.
 
 ## Hook Types
+
+### Pre-GUI Hooks
+
+Run **before** the submission dialog opens. Use these to:
+- Pre-populate job name, description, and priority
+- Set parameter defaults based on the current scene or pipeline context
+- Query a project management system for task metadata
+
+Pre-GUI hooks **block the dialog from opening** if they fail (non-zero exit code or timeout).
+
+Output JSON to stdout to modify the initial dialog state:
+
+```python
+import json
+
+output = {
+    "name": "My Render - v042",
+    "description": "Submitted via pipeline",
+    "parameters": {
+        # Job template parameters
+        "SceneFile": "/resolved/path/to/scene.ma",
+        "OutputPath": "/shots/sh010/renders/",
+        # Shared job properties use the deadline: prefix
+        "deadline:priority": 75,
+        "deadline:maxFailedTasksCount": 5,
+        "deadline:maxRetriesPerTask": 3,
+        "deadline:maxWorkerCount": 10,
+        "deadline:targetTaskRunStatus": "READY",  # or "SUSPENDED"
+    }
+}
+print(json.dumps(output))
+```
+
+| Output field | Type | Description |
+|---|---|---|
+| `name` | string | Pre-fill the job name field |
+| `description` | string | Pre-fill the job description field |
+| `parameters` | object | Pre-fill parameter values by name (see below) |
+
+**Parameter keys** (inside `parameters`):
+
+Job template parameters use their name directly. Shared job properties use the `deadline:` prefix:
+
+| Key | Type | Description |
+|---|---|---|
+| `deadline:priority` | integer | Priority (0–100) |
+| `deadline:maxFailedTasksCount` | integer | Maximum failed tasks before the job fails |
+| `deadline:maxRetriesPerTask` | integer | Maximum retries per failed task |
+| `deadline:maxWorkerCount` | integer | Maximum concurrent workers |
+| `deadline:targetTaskRunStatus` | string | Initial task status: `"READY"` or `"SUSPENDED"` |
+
+> **Note:** CLI-supplied `--parameter` values take precedence over hook-supplied `parameters`.
 
 ### Pre-Submission Hooks
 
@@ -67,6 +124,11 @@ The `version` field is required and must be `"1.0"`.
 **YAML format:**
 ```yaml
 version: "1.0"
+preGUI:
+  - command: python3
+    args: [scripts/prefill_from_shotgrid.py]
+    timeout: 10
+
 preSubmission:
   - command: python3
     args: [scripts/validate_assets.py]
@@ -320,10 +382,13 @@ This is useful for studios that want to enforce hooks across all submissions wit
 
 ### Confirmation Prompt
 
-When hooks are enabled, you'll be prompted to confirm before they run:
+When hooks are enabled, you'll be prompted to confirm before they run. Pre-GUI hooks show a prompt before the dialog opens; pre- and post-submission hooks show a prompt when you click Submit.
 
 ```
 This job bundle contains submission hooks that will execute on your machine:
+
+  Pre-GUI hooks:
+    [1] python3 prefill_from_shotgrid.py
 
   Pre-submission hooks:
     [1] python3 validate_assets.py

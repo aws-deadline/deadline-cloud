@@ -22,6 +22,7 @@ from deadline.client.job_bundle._hooks import (
 )
 from deadline.client.job_bundle._hooks._merger import merge_asset_references, merge_payload
 from deadline.client.job_bundle._hooks._validator import (
+    validate_pre_gui_output,
     validate_configuration,
     validate_modified_payload,
 )
@@ -60,6 +61,7 @@ class TestHookConfiguration:
     def test_from_dict_empty(self):
         """Test parsing empty configuration."""
         config = HookConfiguration.from_dict({})
+        assert config.pre_gui == []
         assert config.pre_submission == []
         assert config.post_submission == []
         assert config.version == "1.0"
@@ -842,10 +844,13 @@ class TestHookManager:
 
         hooks = HookConfiguration(
             version="1.0",
+            pre_gui=[HookDefinition(command="python", args=["prefill.py"])],
             pre_submission=[HookDefinition(command="python", args=["validate.py"])],
             post_submission=[HookDefinition(command="bash", args=["notify.sh"])],
         )
         message = _generate_hooks_confirmation_message(hooks, "/path/to/bundle")
+        assert "Pre-GUI hooks:" in message
+        assert "python prefill.py" in message
         assert "Pre-submission hooks:" in message
         assert "python validate.py" in message
         assert "Post-submission hooks:" in message
@@ -975,3 +980,284 @@ class TestHookManager:
             with open(output_file) as f:
                 # Hook should receive the bundle_dir, not the hooks_dir
                 assert f.read() == bundle_dir
+
+
+class TestValidateBeforeGUIOutput:
+    """Tests for pre-GUI hook output validation."""
+
+    def test_valid_empty(self):
+        validate_pre_gui_output({}, "hook")
+
+    def test_valid_all_fields(self):
+        validate_pre_gui_output(
+            {
+                "name": "My Job",
+                "description": "desc",
+                "parameters": {"deadline:priority": 75, "k": "v"},
+            },
+            "hook",
+        )
+
+    def test_invalid_not_dict(self):
+        with pytest.raises(DeadlineOperationError, match="must be a JSON object"):
+            validate_pre_gui_output("string", "hook")  # type: ignore[arg-type]
+
+    def test_invalid_unknown_field(self):
+        with pytest.raises(DeadlineOperationError, match="unrecognised fields"):
+            validate_pre_gui_output({"farmId": "farm-123"}, "hook")
+
+    def test_invalid_parameters_not_dict(self):
+        with pytest.raises(DeadlineOperationError, match="'parameters' must be an object"):
+            validate_pre_gui_output({"parameters": ["list"]}, "hook")
+
+    def test_invalid_unknown_field_priority(self):
+        with pytest.raises(DeadlineOperationError, match="unrecognised fields"):
+            validate_pre_gui_output({"priority": 75}, "hook")
+
+    def test_invalid_name_not_string(self):
+        with pytest.raises(DeadlineOperationError, match="'name' must be a string"):
+            validate_pre_gui_output({"name": 123}, "hook")
+
+    def test_invalid_description_not_string(self):
+        with pytest.raises(DeadlineOperationError, match="'description' must be a string"):
+            validate_pre_gui_output({"description": []}, "hook")
+
+
+class TestHookConfigurationBeforeGUI:
+    """Tests for preGUI in HookConfiguration."""
+
+    def test_from_dict_pre_gui(self):
+        data = {"preGUI": [{"command": "prefill.py"}]}
+        config = HookConfiguration.from_dict(data)
+        assert len(config.pre_gui) == 1
+        assert config.pre_gui[0].command == "prefill.py"
+
+    def test_from_dict_all_phases(self):
+        data = {
+            "preGUI": [{"command": "prefill.py"}],
+            "preSubmission": [{"command": "validate.py"}],
+            "postSubmission": [{"command": "notify.py"}],
+        }
+        config = HookConfiguration.from_dict(data)
+        assert len(config.pre_gui) == 1
+        assert len(config.pre_submission) == 1
+        assert len(config.post_submission) == 1
+
+
+class TestValidateConfigurationBeforeGUI:
+    """Tests for preGUI phase in validate_configuration."""
+
+    def test_valid_pre_gui(self):
+        validate_configuration({"preGUI": [{"command": "prefill.py"}]})
+
+    def test_invalid_pre_gui_not_list(self):
+        with pytest.raises(DeadlineOperationError, match="must be a list"):
+            validate_configuration({"preGUI": "not a list"})
+
+    def test_invalid_pre_gui_hook_missing_command(self):
+        with pytest.raises(DeadlineOperationError, match="missing required 'command'"):
+            validate_configuration({"preGUI": [{"args": []}]})
+
+
+class TestExecuteBeforeGUIHooks:
+    """Tests for HookManager.execute_pre_gui_hooks."""
+
+    def _make_metadata(self, tmpdir: str) -> HookMetadata:
+        return HookMetadata(
+            job_name="Test",
+            priority=50,
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_bundle_dir=tmpdir,
+            parameters={},
+            submitter_name="Test",
+            asset_references={},
+            submission_payload={},
+        )
+
+    def test_no_pre_gui_hooks_returns_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {"preSubmission": [{"command": sys.executable, "args": ["-c", "pass"]}]}, f
+                )
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            result = manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+            assert result == {}
+
+    def test_returns_merged_output(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            output = {
+                "name": "Prefilled Job",
+                "parameters": {"deadline:priority": 80, "Foo": "bar"},
+            }
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preGUI": [
+                            {
+                                "command": sys.executable,
+                                "args": ["-c", f"import json; print(json.dumps({output!r}))"],
+                            }
+                        ]
+                    },
+                    f,
+                )
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            result = manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+            assert result["name"] == "Prefilled Job"
+            assert result["parameters"] == {"deadline:priority": 80, "Foo": "bar"}
+
+    def test_later_hook_overrides_scalar(self):
+        """Later hooks override earlier hooks for scalar fields like name."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preGUI": [
+                            {
+                                "command": sys.executable,
+                                "args": ["-c", 'import json; print(json.dumps({"name": "first"}))'],
+                            },
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    'import json; print(json.dumps({"name": "second"}))',
+                                ],
+                            },
+                        ]
+                    },
+                    f,
+                )
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            result = manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+            assert result["name"] == "second"
+
+    def test_parameters_merged_across_hooks(self):
+        """Parameters from multiple hooks are merged (not replaced)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preGUI": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    'import json; print(json.dumps({"parameters": {"A": "1"}}))',
+                                ],
+                            },
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    'import json; print(json.dumps({"parameters": {"B": "2"}}))',
+                                ],
+                            },
+                        ]
+                    },
+                    f,
+                )
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            result = manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+            assert result["parameters"] == {"A": "1", "B": "2"}
+
+    def test_failure_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump({"preGUI": [{"command": sys.executable, "args": ["-c", "exit(1)"]}]}, f)
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            with pytest.raises(DeadlineOperationError, match="failed with exit code 1"):
+                manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+
+    def test_timeout_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preGUI": [
+                            {
+                                "command": sys.executable,
+                                "args": ["-c", "import time; time.sleep(10)"],
+                                "timeout": 1,
+                            }
+                        ]
+                    },
+                    f,
+                )
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            with pytest.raises(DeadlineOperationError, match="timed out"):
+                manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+
+    def test_invalid_json_output_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {"preGUI": [{"command": sys.executable, "args": ["-c", "print('not json')"]}]},
+                    f,
+                )
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            with pytest.raises(DeadlineOperationError, match="invalid JSON"):
+                manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+
+    def test_no_output_returns_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump({"preGUI": [{"command": sys.executable, "args": ["-c", "pass"]}]}, f)
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            result = manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+            assert result == {}
+
+    def test_deadline_prefix_params_go_to_shared_values(self):
+        """deadline: params land in initial_shared_parameter_values, not initial_settings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preGUI": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    'import json; print(json.dumps({"parameters": {"deadline:priority": 80}}))',
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+            manager = HookManager(tmpdir, lambda x: None)
+            manager.load_hooks()
+            result = manager.execute_pre_gui_hooks(self._make_metadata(tmpdir))
+            assert result["parameters"]["deadline:priority"] == 80
+
+    def test_confirmation_message_includes_pre_gui(self):
+        from deadline.client.job_bundle._hooks import _generate_hooks_confirmation_message
+
+        hooks = HookConfiguration(
+            version="1.0",
+            pre_gui=[HookDefinition(command="python", args=["prefill.py"])],
+            pre_submission=[],
+            post_submission=[],
+        )
+        message = _generate_hooks_confirmation_message(hooks, "/bundle")
+        assert "Pre-GUI hooks:" in message
+        assert "python prefill.py" in message

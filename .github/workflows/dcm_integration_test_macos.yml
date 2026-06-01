@@ -60,6 +60,15 @@ jobs:
             --monitor-url "https://${MONITOR_SUBDOMAIN}.${MONITOR_REGION}.deadlinecloud.amazonaws.com" \
             --enable-auto-login --set-as-deadline-default
 
+      - name: Dismiss macOS Setup Assistant
+        run: |
+          if pgrep -x "Setup Assistant" > /dev/null 2>&1; then
+            echo "Setup Assistant is running — dismissing it"
+            sudo touch /var/db/.AppleSetupDone
+            sudo killall "Setup Assistant" 2>/dev/null || true
+            sleep 2
+          fi
+
       - name: Run E2E test
         run: python .github/scripts/dcm_e2e_test.py
 

@@ -39,7 +39,7 @@ def validate_configuration(config: _Dict[str, _Any]) -> None:
             f"Unsupported hooks version '{version}'. Supported: {', '.join(sorted(_SUPPORTED_VERSIONS))}"
         )
 
-    for key in ("preSubmission", "postSubmission"):
+    for key in ("preGUI", "preSubmission", "postSubmission"):
         if key in config and not isinstance(config[key], list):
             raise _DeadlineOperationError(f"Hook configuration '{key}' must be a list")
 
@@ -69,3 +69,28 @@ def validate_modified_payload(payload: _Dict[str, _Any], hook_name: str) -> None
             raise _DeadlineOperationError(f"Hook '{hook_name}' 'attachments' must be an object")
         if "assetReferences" in attachments:
             _validate_asset_references(attachments["assetReferences"], hook_name)
+
+
+_PRE_GUI_ALLOWED_KEYS = {"parameters", "name", "description"}
+
+
+def validate_pre_gui_output(output: _Dict[str, _Any], hook_name: str) -> None:
+    """Validate that a pre-GUI hook output contains only recognised fields."""
+    if not isinstance(output, dict):
+        raise _DeadlineOperationError(f"Hook '{hook_name}' output must be a JSON object")
+
+    unknown = set(output.keys()) - _PRE_GUI_ALLOWED_KEYS
+    if unknown:
+        raise _DeadlineOperationError(
+            f"Hook '{hook_name}' output contains unrecognised fields: {', '.join(sorted(unknown))}. "
+            f"Allowed fields: {', '.join(sorted(_PRE_GUI_ALLOWED_KEYS))}"
+        )
+
+    if "parameters" in output and not isinstance(output["parameters"], dict):
+        raise _DeadlineOperationError(
+            f"Hook '{hook_name}' 'parameters' must be an object mapping parameter names to values"
+        )
+
+    for str_field in ("name", "description"):
+        if str_field in output and not isinstance(output[str_field], str):
+            raise _DeadlineOperationError(f"Hook '{hook_name}' '{str_field}' must be a string")

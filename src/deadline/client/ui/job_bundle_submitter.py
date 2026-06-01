@@ -16,7 +16,15 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
+from ..config import config_file as _config_file
+from ..config.config_file import get_setting as _get_setting
+from ..exceptions import DeadlineOperationCanceled as _DeadlineOperationCanceled
 from ..exceptions import DeadlineOperationError
+from ..job_bundle._hooks import (
+    HookManager as _HookManager,
+    HookMetadata as _HookMetadata,
+    _generate_hooks_confirmation_message,
+)
 from ..job_bundle.loader import (
     parse_yaml_or_json_content,
     read_yaml_or_json,
@@ -42,6 +50,30 @@ from ..job_bundle.submission import AssetReferences
 from ..api._session import session_context
 
 logger = getLogger(__name__)
+
+
+def _make_pre_gui_metadata(initial_settings: Any, job_bundle_dir: str) -> _HookMetadata:
+    """Build minimal HookMetadata for the pre-GUI phase."""
+    farm_id = _get_setting("defaults.farm_id") or ""
+    queue_id = _get_setting("defaults.queue_id") or ""
+    storage_profile_id = _get_setting("settings.storage_profile_id") or None
+    parameters = {
+        p["name"]: p.get("value", p.get("default"))
+        for p in getattr(initial_settings, "parameters", [])
+        if "value" in p or "default" in p
+    }
+    return _HookMetadata(
+        job_name=getattr(initial_settings, "name", ""),
+        priority=50,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        job_bundle_dir=job_bundle_dir,
+        parameters=parameters,
+        submitter_name=getattr(initial_settings, "submitter_name", "JobBundle"),
+        asset_references={},
+        submission_payload={},
+        storage_profile_id=storage_profile_id,
+    )
 
 
 def _validate_job_parameters_against_definitions(
@@ -281,6 +313,35 @@ def show_job_bundle_submitter(
     initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
     initial_settings.browse_enabled = browse
 
+    # Run pre-GUI hooks to allow studios to pre-populate dialog fields.
+    pre_gui_output: dict[str, Any] = {}
+    allow_env_hooks = _config_file.str2bool(_get_setting("settings.allow_environment_hooks"))
+    allow_bundle_hooks = _config_file.str2bool(_get_setting("settings.allow_bundle_hooks"))
+    hook_manager = _HookManager(input_job_bundle_dir, logger.info)
+    hooks = hook_manager.load_hooks()
+    if hooks and hooks.pre_gui and not allow_bundle_hooks and not allow_env_hooks:
+        logger.warning(
+            "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
+            "Enable with: deadline config set settings.allow_bundle_hooks true"
+        )
+    if (allow_env_hooks or allow_bundle_hooks) and hooks and hooks.pre_gui:
+        if not _config_file.str2bool(_get_setting("settings.auto_accept")):
+            confirmation_msg = (
+                _generate_hooks_confirmation_message(hooks, input_job_bundle_dir)
+                + "Do you want to run these hooks?"
+            )
+            reply = QMessageBox.question(
+                parent,
+                tr("Job Submission Confirmation"),
+                confirmation_msg,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                raise _DeadlineOperationCanceled("Job submission canceled (user declined hooks).")
+        hook_metadata = _make_pre_gui_metadata(initial_settings, input_job_bundle_dir)
+        pre_gui_output = hook_manager.execute_pre_gui_hooks(hook_metadata)
+
     initial_shared_parameter_values = {}
 
     job_parameters_dict = {param["name"]: param for param in (job_parameters or [])}
@@ -308,6 +369,27 @@ def show_job_bundle_submitter(
     # Put the job_parameter values that weren't for the template in the shared parameter values
     for parameter in job_parameters_dict.values():
         initial_shared_parameter_values[parameter["name"]] = parameter["value"]
+
+    # Merge pre-GUI hook output. CLI-supplied parameters take precedence over hook values.
+    if pre_gui_output:
+        hook_params = pre_gui_output.get("parameters", {})
+        template_param_names = {p["name"] for p in initial_settings.parameters}
+        for param_name, param_value in hook_params.items():
+            if param_name in (job_parameters_dict or {}):
+                continue
+            if param_name in template_param_names:
+                # Job template parameter — update initial_settings.parameters in-place
+                for p in initial_settings.parameters:
+                    if p["name"] == param_name:
+                        p["value"] = param_value
+                        break
+            else:
+                # Shared job property (deadline: keys, queue parameters, etc.)
+                initial_shared_parameter_values[param_name] = param_value
+        if "name" in pre_gui_output:
+            initial_settings.name = pre_gui_output["name"]
+        if "description" in pre_gui_output:
+            initial_settings.description = pre_gui_output["description"]
 
     submitter_dialog = SubmitJobToDeadlineDialog(
         job_setup_widget_type=JobBundleSettingsWidget,

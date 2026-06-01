@@ -15,6 +15,7 @@ from ._executor import HookExecutor as _HookExecutor
 from ._merger import merge_payload as _merge_payload
 from ._models import HookConfiguration as _HookConfiguration
 from ._models import HookMetadata as _HookMetadata
+from ._validator import validate_pre_gui_output as _validate_pre_gui_output
 from ._validator import validate_configuration as _validate_configuration
 from ._validator import validate_modified_payload as _validate_modified_payload
 
@@ -24,6 +25,13 @@ _logger = _logging.getLogger(__name__)
 def _generate_hooks_confirmation_message(hooks: _HookConfiguration, bundle_dir: str) -> str:
     """Generate a confirmation message listing hooks that will execute."""
     lines = ["This job bundle contains submission hooks that will execute on your machine:\n"]
+
+    if hooks.pre_gui:
+        lines.append("  Pre-GUI hooks:")
+        for i, hook in enumerate(hooks.pre_gui):
+            cmd = f"{hook.command} {' '.join(hook.args)}".strip()
+            lines.append(f"    [{i + 1}] {cmd}")
+        lines.append("")
 
     if hooks.pre_submission:
         lines.append("  Pre-submission hooks:")
@@ -67,6 +75,63 @@ class HookManager:
         _validate_configuration(config_data)
         self.hooks = _HookConfiguration.from_dict(config_data)
         return self.hooks
+
+    def execute_pre_gui_hooks(
+        self,
+        metadata: _HookMetadata,
+    ) -> _Dict[str, _Any]:
+        """Execute all pre-GUI hooks and return merged initial parameter overrides.
+
+        Runs before the submission dialog opens. Hooks may output JSON to pre-populate
+        dialog fields: parameters, priority, farmId, queueId, name, description.
+        Failures block the dialog from opening.
+        """
+        if not self.hooks or not self.hooks.pre_gui:
+            return {}
+
+        metadata.job_bundle_dir = self._original_bundle_dir
+
+        merged: _Dict[str, _Any] = {}
+        for i, hook in enumerate(self.hooks.pre_gui):
+            hook_name = f"{hook.command} {' '.join(hook.args)}".strip()
+            self.print_callback(f"Running pre-GUI hook [{i + 1}]: {hook_name}")
+
+            result = self._executor.execute(hook, metadata, "pre-GUI", i + 1)
+
+            if result.timed_out:
+                self._report_failure(hook, result, i + 1, "pre-GUI")
+                raise _DeadlineOperationError(
+                    f"Pre-GUI hook [{i + 1}] timed out after {hook.timeout}s: {hook_name}"
+                )
+
+            if not result.is_success():
+                self._report_failure(hook, result, i + 1, "pre-GUI")
+                raise _DeadlineOperationError(
+                    f"Pre-GUI hook [{i + 1}] failed with exit code {result.exit_code}: {hook_name}"
+                )
+
+            if result.stdout.strip():
+                try:
+                    output = _json.loads(result.stdout)
+                    _validate_pre_gui_output(output, hook_name)
+                    # Later hooks override earlier ones for scalar fields; parameters are merged.
+                    params = merged.pop("parameters", {})
+                    params.update(output.pop("parameters", {}))
+                    merged.update(output)
+                    if params:
+                        merged["parameters"] = params
+                    _logger.debug(f"Pre-GUI hook [{i + 1}] modified initial settings")
+                except _json.JSONDecodeError as e:
+                    raise _DeadlineOperationError(
+                        f"Pre-GUI hook [{i + 1}] produced invalid JSON: {e}"
+                    )
+
+            if result.stderr:
+                _logger.warning(f"Pre-GUI hook [{i + 1}] stderr: {result.stderr}")
+
+            _logger.debug(f"Pre-GUI hook [{i + 1}] completed in {result.execution_time:.2f}s")
+
+        return merged
 
     def execute_pre_submission_hooks(
         self,

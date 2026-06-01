@@ -242,6 +242,12 @@ class TelemetryClient:
             target=self._process_event_queue_thread, daemon=True
         )
         self.processing_thread.start()
+        self._put_telemetry_record(
+            TelemetryEvent(
+                event_type="com.amazon.rum.deadline.process_start",
+                event_details={},
+            )
+        )
 
     def _get_system_metadata(self, config: Optional[ConfigParser]) -> Dict[str, Any]:
         """
