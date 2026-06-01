@@ -9,12 +9,17 @@ import click
 import yaml
 
 from deadline.client.cli._common import (
+    _apply_cli_options_to_config,
     _auto_select_farm,
     _auto_select_queue,
     _parse_file_parameter,
     _parse_multi_format_parameters,
 )
 from deadline.client.config import config_file
+from deadline.client.config.config_file import (
+    _SETTING_FARM_ID as SETTING_FARM_ID,
+    _SETTING_QUEUE_ID as SETTING_QUEUE_ID,
+)
 
 
 class TestParseFileParameter:
@@ -342,3 +347,48 @@ class TestAutoSelectQueue:
         with patch("deadline.client.cli._common._api.list_queues") as mock_list:
             mock_list.side_effect = Exception("API error")
             assert _auto_select_queue() is None
+
+
+class TestApplyCliOptionsAutoSelect:
+    """End-to-end auto-select behavior through _apply_cli_options_to_config."""
+
+    def test_auto_selects_single_farm_and_queue(self, fresh_deadline_config):
+        """With one farm and one queue, both required options are auto-filled."""
+        with patch("deadline.client.cli._common._api.list_farms") as mock_farms, patch(
+            "deadline.client.cli._common._api.list_queues"
+        ) as mock_queues:
+            mock_farms.return_value = {"farms": [{"farmId": "farm-1"}]}
+            mock_queues.return_value = {"queues": [{"queueId": "queue-1"}]}
+
+            _apply_cli_options_to_config(required_options={"farm_id", "queue_id"})
+
+        assert config_file.get_setting(SETTING_FARM_ID) == "farm-1"
+        assert config_file.get_setting(SETTING_QUEUE_ID) == "queue-1"
+
+    def test_raises_when_multiple_farms(self, fresh_deadline_config):
+        """With multiple farms, the missing-farm UsageError is still raised."""
+        with patch("deadline.client.cli._common._api.list_farms") as mock_farms:
+            mock_farms.return_value = {"farms": [{"farmId": "f-1"}, {"farmId": "f-2"}]}
+            with pytest.raises(click.UsageError, match="farm-id"):
+                _apply_cli_options_to_config(required_options={"farm_id"})
+
+    def test_raises_when_multiple_queues(self, fresh_deadline_config):
+        """A single farm auto-selects, but multiple queues raise the queue error."""
+        with patch("deadline.client.cli._common._api.list_farms") as mock_farms, patch(
+            "deadline.client.cli._common._api.list_queues"
+        ) as mock_queues:
+            mock_farms.return_value = {"farms": [{"farmId": "farm-1"}]}
+            mock_queues.return_value = {"queues": [{"queueId": "q-1"}, {"queueId": "q-2"}]}
+            with pytest.raises(click.UsageError, match="queue-id"):
+                _apply_cli_options_to_config(required_options={"farm_id", "queue_id"})
+
+        # The farm should still have been auto-selected before the queue failure.
+        assert config_file.get_setting(SETTING_FARM_ID) == "farm-1"
+
+    def test_explicit_farm_id_skips_auto_select(self, fresh_deadline_config):
+        """An explicit --farm-id is honored and list_farms is never called."""
+        with patch("deadline.client.cli._common._api.list_farms") as mock_farms:
+            _apply_cli_options_to_config(required_options={"farm_id"}, farm_id="farm-explicit")
+
+        mock_farms.assert_not_called()
+        assert config_file.get_setting(SETTING_FARM_ID) == "farm-explicit"
