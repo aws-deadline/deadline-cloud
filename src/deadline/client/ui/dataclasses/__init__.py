@@ -224,7 +224,11 @@ class CustomAmountRequirement:
     def __post_init__(self):
         if not self.name:
             raise ValueError(f"Custom Amount {self} has no name")
-        elif self.min and self.max and self.min > self.max:
+        elif (
+            self.min != self.DEFAULT_VALUE
+            and self.max != self.DEFAULT_VALUE
+            and self.min > self.max
+        ):
             raise ValueError(f"Custom Amount {self} has min higher than max")
 
     def serialize(self) -> dict:

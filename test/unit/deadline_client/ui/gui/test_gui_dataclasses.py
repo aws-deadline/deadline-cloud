@@ -220,13 +220,6 @@ class TestHardwareRequirements:
 
 
 class TestCustomAmountRequirement:
-    # Note: CustomAmountRequirement.DEFAULT_VALUE is -(2**31) + 1 = -2147483647.
-    # The __post_init__ validation uses `self.min and self.max` which treats
-    # the negative default as truthy. When only min is set (positive) and max
-    # stays at DEFAULT_VALUE (negative), min > max triggers a ValueError.
-    # Therefore, setting only min (positive) without max is not valid with
-    # this class. Tests below reflect the actual behavior.
-
     def test_construct_with_valid_name(self):
         """Construction with a name should succeed."""
         req = CustomAmountRequirement(name="mycustom")
@@ -242,10 +235,11 @@ class TestCustomAmountRequirement:
         with pytest.raises(ValueError, match="has min higher than max"):
             CustomAmountRequirement(name="test", min=10, max=5)
 
-    def test_positive_min_without_max_raises_because_default_is_negative(self):
-        """Setting positive min with default (negative) max triggers min > max."""
-        with pytest.raises(ValueError, match="has min higher than max"):
-            CustomAmountRequirement(name="test", min=3)
+    def test_construct_with_only_min(self):
+        """Setting only min (max stays at DEFAULT_VALUE) should succeed."""
+        req = CustomAmountRequirement(name="test", min=3)
+        assert req.min == 3
+        assert req.max == CustomAmountRequirement.DEFAULT_VALUE
 
     def test_min_equals_max_is_valid(self):
         """min == max should not raise."""
@@ -253,13 +247,13 @@ class TestCustomAmountRequirement:
         assert req.min == 5
         assert req.max == 5
 
-    def test_construct_with_zero_min_succeeds(self):
-        """min=0 is falsy so the validation short-circuits, allowing construction."""
+    def test_construct_with_zero_min(self):
+        """min=0 should be valid."""
         req = CustomAmountRequirement(name="test", min=0)
         assert req.min == 0
 
     def test_construct_with_only_max(self):
-        """Only setting max should succeed (default min is negative, so min < max)."""
+        """Only setting max should succeed."""
         req = CustomAmountRequirement(name="test", max=10)
         assert req.max == 10
 
