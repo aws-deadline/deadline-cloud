@@ -391,7 +391,6 @@ class SubmitJobToDeadlineDialog(QDialog):
         farm_id = result.get("farm_id")
         if farm_id and not get_setting(_SETTING_FARM_ID):
             set_setting(_SETTING_FARM_ID, farm_id)
-            logger.info("Auto-selected farm: %s", farm_id)
             applied = True
 
         queue_id = result.get("queue_id")
@@ -400,7 +399,6 @@ class SubmitJobToDeadlineDialog(QDialog):
             # configured; otherwise it would be a queue from a different farm.
             if get_setting(_SETTING_FARM_ID) == result.get("queue_farm_id"):
                 set_setting(_SETTING_QUEUE_ID, queue_id)
-                logger.info("Auto-selected queue: %s", queue_id)
                 applied = True
 
         if applied:

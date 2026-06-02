@@ -50,6 +50,13 @@ class _DeadlineResourceListComboBoxController(QWidget):
     # Emitted when the background refresh catches an exception
     background_exception = Signal(str, BaseException)
 
+    # When True, if nothing is configured yet and the list resolves to exactly one
+    # resource, that resource is selected automatically. Subclasses opt in. This lives
+    # here - the single point every list refresh funnels through - so auto-select works
+    # regardless of what triggered the refresh (dialog open, profile switch, sign-in,
+    # manual refresh) without each trigger needing its own hook.
+    _auto_select_when_single: bool = False
+
     def __init__(self, resource_name: str, parent: Optional[QWidget] = None):
         super().__init__(parent)
 
@@ -116,6 +123,30 @@ class _DeadlineResourceListComboBoxController(QWidget):
                     self.box.addItem(name, userData=resource_id)
 
             self.refresh_selected_id()
+
+        # If nothing is configured and exactly one resource is available, select it.
+        # Done outside block_signals so currentIndexChanged fires and any connected
+        # dialog logic (e.g. cascading to the next resource) reacts as if the user
+        # had picked it.
+        if self._auto_select_when_single:
+            self._maybe_auto_select_single(items_list)
+
+    def _maybe_auto_select_single(self, items_list: List) -> None:
+        """Select the sole available resource if none is configured yet."""
+        configured_id = config_file.get_setting(self._get_setting_name(), config=self.config)
+        if configured_id:
+            return
+        real_ids = [
+            item[1]
+            for item in items_list
+            if isinstance(item, (list, tuple)) and len(item) >= 2 and item[1]
+        ]
+        if len(real_ids) != 1:
+            return
+        index = self.box.findData(real_ids[0])
+        if index >= 0 and self.box.currentIndex() != index:
+            # Not under block_signals: emitting currentIndexChanged is intentional.
+            self.box.setCurrentIndex(index)
 
     def _handle_loading_state(self, is_loading: bool) -> None:
         """Handle loading state changes."""
@@ -190,6 +221,8 @@ class _DeadlineResourceListComboBoxController(QWidget):
 class DeadlineFarmListComboBoxController(_DeadlineResourceListComboBoxController):
     """Combo box for selecting a Deadline Cloud farm."""
 
+    _auto_select_when_single = True
+
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(resource_name="Farm", parent=parent)
         self._connect_controller_signals()
@@ -212,6 +245,8 @@ class DeadlineFarmListComboBoxController(_DeadlineResourceListComboBoxController
 
 class DeadlineQueueListComboBoxController(_DeadlineResourceListComboBoxController):
     """Combo box for selecting a Deadline Cloud queue."""
+
+    _auto_select_when_single = True
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(resource_name="Queue", parent=parent)

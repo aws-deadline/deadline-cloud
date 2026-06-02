@@ -165,6 +165,62 @@ class TestDeadlineFarmListComboBoxController:
         assert widget.box.currentText() == "<none selected>"
         assert widget.box.currentData() == ""
 
+    def test_handle_list_update_auto_selects_single_farm_when_unset(self, qtbot):
+        """When no farm is configured and exactly one loads, it is auto-selected.
+
+        This is independent of *why* the list refreshed (open, profile switch,
+        sign-in, manual refresh) - the combo selects the lone farm and fires
+        currentIndexChanged so the dialog can react.
+        """
+        widget = DeadlineFarmListComboBoxController()
+        qtbot.addWidget(widget)
+
+        config = ConfigParser()
+        config["defaults"] = {"farm_id": ""}  # nothing configured yet
+        widget.set_config(config)
+
+        selected = []
+        widget.box.currentIndexChanged.connect(lambda i: selected.append(widget.box.itemData(i)))
+
+        with patch("deadline.client.ui.widgets._deadline_list_combo_boxes.config_file") as mock_cf:
+            mock_cf.get_setting.return_value = ""  # no configured farm
+            widget._handle_list_update([["Only Farm", "farm-only"]])
+
+        assert widget.box.currentData() == "farm-only"
+        # currentIndexChanged must fire so the dialog's cascade is driven naturally.
+        assert "farm-only" in selected
+
+    def test_handle_list_update_no_auto_select_when_multiple(self, qtbot):
+        """With more than one farm and nothing configured, no auto-select happens."""
+        widget = DeadlineFarmListComboBoxController()
+        qtbot.addWidget(widget)
+
+        config = ConfigParser()
+        config["defaults"] = {"farm_id": ""}
+        widget.set_config(config)
+
+        with patch("deadline.client.ui.widgets._deadline_list_combo_boxes.config_file") as mock_cf:
+            mock_cf.get_setting.return_value = ""
+            widget._handle_list_update([["Farm A", "farm-a"], ["Farm B", "farm-b"]])
+
+        # Falls back to the "<none selected>" placeholder.
+        assert widget.box.currentData() == ""
+
+    def test_handle_list_update_no_auto_select_when_already_configured(self, qtbot):
+        """If a farm is already configured, the configured one is kept (no override)."""
+        widget = DeadlineFarmListComboBoxController()
+        qtbot.addWidget(widget)
+
+        config = ConfigParser()
+        config["defaults"] = {"farm_id": "farm-a"}
+        widget.set_config(config)
+
+        with patch("deadline.client.ui.widgets._deadline_list_combo_boxes.config_file") as mock_cf:
+            mock_cf.get_setting.return_value = "farm-a"
+            widget._handle_list_update([["Farm A", "farm-a"]])
+
+        assert widget.box.currentData() == "farm-a"
+
 
 class TestDeadlineQueueListComboBoxController:
     """Tests for DeadlineQueueListComboBoxController."""
@@ -292,3 +348,19 @@ class TestDeadlineStorageProfileListComboBoxController:
         assert widget.count() == 3
         assert widget.box.itemText(0) == "<none selected>"
         assert widget.box.itemText(1) == "Profile 1"
+
+    def test_handle_list_update_does_not_auto_select_single_profile(self, qtbot):
+        """Storage profile is optional, so a lone profile must NOT be auto-selected."""
+        widget = DeadlineStorageProfileListComboBoxController()
+        qtbot.addWidget(widget)
+
+        config = ConfigParser()
+        config["settings"] = {"storage_profile_id": ""}
+        widget.set_config(config)
+
+        with patch("deadline.client.ui.widgets._deadline_list_combo_boxes.config_file") as mock_cf:
+            mock_cf.get_setting.return_value = ""
+            widget._handle_list_update([["Only Profile", "profile-only"]])
+
+        # No configured id and no auto-select -> stays on the "<none selected>" entry.
+        assert widget.box.currentData() == ""

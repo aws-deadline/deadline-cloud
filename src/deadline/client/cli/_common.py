@@ -93,15 +93,11 @@ def _handle_error(func: Callable) -> Callable:
 def _auto_select_farm(config: Optional[ConfigParser] = None) -> Optional[str]:
     """Auto-select farm ID if exactly one farm is available."""
     try:
-        logger.debug("Auto-select farm: listing farms...")
         farms = _api.list_farms(config=config).get("farms", [])
-        logger.debug("Auto-select farm: found %d farm(s)", len(farms))
         if len(farms) == 1:
-            farm_id = farms[0]["farmId"]
-            click.echo(f"Auto-selected the only available farm: {farm_id}")
-            return farm_id
+            return farms[0]["farmId"]
     except Exception:
-        logger.debug("Auto-select farm failed", exc_info=True)
+        pass
     return None
 
 
@@ -110,17 +106,12 @@ def _auto_select_queue(config: Optional[ConfigParser] = None) -> Optional[str]:
     try:
         farm_id = config_file.get_setting(SETTING_FARM_ID, config=config)
         if not farm_id:
-            logger.debug("Auto-select queue: no farm_id configured")
             return None
-        logger.debug("Auto-select queue: listing queues for farm %s...", farm_id)
         queues = _api.list_queues(farmId=farm_id, config=config).get("queues", [])
-        logger.debug("Auto-select queue: found %d queue(s) in farm %s", len(queues), farm_id)
         if len(queues) == 1:
-            queue_id = queues[0]["queueId"]
-            click.echo(f"Auto-selected the only available queue: {queue_id}")
-            return queue_id
+            return queues[0]["queueId"]
     except Exception:
-        logger.debug("Auto-select queue failed", exc_info=True)
+        pass
     return None
 
 

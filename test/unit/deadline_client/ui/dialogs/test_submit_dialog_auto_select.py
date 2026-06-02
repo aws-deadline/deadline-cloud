@@ -40,6 +40,21 @@ def _reset_thread_pool():
     DeadlineThreadPool.reset()
 
 
+@pytest.fixture(autouse=True)
+def _restore_auth_singleton():
+    """Restore the DeadlineAuthenticationStatus singleton after each test.
+
+    _build_dialog swaps in a stub auth status via the module-global; without
+    restoring it, the stub leaks into other test files (e.g. config dialog tests
+    that expect a real auth status with signals) under random test ordering.
+    """
+    import deadline.client.ui.deadline_authentication_status as auth_module
+
+    saved = auth_module._deadline_authentication_status
+    yield
+    auth_module._deadline_authentication_status = saved
+
+
 class MockJobSettingsWidget(QWidget):
     """A mock job settings widget that is a real QWidget."""
 

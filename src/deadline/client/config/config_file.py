@@ -52,8 +52,7 @@ __config_file_path = None
 __config_mtime = None
 
 # Canonical setting-name constants. Use these everywhere instead of repeating the
-# string literals, which previously drifted across the CLI and UI code. These are
-# internal (underscore-prefixed) so they don't expand the public deadline API.
+# string literals, which previously drifted across the CLI and UI code.
 _SETTING_FARM_ID = "defaults.farm_id"
 _SETTING_QUEUE_ID = "defaults.queue_id"
 
