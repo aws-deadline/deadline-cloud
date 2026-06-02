@@ -2,19 +2,12 @@
 
 """GUI tests for SharedJobPropertiesWidget using pytest-qt."""
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from dataclasses import dataclass
 from unittest.mock import patch
 
 import pytest
 
-try:
-    from deadline.client.ui.widgets.shared_job_settings_tab import SharedJobPropertiesWidget
-except ImportError:
-    pytest.skip("GUI dependencies not available", allow_module_level=True)
+from deadline.client.ui.widgets.shared_job_settings_tab import SharedJobPropertiesWidget
 
 
 @dataclass

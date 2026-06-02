@@ -39,7 +39,7 @@ jobs:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
       ref: ${{inputs.tag}}
-      # UI, MCP, and incremental download features require Python >= 3.9, so coverage is lower on 3.8
+      # 47% = baseline without UI/MCP/incremental-download modules (~35% of source requires Python >= 3.9)
       cov-fail-under: "47"
 
   Attributions:

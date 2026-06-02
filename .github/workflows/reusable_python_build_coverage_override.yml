@@ -69,6 +69,8 @@ jobs:
         python-version: ${{ inputs.python-version }}
 
     - name: Install Hatch
+      # TODO: Remove virtualenv<21 pin once hatch supports virtualenv 21+
+      # (see https://github.com/pypa/hatch/issues/1950)
       run: |
         pip install --upgrade hatch "virtualenv<21"
 

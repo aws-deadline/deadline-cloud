@@ -2,18 +2,13 @@
 
 """Tests for TimeoutTableWidget and TimeoutEntryWidget."""
 
-import pytest
-
-try:
-    from deadline.client.ui.widgets.job_timeouts_widget import (
-        TimeoutEntryWidget,
-        TimeoutTableWidget,
-        WARNING_ICON,
-        ERROR_ICON,
-    )
-    from deadline.client.ui.dataclasses.timeouts import TimeoutEntry, TimeoutTableEntries
-except ImportError:
-    pytest.skip("GUI dependencies not available", allow_module_level=True)
+from deadline.client.ui.widgets.job_timeouts_widget import (
+    TimeoutEntryWidget,
+    TimeoutTableWidget,
+    WARNING_ICON,
+    ERROR_ICON,
+)
+from deadline.client.ui.dataclasses.timeouts import TimeoutEntry, TimeoutTableEntries
 
 
 def _make_timeouts(**entries):

@@ -8,18 +8,15 @@ from configparser import ConfigParser
 from unittest.mock import MagicMock, patch
 
 import pytest
+from qtpy.QtWidgets import QApplication as QApplication
 
-try:
-    from deadline.client.ui.dialogs.deadline_config_dialog import (
-        DeadlineConfigDialog,
-        DeadlineWorkstationConfigWidget,
-    )
-    from deadline.client.ui.controllers._deadline_controller import DeadlineUIController
-    from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
-    from deadline.client import api
-    from qtpy.QtWidgets import QApplication as QApplication
-except ImportError:
-    pytest.skip("GUI dependencies not available", allow_module_level=True)
+from deadline.client import api
+from deadline.client.ui.controllers._deadline_controller import DeadlineUIController
+from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
+from deadline.client.ui.dialogs.deadline_config_dialog import (
+    DeadlineConfigDialog,
+    DeadlineWorkstationConfigWidget,
+)
 
 
 @pytest.fixture(autouse=True)

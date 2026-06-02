@@ -7,18 +7,15 @@ from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
+from qtpy.QtCore import QEvent, Qt  # type: ignore[attr-defined]
+from qtpy.QtGui import QKeyEvent  # type: ignore[attr-defined]
+from qtpy.QtWidgets import QWidget
 
-try:
-    from qtpy.QtCore import QEvent, Qt  # type: ignore[attr-defined]
-    from qtpy.QtGui import QKeyEvent  # type: ignore[attr-defined]
-    from qtpy.QtWidgets import QWidget
-    from deadline.client.ui.dataclasses import JobBundleSettings
-    from deadline.client.ui.dialogs.submit_job_to_deadline_dialog import (
-        SubmitJobToDeadlineDialog,
-    )
-    from deadline.client.job_bundle.submission import AssetReferences
-except ImportError:
-    pytest.skip("GUI dependencies not available", allow_module_level=True)
+from deadline.client.ui.dataclasses import JobBundleSettings
+from deadline.client.ui.dialogs.submit_job_to_deadline_dialog import (
+    SubmitJobToDeadlineDialog,
+)
+from deadline.client.job_bundle.submission import AssetReferences
 
 
 _TEST_DATA = Path(__file__).resolve().parent / "test_data"

@@ -7,10 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-try:
-    from deadline.client.ui.widgets.openjd_parameters_widget import OpenJDParametersWidget
-except ImportError:
-    pytest.skip("GUI dependencies not available", allow_module_level=True)
+from deadline.client.ui.widgets.openjd_parameters_widget import OpenJDParametersWidget
 
 
 def _line_edit_param(name="MyString", default="hello"):

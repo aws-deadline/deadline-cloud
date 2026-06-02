@@ -2,17 +2,8 @@
 
 """GUI tests for JobAttachmentsWidget using pytest-qt."""
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest
-
-try:
-    from deadline.client.ui.widgets.job_attachments_tab import JobAttachmentsWidget
-    from deadline.client.job_bundle.submission import AssetReferences
-except ImportError:
-    pytest.skip("GUI dependencies not available", allow_module_level=True)
+from deadline.client.ui.widgets.job_attachments_tab import JobAttachmentsWidget
+from deadline.client.job_bundle.submission import AssetReferences
 
 
 class TestJobAttachmentsWidgetCreation:

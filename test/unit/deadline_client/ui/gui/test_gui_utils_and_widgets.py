@@ -2,24 +2,17 @@
 
 """GUI tests for UI utilities and custom spinbox widgets."""
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import warnings
 
 import pytest
+from qtpy.QtWidgets import QWidget
 
-try:
-    from qtpy.QtWidgets import QWidget
-    from deadline.client.ui._utils import block_signals, CancelationFlag
-    from deadline.client.ui.widgets.spinbox_widgets import (
-        DecimalMode,
-        FloatDragSpinBox,
-        IntDragSpinBox,
-    )
-except ImportError:
-    pytest.skip("GUI dependencies not available", allow_module_level=True)
+from deadline.client.ui._utils import block_signals, CancelationFlag
+from deadline.client.ui.widgets.spinbox_widgets import (
+    DecimalMode,
+    FloatDragSpinBox,
+    IntDragSpinBox,
+)
 
 
 # ---------- block_signals ----------

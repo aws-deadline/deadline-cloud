@@ -105,9 +105,10 @@ dialog, submitter dialog) should have basic UI tests here to confirm it
 opens, displays the right data, and responds to user actions.
 
 Exhaustive widget-level testing (e.g. every combo-box option, every
-validation state) is better suited to a future `pytest-qt` suite, which
-can test Qt widgets in-process without rendering to the screen — faster
-and lighter weight, but lower fidelity.
+validation state) belongs in the `pytest-qt` suite at
+`test/unit/deadline_client/ui/gui/`, which tests Qt widgets in-process
+without rendering to the screen — faster and lighter weight, but lower
+fidelity.
 
 Run: `hatch run ui:test`
 

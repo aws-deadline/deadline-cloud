@@ -2,21 +2,16 @@
 
 """Tests for HostRequirementsWidget covering mode toggling, get/set requirements."""
 
-import pytest
-
-try:
-    from deadline.client.ui.widgets.host_requirements_tab import (
-        HostRequirementsWidget,
-        HardwareRequirementsWidget,
-        OSRequirementsWidget,
-    )
-    from deadline.client.ui.dataclasses import (
-        HostRequirements,
-        HardwareRequirements,
-        OsRequirements,
-    )
-except ImportError:
-    pytest.skip("GUI dependencies not available", allow_module_level=True)
+from deadline.client.ui.widgets.host_requirements_tab import (
+    HostRequirementsWidget,
+    HardwareRequirementsWidget,
+    OSRequirementsWidget,
+)
+from deadline.client.ui.dataclasses import (
+    HostRequirements,
+    HardwareRequirements,
+    OsRequirements,
+)
 
 
 class TestHostRequirementsWidget:
