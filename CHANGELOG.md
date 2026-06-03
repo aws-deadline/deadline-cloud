@@ -1,3 +1,10 @@
+## 0.57.3 (2026-06-01)
+
+### Features
+* Added a preGUI submission hook phase, allowing custom logic to run before the submission GUI is displayed. (#1178)
+
+### Bug Fixes
+* Fixed an issue in the submission UI where timeout validation errors would flash while still editing days/hours/minutes fields. Errors now only appear after focus leaves the entire timeout row, and clear immediately when the value becomes valid. (#1180)
 ## 0.57.2 (2026-05-25)
 
 ### Features

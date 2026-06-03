@@ -1,12 +1,25 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import json
+from unittest.mock import patch
+
 import pytest
 
 import click
 import yaml
 
-from deadline.client.cli._common import _parse_file_parameter, _parse_multi_format_parameters
+from deadline.client.cli._common import (
+    _apply_cli_options_to_config,
+    _auto_select_farm,
+    _auto_select_queue,
+    _parse_file_parameter,
+    _parse_multi_format_parameters,
+)
+from deadline.client.config import config_file
+from deadline.client.config.config_file import (
+    _SETTING_FARM_ID as SETTING_FARM_ID,
+    _SETTING_QUEUE_ID as SETTING_QUEUE_ID,
+)
 
 
 class TestParseFileParameter:
@@ -282,3 +295,100 @@ class TestProgressBarCallbackManager:
 
         assert manager._bar_status == manager.BAR_CREATED
         manager._exit_stack.close()
+
+
+class TestAutoSelectFarm:
+    def test_single_farm_returns_id(self, fresh_deadline_config):
+        with patch("deadline.client.cli._common._api.list_farms") as mock_list:
+            mock_list.return_value = {"farms": [{"farmId": "farm-abc123"}]}
+            assert _auto_select_farm() == "farm-abc123"
+
+    def test_multiple_farms_returns_none(self, fresh_deadline_config):
+        with patch("deadline.client.cli._common._api.list_farms") as mock_list:
+            mock_list.return_value = {"farms": [{"farmId": "farm-1"}, {"farmId": "farm-2"}]}
+            assert _auto_select_farm() is None
+
+    def test_no_farms_returns_none(self, fresh_deadline_config):
+        with patch("deadline.client.cli._common._api.list_farms") as mock_list:
+            mock_list.return_value = {"farms": []}
+            assert _auto_select_farm() is None
+
+    def test_api_error_returns_none(self, fresh_deadline_config):
+        with patch("deadline.client.cli._common._api.list_farms") as mock_list:
+            mock_list.side_effect = Exception("API error")
+            assert _auto_select_farm() is None
+
+
+class TestAutoSelectQueue:
+    def test_single_queue_returns_id(self, fresh_deadline_config):
+        config_file.set_setting("defaults.farm_id", "farm-abc123")
+        with patch("deadline.client.cli._common._api.list_queues") as mock_list:
+            mock_list.return_value = {"queues": [{"queueId": "queue-xyz789"}]}
+            assert _auto_select_queue() == "queue-xyz789"
+            mock_list.assert_called_once_with(farmId="farm-abc123", config=None)
+
+    def test_multiple_queues_returns_none(self, fresh_deadline_config):
+        config_file.set_setting("defaults.farm_id", "farm-abc123")
+        with patch("deadline.client.cli._common._api.list_queues") as mock_list:
+            mock_list.return_value = {"queues": [{"queueId": "queue-1"}, {"queueId": "queue-2"}]}
+            assert _auto_select_queue() is None
+
+    def test_no_queues_returns_none(self, fresh_deadline_config):
+        config_file.set_setting("defaults.farm_id", "farm-abc123")
+        with patch("deadline.client.cli._common._api.list_queues") as mock_list:
+            mock_list.return_value = {"queues": []}
+            assert _auto_select_queue() is None
+
+    def test_no_farm_id_returns_none(self, fresh_deadline_config):
+        assert _auto_select_queue() is None
+
+    def test_api_error_returns_none(self, fresh_deadline_config):
+        config_file.set_setting("defaults.farm_id", "farm-abc123")
+        with patch("deadline.client.cli._common._api.list_queues") as mock_list:
+            mock_list.side_effect = Exception("API error")
+            assert _auto_select_queue() is None
+
+
+class TestApplyCliOptionsAutoSelect:
+    """End-to-end auto-select behavior through _apply_cli_options_to_config."""
+
+    def test_auto_selects_single_farm_and_queue(self, fresh_deadline_config):
+        """With one farm and one queue, both required options are auto-filled."""
+        with patch("deadline.client.cli._common._api.list_farms") as mock_farms, patch(
+            "deadline.client.cli._common._api.list_queues"
+        ) as mock_queues:
+            mock_farms.return_value = {"farms": [{"farmId": "farm-1"}]}
+            mock_queues.return_value = {"queues": [{"queueId": "queue-1"}]}
+
+            _apply_cli_options_to_config(required_options={"farm_id", "queue_id"})
+
+        assert config_file.get_setting(SETTING_FARM_ID) == "farm-1"
+        assert config_file.get_setting(SETTING_QUEUE_ID) == "queue-1"
+
+    def test_raises_when_multiple_farms(self, fresh_deadline_config):
+        """With multiple farms, the missing-farm UsageError is still raised."""
+        with patch("deadline.client.cli._common._api.list_farms") as mock_farms:
+            mock_farms.return_value = {"farms": [{"farmId": "f-1"}, {"farmId": "f-2"}]}
+            with pytest.raises(click.UsageError, match="farm-id"):
+                _apply_cli_options_to_config(required_options={"farm_id"})
+
+    def test_raises_when_multiple_queues(self, fresh_deadline_config):
+        """A single farm auto-selects, but multiple queues raise the queue error."""
+        with patch("deadline.client.cli._common._api.list_farms") as mock_farms, patch(
+            "deadline.client.cli._common._api.list_queues"
+        ) as mock_queues:
+            mock_farms.return_value = {"farms": [{"farmId": "farm-1"}]}
+            mock_queues.return_value = {"queues": [{"queueId": "q-1"}, {"queueId": "q-2"}]}
+            with pytest.raises(click.UsageError, match="queue-id"):
+                _apply_cli_options_to_config(required_options={"farm_id", "queue_id"})
+
+        # The farm should still have been auto-selected before the queue failure.
+        assert config_file.get_setting(SETTING_FARM_ID) == "farm-1"
+
+    def test_explicit_farm_id_skips_auto_select(self, fresh_deadline_config):
+        """An explicit --farm-id is honored and list_farms is never called."""
+        with patch("deadline.client.cli._common._api.list_farms") as mock_farms:
+            _apply_cli_options_to_config(required_options={"farm_id"}, farm_id="farm-explicit")
+
+        mock_farms.assert_not_called()
+        assert config_file.get_setting(SETTING_FARM_ID) == "farm-explicit"

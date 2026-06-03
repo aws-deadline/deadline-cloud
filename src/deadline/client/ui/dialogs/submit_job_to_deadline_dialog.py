@@ -12,7 +12,7 @@ import json
 from typing import Any, Dict, Optional, Protocol
 import yaml
 
-from qtpy.QtCore import QSize, Qt  # pylint: disable=import-error
+from qtpy.QtCore import QSize, Qt, Signal as _Signal  # pylint: disable=import-error
 from qtpy.QtGui import QKeyEvent  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
@@ -33,9 +33,11 @@ from ..dataclasses import HostRequirements
 from ...dataclasses import SubmitterInfo
 from ... import api
 from ...api._session import session_context as _session_context
+from ..controllers import AsyncTaskRunner as _AsyncTaskRunner
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .._utils import block_signals, tr
 from ...config import get_setting, set_setting, config_file
+from ...config.config_file import _SETTING_FARM_ID, _SETTING_QUEUE_ID
 from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
 from ...job_bundle.parameters import JobParameter
@@ -104,6 +106,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         submitter_info (SubmitterInfo): Information related to the submitter window and application it's running in
     """
 
+    _auto_select_complete = _Signal()
+
     def __init__(
         self,
         *,
@@ -150,6 +154,11 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.show_host_requirements_tab = show_host_requirements_tab
         self.known_asset_paths = known_asset_paths or []
         self.should_close = False
+
+        # Runs the auto-select farm/queue API calls off the Qt event loop. Using a
+        # single operation_key means a newer auto-select supersedes (and cancels) an
+        # in-flight older one, so a stale result can never clobber newer settings.
+        self._auto_select_runner = _AsyncTaskRunner(self)
 
         self._build_ui(
             job_setup_widget_type,
@@ -229,6 +238,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.deadline_authentication_status.api_availability_changed.connect(
             self.refresh_deadline_settings
         )
+        self._auto_select_complete.connect(self.refresh_deadline_settings)
 
         # Refresh the submit button enable state once queue parameter status changes
         self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
@@ -257,8 +267,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         # Enable/disable the Submit button based on whether the
         # AWS Deadline Cloud API is accessible and the farm+queue are configured.
         api_available = self.deadline_authentication_status.api_availability is True
-        farm_configured = get_setting("defaults.farm_id") != ""
-        queue_configured = get_setting("defaults.queue_id") != ""
+        farm_configured = get_setting(_SETTING_FARM_ID) != ""
+        queue_configured = get_setting(_SETTING_QUEUE_ID) != ""
         queue_valid = self.shared_job_settings.is_queue_valid()
 
         enable = api_available and farm_configured and queue_configured and queue_valid
@@ -295,6 +305,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             self.submit_button.setToolTip("")
 
     def refresh_deadline_settings(self):
+        self._auto_select_defaults()
         self._set_submit_button_state()
 
         self.shared_job_settings.deadline_cloud_settings_box.refresh_setting_controls(
@@ -302,6 +313,100 @@ class SubmitJobToDeadlineDialog(QDialog):
         )
         # If necessary, this reloads the queue parameters
         self.shared_job_settings.refresh_queue_parameters()
+
+    # Identifies the auto-select task in the AsyncTaskRunner. Reusing one key means a
+    # newer auto-select supersedes any in-flight older one (latest-wins).
+    _AUTO_SELECT_OPERATION_KEY = "submit_dialog_auto_select_defaults"
+
+    def _auto_select_defaults(self):
+        """Kick off an auto-select of the default farm/queue if only one is available.
+
+        The AWS API calls run in a background thread via ``AsyncTaskRunner``; the
+        result is applied back on the Qt main thread (see ``_on_auto_select_resolved``)
+        so we never touch settings or widgets from the worker thread.
+        """
+        if self.deadline_authentication_status.api_availability is not True:
+            return
+        farm_id = get_setting(_SETTING_FARM_ID)
+        queue_id = get_setting(_SETTING_QUEUE_ID)
+        if farm_id and queue_id:
+            # Nothing to select.
+            return
+        if self._auto_select_runner.is_running(self._AUTO_SELECT_OPERATION_KEY):
+            # An auto-select is already in flight; let it finish. When it applies a
+            # change it emits ``_auto_select_complete`` which re-enters here to pick
+            # up the next step (e.g. select the queue after the farm).
+            return
+
+        self._auto_select_runner.run(
+            operation_key=self._AUTO_SELECT_OPERATION_KEY,
+            fn=self._resolve_auto_select,
+            on_success=self._on_auto_select_resolved,
+            on_error=self._on_auto_select_error,
+            current_farm_id=farm_id,
+            current_queue_id=queue_id,
+        )
+
+    @staticmethod
+    def _resolve_auto_select(
+        *, current_farm_id: str, current_queue_id: str
+    ) -> dict[str, Optional[str]]:
+        """Background worker: resolve the farm/queue to auto-select.
+
+        Runs in a worker thread, so it only calls AWS APIs and returns plain data -
+        it does not read or write settings or touch any widgets.
+        """
+        farm_id_to_set: Optional[str] = None
+        queue_id_to_set: Optional[str] = None
+
+        farm_id = current_farm_id
+        if not farm_id:
+            farms = api.list_farms().get("farms", [])
+            if len(farms) == 1:
+                farm_id = farms[0]["farmId"]
+                farm_id_to_set = farm_id
+
+        if farm_id and not current_queue_id:
+            queues = api.list_queues(farmId=farm_id).get("queues", [])
+            if len(queues) == 1:
+                queue_id_to_set = queues[0]["queueId"]
+
+        return {
+            "farm_id": farm_id_to_set,
+            "queue_id": queue_id_to_set,
+            # The farm the queue was resolved under, so the main thread can confirm
+            # it still matches the configured farm before applying the queue.
+            "queue_farm_id": farm_id if queue_id_to_set else None,
+        }
+
+    def _on_auto_select_resolved(self, result: dict[str, Optional[str]]):
+        """Main-thread slot: apply the resolved farm/queue if still applicable.
+
+        Re-checks the current settings before writing so that a result computed
+        against now-stale state (e.g. the user changed the farm while the request
+        was in flight) is discarded rather than clobbering newer values.
+        """
+        applied = False
+
+        farm_id = result.get("farm_id")
+        if farm_id and not get_setting(_SETTING_FARM_ID):
+            set_setting(_SETTING_FARM_ID, farm_id)
+            applied = True
+
+        queue_id = result.get("queue_id")
+        if queue_id and not get_setting(_SETTING_QUEUE_ID):
+            # Only apply the queue if it was resolved for the farm that is still
+            # configured; otherwise it would be a queue from a different farm.
+            if get_setting(_SETTING_FARM_ID) == result.get("queue_farm_id"):
+                set_setting(_SETTING_QUEUE_ID, queue_id)
+                applied = True
+
+        if applied:
+            self._auto_select_complete.emit()
+
+    def _on_auto_select_error(self, error: BaseException):
+        """Main-thread slot: auto-select is best-effort, so just log failures."""
+        logger.debug("Auto-select defaults failed", exc_info=error)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """
