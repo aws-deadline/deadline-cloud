@@ -51,6 +51,11 @@ __config = ConfigParser()
 __config_file_path = None
 __config_mtime = None
 
+# Canonical setting-name constants. Use these everywhere instead of repeating the
+# string literals, which previously drifted across the CLI and UI code.
+_SETTING_FARM_ID = "defaults.farm_id"
+_SETTING_QUEUE_ID = "defaults.queue_id"
+
 # This value defines the AWS Deadline Cloud settings structure. For each named setting,
 # it stores:
 # "default" - The default value.
@@ -76,7 +81,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
         "is_path": True,
         "description": "The directory in which to place the job submission history for this AWS profile name.",
     },
-    "defaults.farm_id": {
+    _SETTING_FARM_ID: {
         "default": "",
         "depend": "defaults.aws_profile_name",
         "section_format": "{}",
@@ -84,13 +89,13 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     },
     "settings.storage_profile_id": {
         "default": "",
-        "depend": "defaults.farm_id",
+        "depend": _SETTING_FARM_ID,
         "section_format": "{}",
         "description": "The storage profile that this workstation conforms to. It specifies where shared file systems are mounted, and where named job attachments should go.",
     },
-    "defaults.queue_id": {
+    _SETTING_QUEUE_ID: {
         "default": "",
-        "depend": "defaults.farm_id",
+        "depend": _SETTING_FARM_ID,
         "section_format": "{}",
         "description": "The Queue ID to use by default.",
     },
@@ -121,7 +126,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     },
     "defaults.job_attachments_file_system": {
         "default": "COPIED",
-        "depend": "defaults.farm_id",
+        "depend": _SETTING_FARM_ID,
         "description": "The file system mode to use for job attachments when running jobs. COPIED means to download a copy of the attachment data, VIRTUAL means to use a virtual file system for lazy loading.",
     },
     "settings.s3_max_pool_connections": {

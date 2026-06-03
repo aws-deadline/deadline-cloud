@@ -350,3 +350,94 @@ class TestSettingsDialogue:
 
         items = [queue_combo.itemText(i) for i in range(queue_combo.count())]
         assert "Test Queue" not in items
+
+    def test_single_farm_auto_selected_on_profile_change(self, qtbot, config_widget, mock_backend):
+        """When a profile has exactly one farm, switching profiles should auto-select it.
+
+        Repro for the manual-test bug: open config GUI, switch profiles -> the
+        single available farm was NOT auto-selected (combo stayed on the
+        '<none selected>' placeholder and the cascade stopped).
+        """
+        _, farm_id, queue_id = mock_backend
+
+        # Start from a profile with nothing selected (as a fresh profile switch would).
+        config_widget.changes.clear()
+        config_widget.changes["defaults.farm_id"] = ""
+        config_widget.changes["defaults.queue_id"] = ""
+        config_widget.refresh()
+
+        controller = DeadlineUIController.getInstance()
+
+        # Simulate the profile-change cascade entry point: farms get refreshed.
+        config_widget._awaiting_farms_for_cascade = True
+        with qtbot.waitSignal(controller.farms_updated, timeout=5000):
+            config_widget.default_farm_box.refresh_list()
+        QApplication.processEvents()
+
+        # The single farm should now be recorded as the pending farm change, which is
+        # what gets persisted on Apply. (currentData on the combo can't be asserted
+        # here because config_file is mocked, so refresh() can't read the value back.)
+        assert config_widget.changes.get("defaults.farm_id") == farm_id
+
+    def test_single_farm_auto_selected_on_signin(self, qtbot, config_widget, mock_backend):
+        """Signing in (not a profile switch) must also auto-select a lone farm.
+
+        Repro for the manual-test bug: a profile was selected but not signed in;
+        clicking sign-in repopulated the farm list via refresh_lists() - which does
+        NOT set the cascade flags - yet the single farm must still be selected.
+        Because auto-select lives in the combo (the one place every refresh funnels
+        through), it works here without a sign-in-specific hook.
+        """
+        _, farm_id, _ = mock_backend
+
+        config_widget.changes.clear()
+        config_widget.changes["defaults.farm_id"] = ""
+        config_widget.changes["defaults.queue_id"] = ""
+        config_widget.refresh()
+
+        controller = DeadlineUIController.getInstance()
+
+        # Sign-in path: refresh_lists() refreshes the farm list WITHOUT the cascade
+        # flags, but only when the API is available - so stub auth as signed in.
+        auth_stub = MagicMock()
+        auth_stub.api_availability = True
+        assert not config_widget._awaiting_farms_for_cascade
+        with patch(
+            "deadline.client.ui.dialogs.deadline_config_dialog.DeadlineAuthenticationStatus.getInstance",
+            return_value=auth_stub,
+        ):
+            with qtbot.waitSignal(controller.farms_updated, timeout=5000):
+                config_widget.refresh_lists()
+        QApplication.processEvents()
+
+        # The lone farm is auto-selected (combo fires currentIndexChanged ->
+        # default_farm_changed records it). We assert on the pending change, which is
+        # what gets persisted on Apply; the combo's own currentData can't be asserted
+        # because config_file is mocked so refresh() can't read the value back.
+        assert config_widget.changes.get("defaults.farm_id") == farm_id
+
+    def test_multiple_farms_not_auto_selected_on_signin(self, qtbot, config_widget, mock_backend):
+        """With more than one farm, sign-in must not auto-select any farm."""
+        backend, _, _ = mock_backend
+        backend.create_farm(displayName="Second Farm")
+
+        config_widget.changes.clear()
+        config_widget.changes["defaults.farm_id"] = ""
+        config_widget.changes["defaults.queue_id"] = ""
+        config_widget.refresh()
+
+        controller = DeadlineUIController.getInstance()
+        auth_stub = MagicMock()
+        auth_stub.api_availability = True
+        with patch(
+            "deadline.client.ui.dialogs.deadline_config_dialog.DeadlineAuthenticationStatus.getInstance",
+            return_value=auth_stub,
+        ):
+            with qtbot.waitSignal(controller.farms_updated, timeout=5000):
+                config_widget.refresh_lists()
+        QApplication.processEvents()
+
+        # Nothing auto-selected: no farm change recorded, and the combo sits on the
+        # "<none selected>" placeholder.
+        assert config_widget.changes.get("defaults.farm_id", "") == ""
+        assert config_widget.default_farm_box.box.currentData() == ""

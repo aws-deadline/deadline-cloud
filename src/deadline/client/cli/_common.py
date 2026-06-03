@@ -32,7 +32,10 @@ import yaml
 from contextlib import ExitStack
 from deadline.job_attachments.progress_tracker import ProgressReportMetadata
 
+from .. import api as _api
 from ..config import config_file
+from ..config.config_file import _SETTING_FARM_ID as SETTING_FARM_ID
+from ..config.config_file import _SETTING_QUEUE_ID as SETTING_QUEUE_ID
 from ..exceptions import DeadlineOperationError
 from ..job_bundle import deadline_yaml_dump
 from ._groups._sigint_handler import SigIntHandler
@@ -87,6 +90,31 @@ def _handle_error(func: Callable) -> Callable:
     return wraps
 
 
+def _auto_select_farm(config: Optional[ConfigParser] = None) -> Optional[str]:
+    """Auto-select farm ID if exactly one farm is available."""
+    try:
+        farms = _api.list_farms(config=config).get("farms", [])
+        if len(farms) == 1:
+            return farms[0]["farmId"]
+    except Exception:
+        pass
+    return None
+
+
+def _auto_select_queue(config: Optional[ConfigParser] = None) -> Optional[str]:
+    """Auto-select queue ID if exactly one queue is available in the current farm."""
+    try:
+        farm_id = config_file.get_setting(SETTING_FARM_ID, config=config)
+        if not farm_id:
+            return None
+        queues = _api.list_queues(farmId=farm_id, config=config).get("queues", [])
+        if len(queues) == 1:
+            return queues[0]["queueId"]
+    except Exception:
+        pass
+    return None
+
+
 def _apply_cli_options_to_config(
     *, config: Optional[ConfigParser] = None, required_options: Set[str] = set(), **args
 ) -> Optional[ConfigParser]:
@@ -109,11 +137,11 @@ def _apply_cli_options_to_config(
 
         farm_id = args.pop("farm_id", None)
         if farm_id:
-            config_file.set_setting("defaults.farm_id", farm_id, config=config)
+            config_file.set_setting(SETTING_FARM_ID, farm_id, config=config)
 
         queue_id = args.pop("queue_id", None)
         if queue_id:
-            config_file.set_setting("defaults.queue_id", queue_id, config=config)
+            config_file.set_setting(SETTING_QUEUE_ID, queue_id, config=config)
 
         storage_profile_id = args.pop("storage_profile_id", None)
         if storage_profile_id:
@@ -139,16 +167,28 @@ def _apply_cli_options_to_config(
         for name in ["profile", "farm_id", "queue_id", "job_id", "storage_profile_id"]:
             args.pop(name, None)
 
-    # Check that the required options have values
+    # Check that the required options have values, auto-selecting if only one exists
     if "farm_id" in required_options:
         required_options.remove("farm_id")
-        if not config_file.get_setting("defaults.farm_id", config=config):
-            raise click.UsageError("Missing '--farm-id' or default Farm ID configuration")
+        if not config_file.get_setting(SETTING_FARM_ID, config=config):
+            farm_id = _auto_select_farm(config)
+            if farm_id:
+                if config is None:
+                    config = config_file.read_config()
+                config_file.set_setting(SETTING_FARM_ID, farm_id, config=config)
+            else:
+                raise click.UsageError("Missing '--farm-id' or default Farm ID configuration")
 
     if "queue_id" in required_options:
         required_options.remove("queue_id")
-        if not config_file.get_setting("defaults.queue_id", config=config):
-            raise click.UsageError("Missing '--queue-id' or default Queue ID configuration")
+        if not config_file.get_setting(SETTING_QUEUE_ID, config=config):
+            queue_id = _auto_select_queue(config)
+            if queue_id:
+                if config is None:
+                    config = config_file.read_config()
+                config_file.set_setting(SETTING_QUEUE_ID, queue_id, config=config)
+            else:
+                raise click.UsageError("Missing '--queue-id' or default Queue ID configuration")
 
     if "job_id" in required_options:
         required_options.remove("job_id")
