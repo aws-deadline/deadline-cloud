@@ -906,3 +906,81 @@ def test_process_event_queue_thread_skips_account_id_when_resolution_fails(
 
     resolve_mock.assert_called_once()
     assert "accountId" not in mock_telemetry_client._common_details
+
+
+class TestGetMonitorSessionId:
+    """Tests for TelemetryClient._get_monitor_session_id"""
+
+    @pytest.fixture
+    def make_client(self, fresh_deadline_config):
+        """Creates a TelemetryClient with telemetry internals patched out."""
+
+        def _make():
+            with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
+                api._telemetry, "get_monitor_id", return_value=None
+            ), patch.object(
+                api._telemetry, "get_user_and_identity_store_id", return_value=(None, None)
+            ), patch.object(
+                api._telemetry,
+                "get_deadline_endpoint_url",
+                return_value="https://fake-endpoint",
+            ):
+                return TelemetryClient(
+                    package_name="deadline-cloud-library",
+                    package_ver="0.1.2",
+                    config=config.config_file.read_config(),
+                )
+
+        return _make
+
+    def test_reads_profile_scoped_session_id(self, fresh_deadline_config, make_client):
+        """When a profile-scoped monitor session_id exists, it is returned."""
+        config.set_setting("defaults.aws_profile_name", "my-profile-us-west-2")
+        deadline_config = config.config_file.read_config()
+        deadline_config["profile-my-profile-us-west-2 deadline-cloud-monitor"] = {
+            "session_id": "abc123"
+        }
+        config.config_file.write_config(deadline_config)
+
+        client = make_client()
+        assert client._common_details.get("monitor_session_id") == "abc123"
+
+    def test_falls_back_to_global_section(self, fresh_deadline_config, make_client):
+        """When no profile-scoped section exists, falls back to [deadline-cloud-monitor]."""
+        config.set_setting("defaults.aws_profile_name", "my-profile-us-west-2")
+        deadline_config = config.config_file.read_config()
+        deadline_config["deadline-cloud-monitor"] = {"session_id": "global-session-456"}
+        config.config_file.write_config(deadline_config)
+
+        client = make_client()
+        assert client._common_details.get("monitor_session_id") == "global-session-456"
+
+    def test_profile_scoped_takes_precedence_over_global(self, fresh_deadline_config, make_client):
+        """Profile-scoped session_id is preferred over the global one."""
+        config.set_setting("defaults.aws_profile_name", "my-profile-us-west-2")
+        deadline_config = config.config_file.read_config()
+        deadline_config["deadline-cloud-monitor"] = {"session_id": "global-session"}
+        deadline_config["profile-my-profile-us-west-2 deadline-cloud-monitor"] = {
+            "session_id": "profile-session"
+        }
+        config.config_file.write_config(deadline_config)
+
+        client = make_client()
+        assert client._common_details.get("monitor_session_id") == "profile-session"
+
+    def test_no_session_id_when_not_configured(self, fresh_deadline_config, make_client):
+        """When no monitor session_id is in the config, it is not added to common details."""
+        config.set_setting("defaults.aws_profile_name", "my-profile-us-west-2")
+
+        client = make_client()
+        assert "monitor_session_id" not in client._common_details
+
+    def test_empty_session_id_treated_as_absent(self, fresh_deadline_config, make_client):
+        """An empty session_id value in config is treated as absent."""
+        config.set_setting("defaults.aws_profile_name", "my-profile-us-west-2")
+        deadline_config = config.config_file.read_config()
+        deadline_config["profile-my-profile-us-west-2 deadline-cloud-monitor"] = {"session_id": ""}
+        config.config_file.write_config(deadline_config)
+
+        client = make_client()
+        assert "monitor_session_id" not in client._common_details

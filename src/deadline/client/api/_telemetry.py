@@ -188,6 +188,11 @@ class TelemetryClient:
         if monitor_id:
             self._system_metadata["monitor_id"] = monitor_id
 
+        monitor_session_id = self._get_monitor_session_id(config=config)
+        if monitor_session_id:
+            self._common_details["monitor_session_id"] = monitor_session_id
+            logger.debug("Telemetry using monitor_session_id: %s", monitor_session_id)
+
         self._initialized = True
         self._start_threads()
 
@@ -231,6 +236,29 @@ class TelemetryClient:
             identifier = str(uuid.uuid4())
             config_file.set_setting("telemetry.identifier", identifier)
         return identifier
+
+    _MONITOR_CONFIG_SECTION = "deadline-cloud-monitor"
+
+    def _get_monitor_session_id(self, config: Optional[ConfigParser] = None) -> Optional[str]:
+        """Reads the Monitor session_id from the deadline config if available."""
+        try:
+            deadline_config = config if config is not None else config_file.read_config()
+            profile_name = config_file.get_setting(
+                "defaults.aws_profile_name", config=deadline_config
+            )
+
+            profile_section = f"profile-{profile_name} {self._MONITOR_CONFIG_SECTION}"
+            session_id = deadline_config.get(profile_section, "session_id", fallback=None)
+            if session_id:
+                return session_id
+
+            return (
+                deadline_config.get(self._MONITOR_CONFIG_SECTION, "session_id", fallback=None)
+                or None
+            )
+        except Exception:
+            logger.debug("Could not read monitor session_id", exc_info=True)
+            return None
 
     def _start_threads(self) -> None:
         """Set up background threads for shutdown checking and request sending"""
