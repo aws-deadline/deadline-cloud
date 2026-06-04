@@ -53,7 +53,7 @@ jobs:
         # created to read the PGP signing key from Secrets Manager), it also
         # grants the bedrock:InvokeModel permission this digest needs, so we
         # reuse it rather than provisioning a separate Bedrock role.
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_PGP_KEY_SECRET_ROLE }}
           aws-region: us-west-2
