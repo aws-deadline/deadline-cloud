@@ -25,6 +25,14 @@ import xa11y
 # because Qt/AT-SPI startup under Xvfb on Linux CI and Windows UIA can
 # be substantially slower than a developer workstation.
 STARTUP_TIMEOUT = 45.0
+# Number of times to (re)spawn the GUI subprocess if it fails to surface a
+# visible dialog within STARTUP_TIMEOUT. The accessibility bridge (AT-SPI on
+# Linux, UIA on Windows, AX on macOS) occasionally wedges on the hosted CI
+# runners so that a dialog never becomes queryable, even though the process
+# launched fine. A fresh subprocess resets that bridge state. A real failure
+# (e.g. the GUI crashes on startup) reproduces on every attempt, so retrying
+# costs a little wall-clock without masking genuine bugs.
+STARTUP_ATTEMPTS = 3
 CLOSE_TIMEOUT = 10.0
 TERMINATE_TIMEOUT = 3.0
 SUBMIT_TIMEOUT = 20.0
@@ -225,8 +233,50 @@ class DeadlineApp:
         timeout: float = STARTUP_TIMEOUT,
         capture_stdio: bool = False,
         dialog_name: Optional[str] = None,
+        attempts: int = STARTUP_ATTEMPTS,
     ) -> _T:
-        """Spawn ``deadline <args>`` and attach to its accessibility tree."""
+        """Spawn ``deadline <args>`` and attach to its accessibility tree.
+
+        Retries the whole spawn up to *attempts* times if the dialog never
+        becomes visible within *timeout*. The accessibility bridge on the
+        hosted CI runners intermittently wedges so a dialog never surfaces
+        even though the process started fine; a fresh subprocess clears it.
+        Each attempt spawns its own process, and only the successful instance
+        is returned, so ``capture_stdio`` callers still read the right pipes.
+        """
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, attempts + 1):
+            try:
+                return cls._launch_once(
+                    args,
+                    env=env,
+                    timeout=timeout,
+                    capture_stdio=capture_stdio,
+                    dialog_name=dialog_name,
+                )
+            except (xa11y.TimeoutError, TimeoutError) as exc:
+                # xa11y.TimeoutError: dialog never became visible (wait_visible).
+                # builtin TimeoutError: process never surfaced in the a11y tree
+                # (_find_app). Both indicate a wedged bridge worth relaunching.
+                last_exc = exc
+                if attempt < attempts:
+                    sys.stderr.write(
+                        f"[ui-test] GUI dialog did not become visible within "
+                        f"{timeout}s (attempt {attempt}/{attempts}); relaunching.\n"
+                    )
+        assert last_exc is not None
+        raise last_exc
+
+    @classmethod
+    def _launch_once(
+        cls: type[_T],
+        args: Sequence[str],
+        env: Optional[dict],
+        timeout: float,
+        capture_stdio: bool,
+        dialog_name: Optional[str],
+    ) -> _T:
+        """Spawn the GUI subprocess once and wait for its dialog to appear."""
         cmd = [sys.executable, "-m", "deadline", *args]
         baseline = {a.name for a in xa11y.App.list()}
         popen_kwargs: dict = dict(
