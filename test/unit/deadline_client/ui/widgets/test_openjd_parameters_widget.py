@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import pytest
-from conftest import STRING_FIELD_MAX_LENGTH
+from .conftest import STRING_FIELD_MAX_LENGTH
 from pathlib import Path
 
 try:
