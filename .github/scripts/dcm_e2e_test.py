@@ -83,6 +83,42 @@ def browser():
     fail(f"browser {BROWSER_NAME!r} not found; apps: {[a.name for a in xa11y.App.list()]}")
 
 
+def prewarm_browser():
+    """Launch Firefox with about:blank so the cold-start (profile init, privacy
+    notice tab) doesn't run inside the IdC PAR token's short TTL window.
+
+    DCM's xdg-open later invokes `firefox <auth-url>`, which the running Firefox
+    handles as a new tab in O(ms) instead of a fresh process taking seconds.
+    """
+    if not IS_LINUX:
+        return
+    subprocess.Popen(
+        ["firefox", "about:blank"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+    )
+    try:
+        browser()
+    except Exception as e:
+        print(f"prewarm: browser app not detected: {e}", flush=True)
+        return
+    time.sleep(3)
+    print("prewarm: Firefox is running and idle on about:blank", flush=True)
+
+
+def is_on_403_page(br):
+    """True if a '403 Forbidden' heading is visible in the browser. The IdC
+    /platform/authorize PAR token is single-use and short-lived; if Firefox is
+    slow to GET it (cold start, privacy-notice tab), AWS responds 403 and the
+    only recovery is to restart `deadline auth login` to mint a new one."""
+    try:
+        br.locator("heading[name='403 Forbidden']").wait_visible(timeout=2)
+        return True
+    except Exception:
+        return False
+
+
 def click_open_link(br):
     """Click the browser's 'Open this link in Deadline Cloud monitor?' dialog."""
     for label in OPEN_LINK_LABELS:
@@ -115,6 +151,8 @@ def _type_into(locator, text):
 
 
 def sign_in():
+    """Drive the IdC sign-in flow. Returns True on success, False if the IdC
+    /platform/authorize page returned 403 (caller should restart the login)."""
     br = browser()
     # Dismiss any first-run welcome screens (Edge has several layered ones)
     for _ in range(6):
@@ -140,6 +178,8 @@ def sign_in():
                 pass
         if not dismissed:
             break
+    if is_on_403_page(br):
+        return False
     user = br.locator("text_field[name='Username']")
     user.wait_visible(timeout=120)
     _type_into(user, USERNAME)
@@ -159,23 +199,34 @@ def sign_in():
     end = time.time() + 60
     while time.time() < end:
         if click_open_link(br):
-            return
+            return True
         time.sleep(1)
     print("No Open Link dialog appeared (browser may have auto-dispatched the scheme)", flush=True)
+    return True
 
 
 def main():
-    cli = subprocess.Popen(["deadline", "auth", "login"])
-    print(f"auth login pid={cli.pid}", flush=True)
-    try:
-        time.sleep(10)
-        sign_in()
-        cli.wait(timeout=180)
-        if cli.returncode:
-            fail(f"auth login failed: {cli.returncode}")
-    finally:
-        if cli.poll() is None:
-            cli.kill()
+    prewarm_browser()
+
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        cli = subprocess.Popen(["deadline", "auth", "login"])
+        print(f"auth login attempt {attempt}/{max_attempts} pid={cli.pid}", flush=True)
+        try:
+            time.sleep(10)
+            if sign_in():
+                cli.wait(timeout=180)
+                if cli.returncode:
+                    fail(f"auth login failed: {cli.returncode}")
+                break
+            screenshot(f"403_attempt_{attempt}")
+            print(f"attempt {attempt}: IdC returned 403, restarting login", flush=True)
+        finally:
+            if cli.poll() is None:
+                cli.kill()
+        time.sleep(5)
+    else:
+        fail(f"IdC /platform/authorize returned 403 on all {max_attempts} attempts")
 
     run(["deadline", "auth", "status"])
     run(["deadline", "farm", "list"])
