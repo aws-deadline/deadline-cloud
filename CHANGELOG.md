@@ -1,3 +1,8 @@
+## 0.57.4 (2026-06-08)
+
+### Features
+* When no default farm or queue is configured, the CLI and GUI submit dialog now automatically select the farm/queue if only one is available to the user. If multiple exist, the existing behavior is preserved. (#1015)
+* The Monitor's session_id is now read from ~/.deadline/config and included in telemetry events for cross-component correlation with Monitor and CTDX sessions. (#1184)
 ## 0.57.3 (2026-06-01)
 
 ### Features
