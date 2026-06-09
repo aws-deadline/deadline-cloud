@@ -19,6 +19,7 @@ from ...config import config_file
 from .._main import deadline as main
 
 from ... import api
+from ...api._session import get_default_client_config
 from ....job_attachments.api.attachment import (
     _attachment_download,
     _attachment_upload,
@@ -122,7 +123,7 @@ def attachment_download(
 
         s3_root_uri = s3_settings.to_s3_root_uri()
 
-        deadline_client = boto3_session.client("deadline")
+        deadline_client = boto3_session.client("deadline", config=get_default_client_config())
         boto3_session = api.get_queue_user_boto3_session(deadline=deadline_client, config=config)
 
     if not s3_root_uri:
@@ -224,7 +225,7 @@ def attachment_upload(
 
         s3_root_uri = s3_settings.to_s3_root_uri()
 
-        deadline_client = boto3_session.client("deadline")
+        deadline_client = boto3_session.client("deadline", config=get_default_client_config())
         boto3_session = api.get_queue_user_boto3_session(deadline=deadline_client, config=config)
 
     if not s3_root_uri:

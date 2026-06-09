@@ -266,9 +266,11 @@ def test_cli_handle_web_url_download_output_only_required_input(fresh_deadline_c
     """
     set_setting("settings.auto_accept", "true")
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(api, "get_queue_user_boto3_session"):
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(api, "get_queue_user_boto3_session"),
+    ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
             total_time=12,
@@ -322,10 +324,11 @@ def test_cli_handle_web_url_download_output_with_optional_input(fresh_deadline_c
     """
     set_setting("settings.auto_accept", "true")
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
@@ -504,10 +507,15 @@ def test_cli_handle_web_url_install_frozen_exe(fresh_deadline_config, monkeypatc
 
     exe_path = r"C:\Program Files\DeadlineClient\deadline.exe"
 
-    with patch.object(sys, "platform", "win32"), patch.object(sys, "argv", [exe_path]), patch(
-        "deadline.client.cli._deadline_web_url.Path.resolve",
-        return_value=Path(exe_path),
-    ), patch("os.path.isfile", return_value=True) as isfile_mock:
+    with (
+        patch.object(sys, "platform", "win32"),
+        patch.object(sys, "argv", [exe_path]),
+        patch(
+            "deadline.client.cli._deadline_web_url.Path.resolve",
+            return_value=Path(exe_path),
+        ),
+        patch("os.path.isfile", return_value=True) as isfile_mock,
+    ):
         winreg_mock.HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
         winreg_mock.REG_SZ = "REG_SZ"
         winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
@@ -530,10 +538,15 @@ def test_cli_handle_web_url_install_pip_console_script(fresh_deadline_config, mo
 
     script_path = r"C:\Scripts\deadline"
 
-    with patch.object(sys, "platform", "win32"), patch.object(sys, "argv", [script_path]), patch(
-        "deadline.client.cli._deadline_web_url.Path.resolve",
-        return_value=Path(script_path),
-    ), patch("os.path.isfile", return_value=True) as isfile_mock:
+    with (
+        patch.object(sys, "platform", "win32"),
+        patch.object(sys, "argv", [script_path]),
+        patch(
+            "deadline.client.cli._deadline_web_url.Path.resolve",
+            return_value=Path(script_path),
+        ),
+        patch("os.path.isfile", return_value=True) as isfile_mock,
+    ):
         winreg_mock.HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
         winreg_mock.REG_SZ = "REG_SZ"
         winreg_mock.CreateKeyEx.side_effect = ["FIRST_CREATED_KEY", "SECOND_CREATED_KEY"]
@@ -553,15 +566,20 @@ def test_cli_handle_web_url_install_linux(fresh_deadline_config, tmp_path):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
 
-    with patch.object(sys, "platform", "linux"), patch.object(
-        sys, "argv", ["/usr/bin/deadline"]
-    ), patch.object(shutil, "which", return_value="/usr/bin/deadline"), patch.object(
-        os.path,
-        "expanduser",
-        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
-            "~/.config", str(config_dir)
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
         ),
-    ), patch.object(subprocess, "run"), patch.object(os, "makedirs"):
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
         runner = CliRunner()
         result = runner.invoke(main, ["handle-web-url", "--install"])
 
@@ -602,13 +620,16 @@ def test_cli_handle_web_url_uninstall_linux(fresh_deadline_config, tmp_path):
     entry_dir.mkdir()
     (entry_dir / "deadline.desktop").write_text("[Desktop Entry]\n")
 
-    with patch.object(sys, "platform", "linux"), patch.object(
-        shutil, "which", return_value="/usr/bin/update-desktop-database"
-    ), patch.object(
-        os.path,
-        "expanduser",
-        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)),
-    ), patch.object(subprocess, "run"):
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(shutil, "which", return_value="/usr/bin/update-desktop-database"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)),
+        ),
+        patch.object(subprocess, "run"),
+    ):
         runner = CliRunner()
         result = runner.invoke(main, ["handle-web-url", "--uninstall"])
 
@@ -731,8 +752,9 @@ def test_cli_handle_web_url_install_open_url_uninstall_real_windows(
     assert deadline_path, "deadline CLI must be on PATH"
 
     # Step 1: Install — real registry writes
-    with patch.object(sys, "argv", [deadline_path]), patch.object(
-        os.path, "isfile", return_value=True
+    with (
+        patch.object(sys, "argv", [deadline_path]),
+        patch.object(os.path, "isfile", return_value=True),
     ):
         result = runner.invoke(main, ["handle-web-url", "--install"])
     assert result.exit_code == 0, result.output
@@ -954,15 +976,20 @@ def test_linux_install_generates_valid_desktop_file(fresh_deadline_config, tmp_p
 
     desktop_file_path = str(entry_dir / "deadline.desktop")
 
-    with patch.object(sys, "platform", "linux"), patch.object(
-        sys, "argv", ["/usr/bin/deadline"]
-    ), patch.object(shutil, "which", return_value="/usr/bin/deadline"), patch.object(
-        os.path,
-        "expanduser",
-        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
-            "~/.config", str(config_dir)
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
         ),
-    ), patch.object(subprocess, "run"), patch.object(os, "makedirs"):
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
         from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
 
         install_deadline_web_url_handler(all_users=False)
@@ -991,21 +1018,26 @@ def test_linux_install_resolves_bare_command_via_shutil_which(fresh_deadline_con
 
     desktop_file_path = str(entry_dir / "deadline.desktop")
 
-    with patch.object(sys, "platform", "linux"), patch.object(
-        sys, "argv", ["deadline"]
-    ), patch.object(
-        shutil,
-        "which",
-        side_effect=lambda cmd: (
-            "/opt/deadline/bin/deadline" if cmd == "deadline" else "/usr/bin/" + cmd
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["deadline"]),
+        patch.object(
+            shutil,
+            "which",
+            side_effect=lambda cmd: (
+                "/opt/deadline/bin/deadline" if cmd == "deadline" else "/usr/bin/" + cmd
+            ),
         ),
-    ), patch.object(
-        os.path,
-        "expanduser",
-        side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
-            "~/.config", str(config_dir)
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
         ),
-    ), patch.object(subprocess, "run"), patch.object(os, "makedirs"):
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
         from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
 
         install_deadline_web_url_handler(all_users=False)
@@ -1020,10 +1052,14 @@ def test_linux_install_raises_when_command_not_found(fresh_deadline_config, tmp_
     Tests that on Linux, when shutil.which cannot find the command,
     the install raises a DeadlineOperationError.
     """
-    with patch.object(sys, "platform", "linux"), patch.object(
-        sys, "argv", ["deadline"]
-    ), patch.object(
-        shutil, "which", side_effect=lambda cmd: None if cmd == "deadline" else "/usr/bin/" + cmd
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["deadline"]),
+        patch.object(
+            shutil,
+            "which",
+            side_effect=lambda cmd: None if cmd == "deadline" else "/usr/bin/" + cmd,
+        ),
     ):
         from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
         from deadline.client.exceptions import DeadlineOperationError

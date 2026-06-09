@@ -19,7 +19,7 @@ __all__ = [
 
 import os
 from dataclasses import dataclass, field
-from typing import Literal, Dict, List, Union
+from typing import Any, Literal, Dict, List, Optional, Union
 
 from ...job_bundle.parameters import JobParameter
 
@@ -347,9 +347,9 @@ class HostRequirements:
     Settings for a HostRequirementsWidget.
     """
 
-    os_requirements: OsRequirements = field(default=None)
-    hardware_requirements: HardwareRequirements = field(default=None)
-    custom_requirements: CustomRequirements = field(default=None)
+    os_requirements: Optional[OsRequirements] = field(default=None)
+    hardware_requirements: Optional[HardwareRequirements] = field(default=None)
+    custom_requirements: Optional[CustomRequirements] = field(default=None)
 
     def __post_init__(self):
         if isinstance(self.os_requirements, dict):
@@ -359,6 +359,95 @@ class HostRequirements:
         if isinstance(self.custom_requirements, dict):
             self.custom_requirements = CustomRequirements(**self.custom_requirements)
 
+    # Maps a well-known OpenJD "amount.worker.*" capability name to the pair of
+    # HardwareRequirements fields (min field, max field) it populates.
+    _HARDWARE_AMOUNTS = {
+        "amount.worker.vcpu": ("cpu_min", "cpu_max"),
+        "amount.worker.memory": ("memory_min", "memory_max"),
+        "amount.worker.gpu": ("acceleration_min", "acceleration_max"),
+        "amount.worker.gpu.memory": ("acceleration_memory_min", "acceleration_memory_max"),
+        "amount.worker.disk.scratch": ("scratch_space_min", "scratch_space_max"),
+    }
+    # The well-known OS/CPU attribute capability names.
+    _OS_FAMILY_ATTRIBUTE = "attr.worker.os.family"
+    _CPU_ARCH_ATTRIBUTE = "attr.worker.cpu.arch"
+    # Prefixes for custom (user-defined) capabilities. OpenJD reserves the
+    # "amount.worker."/"attr.worker." namespace for its own defined capabilities,
+    # so custom capabilities use the bare "amount."/"attr." prefix (this matches
+    # what the host requirements widget emits when serializing custom entries).
+    _CUSTOM_AMOUNT_PREFIX = "amount."
+    _CUSTOM_ATTRIBUTE_PREFIX = "attr."
+
+    @classmethod
+    def from_dict(cls, requirements: Dict[str, Any]) -> "HostRequirements":
+        """
+        Build a HostRequirements from an OpenJD step "hostRequirements" dict, the
+        inverse of serialize(). Well-known os/cpu attributes and the standard
+        hardware amounts populate the OS and hardware sections; everything else
+        becomes a custom requirement.
+        """
+        operating_systems: List[str] = []
+        cpu_archs: List[str] = []
+        hardware_fields: Dict[str, int] = {}
+        custom_amounts: List[CustomAmountRequirement] = []
+        custom_attributes: List[CustomAttributeRequirement] = []
+
+        for amount in (requirements or {}).get("amounts", []):
+            name = amount.get("name", "")
+            if name in cls._HARDWARE_AMOUNTS:
+                min_field, max_field = cls._HARDWARE_AMOUNTS[name]
+                if "min" in amount:
+                    hardware_fields[min_field] = amount["min"]
+                if "max" in amount:
+                    hardware_fields[max_field] = amount["max"]
+            elif name.startswith(cls._CUSTOM_AMOUNT_PREFIX):
+                custom_amounts.append(
+                    CustomAmountRequirement(
+                        name=name[len(cls._CUSTOM_AMOUNT_PREFIX) :],
+                        min=amount.get("min", CustomAmountRequirement.DEFAULT_VALUE),
+                        max=amount.get("max", CustomAmountRequirement.DEFAULT_VALUE),
+                    )
+                )
+
+        for attribute in (requirements or {}).get("attributes", []):
+            name = attribute.get("name", "")
+            option = (
+                CustomAttributeRequirement.ANY_OF
+                if "anyOf" in attribute
+                else (CustomAttributeRequirement.ALL_OF)
+            )
+            values = attribute.get(option, [])
+            if name == cls._OS_FAMILY_ATTRIBUTE:
+                operating_systems = list(values)
+            elif name == cls._CPU_ARCH_ATTRIBUTE:
+                cpu_archs = list(values)
+            elif name.startswith(cls._CUSTOM_ATTRIBUTE_PREFIX):
+                custom_attributes.append(
+                    CustomAttributeRequirement(
+                        name=name[len(cls._CUSTOM_ATTRIBUTE_PREFIX) :],
+                        option=option,
+                        values=list(values),
+                    )
+                )
+
+        os_requirements = (
+            OsRequirements(operating_systems=operating_systems, cpu_archs=cpu_archs)  # type: ignore[arg-type]
+            if operating_systems or cpu_archs
+            else None
+        )
+        hardware_requirements = HardwareRequirements(**hardware_fields) if hardware_fields else None
+        custom_requirements = (
+            CustomRequirements(amounts=custom_amounts, attributes=custom_attributes)
+            if custom_amounts or custom_attributes
+            else None
+        )
+
+        return cls(
+            os_requirements=os_requirements,
+            hardware_requirements=hardware_requirements,
+            custom_requirements=custom_requirements,
+        )
+
     def serialize(self) -> dict:
         requirements: Dict[str, Union[List[str], List[int]]] = {}
         if self.os_requirements is not None:
@@ -367,10 +456,11 @@ class HostRequirements:
         if self.hardware_requirements:
             requirements.setdefault("amounts", []).extend(self.hardware_requirements.serialize())
 
-        custom_requirements = self.custom_requirements.serialize()
-        if custom_requirements.get("amounts", []):
-            requirements.setdefault("amounts", []).extend(custom_requirements["amounts"])
-        if custom_requirements.get("attributes", []):
-            requirements.setdefault("attributes", []).extend(custom_requirements["attributes"])
+        if self.custom_requirements is not None:
+            custom_requirements = self.custom_requirements.serialize()
+            if custom_requirements.get("amounts", []):
+                requirements.setdefault("amounts", []).extend(custom_requirements["amounts"])
+            if custom_requirements.get("attributes", []):
+                requirements.setdefault("attributes", []).extend(custom_requirements["attributes"])
 
         return requirements

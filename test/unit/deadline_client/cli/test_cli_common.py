@@ -354,9 +354,10 @@ class TestApplyCliOptionsAutoSelect:
 
     def test_auto_selects_single_farm_and_queue(self, fresh_deadline_config):
         """With one farm and one queue, both required options are auto-filled."""
-        with patch("deadline.client.cli._common._api.list_farms") as mock_farms, patch(
-            "deadline.client.cli._common._api.list_queues"
-        ) as mock_queues:
+        with (
+            patch("deadline.client.cli._common._api.list_farms") as mock_farms,
+            patch("deadline.client.cli._common._api.list_queues") as mock_queues,
+        ):
             mock_farms.return_value = {"farms": [{"farmId": "farm-1"}]}
             mock_queues.return_value = {"queues": [{"queueId": "queue-1"}]}
 
@@ -374,9 +375,10 @@ class TestApplyCliOptionsAutoSelect:
 
     def test_raises_when_multiple_queues(self, fresh_deadline_config):
         """A single farm auto-selects, but multiple queues raise the queue error."""
-        with patch("deadline.client.cli._common._api.list_farms") as mock_farms, patch(
-            "deadline.client.cli._common._api.list_queues"
-        ) as mock_queues:
+        with (
+            patch("deadline.client.cli._common._api.list_farms") as mock_farms,
+            patch("deadline.client.cli._common._api.list_queues") as mock_queues,
+        ):
             mock_farms.return_value = {"farms": [{"farmId": "farm-1"}]}
             mock_queues.return_value = {"queues": [{"queueId": "q-1"}, {"queueId": "q-2"}]}
             with pytest.raises(click.UsageError, match="queue-id"):

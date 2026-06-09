@@ -61,14 +61,16 @@ class TestSubmitJobDialogHelpButton:
 
         test_exception = Exception("Test error")
 
-        with patch(
-            "deadline.client.ui.dialogs.submit_job_to_deadline_dialog._HelpDialog",
-            side_effect=test_exception,
-        ), patch(
-            "deadline.client.ui.dialogs.submit_job_to_deadline_dialog.logger"
-        ) as mock_logger, patch(
-            "deadline.client.ui.dialogs.submit_job_to_deadline_dialog.QMessageBox"
-        ) as mock_msgbox:
+        with (
+            patch(
+                "deadline.client.ui.dialogs.submit_job_to_deadline_dialog._HelpDialog",
+                side_effect=test_exception,
+            ),
+            patch("deadline.client.ui.dialogs.submit_job_to_deadline_dialog.logger") as mock_logger,
+            patch(
+                "deadline.client.ui.dialogs.submit_job_to_deadline_dialog.QMessageBox"
+            ) as mock_msgbox,
+        ):
             # Call the method directly on our mock
             SubmitJobToDeadlineDialog._on_help_button_clicked(mock_dialog)
 

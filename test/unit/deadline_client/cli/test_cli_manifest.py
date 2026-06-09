@@ -75,9 +75,11 @@ def mock_attachment_settings():
 
 @pytest.fixture
 def mock_init_objects():
-    with patch.object(S3AssetManager, "__init__", lambda self, *args, **kwargs: None), patch.object(
-        S3AssetUploader, "__init__", lambda self, *args, **kwargs: None
-    ), patch.object(JobAttachmentS3Settings, "__init__", lambda self, *args, **kwargs: None):
+    with (
+        patch.object(S3AssetManager, "__init__", lambda self, *args, **kwargs: None),
+        patch.object(S3AssetUploader, "__init__", lambda self, *args, **kwargs: None),
+        patch.object(JobAttachmentS3Settings, "__init__", lambda self, *args, **kwargs: None),
+    ):
         yield
 
 

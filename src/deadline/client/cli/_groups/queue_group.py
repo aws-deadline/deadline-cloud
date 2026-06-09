@@ -8,7 +8,6 @@ import click
 import json
 import time
 import os
-import sys
 from configparser import ConfigParser
 from typing import Optional
 import boto3
@@ -335,9 +334,6 @@ def sync_output(
     Learn more about [automatic downloads](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/auto-downloads.html)
     """
     api._session.session_context["cli-command-name"] = "deadline.queue.sync-output"
-
-    if sys.version_info < (3, 9):
-        raise DeadlineOperationError("The sync-output command requires Python version 3.9 or later")
 
     if ignore_storage_profiles and args.get("storage_profile_id") is not None:
         raise click.UsageError(

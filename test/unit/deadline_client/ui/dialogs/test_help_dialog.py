@@ -130,14 +130,15 @@ class TestHelpDialog:
 
         mock_env_info = Mock()
 
-        with patch(
-            "deadline.client.ui.dialogs._help_dialog._EnvironmentInfo.collect",
-            return_value=mock_env_info,
-        ), patch.object(_HelpDialog, "__init__", return_value=None), patch(
-            "deadline.client.ui.dialogs._help_dialog.asdict"
-        ) as mock_asdict, patch(
-            "deadline.client.ui.dialogs._help_dialog.yaml.dump"
-        ) as mock_yaml_dump:
+        with (
+            patch(
+                "deadline.client.ui.dialogs._help_dialog._EnvironmentInfo.collect",
+                return_value=mock_env_info,
+            ),
+            patch.object(_HelpDialog, "__init__", return_value=None),
+            patch("deadline.client.ui.dialogs._help_dialog.asdict") as mock_asdict,
+            patch("deadline.client.ui.dialogs._help_dialog.yaml.dump") as mock_yaml_dump,
+        ):
             # Mock asdict to return predictable data
             mock_asdict.side_effect = [
                 {"env_field": "env_value"},  # environment_info

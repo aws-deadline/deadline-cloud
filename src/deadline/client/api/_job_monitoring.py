@@ -17,6 +17,7 @@ from deadline.client.exceptions import DeadlineOperationError, DeadlineOperation
 from deadline.client.api._session import (
     get_boto3_client,
     get_boto3_session,
+    get_default_client_config,
     get_queue_user_boto3_session,
     get_user_and_identity_store_id,
 )
@@ -303,7 +304,7 @@ def get_session_logs(
             queue_session = get_queue_user_boto3_session(
                 deadline=deadline, config=config, farm_id=farm_id, queue_id=queue_id
             )
-            logs_client = queue_session.client("logs")
+            logs_client = queue_session.client("logs", config=get_default_client_config())
         except Exception as e:
             raise DeadlineOperationError(f"Failed to get queue credentials: {e}")
     else:
@@ -441,7 +442,9 @@ def get_worker_logs(
                 aws_session_token=credentials["sessionToken"],
             )
             logs_client = fleet_session.client(
-                "logs", region_name=get_boto3_session(config=config).region_name
+                "logs",
+                region_name=get_boto3_session(config=config).region_name,
+                config=get_default_client_config(),
             )
         except Exception as e:
             raise DeadlineOperationError(f"Failed to get fleet credentials: {e}")

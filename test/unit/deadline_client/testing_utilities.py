@@ -201,27 +201,35 @@ def patch_calls_for_create_job_from_job_bundle(
 
     It patches a bunch of functions that might call to the internet, or need to be wrapped to test JA effectively.
     See the assignments in this function implementation to access the mocked values."""
-    with patch.object(
-        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
-    ) as mock_get_deadline_cloud_library_telemetry_client, patch.object(
-        _submit_job_bundle.api, "get_queue_parameter_definitions", return_value=queue_paramdefs
-    ) as mock_get_queue_parameter_definitions, patch.object(
-        _submit_job_bundle.api,
-        "create_job_from_job_bundle",
-        wraps=_submit_job_bundle.create_job_from_job_bundle,
-    ) as mock_create_job_from_job_bundle, patch.object(
-        _submit_job_bundle,
-        "_generate_message_for_asset_paths",
-        wraps=_submit_job_bundle._generate_message_for_asset_paths,
-    ) as mock_generate_message_for_asset_paths, patch.object(
-        _submit_job_bundle, "_hash_attachments", wraps=_submit_job_bundle._hash_attachments
-    ) as mock_hash_attachments, patch(
-        "deadline.job_attachments.upload.S3AssetUploader"
-    ), patch.object(
-        S3AssetManager, "upload_assets", return_value=upload_assets_return
-    ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ) as mock_get_queue_user_boto3_session, patch.object(boto3, "Session") as boto3_session_mock:
+    with (
+        patch.object(
+            _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
+        ) as mock_get_deadline_cloud_library_telemetry_client,
+        patch.object(
+            _submit_job_bundle.api, "get_queue_parameter_definitions", return_value=queue_paramdefs
+        ) as mock_get_queue_parameter_definitions,
+        patch.object(
+            _submit_job_bundle.api,
+            "create_job_from_job_bundle",
+            wraps=_submit_job_bundle.create_job_from_job_bundle,
+        ) as mock_create_job_from_job_bundle,
+        patch.object(
+            _submit_job_bundle,
+            "_generate_message_for_asset_paths",
+            wraps=_submit_job_bundle._generate_message_for_asset_paths,
+        ) as mock_generate_message_for_asset_paths,
+        patch.object(
+            _submit_job_bundle, "_hash_attachments", wraps=_submit_job_bundle._hash_attachments
+        ) as mock_hash_attachments,
+        patch("deadline.job_attachments.upload.S3AssetUploader"),
+        patch.object(
+            S3AssetManager, "upload_assets", return_value=upload_assets_return
+        ) as mock_upload_assets,
+        patch.object(
+            _submit_job_bundle.api, "get_queue_user_boto3_session"
+        ) as mock_get_queue_user_boto3_session,
+        patch.object(boto3, "Session") as boto3_session_mock,
+    ):
         mock = Mock()
         # Read these assignments to see what to access
         mock.get_boto3_client = boto3_session_mock().client

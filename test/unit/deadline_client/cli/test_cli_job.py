@@ -303,12 +303,12 @@ def test_cli_job_download_output_stdout_with_only_required_input(
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
@@ -420,12 +420,12 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
@@ -526,12 +526,12 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
@@ -627,12 +627,12 @@ def test_cli_job_download_no_output_stdout(fresh_deadline_config, tmp_path: Path
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
@@ -697,12 +697,13 @@ def test_cli_job_download_output_stdout_with_json_format(
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "_assert_valid_path", return_value=None), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "round", return_value=0),
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "_assert_valid_path", return_value=None),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         mock_root_path = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_download = MagicMock()
@@ -920,9 +921,10 @@ def test_cli_job_wait_succeeded(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.return_value = api.JobCompletionResult(
             status="SUCCEEDED", failed_tasks=[], elapsed_time=10.5
         )
@@ -954,9 +956,10 @@ def test_cli_job_wait_timeout(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.side_effect = DeadlineOperationTimedOut(
             "Timeout waiting for job job-123 to complete after 30.0 seconds"
         )
@@ -979,9 +982,10 @@ def test_cli_job_wait_failed(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.return_value = api.JobCompletionResult(
             status="FAILED",
             failed_tasks=[
@@ -1018,9 +1022,10 @@ def test_cli_job_wait_canceled(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.return_value = api.JobCompletionResult(
             status="CANCELED", failed_tasks=[], elapsed_time=5.0
         )
@@ -1047,9 +1052,10 @@ def test_cli_job_wait_archived(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.return_value = api.JobCompletionResult(
             status="ARCHIVED", failed_tasks=[], elapsed_time=8.3
         )
@@ -1076,9 +1082,10 @@ def test_cli_job_wait_not_compatible(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.return_value = api.JobCompletionResult(
             status="NOT_COMPATIBLE", failed_tasks=[], elapsed_time=2.1
         )
@@ -1107,9 +1114,10 @@ def test_cli_job_wait_succeeded_with_failed_tasks_returns_exit_code_2(
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.return_value = api.JobCompletionResult(
             status="SUCCEEDED",
             failed_tasks=[
@@ -1145,9 +1153,10 @@ def test_cli_job_wait_json_output_succeeded(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.return_value = api.JobCompletionResult(
             status="SUCCEEDED", failed_tasks=[], elapsed_time=10.5
         )
@@ -1176,9 +1185,10 @@ def test_cli_job_wait_json_output_failed(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         mock_wait.return_value = api.JobCompletionResult(
             status="FAILED",
             failed_tasks=[
@@ -1221,9 +1231,10 @@ def test_cli_job_wait_unknown_status_returns_exit_code_2(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as mock_get_client:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as mock_get_client,
+    ):
         mock_client = mock_get_client.return_value
         mock_client.get_job.return_value = {"jobId": MOCK_JOB_ID, "name": "Test Job"}
 
@@ -1248,9 +1259,10 @@ def test_cli_job_wait_timeout_json_output(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as mock_get_client:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as mock_get_client,
+    ):
         mock_client = mock_get_client.return_value
         mock_client.get_job.return_value = {"jobId": MOCK_JOB_ID, "name": "Test Job"}
 
@@ -1280,9 +1292,10 @@ def test_cli_job_wait_error_handling(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as mock_get_client:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as mock_get_client,
+    ):
         mock_client = mock_get_client.return_value
         mock_client.get_job.return_value = {"jobId": MOCK_JOB_ID, "name": "Test Job"}
 
@@ -1305,9 +1318,10 @@ def test_cli_job_wait_error_handling_json_output(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "wait_for_job_completion") as mock_wait, patch.object(
-        api, "get_boto3_client"
-    ) as mock_get_client:
+    with (
+        patch.object(api, "wait_for_job_completion") as mock_wait,
+        patch.object(api, "get_boto3_client") as mock_get_client,
+    ):
         mock_client = mock_get_client.return_value
         mock_client.get_job.return_value = {"jobId": MOCK_JOB_ID, "name": "Test Job"}
 
@@ -1333,10 +1347,11 @@ def test_cli_job_download_output_handle_web_url_with_optional_input(
     """
     config.set_setting("settings.auto_accept", "true")
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
@@ -1413,17 +1428,20 @@ def test_cli_job_download_output_with_different_asset_root_path_format_than_job(
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(job_group, "round", return_value=0), patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "_assert_valid_path", return_value=None), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(
-        job_group.os.path,
-        "expanduser",
-        return_value=tmp_path,
-    ) as mock_expanduser, patch.object(api._telemetry.TelemetryClient, "record_event", MagicMock()):
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "round", return_value=0),
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "_assert_valid_path", return_value=None),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(
+            job_group.os.path,
+            "expanduser",
+            return_value=tmp_path,
+        ) as mock_expanduser,
+        patch.object(api._telemetry.TelemetryClient, "record_event", MagicMock()),
+    ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
             total_time=12,
@@ -1648,12 +1666,12 @@ class TestJsonLineHelpers:
 def test_cli_job_download_output_with_session_action_id(fresh_deadline_config):
     config.set_setting("settings.auto_accept", "true")
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as MockOutputDownloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
@@ -1878,11 +1896,12 @@ class TestJobDownloadInput:
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
         config.set_setting("settings.auto_accept", "true")
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(api, "get_queue_user_boto3_session"):
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(api, "get_queue_user_boto3_session"),
+        ):
             self._setup_mocks(boto3_mock, mock_downloader)
 
             runner = CliRunner()
@@ -1918,9 +1937,11 @@ class TestJobDownloadInput:
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(api, "get_queue_user_boto3_session"):
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(api, "get_queue_user_boto3_session"),
+        ):
             self._setup_mocks(boto3_mock, mock_downloader, paths_by_root={})
 
             runner = CliRunner()
@@ -1937,11 +1958,12 @@ class TestJobDownloadInput:
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(api, "get_queue_user_boto3_session"):
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(api, "get_queue_user_boto3_session"),
+        ):
             self._setup_mocks(boto3_mock, mock_downloader)
 
             runner = CliRunner()
@@ -1961,11 +1983,12 @@ class TestJobDownloadInput:
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
         config.set_setting("settings.auto_accept", "true")
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(api, "get_queue_user_boto3_session"):
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(api, "get_queue_user_boto3_session"),
+        ):
             self._setup_mocks(boto3_mock, mock_downloader)
 
             runner = CliRunner()
@@ -1987,11 +2010,12 @@ class TestJobDownloadInput:
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
         config.set_setting("settings.auto_accept", "true")
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(api, "get_queue_user_boto3_session"):
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(api, "get_queue_user_boto3_session"),
+        ):
             self._setup_mocks(boto3_mock, mock_downloader)
 
             runner = CliRunner()
@@ -2021,11 +2045,12 @@ class TestJobDownloadInput:
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
         config.set_setting("settings.auto_accept", "true")
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(api, "get_queue_user_boto3_session"):
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(api, "get_queue_user_boto3_session"),
+        ):
             self._setup_mocks(boto3_mock, mock_downloader)
 
             runner = CliRunner()
@@ -2060,11 +2085,12 @@ class TestJobDownloadInput:
             PathFormat.WINDOWS if current_format == PathFormat.POSIX else PathFormat.POSIX
         )
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(api, "get_queue_user_boto3_session"):
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(api, "get_queue_user_boto3_session"),
+        ):
             mock_download = MagicMock()
             mock_download.return_value = DownloadSummaryStatistics(
                 total_time=5, processed_files=1, processed_bytes=256
@@ -2113,15 +2139,15 @@ class TestJobDownloadInput:
         mock_root = "/original/root"
         mapped_root = "/mapped/root"
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(api, "get_queue_user_boto3_session"), patch.object(
-            job_group, "_resolve_storage_profiles"
-        ) as mock_resolve, patch.object(
-            job_group, "_generate_path_mapping_rules"
-        ) as mock_gen_rules, patch.object(job_group, "_PathMappingRuleApplier") as mock_applier_cls:
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(api, "get_queue_user_boto3_session"),
+            patch.object(job_group, "_resolve_storage_profiles") as mock_resolve,
+            patch.object(job_group, "_generate_path_mapping_rules") as mock_gen_rules,
+            patch.object(job_group, "_PathMappingRuleApplier") as mock_applier_cls,
+        ):
             mock_download = MagicMock()
             mock_download.return_value = DownloadSummaryStatistics(
                 total_time=5, processed_files=1, processed_bytes=256
@@ -2159,11 +2185,12 @@ class TestJobDownloadInput:
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-        with patch.object(api, "get_boto3_client") as boto3_mock, patch.object(
-            job_group, "InputDownloader"
-        ) as mock_downloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(api, "get_queue_user_boto3_session"):
+        with (
+            patch.object(api, "get_boto3_client") as boto3_mock,
+            patch.object(job_group, "InputDownloader") as mock_downloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(api, "get_queue_user_boto3_session"),
+        ):
             self._setup_mocks(boto3_mock, mock_downloader)
             # Return different paths after set_root_path is called
             mock_downloader.return_value.get_paths_by_root.side_effect = [

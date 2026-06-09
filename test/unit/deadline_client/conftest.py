@@ -141,15 +141,17 @@ def deadline_mock() -> Generator[MagicMock, None, None]:
             }
         }
 
-        with patch(
-            "botocore.client.BaseClient._make_api_call", new=mock_make_api_call
-        ), patch.object(
-            deadline.client.api,
-            "get_deadline_cloud_library_telemetry_client",
-            new=deadline_magicmock.get_deadline_cloud_library_telemetry_client,
-        ), patch.object(
-            _submit_job_bundle.api,
-            "get_deadline_cloud_library_telemetry_client",
-            new=deadline_magicmock.get_deadline_cloud_library_telemetry_client,
+        with (
+            patch("botocore.client.BaseClient._make_api_call", new=mock_make_api_call),
+            patch.object(
+                deadline.client.api,
+                "get_deadline_cloud_library_telemetry_client",
+                new=deadline_magicmock.get_deadline_cloud_library_telemetry_client,
+            ),
+            patch.object(
+                _submit_job_bundle.api,
+                "get_deadline_cloud_library_telemetry_client",
+                new=deadline_magicmock.get_deadline_cloud_library_telemetry_client,
+            ),
         ):
             yield deadline_magicmock

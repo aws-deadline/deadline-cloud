@@ -226,9 +226,11 @@ def test_create_job_from_job_bundle_with_not_valid_directory_path(
     with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
         f.write(job_template_replaced)
 
-    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
-        _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"):
+    with (
+        patch.object(_submit_job_bundle.api, "get_boto3_session"),
+        patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock,
+        patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"),
+    ):
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
         client_mock().get_job.side_effect = [MOCK_GET_JOB_RESPONSE]
@@ -248,16 +250,13 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
     Test a job bundle with template from JOB_TEMPLATE_ALL_ASSET_REF_VARIANTS.
     """
     # Use a temporary directory for the job bundle
-    with patch.object(_submit_job_bundle.api, "get_boto3_session"), patch.object(
-        _submit_job_bundle.api, "get_boto3_client"
-    ) as client_mock, patch.object(
-        _submit_job_bundle.api, "get_queue_user_boto3_session"
-    ), patch.object(
-        S3AssetManager, "hash_assets_and_create_manifest"
-    ) as mock_hash_assets, patch.object(
-        S3AssetManager, "upload_assets"
-    ) as mock_upload_assets, patch.object(
-        _submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"
+    with (
+        patch.object(_submit_job_bundle.api, "get_boto3_session"),
+        patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock,
+        patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"),
+        patch.object(S3AssetManager, "hash_assets_and_create_manifest") as mock_hash_assets,
+        patch.object(S3AssetManager, "upload_assets") as mock_upload_assets,
+        patch.object(_submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"),
     ):
         client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
         client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]

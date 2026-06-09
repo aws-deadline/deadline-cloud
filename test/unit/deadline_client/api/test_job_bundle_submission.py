@@ -547,10 +547,13 @@ def test_create_job_from_job_bundle_empty_job_attachments(
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("settings.storage_profile_id", MOCK_STORAGE_PROFILE_ID)
 
-    with patch_calls_for_create_job_from_job_bundle() as mock, patch.object(
-        S3AssetManager,
-        "prepare_paths_for_upload",
-    ) as mock_prepare_paths:
+    with (
+        patch_calls_for_create_job_from_job_bundle() as mock,
+        patch.object(
+            S3AssetManager,
+            "prepare_paths_for_upload",
+        ) as mock_prepare_paths,
+    ):
         mock.get_boto3_client().get_storage_profile_for_queue.return_value = (
             MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
         )
@@ -1067,8 +1070,10 @@ def test_wait_for_create_job_to_complete_timeout():
         32.5,
         301,
     ]  # Last value exceeds 300s timeout
-    with pytest.raises(TimeoutError), patch.object(time, "sleep"), patch.object(
-        time, "time", side_effect=mock_times
+    with (
+        pytest.raises(TimeoutError),
+        patch.object(time, "sleep"),
+        patch.object(time, "time", side_effect=mock_times),
     ):
         api.wait_for_create_job_to_complete(
             farm_id=MOCK_FARM_ID,

@@ -5,7 +5,7 @@ Tests for the job monitoring API functions.
 """
 
 import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import ANY, patch, MagicMock
 import pytest
 
 from deadline.client.api._job_monitoring import (
@@ -427,9 +427,12 @@ def test_get_session_logs_basic():
     """
     Test that get_session_logs works correctly with basic parameters.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+    ):
         # Mock user and identity store ID to be None (standard credentials path)
         mock_get_user.return_value = (None, None)
 
@@ -469,9 +472,12 @@ def test_get_session_logs_with_datetime_params():
     """
     Test that get_session_logs works correctly with datetime parameters.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+    ):
         # Mock user and identity store ID to be None (standard credentials path)
         mock_get_user.return_value = (None, None)
 
@@ -513,11 +519,15 @@ def test_get_session_logs_with_monitor_credentials():
     """
     Test that get_session_logs works correctly with Deadline Cloud monitor credentials.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch(
-        "deadline.client.api._job_monitoring.get_queue_user_boto3_session"
-    ) as mock_get_session:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch(
+            "deadline.client.api._job_monitoring.get_queue_user_boto3_session"
+        ) as mock_get_session,
+    ):
         # Mock user and identity store ID to simulate monitor credentials
         mock_get_user.return_value = ("user-123", "identity-store-456")
 
@@ -553,7 +563,7 @@ def test_get_session_logs_with_monitor_credentials():
         )
 
         # Verify the logs client was created from the queue session
-        queue_session_mock.client.assert_called_once_with("logs")
+        queue_session_mock.client.assert_called_once_with("logs", config=ANY)
 
         # Verify the logs client was called with correct parameters
         logs_client_mock.get_log_events.assert_called_once_with(
@@ -568,9 +578,12 @@ def test_get_session_logs_with_next_token():
     """
     Test that get_session_logs works correctly with pagination token.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+    ):
         # Mock user and identity store ID to be None (standard credentials path)
         mock_get_user.return_value = (None, None)
 
@@ -606,9 +619,12 @@ def test_get_session_logs_resource_not_found():
     """
     Test that get_session_logs handles ResourceNotFoundException correctly.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+    ):
         # Mock user and identity store ID to be None (standard credentials path)
         mock_get_user.return_value = (None, None)
 
@@ -643,9 +659,12 @@ def test_get_session_logs_invalid_datetime():
     """
     Test that get_session_logs handles invalid datetime objects correctly.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+    ):
         # Mock user and identity store ID to be None (standard credentials path)
         mock_get_user.return_value = (None, None)
 
@@ -682,9 +701,12 @@ def test_get_worker_logs_basic():
     """
     Test that get_worker_logs works correctly with basic parameters.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+    ):
         mock_get_user.return_value = (None, None)
 
         logs_client_mock = MagicMock()
@@ -720,9 +742,12 @@ def test_get_worker_logs_with_time_params():
     """
     Test that get_worker_logs works correctly with time parameters.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+    ):
         mock_get_user.return_value = (None, None)
 
         logs_client_mock = MagicMock()
@@ -756,11 +781,14 @@ def test_get_worker_logs_with_monitor_credentials():
     """
     Test that get_worker_logs uses AssumeFleetRoleForRead with monitor credentials.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch(
-        "deadline.client.api._job_monitoring.get_boto3_session"
-    ) as mock_get_session, patch("deadline.client.api._job_monitoring.boto3") as mock_boto3:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api._job_monitoring.get_boto3_session") as mock_get_session,
+        patch("deadline.client.api._job_monitoring.boto3") as mock_boto3,
+    ):
         mock_get_user.return_value = ("user-123", "identity-store-456")
 
         # Mock the deadline client for assume_fleet_role_for_read
@@ -803,16 +831,21 @@ def test_get_worker_logs_with_monitor_credentials():
             aws_secret_access_key="secret",
             aws_session_token="token",
         )
-        fleet_session_mock.client.assert_called_once_with("logs", region_name="us-west-2")
+        fleet_session_mock.client.assert_called_once_with(
+            "logs", region_name="us-west-2", config=ANY
+        )
 
 
 def test_get_worker_logs_resource_not_found():
     """
     Test that get_worker_logs handles ResourceNotFoundException correctly.
     """
-    with patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user:
+    with (
+        patch("deadline.client.api._job_monitoring.get_boto3_client") as mock_get_client,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+    ):
         mock_get_user.return_value = (None, None)
 
         logs_client_mock = MagicMock()

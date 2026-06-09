@@ -9,13 +9,12 @@ authors = [{ name = "Amazon Web Services" }]
 dynamic = ["version"]
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.8, <3.15"
+requires-python = ">=3.9, <3.15"
 # https://pypi.org/classifiers/
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
@@ -35,9 +34,7 @@ classifiers = [
 # Applications that consume this library should be the ones that are more strictly
 # limiting dependencies if they want/need to.
 dependencies = [
-  "boto3 >= 1.42.89; python_version >= '3.9'",
-  "boto3 >= 1.36.8; python_version < '3.9'",
-  # Click 8.2 dropped python 3.8/3.9 support
+  "boto3 >= 1.42.89",
   "click >= 8.1.7",
   "pyyaml >= 6.0",
   "deadline-job-attachments == 0.1.0",
@@ -53,7 +50,7 @@ Source = "https://github.com/aws-deadline/deadline-cloud"
 [project.optional-dependencies]
 gui = [
   # If the version changes, update the version in deadline/client/ui/__init__.py
-  "PySide6-essentials >= 6.6,< 6.11; python_version >= '3.9'",
+  "PySide6-essentials >= 6.6,< 6.11",
 ]
 mcp = [
   "mcp >= 1.13.0",

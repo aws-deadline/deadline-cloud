@@ -54,12 +54,15 @@ def test_load_bundle_button_shown_when_browse_enabled(qtbot, mock_auth_status):
     auth_module._deadline_authentication_status = mock_auth_status
 
     # Also patch the widget's getInstance call
-    with patch(
-        "deadline.client.ui.widgets.deadline_authentication_status_widget.DeadlineAuthenticationStatus.getInstance",
-        return_value=mock_auth_status,
-    ), patch(
-        "deadline.client.ui.dialogs.submit_job_to_deadline_dialog.DeadlineAuthenticationStatus.getInstance",
-        return_value=mock_auth_status,
+    with (
+        patch(
+            "deadline.client.ui.widgets.deadline_authentication_status_widget.DeadlineAuthenticationStatus.getInstance",
+            return_value=mock_auth_status,
+        ),
+        patch(
+            "deadline.client.ui.dialogs.submit_job_to_deadline_dialog.DeadlineAuthenticationStatus.getInstance",
+            return_value=mock_auth_status,
+        ),
     ):
         from deadline.client.ui.dialogs.submit_job_to_deadline_dialog import (
             SubmitJobToDeadlineDialog,
@@ -89,12 +92,15 @@ def test_load_bundle_button_hidden_when_browse_disabled(qtbot, mock_auth_status)
     auth_module._deadline_authentication_status = mock_auth_status
 
     # Also patch the widget's getInstance call
-    with patch(
-        "deadline.client.ui.widgets.deadline_authentication_status_widget.DeadlineAuthenticationStatus.getInstance",
-        return_value=mock_auth_status,
-    ), patch(
-        "deadline.client.ui.dialogs.submit_job_to_deadline_dialog.DeadlineAuthenticationStatus.getInstance",
-        return_value=mock_auth_status,
+    with (
+        patch(
+            "deadline.client.ui.widgets.deadline_authentication_status_widget.DeadlineAuthenticationStatus.getInstance",
+            return_value=mock_auth_status,
+        ),
+        patch(
+            "deadline.client.ui.dialogs.submit_job_to_deadline_dialog.DeadlineAuthenticationStatus.getInstance",
+            return_value=mock_auth_status,
+        ),
     ):
         from deadline.client.ui.dialogs.submit_job_to_deadline_dialog import (
             SubmitJobToDeadlineDialog,

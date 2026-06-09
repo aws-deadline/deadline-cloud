@@ -108,12 +108,15 @@ def _build_dialog(qtbot, auth_status):
     auth_status.api_availability = None  # quiet construction
     auth_module._deadline_authentication_status = auth_status
 
-    with patch(
-        "deadline.client.ui.widgets.deadline_authentication_status_widget.DeadlineAuthenticationStatus.getInstance",
-        return_value=auth_status,
-    ), patch(
-        f"{DIALOG_MODULE}.DeadlineAuthenticationStatus.getInstance",
-        return_value=auth_status,
+    with (
+        patch(
+            "deadline.client.ui.widgets.deadline_authentication_status_widget.DeadlineAuthenticationStatus.getInstance",
+            return_value=auth_status,
+        ),
+        patch(
+            f"{DIALOG_MODULE}.DeadlineAuthenticationStatus.getInstance",
+            return_value=auth_status,
+        ),
     ):
         from deadline.client.ui.dialogs.submit_job_to_deadline_dialog import (
             SubmitJobToDeadlineDialog,
@@ -163,9 +166,12 @@ def test_auto_selects_single_farm_and_queue(qtbot, fresh_deadline_config):
     auth = _AuthStatusStub(True)
     dialog, complete_spy = _build_dialog(qtbot, auth)
 
-    with patch(
-        f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": [{"farmId": "farm-1"}]}
-    ), patch(f"{DIALOG_MODULE}.api.list_queues", return_value={"queues": [{"queueId": "queue-1"}]}):
+    with (
+        patch(f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": [{"farmId": "farm-1"}]}),
+        patch(
+            f"{DIALOG_MODULE}.api.list_queues", return_value={"queues": [{"queueId": "queue-1"}]}
+        ),
+    ):
         dialog._auto_select_defaults()
         _wait_for_auto_select(qtbot, dialog)
 
@@ -180,9 +186,12 @@ def test_auto_selects_queue_when_farm_already_configured(qtbot, fresh_deadline_c
     auth = _AuthStatusStub(True)
     dialog, complete_spy = _build_dialog(qtbot, auth)
 
-    with patch(f"{DIALOG_MODULE}.api.list_farms") as mock_farms, patch(
-        f"{DIALOG_MODULE}.api.list_queues", return_value={"queues": [{"queueId": "queue-9"}]}
-    ) as mock_queues:
+    with (
+        patch(f"{DIALOG_MODULE}.api.list_farms") as mock_farms,
+        patch(
+            f"{DIALOG_MODULE}.api.list_queues", return_value={"queues": [{"queueId": "queue-9"}]}
+        ) as mock_queues,
+    ):
         dialog._auto_select_defaults()
         _wait_for_auto_select(qtbot, dialog)
 
@@ -203,10 +212,13 @@ def test_multiple_farms_does_not_select(qtbot, fresh_deadline_config):
     auth = _AuthStatusStub(True)
     dialog, complete_spy = _build_dialog(qtbot, auth)
 
-    with patch(
-        f"{DIALOG_MODULE}.api.list_farms",
-        return_value={"farms": [{"farmId": "farm-1"}, {"farmId": "farm-2"}]},
-    ), patch(f"{DIALOG_MODULE}.api.list_queues") as mock_queues:
+    with (
+        patch(
+            f"{DIALOG_MODULE}.api.list_farms",
+            return_value={"farms": [{"farmId": "farm-1"}, {"farmId": "farm-2"}]},
+        ),
+        patch(f"{DIALOG_MODULE}.api.list_queues") as mock_queues,
+    ):
         dialog._auto_select_defaults()
         _wait_for_auto_select(qtbot, dialog)
 
@@ -221,11 +233,12 @@ def test_multiple_queues_selects_farm_only(qtbot, fresh_deadline_config):
     auth = _AuthStatusStub(True)
     dialog, complete_spy = _build_dialog(qtbot, auth)
 
-    with patch(
-        f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": [{"farmId": "farm-1"}]}
-    ), patch(
-        f"{DIALOG_MODULE}.api.list_queues",
-        return_value={"queues": [{"queueId": "queue-1"}, {"queueId": "queue-2"}]},
+    with (
+        patch(f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": [{"farmId": "farm-1"}]}),
+        patch(
+            f"{DIALOG_MODULE}.api.list_queues",
+            return_value={"queues": [{"queueId": "queue-1"}, {"queueId": "queue-2"}]},
+        ),
     ):
         dialog._auto_select_defaults()
         _wait_for_auto_select(qtbot, dialog)
@@ -240,9 +253,10 @@ def test_no_farms_does_not_select(qtbot, fresh_deadline_config):
     auth = _AuthStatusStub(True)
     dialog, complete_spy = _build_dialog(qtbot, auth)
 
-    with patch(f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": []}), patch(
-        f"{DIALOG_MODULE}.api.list_queues"
-    ) as mock_queues:
+    with (
+        patch(f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": []}),
+        patch(f"{DIALOG_MODULE}.api.list_queues") as mock_queues,
+    ):
         dialog._auto_select_defaults()
         _wait_for_auto_select(qtbot, dialog)
 
@@ -272,9 +286,10 @@ def test_no_api_calls_when_already_configured(qtbot, fresh_deadline_config):
     auth = _AuthStatusStub(True)
     dialog, complete_spy = _build_dialog(qtbot, auth)
 
-    with patch(f"{DIALOG_MODULE}.api.list_farms") as mock_farms, patch(
-        f"{DIALOG_MODULE}.api.list_queues"
-    ) as mock_queues:
+    with (
+        patch(f"{DIALOG_MODULE}.api.list_farms") as mock_farms,
+        patch(f"{DIALOG_MODULE}.api.list_queues") as mock_queues,
+    ):
         dialog._auto_select_defaults()
         qtbot.wait(50)
 
@@ -312,9 +327,10 @@ def test_does_not_start_second_run_while_in_flight(qtbot, fresh_deadline_config)
     auth = _AuthStatusStub(True)
     dialog, _ = _build_dialog(qtbot, auth)
 
-    with patch.object(dialog._auto_select_runner, "is_running", return_value=True), patch.object(
-        dialog._auto_select_runner, "run"
-    ) as mock_run:
+    with (
+        patch.object(dialog._auto_select_runner, "is_running", return_value=True),
+        patch.object(dialog._auto_select_runner, "run") as mock_run,
+    ):
         dialog._auto_select_defaults()
 
     mock_run.assert_not_called()

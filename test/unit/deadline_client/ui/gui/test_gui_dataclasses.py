@@ -644,3 +644,149 @@ class TestHostRequirements:
         assert "amount.worker.vcpu" in amount_names
         assert "amount.worker.memory" in amount_names
         assert "amount.worker.licenses" in amount_names
+
+
+class TestHostRequirementsFromDict:
+    """Tests for HostRequirements.from_dict, the inverse of serialize()."""
+
+    def test_empty_dict_returns_empty_requirements(self):
+        """An empty dict should produce a HostRequirements with no settings."""
+        req = HostRequirements.from_dict({})
+        assert req.serialize() == {}
+
+    def test_parses_os_family(self):
+        """attr.worker.os.family should map to os_requirements.operating_systems."""
+        req = HostRequirements.from_dict(
+            {"attributes": [{"name": "attr.worker.os.family", "anyOf": ["linux", "windows"]}]}
+        )
+        assert isinstance(req.os_requirements, OsRequirements)
+        assert req.os_requirements.operating_systems == ["linux", "windows"]
+
+    def test_parses_cpu_arch(self):
+        """attr.worker.cpu.arch should map to os_requirements.cpu_archs."""
+        req = HostRequirements.from_dict(
+            {"attributes": [{"name": "attr.worker.cpu.arch", "anyOf": ["x86_64"]}]}
+        )
+        assert req.os_requirements is not None
+        assert req.os_requirements.cpu_archs == ["x86_64"]
+
+    def test_parses_vcpu_min_and_max(self):
+        """amount.worker.vcpu should map to hardware cpu_min/cpu_max."""
+        req = HostRequirements.from_dict(
+            {"amounts": [{"name": "amount.worker.vcpu", "min": 8, "max": 64}]}
+        )
+        assert req.hardware_requirements is not None
+        assert req.hardware_requirements.cpu_min == 8
+        assert req.hardware_requirements.cpu_max == 64
+
+    def test_parses_memory_in_mib(self):
+        """amount.worker.memory should be stored in MiB (template units)."""
+        req = HostRequirements.from_dict(
+            {"amounts": [{"name": "amount.worker.memory", "min": 16384}]}
+        )
+        # Stored as MiB so it round-trips through serialize()
+        assert req.hardware_requirements is not None
+        assert req.hardware_requirements.memory_min == 16384
+
+    def test_parses_min_only_leaves_max_default(self):
+        """An amount with only a min should leave max at the default."""
+        req = HostRequirements.from_dict({"amounts": [{"name": "amount.worker.vcpu", "min": 4}]})
+        assert req.hardware_requirements is not None
+        assert req.hardware_requirements.cpu_min == 4
+        assert req.hardware_requirements.cpu_max == HardwareRequirements.DEFAULT_VALUE
+
+    def test_parses_max_only_leaves_min_default(self):
+        """An amount with only a max should leave min at the default."""
+        req = HostRequirements.from_dict({"amounts": [{"name": "amount.worker.gpu", "max": 4}]})
+        assert req.hardware_requirements is not None
+        assert req.hardware_requirements.acceleration_max == 4
+        assert req.hardware_requirements.acceleration_min == HardwareRequirements.DEFAULT_VALUE
+
+    def test_parses_gpu_memory_and_scratch(self):
+        """GPU memory and scratch space well-known amounts should be parsed."""
+        req = HostRequirements.from_dict(
+            {
+                "amounts": [
+                    {"name": "amount.worker.gpu.memory", "min": 2048},
+                    {"name": "amount.worker.disk.scratch", "min": 100},
+                ]
+            }
+        )
+        assert req.hardware_requirements is not None
+        assert req.hardware_requirements.acceleration_memory_min == 2048
+        assert req.hardware_requirements.scratch_space_min == 100
+
+    def test_parses_custom_amount(self):
+        """A custom amount (bare 'amount.' prefix) should round-trip with the prefix stripped.
+
+        OpenJD reserves the 'amount.worker.' namespace for its own capabilities,
+        so user-defined amounts use the bare 'amount.' prefix.
+        """
+        req = HostRequirements.from_dict(
+            {"amounts": [{"name": "amount.Bugs", "min": 1, "max": 10}]}
+        )
+        assert req.custom_requirements is not None
+        assert len(req.custom_requirements.amounts) == 1
+        custom = req.custom_requirements.amounts[0]
+        assert custom.name == "Bugs"
+        assert custom.min == 1
+        assert custom.max == 10
+
+    def test_parses_custom_attribute_anyof(self):
+        """A custom attribute (bare 'attr.' prefix) should become a custom attribute (anyOf)."""
+        req = HostRequirements.from_dict(
+            {"attributes": [{"name": "attr.pipelineFeatures", "anyOf": ["feature1", "feature2"]}]}
+        )
+        assert req.custom_requirements is not None
+        assert len(req.custom_requirements.attributes) == 1
+        custom = req.custom_requirements.attributes[0]
+        assert custom.name == "pipelineFeatures"
+        assert custom.option == "anyOf"
+        assert custom.values == ["feature1", "feature2"]
+
+    def test_parses_custom_attribute_allof(self):
+        """A custom attribute using allOf should preserve the allOf option."""
+        req = HostRequirements.from_dict(
+            {"attributes": [{"name": "attr.software", "allOf": ["maya", "nuke"]}]}
+        )
+        assert req.custom_requirements is not None
+        custom = req.custom_requirements.attributes[0]
+        assert custom.option == "allOf"
+        assert custom.values == ["maya", "nuke"]
+
+    @staticmethod
+    def _compare_requirements(first, second):
+        assert len(first.get("amounts", [])) == len(second.get("amounts", []))
+        assert len(first.get("attributes", [])) == len(second.get("attributes", []))
+        for amount in first.get("amounts", []):
+            ref = next(a for a in second["amounts"] if a["name"] == amount["name"])
+            assert ref.get("min") == amount.get("min")
+            assert ref.get("max") == amount.get("max")
+        for attribute in first.get("attributes", []):
+            ref = next(a for a in second["attributes"] if a["name"] == attribute["name"])
+            operation = "anyOf" if "anyOf" in attribute else "allOf"
+            assert operation in ref
+            assert set(attribute[operation]) == set(ref[operation])
+
+    def test_roundtrip_well_known_capabilities_through_serialize(self):
+        """For well-known capabilities, from_dict then serialize reproduces the input.
+
+        Custom capabilities are intentionally excluded here: the widget (the real
+        submission path) and OpenJD use the bare ``attr.``/``amount.`` prefix for
+        custom names, while the dataclass ``serialize()`` re-adds ``attr.worker.``/
+        ``amount.worker.``, so the two are not symmetric for custom entries. The
+        custom-prefix handling is covered by the dedicated ``test_parses_custom_*``
+        tests above.
+        """
+        source = {
+            "attributes": [
+                {"name": "attr.worker.os.family", "anyOf": ["windows"]},
+                {"name": "attr.worker.cpu.arch", "anyOf": ["x86_64"]},
+            ],
+            "amounts": [
+                {"name": "amount.worker.vcpu", "min": 8, "max": 64},
+                {"name": "amount.worker.memory", "min": 16384, "max": 131072},
+            ],
+        }
+        result = HostRequirements.from_dict(source).serialize()
+        self._compare_requirements(result, source)

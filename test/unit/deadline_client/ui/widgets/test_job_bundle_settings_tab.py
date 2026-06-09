@@ -56,10 +56,13 @@ def test_on_load_bundle_loads_new_bundle_and_refreshes_dialog(
 
     parent_dialog = MagicMock()
 
-    with patch(
-        "deadline.client.ui.widgets.job_bundle_settings_tab.QFileDialog.getExistingDirectory",
-        return_value=str(second_bundle),
-    ), patch.object(widget, "window", return_value=parent_dialog):
+    with (
+        patch(
+            "deadline.client.ui.widgets.job_bundle_settings_tab.QFileDialog.getExistingDirectory",
+            return_value=str(second_bundle),
+        ),
+        patch.object(widget, "window", return_value=parent_dialog),
+    ):
         widget.on_load_bundle()
 
     assert widget.input_job_bundle_dir == str(second_bundle)
@@ -76,10 +79,13 @@ def test_on_load_bundle_cancelled_dialog_is_noop(widget, qtbot):
     original_dir = widget.input_job_bundle_dir
     parent_dialog = MagicMock()
 
-    with patch(
-        "deadline.client.ui.widgets.job_bundle_settings_tab.QFileDialog.getExistingDirectory",
-        return_value="",
-    ), patch.object(widget, "window", return_value=parent_dialog):
+    with (
+        patch(
+            "deadline.client.ui.widgets.job_bundle_settings_tab.QFileDialog.getExistingDirectory",
+            return_value="",
+        ),
+        patch.object(widget, "window", return_value=parent_dialog),
+    ):
         widget.on_load_bundle()
 
     assert widget.input_job_bundle_dir == original_dir
@@ -96,12 +102,16 @@ def test_on_load_bundle_invalid_bundle_shows_warning(
 
     parent_dialog = MagicMock()
 
-    with patch(
-        "deadline.client.ui.widgets.job_bundle_settings_tab.QFileDialog.getExistingDirectory",
-        return_value=str(bad_bundle),
-    ), patch.object(widget, "window", return_value=parent_dialog), patch(
-        "deadline.client.ui.widgets.job_bundle_settings_tab.QMessageBox.warning"
-    ) as mock_warning:
+    with (
+        patch(
+            "deadline.client.ui.widgets.job_bundle_settings_tab.QFileDialog.getExistingDirectory",
+            return_value=str(bad_bundle),
+        ),
+        patch.object(widget, "window", return_value=parent_dialog),
+        patch(
+            "deadline.client.ui.widgets.job_bundle_settings_tab.QMessageBox.warning"
+        ) as mock_warning,
+    ):
         widget.on_load_bundle()
 
     mock_warning.assert_called_once()

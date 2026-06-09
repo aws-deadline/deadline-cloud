@@ -60,14 +60,17 @@ def mock_auth_status():
 
 def _create_dialog(qtbot, mock_auth_status, *, name, bundle_dir):
     """Helper to create a SubmitJobToDeadlineDialog with a given bundle."""
-    with patch(
-        "deadline.client.ui.widgets.deadline_authentication_status_widget"
-        ".DeadlineAuthenticationStatus.getInstance",
-        return_value=mock_auth_status,
-    ), patch(
-        "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
-        ".DeadlineAuthenticationStatus.getInstance",
-        return_value=mock_auth_status,
+    with (
+        patch(
+            "deadline.client.ui.widgets.deadline_authentication_status_widget"
+            ".DeadlineAuthenticationStatus.getInstance",
+            return_value=mock_auth_status,
+        ),
+        patch(
+            "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
+            ".DeadlineAuthenticationStatus.getInstance",
+            return_value=mock_auth_status,
+        ),
     ):
         settings = JobBundleSettings(
             browse_enabled=True,
@@ -157,14 +160,17 @@ class TestGuiSubmitterBundles:
 
     def test_host_requirements_tab_shown_when_requested(self, qtbot, mock_auth_status):
         """Verify host requirements tab appears when show_host_requirements_tab=True."""
-        with patch(
-            "deadline.client.ui.widgets.deadline_authentication_status_widget"
-            ".DeadlineAuthenticationStatus.getInstance",
-            return_value=mock_auth_status,
-        ), patch(
-            "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
-            ".DeadlineAuthenticationStatus.getInstance",
-            return_value=mock_auth_status,
+        with (
+            patch(
+                "deadline.client.ui.widgets.deadline_authentication_status_widget"
+                ".DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            patch(
+                "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
+                ".DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
         ):
             settings = JobBundleSettings(
                 input_job_bundle_dir=SIMPLE_UI_WITH_JA,

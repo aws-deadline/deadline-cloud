@@ -37,15 +37,18 @@ def test_cli_deadline_cloud_monitor_login_and_logout(fresh_deadline_config):
     config.set_setting("deadline-cloud-monitor.path", dcm)
     config.set_setting("defaults.aws_profile_name", profile_name)
 
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        api._session._get_boto3_session_for_profile, "cache_clear"
-    ) as mock_profile_session_cache_clear, patch.object(
-        api._session._get_queue_user_boto3_session, "cache_clear"
-    ) as mock_queue_session_cache_clear, patch.object(
-        api, "get_boto3_session", new=session_mock
-    ), patch.object(subprocess, "Popen") as popen_mock, patch.object(
-        subprocess, "check_output"
-    ) as check_output_mock:
+    with (
+        patch.object(api._session, "get_boto3_session") as session_mock,
+        patch.object(
+            api._session._get_boto3_session_for_profile, "cache_clear"
+        ) as mock_profile_session_cache_clear,
+        patch.object(
+            api._session._get_queue_user_boto3_session, "cache_clear"
+        ) as mock_queue_session_cache_clear,
+        patch.object(api, "get_boto3_session", new=session_mock),
+        patch.object(subprocess, "Popen") as popen_mock,
+        patch.object(subprocess, "check_output") as check_output_mock,
+    ):
         # The profile name
         session_mock().profile_name = profile_name
         # This configuration includes the IdC profile
@@ -117,8 +120,9 @@ def test_cli_auth_status(fresh_deadline_config):
     profile_name = "sandbox-us-west-2"
     config.set_setting("defaults.aws_profile_name", profile_name)
 
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        api, "get_boto3_session", new=session_mock
+    with (
+        patch.object(api._session, "get_boto3_session") as session_mock,
+        patch.object(api, "get_boto3_session", new=session_mock),
     ):
         # The profile name
         session_mock().profile_name = profile_name
@@ -156,11 +160,16 @@ def test_cli_auth_status_json(fresh_deadline_config):
     }
     config.set_setting("defaults.aws_profile_name", profile_name)
 
-    with patch.object(api._session, "get_boto3_session") as session_mock, patch.object(
-        api, "get_boto3_session", new=session_mock
-    ), patch.object(
-        api, "check_authentication_status", return_value=api.AwsAuthenticationStatus.AUTHENTICATED
-    ), patch.object(api, "check_deadline_api_available", return_value=False):
+    with (
+        patch.object(api._session, "get_boto3_session") as session_mock,
+        patch.object(api, "get_boto3_session", new=session_mock),
+        patch.object(
+            api,
+            "check_authentication_status",
+            return_value=api.AwsAuthenticationStatus.AUTHENTICATED,
+        ),
+        patch.object(api, "check_deadline_api_available", return_value=False),
+    ):
         # The profile name
         session_mock().profile_name = profile_name
         # This configuration includes the IdC profile

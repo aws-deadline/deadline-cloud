@@ -169,9 +169,10 @@ def test_release_pid_lock_when_pid_does_not_match(temp_pid_lock_file):
     def FAKE_PID_exists(pid):
         return pid == FAKE_PID
 
-    with patch.object(psutil, "pid_exists", wraps=FAKE_PID_exists), patch.object(
-        _pid_file_lock, "logger"
-    ) as logger_mock:
+    with (
+        patch.object(psutil, "pid_exists", wraps=FAKE_PID_exists),
+        patch.object(_pid_file_lock, "logger") as logger_mock,
+    ):
         _release_pid_lock(temp_pid_lock_file)
 
         # The function should have logged about leaving the lock file

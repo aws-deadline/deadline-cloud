@@ -31,14 +31,18 @@ from deadline.job_attachments.progress_tracker import SummaryStatistics
 @pytest.fixture(scope="function", name="mock_telemetry_client")
 def fixture_telemetry_client(fresh_deadline_config):
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-    with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
-        api._telemetry, "get_monitor_id", side_effect=["monitor-id"]
-    ), patch.object(api._telemetry, "get_monitor_id", side_effect=[None]), patch.object(
-        api._telemetry,
-        "get_user_and_identity_store_id",
-        side_effect=[("user-id", "identity-store-id")],
-    ), patch.object(
-        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    with (
+        patch.object(api.TelemetryClient, "_start_threads"),
+        patch.object(api._telemetry, "get_monitor_id", side_effect=["monitor-id"]),
+        patch.object(api._telemetry, "get_monitor_id", side_effect=[None]),
+        patch.object(
+            api._telemetry,
+            "get_user_and_identity_store_id",
+            side_effect=[("user-id", "identity-store-id")],
+        ),
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
     ):
         client = TelemetryClient(
             package_name="deadline-cloud-library",
@@ -109,16 +113,19 @@ def test_initialize_failure_then_success(fresh_deadline_config):
     without an exception initializes everything successfully.
     """
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-    with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
-        api._telemetry, "get_monitor_id", side_effect=["monitor-id"]
-    ), patch.object(
-        api._telemetry,
-        "get_user_and_identity_store_id",
-        side_effect=[("user-id", "identity-store-id")],
-    ), patch.object(
-        api._telemetry,
-        "get_deadline_endpoint_url",
-        side_effect=[Exception("Boto3 blew up!"), "https://fake-endpoint-url"],
+    with (
+        patch.object(api.TelemetryClient, "_start_threads"),
+        patch.object(api._telemetry, "get_monitor_id", side_effect=["monitor-id"]),
+        patch.object(
+            api._telemetry,
+            "get_user_and_identity_store_id",
+            side_effect=[("user-id", "identity-store-id")],
+        ),
+        patch.object(
+            api._telemetry,
+            "get_deadline_endpoint_url",
+            side_effect=[Exception("Boto3 blew up!"), "https://fake-endpoint-url"],
+        ),
     ):
         client = TelemetryClient(
             package_name="deadline-cloud-library",
@@ -163,9 +170,11 @@ def test_process_event_queue_thread(fresh_deadline_config, mock_telemetry_client
     queue_mock.get.side_effect = [TelemetryEvent(), None]
     mock_telemetry_client.event_queue = queue_mock
     # WHEN
-    with patch.object(request, "urlopen") as urlopen_mock, patch.object(
-        TelemetryClient, "get_account_id", return_value=None
-    ), patch.object(api._telemetry, "get_boto3_session"):
+    with (
+        patch.object(request, "urlopen") as urlopen_mock,
+        patch.object(TelemetryClient, "get_account_id", return_value=None),
+        patch.object(api._telemetry, "get_boto3_session"),
+    ):
         mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.assert_called_once()
     # THEN
@@ -191,11 +200,12 @@ def test_process_event_queue_thread_retries_and_exits(
     queue_mock.get.side_effect = [TelemetryEvent(), None]
     mock_telemetry_client.event_queue = queue_mock
     # WHEN
-    with patch.object(request, "urlopen", side_effect=http_error) as urlopen_mock, patch.object(
-        time, "sleep"
-    ) as sleep_mock, patch.object(
-        TelemetryClient, "get_account_id", return_value=None
-    ), patch.object(api._telemetry, "get_boto3_session"):
+    with (
+        patch.object(request, "urlopen", side_effect=http_error) as urlopen_mock,
+        patch.object(time, "sleep") as sleep_mock,
+        patch.object(TelemetryClient, "get_account_id", return_value=None),
+        patch.object(api._telemetry, "get_boto3_session"),
+    ):
         mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.call_count = attempt_count
         sleep_mock.call_count = attempt_count
@@ -213,11 +223,11 @@ def test_process_event_queue_thread_handles_unexpected_error(
     queue_mock.get.side_effect = [TelemetryEvent(), None]
     mock_telemetry_client.event_queue = queue_mock
     # WHEN
-    with patch.object(
-        request, "urlopen", side_effect=Exception("Some error")
-    ) as urlopen_mock, patch.object(
-        TelemetryClient, "get_account_id", return_value=None
-    ), patch.object(api._telemetry, "get_boto3_session"):
+    with (
+        patch.object(request, "urlopen", side_effect=Exception("Some error")) as urlopen_mock,
+        patch.object(TelemetryClient, "get_account_id", return_value=None),
+        patch.object(api._telemetry, "get_boto3_session"),
+    ):
         mock_telemetry_client._process_event_queue_thread()
         urlopen_mock.assert_called_once()
     # THEN
@@ -296,9 +306,10 @@ def test_record_error_with_trace(fresh_deadline_config, mock_telemetry_client):
     try:
         raise ValueError("something broke")
     except ValueError as exc:
-        with patch.object(
-            mock_telemetry_client, "get_account_id", return_value="111122223333"
-        ), patch.object(api._telemetry, "get_boto3_session"):
+        with (
+            patch.object(mock_telemetry_client, "get_account_id", return_value="111122223333"),
+            patch.object(api._telemetry, "get_boto3_session"),
+        ):
             # WHEN
             mock_telemetry_client.record_error_with_trace(exc, "test_scope")
 
@@ -327,9 +338,10 @@ def test_record_error_with_trace_extra_details(fresh_deadline_config, mock_telem
     try:
         raise RuntimeError("fail")
     except RuntimeError as exc:
-        with patch.object(
-            mock_telemetry_client, "get_account_id", return_value="111122223333"
-        ), patch.object(api._telemetry, "get_boto3_session"):
+        with (
+            patch.object(mock_telemetry_client, "get_account_id", return_value="111122223333"),
+            patch.object(api._telemetry, "get_boto3_session"),
+        ):
             # WHEN
             mock_telemetry_client.record_error_with_trace(
                 exc, "cli", extra_details={"command": "bundle submit"}
@@ -356,9 +368,10 @@ def test_record_error_with_trace_sanitizes_paths(fresh_deadline_config, mock_tel
     try:
         raise TypeError("bad type")
     except TypeError as exc:
-        with patch.object(
-            mock_telemetry_client, "get_account_id", return_value="111122223333"
-        ), patch.object(api._telemetry, "get_boto3_session"):
+        with (
+            patch.object(mock_telemetry_client, "get_account_id", return_value="111122223333"),
+            patch.object(api._telemetry, "get_boto3_session"),
+        ):
             # WHEN
             mock_telemetry_client.record_error_with_trace(exc, "test")
 
@@ -472,9 +485,12 @@ def test_record_decorator_fails(fresh_deadline_config):
 
 def test_latency_decorator(fresh_deadline_config):
     """Tests that the latency recording decorator works"""
-    with patch.object(
-        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
-    ), patch.object(time, "perf_counter_ns", return_value=0):
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
         # GIVEN
         queue_mock = MagicMock()
         expected_summary: Dict[str, Any] = dict()
@@ -527,12 +543,16 @@ def test_get_telemetry_client_caches_by_package_name(fresh_deadline_config):
 def test_process_start_event_emitted_on_start_threads(fresh_deadline_config):
     """Tests that a process_start event is emitted when _start_threads is called"""
     config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-    with patch.object(api._telemetry, "get_monitor_id", side_effect=[None]), patch.object(
-        api._telemetry,
-        "get_user_and_identity_store_id",
-        side_effect=[("user-id", "identity-store-id")],
-    ), patch.object(
-        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    with (
+        patch.object(api._telemetry, "get_monitor_id", side_effect=[None]),
+        patch.object(
+            api._telemetry,
+            "get_user_and_identity_store_id",
+            side_effect=[("user-id", "identity-store-id")],
+        ),
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
     ):
         client = TelemetryClient(
             package_name="deadline-cloud-library",
@@ -621,15 +641,21 @@ class TestTelemetryClientSwallowExceptions:
 
     def test_init_swallows_get_telemetry_identifier_exception(self, fresh_deadline_config):
         config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-        with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
-            api._telemetry, "get_monitor_id", side_effect=[None]
-        ), patch.object(
-            api._telemetry,
-            "get_user_and_identity_store_id",
-            side_effect=[("user-id", "identity-store-id")],
-        ), patch.object(
-            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
-        ), patch.object(config.config_file, "get_setting", side_effect=RuntimeError("boom")):
+        with (
+            patch.object(api.TelemetryClient, "_start_threads"),
+            patch.object(api._telemetry, "get_monitor_id", side_effect=[None]),
+            patch.object(
+                api._telemetry,
+                "get_user_and_identity_store_id",
+                side_effect=[("user-id", "identity-store-id")],
+            ),
+            patch.object(
+                api._telemetry,
+                "get_deadline_endpoint_url",
+                side_effect=["https://fake-endpoint-url"],
+            ),
+            patch.object(config.config_file, "get_setting", side_effect=RuntimeError("boom")),
+        ):
             client = TelemetryClient(
                 package_name="deadline-cloud-library",
                 package_ver="0.1.2.1234",
@@ -639,15 +665,21 @@ class TestTelemetryClientSwallowExceptions:
 
     def test_init_swallows_get_system_metadata_exception(self, fresh_deadline_config):
         config.set_setting("defaults.aws_profile_name", "SomeRandomProfileName")
-        with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
-            api._telemetry, "get_monitor_id", side_effect=[None]
-        ), patch.object(
-            api._telemetry,
-            "get_user_and_identity_store_id",
-            side_effect=[("user-id", "identity-store-id")],
-        ), patch.object(
-            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
-        ), patch.object(platform, "uname", side_effect=RuntimeError("boom")):
+        with (
+            patch.object(api.TelemetryClient, "_start_threads"),
+            patch.object(api._telemetry, "get_monitor_id", side_effect=[None]),
+            patch.object(
+                api._telemetry,
+                "get_user_and_identity_store_id",
+                side_effect=[("user-id", "identity-store-id")],
+            ),
+            patch.object(
+                api._telemetry,
+                "get_deadline_endpoint_url",
+                side_effect=["https://fake-endpoint-url"],
+            ),
+            patch.object(platform, "uname", side_effect=RuntimeError("boom")),
+        ):
             client = TelemetryClient(
                 package_name="deadline-cloud-library",
                 package_ver="0.1.2.1234",
@@ -845,10 +877,12 @@ def test_process_event_queue_thread_attaches_account_id(
     queue_mock.get.side_effect = [TelemetryEvent(), None]
     mock_telemetry_client.event_queue = queue_mock
 
-    with patch.object(
-        TelemetryClient, "get_account_id", return_value="111122223333"
-    ) as resolve_mock, patch.object(api._telemetry, "get_boto3_session"), patch.object(
-        request, "urlopen"
+    with (
+        patch.object(
+            TelemetryClient, "get_account_id", return_value="111122223333"
+        ) as resolve_mock,
+        patch.object(api._telemetry, "get_boto3_session"),
+        patch.object(request, "urlopen"),
     ):
         mock_telemetry_client._process_event_queue_thread()
 
@@ -873,9 +907,11 @@ def test_process_event_queue_thread_merges_common_details_into_payload(
     ]
     mock_telemetry_client.event_queue = queue_mock
 
-    with patch.object(TelemetryClient, "get_account_id", return_value="111122223333"), patch.object(
-        api._telemetry, "get_boto3_session"
-    ), patch.object(request, "urlopen") as urlopen_mock:
+    with (
+        patch.object(TelemetryClient, "get_account_id", return_value="111122223333"),
+        patch.object(api._telemetry, "get_boto3_session"),
+        patch.object(request, "urlopen") as urlopen_mock,
+    ):
         mock_telemetry_client._process_event_queue_thread()
 
     # Inspect the actual HTTP request body sent by urlopen.
@@ -897,10 +933,10 @@ def test_process_event_queue_thread_skips_account_id_when_resolution_fails(
     queue_mock.get.side_effect = [TelemetryEvent(), None]
     mock_telemetry_client.event_queue = queue_mock
 
-    with patch.object(
-        TelemetryClient, "get_account_id", return_value=None
-    ) as resolve_mock, patch.object(api._telemetry, "get_boto3_session"), patch.object(
-        request, "urlopen"
+    with (
+        patch.object(TelemetryClient, "get_account_id", return_value=None) as resolve_mock,
+        patch.object(api._telemetry, "get_boto3_session"),
+        patch.object(request, "urlopen"),
     ):
         mock_telemetry_client._process_event_queue_thread()
 
@@ -916,14 +952,17 @@ class TestGetMonitorSessionId:
         """Creates a TelemetryClient with telemetry internals patched out."""
 
         def _make():
-            with patch.object(api.TelemetryClient, "_start_threads"), patch.object(
-                api._telemetry, "get_monitor_id", return_value=None
-            ), patch.object(
-                api._telemetry, "get_user_and_identity_store_id", return_value=(None, None)
-            ), patch.object(
-                api._telemetry,
-                "get_deadline_endpoint_url",
-                return_value="https://fake-endpoint",
+            with (
+                patch.object(api.TelemetryClient, "_start_threads"),
+                patch.object(api._telemetry, "get_monitor_id", return_value=None),
+                patch.object(
+                    api._telemetry, "get_user_and_identity_store_id", return_value=(None, None)
+                ),
+                patch.object(
+                    api._telemetry,
+                    "get_deadline_endpoint_url",
+                    return_value="https://fake-endpoint",
+                ),
             ):
                 return TelemetryClient(
                     package_name="deadline-cloud-library",

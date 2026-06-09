@@ -25,6 +25,12 @@ Table of Contents:
       - [Private Modules](#private-modules)
       - [Public Modules](#public-modules)
       - [On `import os as _os`](#on-import-os-as-_os)
+    - [Python Version Support](#python-version-support)
+      - [What we support today](#what-we-support-today)
+      - [Why we don't drop versions on Python EOL alone](#why-we-dont-drop-versions-on-python-eol-alone)
+      - [When to drop support for a Python version](#when-to-drop-support-for-a-python-version)
+      - [When to add support for a new Python version](#when-to-add-support-for-a-new-python-version)
+      - [DCC bundled Python reference](#dcc-bundled-python-reference)
     - [Library Dependencies](#library-dependencies)
       - [Why is a new dependency needed?](#why-is-a-new-dependency-needed)
       - [Quality of the dependency](#quality-of-the-dependency)
@@ -39,7 +45,7 @@ Table of Contents:
 
 To develop the Python code in this repository you will need:
 
-1. Python 3.8 or higher. We recommend [mise](https://github.com/jdx/mise) if you would like to run more than one version
+1. Python 3.9 or higher. We recommend [mise](https://github.com/jdx/mise) if you would like to run more than one version
    of Python on the same system. When running unit tests against all supported Python versions, for instance.
 2. The [hatch](https://github.com/pypa/hatch) package installed (`pip install --upgrade hatch`) into your Python environment.
 
@@ -333,6 +339,155 @@ the module, so we import modules/symbols into a public module with the following
 import os as _os
 from typing import Dict as _Dict
 ```
+
+### Python Version Support
+
+This library is consumed in two very different ways, and that shapes how we choose which Python
+versions to support:
+
+1. As a standalone CLI and Python library, installed into an environment the user controls.
+2. As an in-process integration (a submitter plugin, adaptor, or script) running *inside* a
+   Digital Content Creation (DCC) application — Maya, Houdini, Nuke, 3ds Max, etc. In this case
+   the DCC dictates the Python interpreter, and the user usually cannot change it.
+
+The second case is why our supported range reaches back further than a typical Python library's.
+A DCC often ships with, and is locked to, an older bundled Python. If we drop a version that a
+widely-used DCC release still depends on, users on that DCC can no longer integrate with Deadline
+Cloud at all — there is no "just upgrade Python" option available to them.
+
+#### What we support today
+
+The authoritative declaration of supported versions lives in `pyproject.toml` and `hatch.toml`,
+and these must be kept in sync:
+
+* `pyproject.toml` — `requires-python` and the `Programming Language :: Python :: 3.x` classifiers.
+* `hatch.toml` — the `[[envs.all.matrix]]` `python` list used by `hatch run all:test`.
+
+CI runs the unit test suite against every version in that matrix, so a version is only "supported"
+if it is listed in both places and passing in CI.
+
+When a dependency needs different version constraints across Python versions, prefer
+environment markers over dropping a Python version. We already do this — for example:
+
+```toml
+"boto3 >= 1.42.89; python_version >= '3.9'",
+"boto3 >= 1.36.8; python_version < '3.9'",
+```
+
+#### Why we don't drop versions on Python EOL alone
+
+The Python core team's [end-of-life schedule](https://devguide.python.org/versions/) is **not** our
+primary signal for dropping a version. A Python version reaching upstream EOL does not mean our users
+have stopped using it — DCC vendors lag the upstream Python release cycle by years, and studios pin
+DCC versions for the lifetime of a production.
+
+Instead, we weigh three factors:
+
+1. **DCC bundled-Python support** — Is a Python version still the interpreter shipped by a DCC release
+   that customers actively use? (See the [reference table](#dcc-bundled-python-reference) below.) A
+   version that is the only way to integrate with a popular DCC release is effectively mandatory for
+   us regardless of upstream EOL.
+2. **Real customer usage** — Do we have evidence (telemetry, support tickets, forum/Slack/GitHub
+   issues, direct customer conversations) that people are actually running this library on that
+   version? Low-or-no measured usage is a strong signal that dropping is safe; meaningful usage is a
+   strong signal to keep it.
+3. **Cost to keep supporting it** — What does the version actually cost us? Examples: dependencies
+   that no longer release wheels for it (forcing version-split markers like the boto3 example above),
+   inability to use newer language features across the codebase, extra CI matrix time, and bugs or
+   security fixes we can't pick up because a transitive dependency dropped the version.
+
+A version is a candidate to drop when the cost in (3) is rising **and** both (1) and (2) are low — no
+actively-used DCC release depends on it, and we see little or no real usage. The decision is a
+judgement call balancing these three, not a date on the upstream EOL calendar.
+
+#### When to drop support for a Python version
+
+Before dropping a version, confirm and document the following in the pull request:
+
+* No actively-supported release of a DCC we care about is locked to it as its bundled interpreter
+  (check the [reference table](#dcc-bundled-python-reference)).
+* Usage data / customer signals show the version is not (or is no longer meaningfully) used.
+* You can articulate the concrete cost of keeping it (a dependency that dropped it, a feature we
+  can't adopt, etc.) — "it's old" is not by itself a reason.
+
+Dropping a version is a **breaking change** for any user pinned to it (see
+[Public Contracts](#public-contracts)). When you drop one:
+
+1. Update `requires-python` in `pyproject.toml`.
+2. Remove the matching `Programming Language :: Python :: 3.x` classifier.
+3. Remove the version from the `[[envs.all.matrix]]` list in `hatch.toml`.
+4. Clean up now-unnecessary version-conditional dependency markers and `sys.version_info` /
+   `typing_extensions` shims that existed only for the dropped version.
+5. Call it out in the changelog as a breaking change with migration guidance (see
+   [Changelog Guidelines](#changelog-guidelines)).
+
+#### When to add support for a new Python version
+
+We aim to support current Python versions promptly so users on the latest interpreters — and DCCs
+that have moved to them — are not blocked. To add a version:
+
+1. Add it to the `[[envs.all.matrix]]` list in `hatch.toml` and get the suite passing against it
+   locally and in CI (watch for dependencies that don't yet ship wheels for the new version).
+2. Add the matching `Programming Language :: Python :: 3.x` classifier in `pyproject.toml`.
+3. Widen the upper bound of `requires-python` if necessary.
+
+#### DCC bundled Python reference
+
+This table is the kind of evidence we use for factor (1) above. It covers the DCCs we ship submitters
+for ([the `deadline-cloud-for-*` repositories](https://github.com/aws-deadline/)), and the `Releases`
+column lists the DCC versions each submitter currently supports. It is a **point-in-time aid, not an
+authoritative source** — bundled versions change between DCC releases, so verify against the specific
+DCC release in question (vendor release notes / VFX Reference Platform) before relying on it in a
+drop/add decision.
+
+The bundled Python is what matters most: when a submitter or adaptor runs *inside* the DCC, it is
+constrained to the interpreter that DCC ships. (After Effects, RenderMan, and ShotGrid are exceptions
+— see the notes below the table.)
+
+| DCC | Releases (supported by submitter) | Bundled Python | Reference |
+| --- | --- | --- | --- |
+| Maya | 2023 | 3.9 | |
+| Maya | 2024 | 3.10 | |
+| Maya | 2025, 2026 | 3.11 | |
+| 3ds Max | 2024 | 3.10 | [3ds Max 2024 Python — What's New](https://help.autodesk.com/cloudhelp/2024/ENU/MAXDEV-Python/files/MAXDEV_Python_what_s_new_in_3ds_max_python_api_html.html) |
+| 3ds Max | 2025, 2026 | 3.11 | [3ds Max 2025 Python — What's New](https://help.autodesk.com/cloudhelp/2025/ENU/MAXDEV-Python/files/MAXDEV_Python_what_s_new_in_3ds_max_python_api_html.html) |
+| Houdini | 19.5 | 3.9 (3.7 build available) | [Houdini 19.5 Platforms](https://www.sidefx.com/docs/houdini/news/19_5/platforms.html) |
+| Houdini | 20.0 | 3.10 (3.9 build available) | [Houdini 20.0 Platforms](https://www.sidefx.com/docs/houdini/news/20/platforms.html) |
+| Houdini | 20.5 | 3.11 (3.10 build available) | [Houdini 20.5 Platforms](https://www.sidefx.com/docs/houdini/news/20_5/platforms.html) |
+| Houdini | 21.0 | 3.11 (3.10 build available) | [Houdini 21.0 Platforms](https://www.sidefx.com/docs/houdini/news/21/platforms.html) |
+| Nuke | 15 | 3.10 | [Nuke 15.2 Python module](https://learn.foundry.com/nuke/15.2v1/content/comp_environment/script_editor/nuke_python_module.html) |
+| Nuke | 16 | 3.11 | [Nuke 16 Python module](https://learn.foundry.com/nuke/16.0v1/content/comp_environment/script_editor/nuke_python_module.html) |
+| Nuke | 17 | 3.11 | [Nuke 17 Python module](https://learn.foundry.com/nuke/17.0v1/content/comp_environment/script_editor/nuke_python_module.html) |
+| Blender | 3.6 LTS | 3.10 | [Blender 3.6 versions.cmake](https://github.com/blender/blender/blob/v3.6.0/build_files/build_environment/cmake/versions.cmake) |
+| Blender | 4.0 | 3.10 | [Blender 4.0 versions.cmake](https://github.com/blender/blender/blob/v4.0.0/build_files/build_environment/cmake/versions.cmake) |
+| Blender | 4.1, 4.2 LTS, 4.3, 4.4 | 3.11 | [Blender 4.1 versions.cmake](https://github.com/blender/blender/blob/v4.1.0/build_files/build_environment/cmake/versions.cmake) |
+| Blender | 4.5 LTS, 5.0 | 3.11 | [Blender 4.5 versions.cmake](https://github.com/blender/blender/blob/v4.5.0/build_files/build_environment/cmake/versions.cmake) |
+| Blender | 5.1 | 3.13 | [Blender 5.1 versions.cmake](https://github.com/blender/blender/blob/v5.1.0/build_files/build_environment/cmake/versions.cmake) |
+| Cinema 4D | 2024 | 3.11 | [Cinema 4D 2024 Python SDK](https://developers.maxon.net/docs/py/2024_0_0/) |
+| Cinema 4D | 2025, 2026 | 3.11 | [Cinema 4D 2025 Python SDK](https://developers.maxon.net/docs/py/2025_1_0/manuals/index.html) |
+| KeyShot | 2023 | 3.11 | [KeyShot 2023 scripting manual](https://manuals.keyshot.com/keyshot2023/Content/manual/scripting/index.html) |
+| KeyShot | 2024 | 3.12 | [KeyShot 2024 scripting manual](https://manuals.keyshot.com/keyshot2024/manual/scripting.html) |
+| KeyShot | 2025 | 3.12 | [KeyShot 2025 scripting manual](https://manuals.keyshot.com/kss2025/en-us/manual/scripting.html) |
+| Unreal Engine | 5.4, 5.5 | 3.11.8 | [UE 5.4 Python scripting](https://dev.epicgames.com/documentation/en-us/unreal-engine/scripting-the-unreal-editor-using-python?application_version=5.4) |
+| Unreal Engine | 5.6, 5.7 | 3.11.8 | [UE 5.6 Python scripting](https://dev.epicgames.com/documentation/en-us/unreal-engine/scripting-the-unreal-editor-using-python?application_version=5.6) |
+| VRED | 2025, 2026 | 3.11 | [VRED 2026 — What's New](https://help.autodesk.com/cloudhelp/2026/ENU/VRED-WhatsNew/files/Whats-New/whatsnew-vred-2026/wn-20260.html) |
+| After Effects | 2024 – 2026 | None embedded (ExtendScript/JS); submitter uses an external Python | [After Effects scripting guide](https://ae-scripting.docsforadobe.dev/) |
+| RenderMan | 24 – 26 | Uses host app Python; Pro Server bindings target 3.7 / 3.9 / 3.10 / 3.11 | [Installing RenderMan](https://rmanwiki-26.pixar.com/space/REN26/19660949/Installing+on+Linux) |
+
+Notes:
+* The [VFX Reference Platform](https://vfxplatform.com/) targets Python 3.11 for CY2024/CY2025 and
+  Python 3.13 for CY2026/CY2027.
+* Several DCCs (Nuke 13.x, Houdini 19.0, Maya ≤ 2023, 3ds Max ≤ 2023) bundled Python 3.7–3.9 and are
+  why the library's floor has historically been below 3.9. Our submitters have since moved their
+  minimums up (most now require 3.9+, 3ds Max requires 3.10+), but the `deadline` library itself is
+  consumed beyond just our own submitters, so its supported range can extend below what any one
+  submitter requires.
+* After Effects scripts in ExtendScript/JavaScript and RenderMan host plugins run under the host DCC's
+  interpreter — in these cases the relevant Python is the environment's, not a version bundled by the
+  application.
+
+The [VFX Reference Platform](https://vfxplatform.com/) is a useful cross-vendor reference for the
+Python version the major DCCs target in a given calendar year.
 
 ### Library Dependencies
 

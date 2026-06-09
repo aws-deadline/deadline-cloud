@@ -125,9 +125,10 @@ def assert_directories_equal(snapshot_dir, expected_dir):
 
     if files_differ:
         for snap_file, exp_file in files_differ:
-            with open(snap_file, "r", encoding="utf-8") as snap_fh, open(
-                exp_file, "r", encoding="utf-8"
-            ) as exp_fh:
+            with (
+                open(snap_file, "r", encoding="utf-8") as snap_fh,
+                open(exp_file, "r", encoding="utf-8") as exp_fh,
+            ):
                 for line in difflib.unified_diff(
                     snap_fh.readlines(), exp_fh.readlines(), fromfile=snap_file, tofile=exp_file
                 ):

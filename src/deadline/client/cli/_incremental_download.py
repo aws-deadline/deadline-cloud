@@ -9,7 +9,6 @@ import difflib
 from typing import Optional
 from configparser import ConfigParser
 from typing import Any, Callable
-import sys
 import time
 import concurrent.futures
 import textwrap
@@ -17,7 +16,6 @@ import textwrap
 from .. import api
 import boto3
 from botocore.client import BaseClient  # type: ignore[import]
-from ..exceptions import DeadlineOperationError
 from ..api._list_jobs_by_filter_expression import _list_jobs_by_filter_expression
 from ..api._session import get_session_client
 from ...job_attachments.api import summarize_path_list, human_readable_file_size
@@ -1008,9 +1006,6 @@ def _incremental_output_download(
     Returns:
         An updated checkpoint object.
     """
-    if sys.version_info < (3, 9):
-        raise DeadlineOperationError("The sync-output command requires Python version 3.9 or later")
-
     durations = IncrementalOutputDownloadLatencies()
     deadline = get_session_client(boto3_session, "deadline")
 

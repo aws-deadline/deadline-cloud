@@ -75,9 +75,13 @@ def test_cli_job_logs_verbose(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -115,9 +119,13 @@ def test_cli_job_logs_json(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -172,9 +180,13 @@ def test_cli_job_logs_empty(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = EMPTY_LOG_RESULT
 
@@ -198,9 +210,13 @@ def test_cli_job_logs_json_empty(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = EMPTY_LOG_RESULT
 
@@ -243,9 +259,13 @@ def test_cli_job_logs_json_error(fresh_deadline_config):
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.side_effect = Exception("Test error message")
 
@@ -274,9 +294,13 @@ def test_cli_job_logs_with_time_params(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -319,9 +343,13 @@ def test_cli_job_logs_with_next_token(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -357,9 +385,10 @@ def test_cli_job_logs_with_session_id(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "get_session_logs") as mock_get_logs, patch.object(
-        api, "get_boto3_client"
-    ) as boto3_client_mock:
+    with (
+        patch.object(api, "get_session_logs") as mock_get_logs,
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+    ):
         # Mock the API response
         mock_get_logs.return_value = SessionLogResult(
             events=[
@@ -436,9 +465,10 @@ def test_cli_job_logs_with_job_id_single_session(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        api, "get_session_logs"
-    ) as mock_get_logs:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(api, "get_session_logs") as mock_get_logs,
+    ):
         # Mock the paginator
         paginator_mock = MagicMock()
         boto3_client_mock().get_paginator.return_value = paginator_mock
@@ -555,9 +585,10 @@ def test_cli_job_logs_with_pagination(fresh_deadline_config):
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        api, "get_session_logs"
-    ) as mock_get_logs:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(api, "get_session_logs") as mock_get_logs,
+    ):
         # Mock the paginator
         paginator_mock = MagicMock()
         boto3_client_mock().get_paginator.return_value = paginator_mock
@@ -956,9 +987,10 @@ def test_cli_job_logs_json_with_job_info(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        api, "get_session_logs"
-    ) as mock_get_logs:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(api, "get_session_logs") as mock_get_logs,
+    ):
         # Mock the paginator
         paginator_mock = MagicMock()
         boto3_client_mock().get_paginator.return_value = paginator_mock
@@ -1015,9 +1047,13 @@ def test_cli_job_logs_timezone_utc(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -1076,9 +1112,13 @@ def test_cli_job_logs_timezone_local_verbose(fresh_deadline_config):
         count=2,
     )
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = timezone_aware_result
 
@@ -1141,9 +1181,13 @@ def test_cli_job_logs_timezone_local_json(fresh_deadline_config):
         count=2,
     )
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = timezone_aware_result
 
@@ -1588,9 +1632,10 @@ def test_session_action_retrieval_success_in_progress(fresh_deadline_config, dea
         "definition": {"taskRun": {"taskId": "task-1"}},
     }
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.cli._groups.job_group.datetime"
-    ) as mock_datetime:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch("deadline.client.cli._groups.job_group.datetime") as mock_datetime,
+    ):
         # Mock datetime.now to return a fixed time
         mock_now = datetime.datetime(2023, 1, 1, 14, 0, 0, tzinfo=datetime.timezone.utc)
         mock_datetime.datetime.now.return_value = mock_now
@@ -2452,9 +2497,13 @@ def test_cli_job_logs_timestamp_format_utc(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -2480,9 +2529,13 @@ def test_cli_job_logs_timestamp_format_local(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -2514,9 +2567,13 @@ def test_cli_job_logs_timestamp_format_relative(fresh_deadline_config):
 
     session_start_time = datetime.datetime(2023, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -2552,9 +2609,13 @@ def test_cli_job_logs_timestamp_format_default(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -2624,9 +2685,13 @@ def test_cli_job_logs_timezone_deprecation_warning_utc(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 
@@ -2654,9 +2719,13 @@ def test_cli_job_logs_timezone_deprecation_warning_local(fresh_deadline_config):
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("defaults.job_id", MOCK_JOB_ID)
 
-    with patch("deadline.client.api.get_session_logs") as mock_get_logs, patch(
-        "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
-    ) as mock_get_user, patch("deadline.client.api.get_boto3_client") as boto3_client_mock:
+    with (
+        patch("deadline.client.api.get_session_logs") as mock_get_logs,
+        patch(
+            "deadline.client.api._job_monitoring.get_user_and_identity_store_id"
+        ) as mock_get_user,
+        patch("deadline.client.api.get_boto3_client") as boto3_client_mock,
+    ):
         mock_get_user.return_value = (None, None)
         mock_get_logs.return_value = SAMPLE_LOG_RESULT
 

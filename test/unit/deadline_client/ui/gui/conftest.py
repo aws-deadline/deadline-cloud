@@ -14,6 +14,7 @@ _has_pyside6 = importlib.util.find_spec("PySide6") is not None
 _QT_TEST_FILES = [
     "test_gui_host_requirements.py",
     "test_gui_job_attachments.py",
+    "test_gui_job_bundle_submitter.py",
     "test_gui_job_timeouts.py",
     "test_gui_openjd_parameters.py",
     "test_gui_shared_job_properties.py",

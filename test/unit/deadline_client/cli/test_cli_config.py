@@ -64,9 +64,10 @@ def test_log_level_updated(fresh_deadline_config, caplog, log_level):
     # GIVEN
     config.set_setting("settings.log_level", log_level)
 
-    with caplog.at_level(logging.DEBUG), patch.object(
-        deadline.client.cli._main.logging, "basicConfig"
-    ) as mock_basic_config:
+    with (
+        caplog.at_level(logging.DEBUG),
+        patch.object(deadline.client.cli._main.logging, "basicConfig") as mock_basic_config,
+    ):
         # WHEN
         CliRunner().invoke(deadline.client.cli.main, ["config", "show"])
 

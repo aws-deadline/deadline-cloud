@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import sys
 from typing import Any
 
 import click
@@ -46,11 +45,6 @@ def cli_job_trace_schedule(verbose, trace_format, trace_file, **args):
     "--trace-format chrome --trace-file output.json", open
     https://ui.perfetto.dev in a browser and choose "Open trace file".
     """
-    if sys.version_info < (3, 9):
-        raise DeadlineOperationError(
-            "The trace-schedule command requires Python version 3.9 or later"
-        )
-
     config = _apply_cli_options_to_config(
         required_options={"farm_id", "queue_id", "job_id"}, **args
     )

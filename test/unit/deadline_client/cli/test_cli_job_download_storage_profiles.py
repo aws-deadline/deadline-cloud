@@ -132,15 +132,18 @@ def test_case1_both_profiles_match_auto_mapping(fresh_deadline_config: str) -> N
     config.set_setting("settings.storage_profile_id", "sp-local-111")
     config.set_setting("settings.auto_accept", "true")
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
-        job_group, "get_output_manifests_by_asset_root", return_value={}
-    ) as mock_get_manifests, patch.object(job_group, "_download_mapped_manifests"):
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+        patch.object(
+            job_group, "get_output_manifests_by_asset_root", return_value={}
+        ) as mock_get_manifests,
+        patch.object(job_group, "_download_mapped_manifests"),
+    ):
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
 
         root = "C:\\temp\\render"
@@ -180,13 +183,14 @@ def test_case2_both_profiles_no_matching_locations(fresh_deadline_config: str) -
 
     mock_root = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+    ):
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE_NO_MATCH]
 
         _make_download_mocks(
@@ -222,12 +226,12 @@ def test_case3_no_local_profile_job_has_profile_warning_fallback(
 
     mock_root = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         _make_download_mocks(
             boto3_client_mock,
@@ -259,12 +263,12 @@ def test_case4_no_profiles_either_side(fresh_deadline_config: str) -> None:
 
     mock_root = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         _make_download_mocks(
             boto3_client_mock,
@@ -296,12 +300,12 @@ def test_case5_local_profile_job_has_none_warning(fresh_deadline_config: str) ->
 
     mock_root = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
     ):
         _make_download_mocks(
             boto3_client_mock,
@@ -334,13 +338,14 @@ def test_case6_ignore_storage_profiles_flag(fresh_deadline_config: str) -> None:
 
     mock_root = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+    ):
         _make_download_mocks(
             boto3_client_mock,
             mock_downloader,
@@ -381,13 +386,14 @@ def test_case7_same_profile_both_sides(fresh_deadline_config: str) -> None:
 
     mock_root = "/mnt/shared" if sys.platform != "win32" else "C:\\Users\\username"
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+    ):
         # Both calls return the same profile
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_LOCAL_PROFILE]
 
@@ -481,17 +487,20 @@ def test_case8e_nested_locations_most_specific_rule_wins(
     root = "C:\\Projects"
     mock_manifest = _make_mock_manifest([("Special\\data.txt", 100)])
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
-        job_group,
-        "get_output_manifests_by_asset_root",
-        return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+        patch.object(
+            job_group,
+            "get_output_manifests_by_asset_root",
+            return_value={root: [mock_manifest]},
+        ),
+        patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests,
+    ):
         mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
         mock_download_manifests.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100
@@ -545,17 +554,20 @@ def test_case8e_nested_locations_broader_rule_for_non_nested_path(
     root = "C:\\Projects"
     mock_manifest = _make_mock_manifest([("other\\file.txt", 50)])
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
-        job_group,
-        "get_output_manifests_by_asset_root",
-        return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+        patch.object(
+            job_group,
+            "get_output_manifests_by_asset_root",
+            return_value={root: [mock_manifest]},
+        ),
+        patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests,
+    ):
         mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
         mock_download_manifests.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100
@@ -607,17 +619,20 @@ def test_case8e_nested_locations_mixed_paths(
         ]
     )
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
-        job_group,
-        "get_output_manifests_by_asset_root",
-        return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+        patch.object(
+            job_group,
+            "get_output_manifests_by_asset_root",
+            return_value={root: [mock_manifest]},
+        ),
+        patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests,
+    ):
         mock_get_profile.side_effect = [MOCK_NESTED_LOCAL_PROFILE, MOCK_NESTED_JOB_PROFILE]
         mock_download_manifests.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100
@@ -674,17 +689,20 @@ def test_rules_exist_but_no_files_match_falls_back_to_downloader(
     root = "D:\\unrelated\\output"
     mock_manifest = _make_mock_manifest([("result.exr", 100)])
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
-        job_group,
-        "get_output_manifests_by_asset_root",
-        return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+        patch.object(
+            job_group,
+            "get_output_manifests_by_asset_root",
+            return_value={root: [mock_manifest]},
+        ),
+        patch.object(job_group, "_download_mapped_manifests") as mock_download_manifests,
+    ):
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
 
         mock_root = "/root/path"
@@ -730,17 +748,20 @@ def test_mapped_download_passes_progress_callback(
     root = "C:\\temp\\render"
     mock_manifest = _make_mock_manifest([("output.exr", 100)])
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
-        job_group,
-        "get_output_manifests_by_asset_root",
-        return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+        patch.object(
+            job_group,
+            "get_output_manifests_by_asset_root",
+            return_value={root: [mock_manifest]},
+        ),
+        patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped,
+    ):
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
         mock_download_mapped.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100
@@ -786,17 +807,20 @@ def test_mapped_download_uses_configured_conflict_resolution(
     root = "C:\\temp\\render"
     mock_manifest = _make_mock_manifest([("output.exr", 100)])
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
-        job_group,
-        "get_output_manifests_by_asset_root",
-        return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+        patch.object(
+            job_group,
+            "get_output_manifests_by_asset_root",
+            return_value={root: [mock_manifest]},
+        ),
+        patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped,
+    ):
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
         mock_download_mapped.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100
@@ -837,17 +861,20 @@ def test_mapped_download_json_mode_emits_progress(
     root = "C:\\temp\\render"
     mock_manifest = _make_mock_manifest([("output.exr", 100)])
 
-    with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-        job_group, "OutputDownloader"
-    ) as mock_downloader, patch.object(
-        job_group, "_get_conflicting_filenames", return_value=[]
-    ), patch.object(job_group, "round", return_value=0), patch.object(
-        api, "get_queue_user_boto3_session"
-    ), patch.object(api, "get_storage_profile_for_queue") as mock_get_profile, patch.object(
-        job_group,
-        "get_output_manifests_by_asset_root",
-        return_value={root: [mock_manifest]},
-    ), patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped:
+    with (
+        patch.object(api, "get_boto3_client") as boto3_client_mock,
+        patch.object(job_group, "OutputDownloader") as mock_downloader,
+        patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+        patch.object(job_group, "round", return_value=0),
+        patch.object(api, "get_queue_user_boto3_session"),
+        patch.object(api, "get_storage_profile_for_queue") as mock_get_profile,
+        patch.object(
+            job_group,
+            "get_output_manifests_by_asset_root",
+            return_value={root: [mock_manifest]},
+        ),
+        patch.object(job_group, "_download_mapped_manifests") as mock_download_mapped,
+    ):
         mock_get_profile.side_effect = [MOCK_LOCAL_PROFILE, MOCK_JOB_PROFILE]
         mock_download_mapped.return_value = DownloadSummaryStatistics(
             total_time=1, processed_files=1, processed_bytes=100

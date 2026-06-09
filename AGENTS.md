@@ -7,7 +7,6 @@ This document provides guidance for AI agents working with this codebase.
 AWS Deadline Cloud client is a Python library and CLI tool for interacting with [AWS Deadline Cloud](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/what-is-deadline-cloud.html). It supports job submission, file transfer via job attachments, and provides both CLI and GUI interfaces.
 
 **Package name:** `deadline`
-**Python versions:** 3.8 - 3.13
 **Platforms:** Linux, Windows, macOS
 
 ## Repository Structure

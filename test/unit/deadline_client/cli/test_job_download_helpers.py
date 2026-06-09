@@ -435,13 +435,14 @@ class TestCliDownloadOutputStorageProfileOptions:
         mock_root = "/root/path" if sys.platform != "win32" else "C:\\Users\\username"
         mock_host_format = PathFormat.get_host_path_format()
 
-        with patch.object(api, "get_boto3_client") as boto3_client_mock, patch.object(
-            job_group, "OutputDownloader"
-        ) as MockOutputDownloader, patch.object(
-            job_group, "_get_conflicting_filenames", return_value=[]
-        ), patch.object(job_group, "round", return_value=0), patch.object(
-            api, "get_queue_user_boto3_session"
-        ), patch.object(job_group, "_resolve_storage_profiles", return_value=None) as mock_resolve:
+        with (
+            patch.object(api, "get_boto3_client") as boto3_client_mock,
+            patch.object(job_group, "OutputDownloader") as MockOutputDownloader,
+            patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
+            patch.object(job_group, "round", return_value=0),
+            patch.object(api, "get_queue_user_boto3_session"),
+            patch.object(job_group, "_resolve_storage_profiles", return_value=None) as mock_resolve,
+        ):
             mock_download = MagicMock()
             mock_download.return_value = DownloadSummaryStatistics(
                 total_time=1, processed_files=1, processed_bytes=100

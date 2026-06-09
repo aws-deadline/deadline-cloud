@@ -11,7 +11,7 @@ helpers around the service's API. It can function as a pipeline tool, a standalo
 Notable features include:
 
 * A command-line interface with subcommands for querying your AWS Deadline Cloud resources, and submitting jobs to your AWS Deadline Cloud Farm.
-* A library of functions for creating a job submission UI within any content creation tool that supports Python 3.8+ based plugins and
+* A library of functions for creating a job submission UI within any content creation tool that supports Python 3.9+ based plugins and
   the Qt GUI framework.
 * A Model Context Protocol (MCP) server for AI assistant integration, enabling natural language interaction with AWS Deadline Cloud resources.
 
