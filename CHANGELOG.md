@@ -1,8 +1,17 @@
 ## 0.57.4 (2026-06-08)
 
+### BREAKING CHANGES
+* Dropped Python 3.8 support. The minimum supported Python version is now 3.9. Python 3.8 reached end-of-life in October 2024. Users on 3.8 will not be able to upgrade to this version; all other users are unaffected. (#1200)
+
 ### Features
 * When no default farm or queue is configured, the CLI and GUI submit dialog now automatically select the farm/queue if only one is available to the user. If multiple exist, the existing behavior is preserved. (#1015)
 * The Monitor's session_id is now read from ~/.deadline/config and included in telemetry events for cross-component correlation with Monitor and CTDX sessions. (#1184)
+* Added a weekly release digest GitHub Action that summarizes recent changes across aws-deadline repositories. (#1185)
+
+### Bug Fixes
+* Fixed `deadline bundle gui-submit` ignoring host requirements defined in the job template. The Host Requirements tab now pre-fills from the template's step `hostRequirements` when all steps share the same requirements. (#1198)
+* Fixed several boto clients missing user-agent attribution (app/deadline-client version, submitter, CLI command name) by applying the default client config to remaining bare client construction sites. (#1197)
+
 ## 0.57.3 (2026-06-01)
 
 ### Features
