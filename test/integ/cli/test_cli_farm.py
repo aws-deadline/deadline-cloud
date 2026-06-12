@@ -36,7 +36,8 @@ def test_farm_list(deadline_cli_test: DeadlineCliTest) -> None:
 
     assert result.exit_code == 0
 
-    assert f"- farmId: {deadline_cli_test.farm_id}" in result.output
+    assert f"farmId: {deadline_cli_test.farm_id}" in result.output
     # The following vary from farm to farm, so just make sure the general layout is there.
     # Unit tests are able to test the output more throughly. We'll only look for the required fields.
     assert "displayName:" in result.output
+    assert "region:" in result.output

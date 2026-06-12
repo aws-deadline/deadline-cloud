@@ -146,7 +146,7 @@ async def test_tool_description_extraction(get_boto_session):
         f"Got: {list_farms_tool.description}"
     )
 
-    assert "Calls the [deadline:ListFarms] API call" in list_farms_tool.description, (
+    assert "Calls the [deadline:ListFarms] API" in list_farms_tool.description, (
         "Tool description should come from the function's doc string"
     )
 
