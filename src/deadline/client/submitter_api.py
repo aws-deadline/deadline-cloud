@@ -15,7 +15,7 @@ __all__ = [
 import importlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from .api._queue_parameters import get_queue_parameter_definitions
 from .config import config_file
@@ -126,7 +126,10 @@ def get_queue_parameters(
     if not farm_id or not queue_id:
         return []
 
-    params = get_queue_parameter_definitions(farmId=farm_id, queueId=queue_id)
+    params = cast(
+        "list[dict[str, Any]]",
+        get_queue_parameter_definitions(farmId=farm_id, queueId=queue_id),
+    )
 
     if initial_values:
         for param in params:
