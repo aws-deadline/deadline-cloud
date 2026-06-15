@@ -5,17 +5,18 @@ __all__ = [
     "SubmitterAPI",
     "SubmitterSettings",
     "SubmissionContext",
+    "HostName",
     "get_queue_parameters",
     "get_submitter_api",
+    "register_submitter_api",
     "set_conda_packages",
     "append_conda_packages",
     "set_rez_packages",
 ]
 
-import importlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 from .api._queue_parameters import get_queue_parameter_definitions
 from .config import config_file
@@ -61,7 +62,6 @@ class SubmitterAPI(ABC):
         and other scene-derived values. Callers should never need
         to manually set these after calling get_settings().
         """
-        ...
 
     @abstractmethod
     def get_job_template(
@@ -70,7 +70,6 @@ class SubmitterAPI(ABC):
         host_requirements: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Build the OpenJD job template dict for submission."""
-        ...
 
     @abstractmethod
     def get_parameter_values(
@@ -79,7 +78,6 @@ class SubmitterAPI(ABC):
         queue_parameters: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Build the parameter values list for submission."""
-        ...
 
     @abstractmethod
     def get_asset_references(
@@ -87,7 +85,6 @@ class SubmitterAPI(ABC):
         settings: SubmitterSettings,
     ) -> dict[str, Any]:
         """Collect asset references (inputs/outputs) from the scene."""
-        ...
 
     def get_submission_context(
         self, settings: Optional[SubmitterSettings] = None
@@ -139,39 +136,58 @@ def get_queue_parameters(
     return params
 
 
-_SUBMITTER_REGISTRY: dict[str, str] = {
-    "maya": "deadline.maya_submitter.submitter_api:MayaSubmitterAPI",
-    "houdini": "deadline_cloud_for_houdini.submitter_api:HoudiniSubmitterAPI",
-    "nuke": "deadline.nuke_submitter.submitter_api:NukeSubmitterAPI",
-    "blender": "deadline.blender_submitter.addons.deadline_cloud_blender_submitter.submitter_api:BlenderSubmitterAPI",
-    "3dsmax": "deadline.max_submitter.submitter_api:MaxSubmitterAPI",
-    "cinema4d": "deadline.cinema4d_submitter.submitter_api:Cinema4DSubmitterAPI",
-    "unreal": "deadline.unreal_submitter.submitter_api:UnrealSubmitterAPI",
-    "keyshot": "deadline.keyshot_submitter.submitter_api:KeyShotSubmitterAPI",
-    "vred": "deadline.vred_submitter.submitter_api:VREDSubmitterAPI",
-}
+class HostName:
+    """Canonical DCC host identifiers used to register and look up submitters.
+
+    Each DCC submitter package registers its concrete ``SubmitterAPI`` against
+    one of these identifiers via :func:`register_submitter_api`.
+    """
+
+    MAYA = "maya"
+    HOUDINI = "houdini"
+    NUKE = "nuke"
+    BLENDER = "blender"
+    MAX = "3dsmax"
+    CINEMA4D = "cinema4d"
+    UNREAL = "unreal"
+    KEYSHOT = "keyshot"
+    VRED = "vred"
+
+
+# Populated at runtime by each DCC submitter package via register_submitter_api().
+# The shared library intentionally does not import DCC-specific packages.
+_SUBMITTER_REGISTRY: dict[str, Callable[[], SubmitterAPI]] = {}
+
+
+def register_submitter_api(host_name: str, factory: Callable[[], SubmitterAPI]) -> None:
+    """Register a SubmitterAPI factory for a DCC host.
+
+    Called by each DCC submitter package (or a consumer such as AYON) so that
+    ``deadline-cloud`` does not need a hard dependency on every DCC submitter.
+
+    Args:
+        host_name: DCC identifier (see :class:`HostName`).
+        factory: Zero-argument callable returning a SubmitterAPI instance.
+    """
+    _SUBMITTER_REGISTRY[host_name] = factory
 
 
 def get_submitter_api(host_name: str) -> SubmitterAPI:
     """Return the SubmitterAPI implementation for the given DCC.
 
     Args:
-        host_name: DCC identifier (e.g., "maya", "houdini", "nuke").
+        host_name: DCC identifier (see :class:`HostName`).
 
     Raises:
         ValueError: If no implementation is registered for host_name.
     """
-    entry = _SUBMITTER_REGISTRY.get(host_name)
-    if entry is None:
+    factory = _SUBMITTER_REGISTRY.get(host_name)
+    if factory is None:
         raise ValueError(
             f"No SubmitterAPI registered for host '{host_name}'. "
-            f"Available: {list(_SUBMITTER_REGISTRY.keys())}"
+            f"Registered: {sorted(_SUBMITTER_REGISTRY)}"
         )
-
-    module_path, class_name = entry.rsplit(":", 1)
-    module = importlib.import_module(module_path)
-    cls = getattr(module, class_name)
-    return cls()
+    return factory()
 
 
 def set_conda_packages(
