@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 __all__ = [
-    "HostName",
     "SubmissionContext",
     "SubmitterAPI",
     "SubmitterSettings",
@@ -136,26 +135,9 @@ def get_queue_parameters(
     return params
 
 
-class HostName:
-    """Canonical DCC host identifiers used to register and look up submitters.
-
-    Each DCC submitter package registers its concrete ``SubmitterAPI`` against
-    one of these identifiers via :func:`register_submitter_api`.
-    """
-
-    MAYA = "maya"
-    HOUDINI = "houdini"
-    NUKE = "nuke"
-    BLENDER = "blender"
-    MAX = "3dsmax"
-    CINEMA4D = "cinema4d"
-    UNREAL = "unreal"
-    KEYSHOT = "keyshot"
-    VRED = "vred"
-
-
 # Populated at runtime by each DCC submitter package via register_submitter_api().
-# The shared library intentionally does not import DCC-specific packages.
+# The shared library intentionally does not import DCC-specific packages, nor
+# does it enumerate the known DCC hosts -- consumers own that mapping.
 _SUBMITTER_REGISTRY: dict[str, Callable[[], SubmitterAPI]] = {}
 
 
@@ -166,7 +148,7 @@ def register_submitter_api(host_name: str, factory: Callable[[], SubmitterAPI]) 
     ``deadline-cloud`` does not need a hard dependency on every DCC submitter.
 
     Args:
-        host_name: DCC identifier (see :class:`HostName`).
+        host_name: DCC identifier string (e.g. "maya", "nuke").
         factory: Zero-argument callable returning a SubmitterAPI instance.
     """
     _SUBMITTER_REGISTRY[host_name] = factory
@@ -176,7 +158,7 @@ def get_submitter_api(host_name: str) -> SubmitterAPI:
     """Return the SubmitterAPI implementation for the given DCC.
 
     Args:
-        host_name: DCC identifier (see :class:`HostName`).
+        host_name: DCC identifier string (e.g. "maya", "nuke").
 
     Raises:
         ValueError: If no implementation is registered for host_name.
