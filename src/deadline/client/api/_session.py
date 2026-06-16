@@ -130,6 +130,14 @@ def get_default_client_config(**kwargs) -> botocore.config.Config:
         user_agent_extra += submitter_extra
     if session_context.get("cli-command-name"):
         user_agent_extra += f" cli-command/{session_context['cli-command-name']}"
+    # Attribute AI-agent-driven invocations on the service-side User-Agent so they
+    # are distinguishable in service logs (complements the RUM telemetry tagging).
+    # Imported locally to avoid a circular import (_telemetry imports from here).
+    from ._telemetry import detect_invoking_agent
+
+    agent_name = detect_invoking_agent()
+    if agent_name:
+        user_agent_extra += f" invoked-by/{agent_name}"
     client_config = botocore.config.Config(user_agent_extra=user_agent_extra, **kwargs)
     return client_config
 
