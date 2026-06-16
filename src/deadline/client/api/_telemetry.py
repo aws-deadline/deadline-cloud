@@ -41,6 +41,70 @@ logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+# Detection of an AI agent / harness invoking the CLI follows the convention
+# implemented by unjs/std-env (the de-facto reference) and the AGENT proposal
+# tracked in agentsmd/agents.md#136. No personally-identifiable information is
+# read - only the presence/value of well-known agent marker variables.
+#
+# Agents that set a marker env var whose mere presence identifies them. Each
+# entry maps a detection env var to the canonical agent name we report. Checked
+# in order; the first match wins.
+_AGENT_ENV_MARKERS: tuple[tuple[str, str], ...] = (
+    ("CLAUDECODE", "claude-code"),
+    ("CLAUDE_CODE", "claude-code"),
+    ("CODEX_SANDBOX", "codex"),
+    ("CODEX_THREAD_ID", "codex"),
+    ("CURSOR_AGENT", "cursor"),
+    ("REPL_ID", "replit"),
+    ("GEMINI_CLI", "gemini"),
+    ("OPENCODE", "opencode"),
+    ("AUGMENT_AGENT", "auggie"),
+    ("GOOSE_PROVIDER", "goose"),
+)
+
+# Agents detected by matching a substring within the value of an env var
+# (rather than presence alone) - typically IDE/editor integrations. Checked
+# after the presence markers above so a more specific agent running inside the
+# IDE is detected first.
+_AGENT_ENV_VALUE_MARKERS: tuple[tuple[str, str, str], ...] = (
+    ("EDITOR", "devin", "devin"),
+    ("TERM_PROGRAM", "kiro", "kiro"),
+)
+
+
+def detect_invoking_agent() -> Optional[str]:
+    """Best-effort detection of an AI agent / harness invoking the CLI.
+
+    Returns the canonical agent name (e.g. ``"claude-code"``) if a known agent
+    environment is detected, otherwise ``None`` (treated as a human / direct
+    invocation). Detection is based purely on environment variables that agents
+    set; no personally-identifiable information is collected.
+    """
+    # ``AGENT`` (proposed standard, agents.md#136) and ``AI_AGENT`` (Vercel
+    # convention) carry the agent name directly and take priority. claude-code
+    # sets a "<name>_<version>_agent" form, so take the leading token to avoid
+    # recording a version-specific value.
+    for override_var in ("AI_AGENT", "AGENT"):
+        value = os.environ.get(override_var)
+        if value and value not in ("1", "true"):
+            return value.split("_", 1)[0].lower()
+
+    for env_var, agent_name in _AGENT_ENV_MARKERS:
+        if os.environ.get(env_var):
+            return agent_name
+
+    for env_var, needle, agent_name in _AGENT_ENV_VALUE_MARKERS:
+        value = os.environ.get(env_var)
+        if value and needle in value.lower():
+            return agent_name
+
+    # Generic AGENT=1/true (proposed standard) with no parseable name.
+    if os.environ.get("AGENT") in ("1", "true"):
+        return "unknown"
+
+    return None
+
+
 def _swallow_exceptions(func: F) -> F:
     """Decorator that catches all exceptions in telemetry functions to prevent
     telemetry issues from affecting the main application flow."""
@@ -131,6 +195,15 @@ class TelemetryClient:
         # If a different base package is provided, include info from this library as supplementary info
         if package_name != "deadline-cloud-library":
             self._common_details["deadline-cloud-version"] = version
+
+        # Tag every event with whether an AI agent / harness invoked the CLI so
+        # downstream metrics can distinguish agent-driven from human usage.
+        # Recorded in _common_details (not metadata) so it is queryable as an
+        # event_details field in RUM event patterns.
+        agent_name = detect_invoking_agent()
+        self._common_details["invoked_by"] = "AGENT" if agent_name else "HUMAN"
+        if agent_name:
+            self._common_details["agent_name"] = agent_name
         try:
             self._system_metadata = self._get_system_metadata(config=config)
         except Exception:
