@@ -252,17 +252,17 @@ def test_invoked_by_agent_in_user_agent():
     Verifies that a detected AI agent is appended to user_agent_extra as
     invoked-by/<agent>, and omitted entirely for human invocations.
     """
-    from deadline.client.api import _telemetry
+    from deadline.client.api import _session
 
-    # get_default_client_config does a local `from ._telemetry import
-    # detect_invoking_agent`, so patch the source module, not _session.
+    # get_default_client_config calls _session's imported detect_invoking_agent,
+    # so patch it where it is used.
     # Agent detected -> appended.
-    with patch.object(_telemetry, "detect_invoking_agent", return_value="claude-code"):
+    with patch.object(_session, "detect_invoking_agent", return_value="claude-code"):
         config = get_default_client_config()
         assert "invoked-by/claude-code" in config.user_agent_extra
 
     # No agent (human) -> nothing appended.
-    with patch.object(_telemetry, "detect_invoking_agent", return_value=None):
+    with patch.object(_session, "detect_invoking_agent", return_value=None):
         config = get_default_client_config()
         assert "invoked-by/" not in config.user_agent_extra
 

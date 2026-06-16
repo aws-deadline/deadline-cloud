@@ -12,11 +12,11 @@ from dataclasses import asdict
 from urllib import request
 
 from deadline.client import api, config
+from deadline.client.api._agent_detection import detect_invoking_agent
 from deadline.client.api._telemetry import (
     TelemetryClient,
     TelemetryEvent,
     _swallow_exceptions,
-    detect_invoking_agent,
     get_deadline_cloud_library_telemetry_client,
     get_telemetry_client,
     record_success_fail_telemetry_event,
@@ -1115,6 +1115,26 @@ def test_detect_invoking_agent_ai_agent_override(clean_agent_env):
     clean_agent_env.setenv("AI_AGENT", "Claude-Code_1-2-3_agent")
     clean_agent_env.setenv("CURSOR_AGENT", "1")  # would otherwise win
     assert detect_invoking_agent() == "claude-code"
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        # Spaces/slashes/control chars are stripped so the User-Agent token and
+        # telemetry payload can't be corrupted by a malformed env value.
+        pytest.param("foo bar", "foobar", id="strips-space"),
+        pytest.param("a/b\\c", "abc", id="strips-slashes"),
+        pytest.param("name\nwith\rnewlines", "namewithnewlines", id="strips-control-chars"),
+        pytest.param("keep.this-name_x", "keep.this-name", id="keeps-safe-chars-splits-underscore"),
+        pytest.param("MixedCase", "mixedcase", id="lowercased"),
+        pytest.param("!@#$%", None, id="all-disallowed-falls-through"),
+        pytest.param("x" * 200, "x" * 64, id="length-capped"),
+    ],
+)
+def test_detect_invoking_agent_override_sanitized(clean_agent_env, value, expected):
+    """The user-controlled AI_AGENT/AGENT override is constrained to a safe charset/length."""
+    clean_agent_env.setenv("AI_AGENT", value)
+    assert detect_invoking_agent() == expected
 
 
 def test_detect_invoking_agent_presence_beats_ide(clean_agent_env):
