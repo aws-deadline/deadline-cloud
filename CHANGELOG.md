@@ -1,3 +1,10 @@
+## 0.59.0 (2026-06-17)
+
+### BREAKING CHANGES
+* Farms are now supported across all Deadline Cloud regions. A farm is identified by (region, farm_id) rather than a farm_id in a single globally-fixed region. List operations (like `list_farms`) now fan out calls to every region and aggregate results, each annotated with its region. The farm list CLI output now includes a `region` field before `farmId`. (#1202)
+
+### Features
+* Added `use_deadline_cloud_v2_channel` keyword argument to `SubmitJobToDeadlineDialog` and `SharedJobSettingsWidget`. When enabled, the `deadline-cloud-v2` Conda channel is prepended ahead of the default `deadline-cloud` channel in the queue environment's `CondaChannels` parameter, keeping `deadline-cloud` as a fallback. (#1211)
 ## 0.58.0 (2026-06-10)
 
 ### BREAKING CHANGES
