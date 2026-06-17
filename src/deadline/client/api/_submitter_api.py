@@ -16,7 +16,6 @@ __all__ = [
     "append_conda_packages",
     "append_rez_packages",
     "get_queue_parameters",
-    "get_submitter_api",
     "set_conda_packages",
     "set_rez_packages",
 ]
@@ -31,7 +30,9 @@ from typing import cast as _cast
 
 from ..config import get_setting as _get_setting
 from ..exceptions import DeadlineOperationError as _DeadlineOperationError
-from ._queue_parameters import get_queue_parameter_definitions as _get_queue_parameter_definitions
+from ._queue_parameters import (
+    get_queue_parameter_definitions as _get_queue_parameter_definitions,
+)
 
 
 @_dataclass
@@ -182,38 +183,10 @@ def get_queue_parameters(
     return queue_parameters
 
 
-def get_submitter_api(host_name: str) -> SubmitterAPI:
-    """Return the SubmitterAPI implementation for the given DCC.
-
-    Args:
-        host_name: DCC identifier (e.g., "maya", "houdini", "nuke", "blender").
-
-    Returns:
-        An instance of the concrete SubmitterAPI subclass for the DCC.
-
-    Raises:
-        ValueError: If no implementation is registered for host_name.
-    """
-    _registry: dict[str, tuple[str, str]] = {
-        "maya": ("deadline.maya_submitter.api", "MayaSubmitterAPI"),
-        "houdini": ("deadline.houdini_submitter.api", "HoudiniSubmitterAPI"),
-        "nuke": ("deadline.nuke_submitter.api", "NukeSubmitterAPI"),
-        "blender": ("deadline.blender_submitter.api", "BlenderSubmitterAPI"),
-    }
-
-    if host_name not in _registry:
-        raise ValueError(
-            f"No SubmitterAPI implementation registered for '{host_name}'. "
-            f"Available: {list(_registry.keys())}"
-        )
-
-    module_path, class_name = _registry[host_name]
-
-    import importlib as _importlib
-
-    module = _importlib.import_module(module_path)
-    api_class = getattr(module, class_name)
-    return api_class()
+# NOTE: deadline-cloud intentionally provides no discovery registry or factory
+# (no get_submitter_api / register_submitter_api). A consumer always runs inside
+# a known DCC and imports that DCC's concrete SubmitterAPI directly. See the TDD
+# "Discovery: consumer-side direct import" section for rationale.
 
 
 # --- Conda/Rez helpers ---
@@ -243,7 +216,9 @@ def set_conda_packages(parameter_values: list[dict[str, _Any]], packages: str) -
         parameter_values.append({"name": "CondaPackages", "value": packages})
 
 
-def append_conda_packages(parameter_values: list[dict[str, _Any]], packages: str) -> None:
+def append_conda_packages(
+    parameter_values: list[dict[str, _Any]], packages: str
+) -> None:
     """Append to existing CondaPackages in parameter values list.
 
     Args:

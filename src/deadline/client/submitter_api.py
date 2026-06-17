@@ -7,15 +7,13 @@ __all__ = [
     "SubmitterSettings",
     "append_conda_packages",
     "get_queue_parameters",
-    "get_submitter_api",
-    "register_submitter_api",
     "set_conda_packages",
     "set_rez_packages",
 ]
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, cast
+from typing import Any, Optional, cast
 
 from .api._queue_parameters import get_queue_parameter_definitions
 from .config import config_file
@@ -136,41 +134,10 @@ def get_queue_parameters(
     return params
 
 
-# Populated at runtime by each DCC submitter package via register_submitter_api().
-# The shared library intentionally does not import DCC-specific packages, nor
-# does it enumerate the known DCC hosts -- consumers own that mapping.
-_SUBMITTER_REGISTRY: dict[str, Callable[[], SubmitterAPI]] = {}
-
-
-def register_submitter_api(host_name: str, factory: Callable[[], SubmitterAPI]) -> None:
-    """Register a SubmitterAPI factory for a DCC host.
-
-    Called by each DCC submitter package (or a consumer such as AYON) so that
-    ``deadline-cloud`` does not need a hard dependency on every DCC submitter.
-
-    Args:
-        host_name: DCC identifier string (e.g. "maya", "nuke").
-        factory: Zero-argument callable returning a SubmitterAPI instance.
-    """
-    _SUBMITTER_REGISTRY[host_name] = factory
-
-
-def get_submitter_api(host_name: str) -> SubmitterAPI:
-    """Return the SubmitterAPI implementation for the given DCC.
-
-    Args:
-        host_name: DCC identifier string (e.g. "maya", "nuke").
-
-    Raises:
-        ValueError: If no implementation is registered for host_name.
-    """
-    factory = _SUBMITTER_REGISTRY.get(host_name)
-    if factory is None:
-        raise ValueError(
-            f"No SubmitterAPI registered for host '{host_name}'. "
-            f"Registered: {sorted(_SUBMITTER_REGISTRY)}"
-        )
-    return factory()
+# NOTE: deadline-cloud intentionally provides no discovery registry or factory
+# (no register_submitter_api / get_submitter_api). A consumer always runs inside
+# a known DCC and imports that DCC's concrete SubmitterAPI directly. See the TDD
+# "Discovery: consumer-side direct import" section for rationale.
 
 
 def set_conda_packages(
