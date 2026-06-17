@@ -1,7 +1,3 @@
-## 0.59.0 (2026-06-15)
-
-### BREAKING CHANGES
-* Farms are now identified by (region, farm_id) rather than just farm_id. List operations like `list_farms` fan out across all Deadline Cloud regions and return results annotated with their region. The `farm list` CLI output now includes a `region` field before `farmId`. Users who parse CLI output or rely on the previous single-region behavior will need to update their workflows. (#1202)
 ## 0.58.0 (2026-06-10)
 
 ### BREAKING CHANGES
