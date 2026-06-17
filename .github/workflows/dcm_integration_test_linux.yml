@@ -57,6 +57,19 @@ jobs:
           curl -sL 'https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US' -o /tmp/ff.tar.xz
           sudo tar -xJf /tmp/ff.tar.xz -C /opt
           sudo ln -sf /opt/firefox/firefox /usr/local/bin/firefox
+          # Suppress first-run welcome page and data-reporting prompts
+          sudo mkdir -p /opt/firefox/distribution
+          sudo tee /opt/firefox/distribution/policies.json > /dev/null <<'POLICY'
+          {
+            "policies": {
+              "OverrideFirstRunPage": "",
+              "OverridePostUpdatePage": "",
+              "DontCheckDefaultBrowser": true,
+              "DisableTelemetry": true,
+              "NoDefaultBookmarks": true
+            }
+          }
+          POLICY
           mkdir -p ~/.local/share/applications
           cat > ~/.local/share/applications/firefox.desktop <<'EOF'
           [Desktop Entry]
