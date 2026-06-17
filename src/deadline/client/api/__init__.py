@@ -67,6 +67,16 @@ __all__ = [  # noqa: RUF022  grouped by feature, not sorted
     "safe_check_for_updates",
     "UpdateCheckResult",
     "UpdateCheckStatus",
+    # Unified Submitter API
+    "SubmitterAPI",
+    "SubmitterSettings",
+    "SubmissionContext",
+    "get_queue_parameters",
+    "get_submitter_api",
+    "set_conda_packages",
+    "append_conda_packages",
+    "set_rez_packages",
+    "append_rez_packages",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -138,6 +148,17 @@ from ._update_checker import (
     safe_check_for_updates,
     UpdateCheckResult,
     UpdateCheckStatus,
+)
+from ._submitter_api import (
+    SubmitterAPI,
+    SubmitterSettings,
+    SubmissionContext,
+    get_queue_parameters,
+    get_submitter_api,
+    set_conda_packages,
+    append_conda_packages,
+    set_rez_packages,
+    append_rez_packages,
 )
 
 logger = getLogger(__name__)

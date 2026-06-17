@@ -127,10 +127,11 @@ def get_queue_parameters(
         get_queue_parameter_definitions(farmId=farm_id, queueId=queue_id),
     )
 
-    if initial_values:
-        for param in params:
-            if param["name"] in initial_values:
-                param["value"] = initial_values[param["name"]]
+    for param in params:
+        if "value" not in param:
+            param["value"] = param.get("default", "")
+        if initial_values and param["name"] in initial_values:
+            param["value"] = initial_values[param["name"]]
 
     return params
 
