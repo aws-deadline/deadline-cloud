@@ -29,7 +29,8 @@ from ....job_attachments.models import (
 )
 from .click_logger import ClickLogger
 from .._main import deadline as main
-from .._incremental_download import _incremental_output_download
+from .._incremental_download import _incremental_output_download, CategorizedJobIds
+from .._download_status_file import write_download_status_file
 from .._pid_file_lock import PidFileLock
 from ....job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
@@ -376,6 +377,7 @@ def sync_output(
 
     if ignore_storage_profiles:
         local_storage_profile_id = None
+        local_storage_profile = None
         logger.echo("Ignoring all storage profiles.")
     else:
         local_storage_profile_id = config_file.get_setting(
@@ -433,6 +435,22 @@ def sync_output(
             logger.echo(f"    {location['name']}: {location['path']}")
         logger.echo()
 
+    # Pre-flight validation: verify all storage profile file system locations are accessible
+    if local_storage_profile_id and local_storage_profile:
+        inaccessible_locations = []
+        for location in local_storage_profile["fileSystemLocations"]:
+            location_path = location["path"]
+            if not os.path.isdir(location_path):
+                inaccessible_locations.append(f"  {location['name']}: {location_path} (does not exist)")
+            elif not os.access(location_path, os.W_OK):
+                inaccessible_locations.append(f"  {location['name']}: {location_path} (not writable)")
+        if inaccessible_locations:
+            raise DeadlineOperationError(
+                "The following file system locations in the storage profile are not accessible:\n"
+                + "\n".join(inaccessible_locations)
+                + "\n\nEnsure all file system locations are mounted and writable before running sync-output."
+            )
+
     # Perform incremental download while holding a process id lock
 
     pid_lock_file_path: str = os.path.join(checkpoint_dir, f"{download_checkpoint_file_name}.pid")
@@ -488,19 +506,31 @@ def sync_output(
 
         logger.echo()
 
-        updated_download_state: IncrementalDownloadState = _incremental_output_download(
-            boto3_session=boto3_session,
-            farm_id=farm_id,
-            queue=queue,
-            checkpoint=checkpoint,
-            file_conflict_resolution=FileConflictResolution[conflict_resolution],
-            config=config,
-            print_function_callback=logger.echo,
-            dry_run=dry_run,
+        updated_download_state, categorized_job_ids, download_candidate_jobs = (
+            _incremental_output_download(
+                boto3_session=boto3_session,
+                farm_id=farm_id,
+                queue=queue,
+                checkpoint=checkpoint,
+                file_conflict_resolution=FileConflictResolution[conflict_resolution],
+                config=config,
+                print_function_callback=logger.echo,
+                dry_run=dry_run,
+            )
         )
 
-        # Save the checkpoint file if it's not a dry run
+        # Save status file and checkpoint if it's not a dry run
         if not dry_run:
+            write_download_status_file(
+                queue_id=queue_id,
+                categorized_job_ids=categorized_job_ids,
+                download_candidate_jobs=download_candidate_jobs,
+                local_storage_profile_id=local_storage_profile_id,
+                local_storage_profile=local_storage_profile if local_storage_profile_id else None,
+                checkpoint_dir=checkpoint_dir,
+                print_function_callback=logger.echo,
+            )
+
             updated_download_state.save_file(checkpoint_file_path)
             logger.echo("Checkpoint saved")
         else:
