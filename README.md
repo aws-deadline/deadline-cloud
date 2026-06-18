@@ -38,6 +38,24 @@ See [specs/testing.md](specs/testing.md) for the test philosophy (no mocking, Le
 vs Level 2, snapshot workflow). See [DEVELOPMENT.md](DEVELOPMENT.md) §
 "UI accessibility tests" for xa11y setup.
 
+## CI
+
+GitHub Actions runs on every PR and push to mainline:
+
+| Job | What |
+|-----|------|
+| Rustfmt | `cargo fmt --check` |
+| cargo-deny | License/advisory/ban checks |
+| Build & Test | Clippy + `cargo test` on **ubuntu, macOS, Windows** |
+| Documentation | `cargo doc` with `-D warnings` |
+
+A **nightly conformance workflow** replays `deadline-cloud-python`'s
+`test/cli_e2e/` suite against the Rust binary to catch parity drift
+(`.github/workflows/conformance.yml`).
+
+See [specs/HANDOFF.md](specs/HANDOFF.md) § "GitHub CI/CD Architecture"
+for full details.
+
 ## Python GUI Development
 
 The CLI binary handles all business logic in Rust. GUI commands

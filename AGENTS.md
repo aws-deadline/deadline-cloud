@@ -72,6 +72,19 @@ make test                                # Rust + Python tests
 
 If you only need Rust tests, `cargo test` works without a venv.
 
+### CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs fmt, cargo-deny, clippy,
+and `cargo test` on ubuntu/macOS/Windows for every PR. A nightly conformance
+workflow (`conformance.yml`) replays `deadline-cloud-python`'s `cli_e2e/` tests
+against the Rust binary.
+
+Key CI notes:
+- `rust-toolchain.toml` pins the Rust version — CI uses this exact version.
+- Some tests are `#[cfg(unix)]` (spawn `sh`); Windows twins are TODO.
+- If you add a new `#[cfg(unix)]` gate, add a TODO comment and update `specs/progress.md`.
+- Snapshot tests run on all 3 OSes — use cross-OS filters in `insta::Settings`.
+
 ### Python GUI development
 
 The Python Qt GUI (`gui/`) provides the submit and config dialogs.
