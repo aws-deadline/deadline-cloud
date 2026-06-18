@@ -49,7 +49,7 @@ pub enum SessionAutoSelect {
 /// Build a `CloudWatch` Logs client from an `SdkConfig`.
 fn logs_client(sdk_config: &aws_config::SdkConfig) -> aws_sdk_cloudwatchlogs::Client {
     let mut builder = aws_sdk_cloudwatchlogs::config::Builder::from(sdk_config);
-    if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_CLOUDWATCHLOGS") {
+    if let Ok(url) = std::env::var("AWS_ENDPOINT_URL_CLOUDWATCH_LOGS") {
         builder = builder.endpoint_url(url);
     }
     aws_sdk_cloudwatchlogs::Client::from_conf(builder.build())
@@ -361,7 +361,7 @@ mod tests {
         // SAFETY: tests are serialized via #[serial] — no concurrent env mutation.
         unsafe {
             std::env::set_var("AWS_ENDPOINT_URL_DEADLINE", &url);
-            std::env::set_var("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &url);
+            std::env::set_var("AWS_ENDPOINT_URL_CLOUDWATCH_LOGS", &url);
             std::env::set_var("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
             std::env::set_var(
                 "AWS_SECRET_ACCESS_KEY",

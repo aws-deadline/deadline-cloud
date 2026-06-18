@@ -552,8 +552,9 @@ fn execute_hook(
         let _ = stdin.write_all(metadata.to_json().as_bytes());
     }
 
-    // Wait with timeout: store PID so we can kill on timeout
+    // Wait with timeout: store PID so we can kill on timeout (Unix only).
     let timeout = std::time::Duration::from_secs(hook.timeout);
+    #[cfg(unix)]
     let pid = child.id();
     let (tx, rx) = std::sync::mpsc::channel();
     let handle = std::thread::spawn(move || {
@@ -666,9 +667,11 @@ mod tests {
     }
 
     /// Test handler that captures messages.
+    #[cfg(unix)] // only used by cfg(unix) hook-execution tests
     struct CapturingHandler {
         messages: std::sync::Mutex<Vec<String>>,
     }
+    #[cfg(unix)]
     impl CapturingHandler {
         fn new() -> Self {
             Self {
@@ -679,6 +682,7 @@ mod tests {
             self.messages.lock().unwrap().clone()
         }
     }
+    #[cfg(unix)]
     impl SubmissionHandler for CapturingHandler {
         fn on_message(&self, msg: &str) {
             self.messages.lock().unwrap().push(msg.to_owned());
@@ -1130,6 +1134,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_success_no_output() {
         let dir = TempDir::new().unwrap();
@@ -1156,6 +1161,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_modifies_payload() {
         let dir = TempDir::new().unwrap();
@@ -1177,6 +1183,7 @@ mod tests {
         assert_eq!(result["priority"], 100);
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_failure_blocks() {
         let dir = TempDir::new().unwrap();
@@ -1198,6 +1205,7 @@ mod tests {
         assert!(err.contains("failed with exit code"), "got: {err}");
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_timeout() {
         let dir = TempDir::new().unwrap();
@@ -1240,6 +1248,7 @@ mod tests {
         assert!(err.contains("invalid JSON"), "got: {err}");
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_receives_stdin() {
         let dir = TempDir::new().unwrap();
@@ -1262,6 +1271,7 @@ mod tests {
         assert_eq!(content, "StdinTestJob");
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_receives_env_vars() {
         let dir = TempDir::new().unwrap();
@@ -1287,6 +1297,7 @@ mod tests {
         assert_eq!(content, "MyTestJob");
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_receives_custom_env() {
         let dir = TempDir::new().unwrap();
@@ -1329,6 +1340,7 @@ mod tests {
         assert!(err.contains("not found"), "got: {err}");
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_absolute_command() {
         let dir = TempDir::new().unwrap();
@@ -1350,6 +1362,7 @@ mod tests {
             .unwrap();
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_hooks_origin_resolution() {
         let dir = TempDir::new().unwrap();
@@ -1445,6 +1458,7 @@ mod tests {
         assert!(!marker.exists());
     }
 
+    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn post_hook_runs_after_success() {
         let dir = TempDir::new().unwrap();

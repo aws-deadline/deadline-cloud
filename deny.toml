@@ -14,6 +14,12 @@ ignore = [
     { id = "RUSTSEC-2026-0098", reason = "pinned by transitive dep hyper-rustls 0.24" },
     { id = "RUSTSEC-2026-0099", reason = "pinned by transitive dep hyper-rustls 0.24" },
     { id = "RUSTSEC-2026-0104", reason = "pinned by transitive dep hyper-rustls 0.24" },
+    # pyo3 0.24 advisories (deadline-python-bindings). Fixed in pyo3 0.26+.
+    # Tracked by the pyo3 0.24 -> 0.28 upgrade (see specs/progress.md).
+    # RUSTSEC-2026-0176: OOB read in PyList/PyTuple nth iterators — not used in our bindings.
+    # RUSTSEC-2026-0177: missing Sync bound on PyCFunction::new_closure — we don't use new_closure.
+    { id = "RUSTSEC-2026-0176", reason = "pyo3 0.24; pending upgrade to 0.28" },
+    { id = "RUSTSEC-2026-0177", reason = "pyo3 0.24; pending upgrade to 0.28" },
 ]
 
 [licenses]

@@ -1,0 +1,6 @@
+# Pin the toolchain so local and CI use the same compiler and clippy lints.
+# The codebase is maintained clippy-clean against this version; bumping it
+# may surface new lints that must be addressed in the same change.
+[toolchain]
+channel = "1.94.0"
+components = ["rustfmt", "clippy"]

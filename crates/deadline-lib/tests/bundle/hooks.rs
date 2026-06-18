@@ -3,25 +3,36 @@
 //! Tests hook validation, payload merging, and execution behavior
 //! including timeout handling and structured errors.
 
+#[cfg(unix)]
 use deadline_lib::api::errors::DeadlineError;
+#[cfg(unix)]
+use deadline_lib::bundle::hooks::{HookManager, HookMetadata};
 use deadline_lib::bundle::hooks::{
-    HookManager, HookMetadata, merge_asset_references, merge_payload, validate_configuration,
-    validate_modified_payload,
+    merge_asset_references, merge_payload, validate_configuration, validate_modified_payload,
 };
+#[cfg(unix)]
 use deadline_lib::bundle::submission::SubmissionHandler;
-use serde_json::{Value, json};
+#[cfg(unix)]
+use serde_json::Value;
+use serde_json::json;
+#[cfg(unix)]
 use std::collections::HashMap;
+#[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
 // Test SubmissionHandler (captures messages)
+// TODO: remove #[cfg(unix)] when Windows hook twins are added (see progress.md)
 // ---------------------------------------------------------------------------
 
+#[cfg(unix)] // only used by cfg(unix) hook-execution tests
 struct TestHandler {
     messages: std::sync::Mutex<Vec<String>>,
 }
 
+#[cfg(unix)]
 impl TestHandler {
     fn new() -> Self {
         Self {
@@ -30,6 +41,7 @@ impl TestHandler {
     }
 }
 
+#[cfg(unix)]
 impl SubmissionHandler for TestHandler {
     fn on_message(&self, msg: &str) {
         self.messages.lock().unwrap().push(msg.to_owned());
@@ -241,6 +253,7 @@ fn validate_modified_payload_invalid_asset_references_fails() {
 // Batch B: execute_hook timeout joins thread (no leak)
 // =====================================================================
 
+#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_timeout_returns_timed_out_result() {
     let tmp = TempDir::new().unwrap();
@@ -299,6 +312,7 @@ fn execute_hook_timeout_returns_timed_out_result() {
     assert!(err.to_string().contains("timed out"), "got: {err}");
 }
 
+#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_success_returns_stdout() {
     let tmp = TempDir::new().unwrap();
@@ -345,6 +359,7 @@ fn execute_hook_success_returns_stdout() {
     assert_eq!(result["name"], "modified");
 }
 
+#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_nonzero_exit_reports_failure() {
     let tmp = TempDir::new().unwrap();
@@ -390,6 +405,7 @@ fn execute_hook_nonzero_exit_reports_failure() {
     assert!(err.to_string().contains("exit code 42"), "got: {err}");
 }
 
+#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_receives_metadata_on_stdin() {
     let tmp = TempDir::new().unwrap();
@@ -453,6 +469,7 @@ fn execute_hook_receives_metadata_on_stdin() {
 // Batch E: Structured HookFailed error variant
 // =====================================================================
 
+#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_failure_returns_hook_failed_variant() {
     let tmp = TempDir::new().unwrap();
@@ -512,6 +529,7 @@ fn execute_hook_failure_returns_hook_failed_variant() {
     }
 }
 
+#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_timeout_returns_hook_failed_with_timed_out_flag() {
     let tmp = TempDir::new().unwrap();

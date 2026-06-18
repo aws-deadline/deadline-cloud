@@ -565,8 +565,15 @@ pub async fn create_job_from_job_bundle(
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect();
+        // Python parity: `_submit_job_bundle.py` adds the bundle dir to known
+        // paths via `os.path.abspath(job_bundle_dir)`, which makes the path
+        // absolute WITHOUT resolving symlinks. We must do the same — using
+        // `canonicalize` here resolved symlinks (e.g. macOS `/var` -> `/private/var`)
+        // while the asset-reference input paths are left un-resolved, so files
+        // genuinely inside the bundle were falsely flagged as "outside known
+        // paths" on platforms with symlinked temp dirs.
         known_paths.push(
-            std::fs::canonicalize(&params.job_bundle_dir)
+            std::path::absolute(&params.job_bundle_dir)
                 .unwrap_or_else(|_| params.job_bundle_dir.clone())
                 .to_string_lossy()
                 .into_owned(),
@@ -1261,12 +1268,21 @@ pub fn filter_redundant_known_paths(paths: &[String]) -> Vec<String> {
 
     for path in sorted {
         let dominated = filtered.iter().any(|existing| {
-            let existing_with_sep = if existing.ends_with(std::path::MAIN_SEPARATOR) {
+            // Use both separators so this works on Windows paths (`\`) and
+            // posix paths (`/`) regardless of the host platform.
+            let existing_fwd = if existing.ends_with('/') || existing.ends_with('\\') {
                 (*existing).clone()
             } else {
-                format!("{}{}", existing, std::path::MAIN_SEPARATOR)
+                format!("{existing}/")
             };
-            path.starts_with(&existing_with_sep) || *path == **existing
+            let existing_back = if existing.ends_with('/') || existing.ends_with('\\') {
+                (*existing).clone()
+            } else {
+                format!("{existing}\\")
+            };
+            path.starts_with(&existing_fwd)
+                || path.starts_with(&existing_back)
+                || *path == **existing
         });
         if !dominated {
             filtered.push(path);
@@ -1427,15 +1443,17 @@ mod tests {
     #[test]
     fn path_list_separator_splits_correctly() {
         let sep = if cfg!(windows) { ';' } else { ':' };
-        let input = "/mnt/shared:/home/user";
+        let input = if cfg!(windows) {
+            "C:\\mnt\\shared;D:\\home\\user"
+        } else {
+            "/mnt/shared:/home/user"
+        };
         let paths: Vec<&str> = input.split(sep).collect();
-        assert_eq!(paths, vec!["/mnt/shared", "/home/user"]);
-
-        // Verify MAIN_SEPARATOR would destroy paths (the bug)
-        let bad: Vec<&str> = input.split(std::path::MAIN_SEPARATOR).collect();
-        assert!(
-            bad.len() > 2,
-            "MAIN_SEPARATOR splits paths incorrectly: {bad:?}"
-        );
+        let expected: Vec<&str> = if cfg!(windows) {
+            vec!["C:\\mnt\\shared", "D:\\home\\user"]
+        } else {
+            vec!["/mnt/shared", "/home/user"]
+        };
+        assert_eq!(paths, expected);
     }
 }

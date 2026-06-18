@@ -7,6 +7,16 @@ use deadline_lib::bundle::parameters::{
 use deadline_lib::bundle::submission::AssetReferences;
 use std::path::Path;
 
+/// On Windows, PATH parameter values are resolved to absolute paths via
+/// `current_dir().join(value)`. This helper produces the expected result.
+fn expected_path(value: &str) -> String {
+    let abs = std::env::current_dir().unwrap_or_default().join(value);
+    std::fs::canonicalize(&abs)
+        .unwrap_or(abs)
+        .to_string_lossy()
+        .into_owned()
+}
+
 // ── apply_job_parameters (cases 81-93) ──────────────────────────────
 
 // .81: Job parameter provides a value for a template parameter
@@ -117,7 +127,11 @@ fn apply_params_path_in_directory_adds_to_input_dirs() {
         &mut asset_refs,
     )
     .unwrap();
-    assert!(asset_refs.input_directories.contains("/input/dir"));
+    assert!(
+        asset_refs
+            .input_directories
+            .contains(&expected_path("/input/dir"))
+    );
 }
 
 // .87: PATH with dataFlow=IN and objectType=FILE → input_filenames
@@ -135,7 +149,11 @@ fn apply_params_path_in_file_adds_to_input_filenames() {
         &mut asset_refs,
     )
     .unwrap();
-    assert!(asset_refs.input_filenames.contains("/input/file.txt"));
+    assert!(
+        asset_refs
+            .input_filenames
+            .contains(&expected_path("/input/file.txt"))
+    );
 }
 
 // .88: PATH with dataFlow=OUT and objectType=DIRECTORY → output_directories
@@ -153,7 +171,11 @@ fn apply_params_path_out_directory_adds_to_output_dirs() {
         &mut asset_refs,
     )
     .unwrap();
-    assert!(asset_refs.output_directories.contains("/output/dir"));
+    assert!(
+        asset_refs
+            .output_directories
+            .contains(&expected_path("/output/dir"))
+    );
 }
 
 // .89: PATH with dataFlow=OUT and objectType=FILE → parent dir to output_directories
@@ -172,7 +194,9 @@ fn apply_params_path_out_file_adds_parent_to_output_dirs() {
     )
     .unwrap();
     assert!(
-        asset_refs.output_directories.contains("/output/dir"),
+        asset_refs
+            .output_directories
+            .contains(&expected_path("/output/dir")),
         "Expected parent dir '/output/dir', got: {:?}",
         asset_refs.output_directories
     );
@@ -193,8 +217,16 @@ fn apply_params_path_inout_adds_to_both() {
         &mut asset_refs,
     )
     .unwrap();
-    assert!(asset_refs.input_directories.contains("/io/dir"));
-    assert!(asset_refs.output_directories.contains("/io/dir"));
+    assert!(
+        asset_refs
+            .input_directories
+            .contains(&expected_path("/io/dir"))
+    );
+    assert!(
+        asset_refs
+            .output_directories
+            .contains(&expected_path("/io/dir"))
+    );
 }
 
 // .91: PATH with dataFlow=NONE → referenced_paths
@@ -212,7 +244,11 @@ fn apply_params_path_none_adds_to_referenced() {
         &mut asset_refs,
     )
     .unwrap();
-    assert!(asset_refs.referenced_paths.contains("/ref/path"));
+    assert!(
+        asset_refs
+            .referenced_paths
+            .contains(&expected_path("/ref/path"))
+    );
 }
 
 // .92: PATH with invalid dataFlow → error

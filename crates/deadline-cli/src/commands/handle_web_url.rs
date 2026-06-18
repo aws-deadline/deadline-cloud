@@ -149,7 +149,9 @@ async fn handle_download_output(query: &str) -> Result<(), CliError> {
 
 #[cfg(target_os = "windows")]
 fn install_handler(all_users: bool) -> Result<(), CliError> {
-    use std::path::PathBuf;
+    // Imports must precede statements to satisfy clippy::items_after_statements.
+    use winreg::RegKey;
+    use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER};
 
     let exe = std::env::current_exe()
         .map_err(|e| CliError::Operation(format!("Failed to determine CLI path: {e}")))?;
@@ -162,10 +164,6 @@ fn install_handler(all_users: bool) -> Result<(), CliError> {
     }
 
     let command_value = format!("\"{exe_str}\" handle-web-url \"%1\" --prompt-when-complete");
-
-    // Use winreg crate for Windows registry operations
-    use winreg::RegKey;
-    use winreg::enums::*;
 
     let result = (|| -> std::io::Result<()> {
         let hkey = if all_users {
@@ -265,7 +263,7 @@ fn install_handler(_all_users: bool) -> Result<(), CliError> {
 #[cfg(target_os = "windows")]
 fn uninstall_handler(all_users: bool) -> Result<(), CliError> {
     use winreg::RegKey;
-    use winreg::enums::*;
+    use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER};
 
     let result = (|| -> std::io::Result<()> {
         if all_users {

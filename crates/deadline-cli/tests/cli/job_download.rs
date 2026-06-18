@@ -643,6 +643,7 @@ async fn job_download_output_yes_flag_defaults_to_create_copy() {
 
 /// When a job's output root was created on a different OS (e.g., Windows path
 /// on a Linux host), the CLI should prompt the user for a new root path.
+#[cfg(unix)] // Uses a Windows rootPath which is foreign on Unix; Windows twin below uses posix rootPath
 #[tokio::test]
 async fn job_download_output_cross_os_root_prompts_for_new_path() {
     let harness = TestHarness::new().await;
@@ -825,6 +826,7 @@ async fn job_download_output_root_editing_select_index_then_proceed() {
 
 /// In JSON output mode, cross-OS root mismatch should emit JSON messages
 /// instead of human-readable prompts.
+#[cfg(unix)] // Uses a Windows rootPath which is foreign on Unix; Windows twin below uses posix rootPath
 #[tokio::test]
 async fn job_download_output_json_mode_cross_os_root_emits_json() {
     let harness = TestHarness::new().await;
@@ -886,6 +888,7 @@ async fn job_download_output_json_mode_cross_os_root_emits_json() {
 
 /// With --yes, the root editing loop should be skipped (`auto_accept`),
 /// but cross-OS mismatch prompts should still appear.
+#[cfg(unix)] // Uses a Windows rootPath which is foreign on Unix; Windows twin below uses posix rootPath
 #[tokio::test]
 async fn job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt() {
     let harness = TestHarness::new().await;
@@ -938,6 +941,195 @@ async fn job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt() 
         "Expected cross-OS mismatch warning even with --yes, got: {stdout}"
     );
     // But the root editing loop (index selection) should NOT appear
+    assert!(
+        !stdout.contains("[0]") || !stdout.contains("index of root"),
+        "Expected no root editing loop with --yes"
+    );
+}
+
+// ===========================================================================
+// F7: Windows twins — posix root is foreign on a Windows host
+// ===========================================================================
+
+/// Windows twin of `job_download_output_cross_os_root_prompts_for_new_path`:
+/// A job with a posix rootPath on a Windows host should trigger the cross-OS prompt.
+#[cfg(windows)]
+#[tokio::test]
+async fn job_download_output_cross_os_root_prompts_for_new_path() {
+    let harness = TestHarness::new().await;
+
+    let job = json!({
+        "jobId": JOB,
+        "name": "Cross OS Job",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "taskRunStatus": "SUCCEEDED",
+        "taskRunStatusCounts": { "SUCCEEDED": 1 },
+        "attachments": {
+            "manifests": [
+                {
+                    "rootPath": "/mnt/renders/outputs",
+                    "rootPathFormat": "posix",
+                    "outputRelativeDirectories": ["renders"]
+                }
+            ],
+            "fileSystem": "COPIED"
+        }
+    });
+    jobs::mock_get_job(&harness.server, FARM, QUEUE, job).await;
+    queues::mock_get_queue(&harness.server, FARM, queue_with_attachment_settings()).await;
+    sts::mock_get_caller_identity(&harness.server).await;
+
+    let manifest_key = format!(
+        "root-prefix/Manifests/{FARM}/{QUEUE}/{JOB}/step-01/task-01/2024-01-01T00:00:00Z_sa-1/output.manifest"
+    );
+    let manifest_json = json!({
+        "manifestVersion": "2023-03-03",
+        "hashAlg": "xxh128",
+        "totalSize": 100,
+        "paths": [{"path": "render.exr", "hash": "abc123", "size": 100, "mtime": 1_700_000_000}]
+    })
+    .to_string();
+    s3::mock_s3_get_object_with_metadata(
+        &harness.server,
+        &format!("test-bucket/{manifest_key}"),
+        manifest_json.as_bytes(),
+        &[("asset-root", "/mnt/renders/outputs")],
+    )
+    .await;
+    s3::mock_s3_list_objects(&harness.server, &[&manifest_key]).await;
+
+    let new_root = harness.config_dir.path().join("new_output_root");
+    let stdin_input = format!("{}\ny\n", new_root.display());
+
+    let output = harness
+        .cli(&[
+            "job",
+            "download-output",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--yes",
+        ])
+        .write_stdin(stdin_input)
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("does not match") || stdout.contains("different"),
+        "Expected cross-OS mismatch warning on Windows for posix root, got: {stdout}"
+    );
+}
+
+/// Windows twin of `job_download_output_json_mode_cross_os_root_emits_json`.
+#[cfg(windows)]
+#[tokio::test]
+async fn job_download_output_json_mode_cross_os_root_emits_json() {
+    let harness = TestHarness::new().await;
+
+    let job = json!({
+        "jobId": JOB,
+        "name": "Cross OS Job",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "taskRunStatus": "SUCCEEDED",
+        "taskRunStatusCounts": { "SUCCEEDED": 1 },
+        "attachments": {
+            "manifests": [
+                {
+                    "rootPath": "/mnt/renders/outputs",
+                    "rootPathFormat": "posix",
+                    "outputRelativeDirectories": ["renders"]
+                }
+            ],
+            "fileSystem": "COPIED"
+        }
+    });
+    setup_manifest_mocks(&harness, job, "/mnt/renders/outputs").await;
+
+    let new_root = harness.config_dir.path().join("json_root");
+    let json_response = serde_json::json!({
+        "messageType": "pathConfirm",
+        "value": [new_root.to_string_lossy()]
+    });
+    let stdin_input = format!("{json_response}\n");
+
+    let output = harness
+        .cli(&[
+            "job",
+            "download-output",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--output",
+            "json",
+            "--yes",
+        ])
+        .write_stdin(stdin_input)
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"messageType\"") && stdout.contains("path"),
+        "Expected JSON path message in output, got: {stdout}"
+    );
+}
+
+/// Windows twin of `job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt`.
+#[cfg(windows)]
+#[tokio::test]
+async fn job_download_output_yes_skips_root_editing_but_shows_cross_os_prompt() {
+    let harness = TestHarness::new().await;
+
+    let job = json!({
+        "jobId": JOB,
+        "name": "Cross OS Yes Job",
+        "lifecycleStatus": "CREATE_COMPLETE",
+        "taskRunStatus": "SUCCEEDED",
+        "taskRunStatusCounts": { "SUCCEEDED": 1 },
+        "attachments": {
+            "manifests": [
+                {
+                    "rootPath": "/mnt/renders/outputs",
+                    "rootPathFormat": "posix",
+                    "outputRelativeDirectories": ["renders"]
+                }
+            ],
+            "fileSystem": "COPIED"
+        }
+    });
+    setup_manifest_mocks(&harness, job, "/mnt/renders/outputs").await;
+
+    let new_root = harness.config_dir.path().join("yes_cross_os");
+    let stdin_input = format!("{}\n", new_root.display());
+
+    let output = harness
+        .cli(&[
+            "job",
+            "download-output",
+            "--farm-id",
+            FARM,
+            "--queue-id",
+            QUEUE,
+            "--job-id",
+            JOB,
+            "--yes",
+        ])
+        .write_stdin(stdin_input)
+        .output()
+        .expect("failed to run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("does not match") || stdout.contains("different"),
+        "Expected cross-OS mismatch warning even with --yes, got: {stdout}"
+    );
     assert!(
         !stdout.contains("[0]") || !stdout.contains("index of root"),
         "Expected no root editing loop with --yes"

@@ -43,6 +43,10 @@ filetime = "0.2"
 glob = "0.3"
 tempfile = { workspace = true }
 
+# Windows-only: registry access for long-path detection.
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.52"
+
 [dev-dependencies]
 tempfile = { workspace = true }
 test-case = { workspace = true }

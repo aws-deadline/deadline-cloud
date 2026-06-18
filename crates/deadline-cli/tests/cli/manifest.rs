@@ -230,7 +230,12 @@ async fn manifest_diff_json_shows_new_modified_deleted() {
         .output()
         .expect("failed to run");
 
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "manifest diff --json failed, stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     let json: serde_json::Value = serde_json::from_str(&stdout).expect("should be valid JSON");
 
@@ -778,8 +783,9 @@ async fn manifest_diff_root_optional() {
 
     assert!(
         output.status.success(),
-        "Expected diff without --root to succeed, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
+        "Expected diff without --root to succeed, stderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
     );
 }
 

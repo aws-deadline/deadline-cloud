@@ -130,7 +130,7 @@ impl PathFormat {
 /// Extra characters that temp download files may add (suffix like `.tmp`).
 #[cfg(windows)]
 const TEMP_DOWNLOAD_ADDED_CHARS: usize = 20;
-/// Windows MAX_PATH limit.
+/// Windows `MAX_PATH` limit.
 #[cfg(windows)]
 const WINDOWS_MAX_PATH_LENGTH: usize = 260;
 
@@ -144,13 +144,13 @@ pub fn get_long_path_compatible_path(path: &std::path::Path) -> PathBuf {
 }
 
 #[cfg(windows)]
-pub fn get_long_path_compatible_path(path: &std::path::Path) -> std::path::PathBuf {
+pub fn get_long_path_compatible_path(path: &std::path::Path) -> PathBuf {
     let s = path.to_string_lossy();
     if s.len() + TEMP_DOWNLOAD_ADDED_CHARS >= WINDOWS_MAX_PATH_LENGTH
         && !s.starts_with("\\\\?\\")
         && !is_windows_long_path_registry_enabled()
     {
-        std::path::PathBuf::from(format!("\\\\?\\{s}"))
+        PathBuf::from(format!("\\\\?\\{s}"))
     } else {
         path.to_path_buf()
     }
@@ -158,12 +158,19 @@ pub fn get_long_path_compatible_path(path: &std::path::Path) -> std::path::PathB
 
 #[cfg(windows)]
 fn is_windows_long_path_registry_enabled() -> bool {
-    use std::ffi::c_uchar;
-    #[link(name = "ntdll")]
-    extern "system" {
-        fn RtlAreLongPathsEnabled() -> c_uchar;
-    }
-    unsafe { RtlAreLongPathsEnabled() != 0 }
+    // Read HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled
+    // directly via the registry. (Previously called ntdll's
+    // RtlAreLongPathsEnabled, but that symbol is not exported by ntdll.lib,
+    // so it fails to link. The registry value is the source of truth anyway.)
+    (|| -> Option<bool> {
+        let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+        let key = hklm
+            .open_subkey(r"SYSTEM\CurrentControlSet\Control\FileSystem")
+            .ok()?;
+        let val: u32 = key.get_value("LongPathsEnabled").ok()?;
+        Some(val != 0)
+    })()
+    .unwrap_or(false)
 }
 
 // --- JobAttachmentS3Settings ---
@@ -1066,5 +1073,7 @@ mod tests {
         // On non-Windows, always returns unchanged
         #[cfg(not(windows))]
         assert_eq!(result, long_path);
+        #[cfg(windows)]
+        let _ = result;
     }
 }

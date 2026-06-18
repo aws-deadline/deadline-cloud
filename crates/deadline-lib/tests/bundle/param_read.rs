@@ -155,17 +155,23 @@ fn read_params_path_relative_default_made_absolute() {
 // .74: PATH parameter with absolute default path → error
 #[test]
 fn read_params_path_absolute_default_returns_error() {
+    let default_path = if cfg!(windows) {
+        "C:\\absolute\\path"
+    } else {
+        "/absolute/path"
+    };
     let template = serde_json::json!({
         "specificationVersion": "jobtemplate-2023-09",
         "parameterDefinitions": [
-            {"name": "OutDir", "type": "PATH", "default": "/absolute/path"}
+            {"name": "OutDir", "type": "PATH", "default": default_path}
         ]
     });
     let dir = make_bundle(&template, None);
     let err = read_job_bundle_parameters(dir.path()).unwrap_err();
     assert!(
-        err.to_string().contains("is absolute"),
-        "Expected 'is absolute' error, got: {err}"
+        err.to_string().contains("is absolute")
+            || err.to_string().contains("outside of Job Bundle"),
+        "Expected absolute/outside-bundle error, got: {err}"
     );
 }
 

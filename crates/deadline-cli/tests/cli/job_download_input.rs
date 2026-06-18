@@ -13,6 +13,7 @@ const QUEUE: &str = "queue-0123456789abcdef0123456789abcdef";
 const JOB: &str = "job-0123456789abcdef0123456789abcdef";
 
 fn job_with_input_attachments(asset_root: &str) -> serde_json::Value {
+    let format = if cfg!(windows) { "windows" } else { "posix" };
     json!({
         "jobId": JOB,
         "name": "Render Job",
@@ -23,7 +24,7 @@ fn job_with_input_attachments(asset_root: &str) -> serde_json::Value {
             "manifests": [
                 {
                     "rootPath": asset_root,
-                    "rootPathFormat": "posix",
+                    "rootPathFormat": format,
                     "inputManifestPath": "farm-abc/queue-abc/Inputs/manifest123.manifest",
                     "inputManifestHash": "abc123"
                 }

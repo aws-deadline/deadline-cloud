@@ -5,6 +5,15 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use test_case::test_case;
 
+/// Convert posix path to native separators (matches `normalize_path` behavior).
+fn native(p: &str) -> String {
+    if cfg!(windows) {
+        p.replace('/', "\\")
+    } else {
+        p.to_owned()
+    }
+}
+
 // ── AssetReferences ─────────────────────────────────────────────────
 
 #[test]
@@ -48,9 +57,9 @@ fn asset_refs_from_dict_all_fields() {
     });
     let ar = AssetReferences::from_dict(Some(&obj));
     assert_eq!(ar.input_filenames.len(), 2);
-    assert!(ar.input_directories.contains("/dir"));
-    assert!(ar.output_directories.contains("/out"));
-    assert!(ar.referenced_paths.contains("/ref"));
+    assert!(ar.input_directories.contains(&native("/dir")));
+    assert!(ar.output_directories.contains(&native("/out")));
+    assert!(ar.referenced_paths.contains(&native("/ref")));
 }
 
 #[test]
@@ -82,7 +91,7 @@ fn asset_refs_from_dict_normalizes_paths() {
         ar.input_filenames
     );
     assert!(
-        ar.input_filenames.contains("a/b/c"),
+        ar.input_filenames.contains(&native("a/b/c")),
         "got: {:?}",
         ar.input_filenames
     );

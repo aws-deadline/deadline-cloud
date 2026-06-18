@@ -2504,12 +2504,12 @@ fn no_output_message(is_json: bool) -> String {
     }
 }
 
-/// Check if a path exceeds Windows MAX_PATH and warn.
+/// Check if a path exceeds Windows `MAX_PATH` and warn.
 #[cfg(windows)]
 fn check_windows_long_paths(output_paths_by_root: &std::collections::HashMap<String, Vec<String>>) {
     const WINDOWS_MAX_PATH_LENGTH: usize = 260;
     // Check if LongPathsEnabled registry key is set
-    let long_paths_enabled = (|| -> bool {
+    let long_paths_enabled = (|| -> Option<bool> {
         let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
         let key = hklm
             .open_subkey(r"SYSTEM\CurrentControlSet\Control\FileSystem")

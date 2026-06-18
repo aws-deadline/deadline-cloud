@@ -13,21 +13,21 @@ info:
     AWS_DEFAULT_PROFILE: ""
     AWS_DEFAULT_REGION: us-west-2
     AWS_ENDPOINT_URL: ""
-    AWS_ENDPOINT_URL_CLOUDWATCHLOGS: "http://localhost:53404"
-    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:53404"
-    AWS_ENDPOINT_URL_S3: "http://localhost:53404"
-    AWS_ENDPOINT_URL_STS: "http://localhost:53404"
+    AWS_ENDPOINT_URL_CLOUDWATCH_LOGS: "http://localhost:56674"
+    AWS_ENDPOINT_URL_DEADLINE: "http://localhost:56674"
+    AWS_ENDPOINT_URL_S3: "http://localhost:56674"
+    AWS_ENDPOINT_URL_STS: "http://localhost:56674"
     AWS_PROFILE: ""
     AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     AWS_SECURITY_TOKEN: ""
     AWS_SESSION_TOKEN: ""
     AWS_SHARED_CREDENTIALS_FILE: ""
-    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpCEvUEJ/config
-    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpCEvUEJ
+    DEADLINE_CONFIG_FILE_PATH: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpjpaZ1D/config
+    HOME: /var/folders/r_/m1d3rb6s2nb559nj4hd77ptm0000gq/T/.tmpjpaZ1D
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-{"settings.config_file_path": "[CONFIG_PATH]", "deadline-cloud-monitor.path": "", "defaults.aws_profile_name": "(default)", "settings.job_history_dir": "[HOME]/.deadline/job_history/(default)", "defaults.farm_id": "", "settings.storage_profile_id": "", "defaults.queue_id": "", "defaults.job_id": "", "settings.auto_accept": "false", "settings.conflict_resolution": "NOT_SELECTED", "settings.log_level": "WARNING", "telemetry.opt_out": "false", "telemetry.identifier": "", "defaults.job_attachments_file_system": "COPIED", "settings.s3_max_pool_connections": "50", "settings.small_file_threshold_multiplier": "20", "settings.known_asset_paths": "", "settings.locale": "", "settings.force_s3_check": "false", "settings.allow_bundle_hooks": "false", "settings.allow_environment_hooks": "false", "settings.submitter_update_notification": "true", "settings.max_retries_per_task": "5", "settings.max_failed_tasks_count": "20"}
+{"settings.config_file_path": "[CONFIG_PATH]", "deadline-cloud-monitor.path": "", "defaults.aws_profile_name": "(default)", "settings.job_history_dir": "[JOB_HISTORY_DIR]", "defaults.farm_id": "", "settings.storage_profile_id": "", "defaults.queue_id": "", "defaults.job_id": "", "settings.auto_accept": "false", "settings.conflict_resolution": "NOT_SELECTED", "settings.log_level": "WARNING", "telemetry.opt_out": "false", "telemetry.identifier": "", "defaults.job_attachments_file_system": "COPIED", "settings.s3_max_pool_connections": "50", "settings.small_file_threshold_multiplier": "20", "settings.known_asset_paths": "", "settings.locale": "", "settings.force_s3_check": "false", "settings.allow_bundle_hooks": "false", "settings.allow_environment_hooks": "false", "settings.submitter_update_notification": "true", "settings.max_retries_per_task": "5", "settings.max_failed_tasks_count": "20"}
 
 ----- stderr -----

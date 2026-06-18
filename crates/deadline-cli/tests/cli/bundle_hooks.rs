@@ -17,6 +17,7 @@ fn bundle_hooks_settings() -> insta::Settings {
     let mut settings = insta::Settings::clone_current();
     settings.add_filter(r"/var/folders/[^\s]+", "[TEMP_PATH]");
     settings.add_filter(r"/tmp/[^\s]+", "[TEMP_PATH]");
+    crate::common::add_windows_temp_filters(&mut settings);
     settings.add_filter(r"[\d.]+ seconds at .*/s", "[TIME] seconds at [RATE]/s");
     settings
 }
@@ -66,6 +67,7 @@ fn create_bundle_with_hooks(harness: &TestHarness, name: &str) -> String {
 }
 
 /// Create a bundle with a pre-hook that outputs JSON to modify priority.
+#[cfg(unix)] // only used by cfg(unix) hook-execution tests
 fn create_bundle_with_modifying_hook(harness: &TestHarness, name: &str) -> String {
     let dir = create_bundle(harness, name);
     fs::write(
@@ -77,6 +79,7 @@ fn create_bundle_with_modifying_hook(harness: &TestHarness, name: &str) -> Strin
 }
 
 /// Create a bundle with a pre-hook that fails.
+#[cfg(unix)] // only used by cfg(unix) hook-execution tests
 fn create_bundle_with_failing_hook(harness: &TestHarness, name: &str) -> String {
     let dir = create_bundle(harness, name);
     fs::write(
@@ -100,6 +103,7 @@ fn create_env_hooks_dir(harness: &TestHarness, name: &str) -> String {
 }
 
 /// Create a bundle with a post-submission hook that writes a marker file.
+#[cfg(unix)] // only used by cfg(unix) hook-execution tests
 fn create_bundle_with_post_hook(harness: &TestHarness, name: &str) -> (String, String) {
     let dir = create_bundle(harness, name);
     let marker = harness.config_dir.path().join(format!("{name}_marker"));
@@ -144,6 +148,7 @@ async fn mock_submit_no_attachments(harness: &TestHarness) {
 // Bundle hooks enabled — pre-hooks run, submission proceeds
 // =====================================================================
 
+#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_hooks_enabled() {
     let harness = TestHarness::new().await;
@@ -177,6 +182,7 @@ async fn bundle_submit_hooks_disabled_note() {
 // Environment hooks enabled
 // =====================================================================
 
+#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_env_hooks_enabled() {
     let harness = TestHarness::new().await;
@@ -220,6 +226,7 @@ async fn bundle_submit_env_hooks_disabled_warning() {
 // Both bundle and env hooks enabled — env runs first
 // =====================================================================
 
+#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_both_hook_sources() {
     let harness = TestHarness::new().await;
@@ -247,6 +254,7 @@ async fn bundle_submit_both_hook_sources() {
 // Pre-hook modifies payload with --yes
 // =====================================================================
 
+#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_pre_hook_modifies_payload() {
     let harness = TestHarness::new().await;
@@ -265,6 +273,7 @@ async fn bundle_submit_pre_hook_modifies_payload() {
 // Pre-hook fails — submission canceled
 // =====================================================================
 
+#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_pre_hook_failure_cancels() {
     let harness = TestHarness::new().await;
@@ -283,6 +292,7 @@ async fn bundle_submit_pre_hook_failure_cancels() {
 // Post-hook runs after successful submission
 // =====================================================================
 
+#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_post_hook_after_success() {
     let harness = TestHarness::new().await;
@@ -307,6 +317,7 @@ async fn bundle_submit_post_hook_after_success() {
 // Hooks confirmation prompt shown (not --yes)
 // =====================================================================
 
+#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_hooks_confirmation_prompt() {
     let harness = TestHarness::new().await;
@@ -327,6 +338,7 @@ async fn bundle_submit_hooks_confirmation_prompt() {
 // Pre-hook timeout — submission canceled with timeout message (Batch B)
 // =====================================================================
 
+#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_pre_hook_timeout_cancels() {
     let harness = TestHarness::new().await;

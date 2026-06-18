@@ -1,0 +1,129 @@
+name: CI
+
+# Core Rust quality gates. Structure adapted from openjd-rs/.github/workflows/ci.yml,
+# but uses this repo's `make` targets and the stable toolchain (edition 2024).
+# Python/PyO3/xa11y jobs live in a separate workflow (python.yml).
+
+on:
+  push:
+    branches: [mainline]
+  pull_request:
+    branches: [mainline, release, "patch_*", "feature_*"]
+
+# Cancel in-progress PR runs on new pushes; never cancel mainline runs so every
+# landed commit produces a full signal and a populated cache.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  RUST_BACKTRACE: 1
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up pinned Rust toolchain
+        run: rustup show
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+  cargo-deny:
+    name: cargo-deny (licenses, advisories, bans, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: cargo deny check
+        run: cargo deny check
+
+  build-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up pinned Rust toolchain
+        shell: bash
+        run: rustup show
+      # The Deadline SDK injects a `management.` (and `scheduling.`) host prefix
+      # that cannot be disabled. L2 tests point the CLI at http://localhost:PORT,
+      # so the SDK resolves `management.localhost`. macOS/Windows CI runners do
+      # not resolve `*.localhost` to loopback (RFC 6761) by default, so add
+      # explicit hosts entries. (Linux/systemd-resolved already resolves these.)
+      - name: Map *.localhost prefixes to loopback (Unix)
+        if: runner.os != 'Windows'
+        run: echo "127.0.0.1 management.localhost scheduling.localhost" | sudo tee -a /etc/hosts
+      - name: Map *.localhost prefixes to loopback (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "127.0.0.1 management.localhost scheduling.localhost"
+      # Include the rustc version in the cache key so a toolchain bump
+      # invalidates stale target/ artifacts (a common cause of slow rebuilds).
+      - name: Compute rustc hash
+        id: rustc
+        shell: bash
+        run: echo "hash=$(rustc --version --verbose | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Restore cargo cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: rust-${{ matrix.os }}-${{ steps.rustc.outputs.hash }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-${{ matrix.os }}-${{ steps.rustc.outputs.hash }}-
+            rust-${{ matrix.os }}-
+      # On a restore-key (non-exact) hit, target/ holds artifacts built against
+      # a different Cargo.lock; starting clean with a warm registry is faster.
+      - name: Discard stale target/ on restore-key-only hit
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: rm -rf target
+      # Compile lib/bin/test targets once with a unified dep graph.
+      - name: Build (lib, bin, tests)
+        run: cargo test --workspace --all-targets --no-run
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        timeout-minutes: 20
+        run: cargo test --workspace
+      - name: Doctests
+        timeout-minutes: 10
+        run: cargo test --workspace --doc
+
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up pinned Rust toolchain
+        run: rustup show
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: rust-doc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-doc-
+      - name: cargo doc
+        run: cargo doc --no-deps --workspace
+        env:
+          RUSTDOCFLAGS: -D warnings

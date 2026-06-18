@@ -3,6 +3,8 @@
 __pycache__/
 *.egg-info/
 .venv/
+.pytest_cache/
+.ruff_cache/
 
 # maturin develop places .so/.pyd in the source tree
 *.abi3.so

@@ -210,7 +210,11 @@ impl PidFileLock {
         }
         #[cfg(not(unix))]
         {
-            // On Windows, rename fails if target exists
+            // On Windows, fs::rename replaces existing files (MOVEFILE_REPLACE_EXISTING),
+            // so it cannot be used as an atomic create-if-not-exists. Check existence first.
+            if target.exists() {
+                return false;
+            }
             fs::rename(tmp, target).is_ok()
         }
     }
@@ -230,7 +234,8 @@ impl PidFileLock {
         }
         #[cfg(not(unix))]
         {
-            // Conservative: assume alive
+            // Conservative: assume alive. `pid` is only consulted on Unix.
+            let _ = pid;
             true
         }
     }

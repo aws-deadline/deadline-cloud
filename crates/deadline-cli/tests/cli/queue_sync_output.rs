@@ -141,6 +141,16 @@ fn timestamp_filters() -> insta::Settings {
     settings
 }
 
+// OS error strings and codes differ across platforms (e.g. Linux
+// "Permission denied (os error 13)" vs macOS "Read-only file system
+// (os error 30)"). Normalize them so error-path snapshots are cross-OS.
+#[cfg(unix)] // only used by the cfg(unix) checkpoint-dir test
+fn os_error_filters() -> insta::Settings {
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"[A-Za-z][A-Za-z -]*\(os error \d+\)", "[OS_ERROR]");
+    settings
+}
+
 // =========================================================================
 // Error path tests — validation short-circuits
 // =========================================================================
@@ -249,11 +259,13 @@ async fn sync_output_queue_no_attachments_returns_error() {
 }
 
 // Checkpoint directory not writable
+#[cfg(unix)] // exercises a Unix read-only path; Windows fails earlier with a different error
 #[tokio::test]
 async fn sync_output_checkpoint_dir_not_writable_returns_error() {
     let harness = TestHarness::new().await;
     setup_config_with_storage_profile(&harness);
 
+    let _guard = os_error_filters().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&[
         "queue",
         "sync-output",
@@ -287,7 +299,16 @@ async fn sync_output_pid_lock_prevents_concurrent_runs() {
 
     let mut settings = insta::Settings::clone_current();
     settings.add_filter(r"pid \d+", "pid [PID]");
-    settings.add_filter(checkpoint_dir.path().to_str().unwrap(), "[CHECKPOINT_DIR]");
+    // The checkpoint dir is used as a literal match, so escape it — Windows
+    // paths like `C:\Users\...` contain regex metacharacters (`\U` etc.) that
+    // would otherwise be an invalid pattern and panic at filter-compile time.
+    settings.add_filter(
+        &regex::escape(checkpoint_dir.path().to_str().unwrap()),
+        "[CHECKPOINT_DIR]",
+    );
+    // Normalize path separator after the checkpoint dir redaction so that
+    // `[CHECKPOINT_DIR]\file` and `[CHECKPOINT_DIR]/file` produce the same snapshot.
+    settings.add_filter(r"\\queue-aaa", "/queue-aaa");
     let _guard = settings.bind_to_scope();
 
     assert_cmd_snapshot!(harness.cmd(&[

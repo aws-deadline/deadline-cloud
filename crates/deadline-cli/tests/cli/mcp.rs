@@ -24,7 +24,7 @@ async fn mcp_client(harness: &TestHarness) -> rmcp::service::RunningService<rmcp
         cmd.arg("mcp-server");
         cmd.env("AWS_ENDPOINT_URL_DEADLINE", &ep);
         cmd.env("AWS_ENDPOINT_URL_STS", &ep);
-        cmd.env("AWS_ENDPOINT_URL_CLOUDWATCHLOGS", &ep);
+        cmd.env("AWS_ENDPOINT_URL_CLOUDWATCH_LOGS", &ep);
         cmd.env("AWS_ENDPOINT_URL_S3", &ep);
         cmd.env("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
         cmd.env(

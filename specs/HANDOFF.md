@@ -3,29 +3,62 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-Active work item: **Python repo parity — telemetry + UI (2026-05-28)**
+## Active: None
 
-**Status: Step 3 complete, awaiting review**
+No active work item. CI is green on all 3 OSes; PR #2 is ready to merge.
 
-Porting 3 features from deadline-cloud-python (commits 7a68ce1, 53b648d, e90e1e7):
+---
 
-1. `process_start` telemetry event on client init
-2. Stack trace sanitizer + `record_error_with_trace`
-3. `HoverRadioButton` widget
+## GitHub CI/CD Architecture
 
-Files created/modified:
-- `crates/deadline-lib/src/api/stack_trace_sanitizer.rs` (new)
-- `crates/deadline-lib/src/api/telemetry.rs` (process_start + record_error_with_trace + 5 tests)
-- `crates/deadline-lib/src/api/mod.rs` (register module)
-- `crates/deadline-cli/src/commands/bundle.rs` (use record_error_with_trace)
-- `crates/deadline-python-bindings/src/telemetry.rs` (PyO3 binding)
-- `gui/deadline/client/ui/widgets/radio_button_widget.py` (new)
-- `gui/deadline/client/ui/widgets/host_requirements_tab.py` (use HoverRadioButton)
-- `gui/deadline/client/ui/widgets/shared_job_settings_tab.py` (use HoverRadioButton)
-- `gui/deadline/client/ui/widgets/__init__.py` (export)
+### Inner loop: `.github/workflows/ci.yml`
 
-Test results: 1,367 Rust tests pass (12 new). clippy --all-targets clean.
-ruff check + format clean.
+Triggered on every push to `mainline` and every PR targeting
+`mainline`, `release`, `patch_*`, `feature_*`.
+
+| Job | Runs on | What it does |
+|-----|---------|-------------|
+| **Rustfmt** | ubuntu | `cargo fmt --all -- --check` |
+| **cargo-deny** | ubuntu | License, advisory, ban, source checks |
+| **Build & Test** | ubuntu, macOS, Windows (matrix) | Build all targets, clippy `-D warnings`, `cargo test --workspace`, doctests |
+| **Documentation** | ubuntu | `cargo doc --no-deps --workspace` with `-D warnings` |
+
+Key CI infrastructure:
+- `rust-toolchain.toml` pins stable 1.94.0 (avoids CI breakage from newer clippy)
+- `*.localhost` host entries added on macOS/Windows (AWS SDK's `management.` prefix)
+- Cargo cache keyed on `(os, rustc-version-hash, Cargo.lock-hash)` with stale target/ eviction
+- `concurrency` cancels in-progress PR runs on new pushes; never cancels mainline
+- `fail-fast: false` — all 3 OSes run to completion even if one fails
+
+### Outer loop: `.github/workflows/conformance.yml`
+
+Nightly scheduled (07:00 UTC) + manual dispatch. Replays
+`deadline-cloud-python`'s `test/cli_e2e/` suite against the Rust binary
+to catch parity drift. Uses a localhost-rewrite pytest plugin
+(`conformance/`) and an xfail allowlist for known gaps.
+
+### What's NOT in CI yet (follow-up PRs)
+- xa11y GUI tests (need display server / Xvfb)
+- Python binding tests (`make test-bindings`)
+- Release builds / binary packaging
+- Coverage reporting
+
+---
+
+## Recently completed
+
+- **Cross-OS CI — GitHub Actions (2026-06-18)** — PR #2, branch
+  `ci/github-workflows`. Full 3-OS CI gate: fmt, cargo-deny, doc,
+  build+clippy+test on ubuntu/macOS/Windows. Fixed 5 real Windows bugs
+  in production code (glob backslash escape, PID lock race, zip shell-out,
+  filter_redundant separator, manifest root_prefix mismatch). 425 CLI L2
+  tests + 513 lib L1 tests + 206 integration tests pass on Windows.
+  16 tests remain `#[cfg(unix)]`-gated (spawn `sh`); Windows twins tracked
+  in progress.md.
+
+- **Python repo parity — telemetry + UI (2026-05-28)** — process_start event,
+  stack trace sanitizer + record_error_with_trace, HoverRadioButton widget.
+  Merged to mainline (commits a5d99cf, ce941a8).
 
 ---
 

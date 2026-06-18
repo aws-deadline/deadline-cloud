@@ -38,6 +38,15 @@ serial_test = { workspace = true }
 rmcp = { version = "1.5", features = ["server", "transport-io", "macros"] }
 schemars = "1"
 serde = { workspace = true }
+zip = { workspace = true }
+
+# Linux-only: used by handle-web-url to locate `update-desktop-database`.
+[target.'cfg(target_os = "linux")'.dependencies]
+which = "7"
+
+# Windows-only: registry access for handle-web-url and long-path detection.
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.52"
 
 [dev-dependencies]
 deadline-test-server = { workspace = true }

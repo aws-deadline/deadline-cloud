@@ -814,8 +814,19 @@ async fn mcp_server_emits_startup_telemetry() {
 
     let client = ().serve(transport).await.expect("failed to initialize MCP client");
 
-    // Give server time to emit startup telemetry
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // Wait for server_startup telemetry to arrive at wiremock. Windows CI debug
+    // builds are slow — the background telemetry thread needs time to send both
+    // `process_start` and `server_startup` events sequentially.
+    for _ in 0..20 {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        let received = harness.server.received_requests().await.unwrap_or_default();
+        if received
+            .iter()
+            .any(|r| String::from_utf8_lossy(&r.body).contains("mcp.server_startup"))
+        {
+            break;
+        }
+    }
     client.cancel().await.unwrap();
     // wiremock verifies expect(1..) on drop
 }

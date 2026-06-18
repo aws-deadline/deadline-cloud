@@ -4,12 +4,21 @@ use deadline_test_server::TestHarness;
 use deadline_test_server::deadline_api::farms;
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
-use std::os::unix::fs::PermissionsExt;
+
+/// Make a file executable. Only compiled for Unix: the DCM monitor tests that
+/// use it run a `#!/bin/bash` fake monitor, which Windows can't execute, so
+/// those tests are `#[cfg(unix)]` (mirrors Python mocking `subprocess.Popen`).
+#[cfg(unix)]
+fn make_executable(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
 
 /// Set up a fake DCM environment in the harness temp dir:
 /// - AWS config with a DCM profile (has `monitor_id`)
 /// - Deadline config pointing to the DCM profile and fake monitor binary
 /// - A fake monitor shell script at the given path
+#[cfg(unix)]
 fn setup_dcm_env(harness: &TestHarness, monitor_script: &str) {
     let dir = harness.config_dir.path();
 
@@ -29,7 +38,7 @@ identity_store_id = d-fake789
     // Fake monitor binary
     let monitor_path = dir.join("fake-monitor");
     std::fs::write(&monitor_path, monitor_script).unwrap();
-    std::fs::set_permissions(&monitor_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    make_executable(&monitor_path);
 
     // Deadline config pointing to DCM profile and fake monitor
     std::fs::write(
@@ -49,6 +58,7 @@ path = {}
 }
 
 /// Build a command with the fake AWS config file set.
+#[cfg(unix)]
 fn dcm_cmd(harness: &TestHarness, args: &[&str]) -> std::process::Command {
     let mut cmd = harness.cmd(args);
     let aws_config_path = harness.config_dir.path().join("aws_config");
@@ -137,6 +147,7 @@ async fn auth_logout_non_dcm_profile_prints_error() {
 // Login polling now uses ListFarms instead of STS.
 
 // DCM login happy path — monitor starts, ListFarms succeeds
+#[cfg(unix)] // runs a `#!/bin/bash` fake monitor; Windows parity covered by Python mocking Popen
 #[tokio::test]
 async fn auth_login_dcm_profile_succeeds() {
     let harness = TestHarness::new().await;
@@ -150,6 +161,7 @@ async fn auth_login_dcm_profile_succeeds() {
 }
 
 // monitor exits before auth succeeds
+#[cfg(unix)]
 #[tokio::test]
 async fn auth_login_dcm_monitor_exits_with_error() {
     let harness = TestHarness::new().await;
@@ -165,6 +177,7 @@ async fn auth_login_dcm_monitor_exits_with_error() {
 }
 
 // monitor executable not found
+#[cfg(unix)] // output embeds an OS-specific monitor path; covered on Unix
 #[tokio::test]
 async fn auth_login_dcm_monitor_not_found() {
     let harness = TestHarness::new().await;
@@ -200,6 +213,7 @@ path = /nonexistent/path/to/monitor
 // --- auth logout (DCM profile) ---
 
 // DCM logout happy path
+#[cfg(unix)]
 #[tokio::test]
 async fn auth_logout_dcm_profile_succeeds() {
     let harness = TestHarness::new().await;
@@ -211,6 +225,7 @@ async fn auth_logout_dcm_profile_succeeds() {
 }
 
 // logout subprocess returns non-zero
+#[cfg(unix)]
 #[tokio::test]
 async fn auth_logout_dcm_monitor_fails() {
     let harness = TestHarness::new().await;
@@ -249,6 +264,7 @@ async fn auth_status_output_json_uppercase_produces_json() {
 // This test uses credential_process in the AWS profile (no env-var credentials)
 // to prove that cache invalidation is required. The monitor script writes
 // credential_process to the profile after a delay, simulating DCM's behavior.
+#[cfg(unix)]
 #[tokio::test]
 async fn auth_login_dcm_picks_up_credentials_written_mid_login() {
     let harness = TestHarness::new().await;
@@ -264,7 +280,7 @@ async fn auth_login_dcm_picks_up_credentials_written_mid_login() {
         "#!/bin/bash\necho '{\"Version\": 1, \"AccessKeyId\": \"AKIAIOSFODNN7EXAMPLE\", \"SecretAccessKey\": \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\", \"SessionToken\": \"token\", \"Expiration\": \"2099-01-01T00:00:00Z\"}'\n",
     )
     .unwrap();
-    std::fs::set_permissions(&cred_helper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    make_executable(&cred_helper);
 
     // AWS config: has monitor_id and user_id but NO credential_process initially.
     // Without credentials, the SDK cannot sign requests → ListFarms fails.
@@ -284,7 +300,7 @@ async fn auth_login_dcm_picks_up_credentials_written_mid_login() {
     );
     let monitor_path = dir.join("fake-monitor");
     std::fs::write(&monitor_path, &monitor_script).unwrap();
-    std::fs::set_permissions(&monitor_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    make_executable(&monitor_path);
 
     // Deadline config
     std::fs::write(

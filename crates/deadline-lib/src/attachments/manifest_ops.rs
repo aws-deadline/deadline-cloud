@@ -164,7 +164,11 @@ pub fn glob_files(root: &Path, config: &GlobConfig) -> Result<Vec<String>, JobAt
     let mut matched: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for pattern in &config.include {
-        let full_pattern = base.join(pattern).to_string_lossy().into_owned();
+        // The `glob` crate treats `\` as an escape character on ALL platforms.
+        // On Windows, joined paths contain `\` separators which would be
+        // misinterpreted (e.g. `C:\Users` → invalid escape `\U`). Convert to
+        // `/` which glob handles correctly cross-platform.
+        let full_pattern = base.join(pattern).to_string_lossy().replace('\\', "/");
         for entry in glob::glob(&full_pattern)
             .map_err(|e| JobAttachmentsError::AssetSync(format!("Invalid glob pattern: {e}")))?
         {
@@ -182,7 +186,7 @@ pub fn glob_files(root: &Path, config: &GlobConfig) -> Result<Vec<String>, JobAt
     }
 
     for pattern in &config.exclude {
-        let full_pattern = base.join(pattern).to_string_lossy().into_owned();
+        let full_pattern = base.join(pattern).to_string_lossy().replace('\\', "/");
         if let Ok(entries) = glob::glob(&full_pattern) {
             for entry in entries.flatten() {
                 let normalized = std::path::absolute(&entry)
@@ -397,10 +401,15 @@ fn hash_files_to_manifest(
         unreachable!()
     };
 
-    let root_prefix = std::path::absolute(Path::new(root))
-        .unwrap_or_else(|_| PathBuf::from(root))
-        .to_string_lossy()
-        .into_owned();
+    let root_prefix = {
+        let raw = std::path::absolute(Path::new(root))
+            .unwrap_or_else(|_| PathBuf::from(root))
+            .to_string_lossy()
+            .into_owned();
+        // openjd_snapshots normalizes all paths to forward slashes on Windows;
+        // match that so strip_prefix below works cross-platform.
+        raw.replace('\\', "/")
+    };
     let files: Vec<FileEntry> = hashed
         .files
         .iter()

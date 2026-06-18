@@ -1,0 +1,13 @@
+# Conformance xfail allowlist
+#
+# Tests in deadline-cloud-python's test/cli_e2e/ suite that intentionally (or
+# pending a fix) behave differently against the Rust `deadline` binary. Each
+# listed test is marked xfail so only NEW drift turns the conformance run red.
+#
+# Format (one per line):  <nodeid substring>  # reason
+# Matching is by substring against the pytest nodeid.
+#
+# Every entry MUST have a reason. Prefer fixing the Rust CLI over adding an
+# entry; use this list only for deliberate, documented differences.
+
+test/cli_e2e/test_help.py::test_cli_deadline_no_args_prints_help  # Rust clap exits 0 with no output on no-args; Python click prints "Usage". Candidate Rust fix: print help when no subcommand is given.

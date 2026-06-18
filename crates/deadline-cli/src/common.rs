@@ -341,16 +341,25 @@ fn format_timedelta(d: chrono::TimeDelta) -> String {
 // Path utilities
 // ---------------------------------------------------------------------------
 
-/// Expand leading `~` to the user's home directory.
+/// Expand a leading `~` (alone or as `~/...`) to the user's home directory,
+/// matching Python's `os.path.expanduser` for the home shorthand. Non-tilde
+/// paths are returned unchanged. Home is `HOME` (Unix, and Git-Bash on Windows),
+/// falling back to `USERPROFILE` on Windows.
 pub(crate) fn expand_tilde(path: &str) -> std::path::PathBuf {
-    if (path.starts_with("~/") || path == "~")
-        && let Ok(home) = std::env::var("HOME")
-    {
-        return std::path::PathBuf::from(home).join(&path[2..]);
-    }
-    #[cfg(windows)]
-    if let Ok(profile) = std::env::var("USERPROFILE") {
-        return std::path::PathBuf::from(profile).join(&path[2..]);
+    // Only "~" or a "~/" prefix are expanded. `rest` is the remainder after the
+    // tilde (and its separator), so we never index into `path` blindly.
+    let rest = if path == "~" {
+        Some("")
+    } else {
+        path.strip_prefix("~/")
+    };
+    if let Some(rest) = rest {
+        let home = std::env::var("HOME").ok();
+        #[cfg(windows)]
+        let home = home.or_else(|| std::env::var("USERPROFILE").ok());
+        if let Some(home) = home {
+            return std::path::PathBuf::from(home).join(rest);
+        }
     }
     std::path::PathBuf::from(path)
 }
@@ -367,7 +376,52 @@ pub(crate) fn expand_tilde(path: &str) -> std::path::PathBuf {
 mod tests {
     use super::*;
 
-    // -- strip_markdown_for_terminal --
+    // -- expand_tilde --
+
+    #[test]
+    #[serial]
+    fn expand_tilde_bare_tilde_returns_home() {
+        // SAFETY: serialized test.
+        unsafe { std::env::set_var("HOME", "/home/u") };
+        assert_eq!(expand_tilde("~"), std::path::PathBuf::from("/home/u"));
+    }
+
+    #[test]
+    #[serial]
+    fn expand_tilde_with_subpath_joins_home() {
+        // SAFETY: serialized test.
+        unsafe { std::env::set_var("HOME", "/home/u") };
+        assert_eq!(
+            expand_tilde("~/.deadline/config"),
+            std::path::PathBuf::from("/home/u/.deadline/config")
+        );
+    }
+
+    #[test]
+    fn expand_tilde_empty_string_does_not_panic() {
+        // Regression: the Windows branch used to slice `&path[2..]` on every
+        // path, panicking with "byte index 2 is out of bounds" on short inputs.
+        assert_eq!(expand_tilde(""), std::path::PathBuf::from(""));
+    }
+
+    #[test]
+    fn expand_tilde_non_tilde_path_is_unchanged() {
+        // Regression: a non-tilde path must never be rewritten (the old Windows
+        // branch stripped the first two chars and joined to USERPROFILE).
+        assert_eq!(
+            expand_tilde("relative/dir"),
+            std::path::PathBuf::from("relative/dir")
+        );
+        assert_eq!(
+            expand_tilde("/abs/path"),
+            std::path::PathBuf::from("/abs/path")
+        );
+    }
+
+    #[test]
+    fn expand_tilde_tilde_in_middle_is_not_expanded() {
+        assert_eq!(expand_tilde("a/~/b"), std::path::PathBuf::from("a/~/b"));
+    }
 
     #[test]
     fn strip_markdown_inline_link_becomes_text_and_url() {

@@ -276,17 +276,47 @@ fn redirect_std_to_file(file: &std::fs::File) {
         unsafe_code,
         reason = "redirecting stdout/stderr requires Win32 SetStdHandle"
     )]
+    // SAFETY: SetStdHandle is a standard Win32 call that swaps the process's
+    // standard output/error handles. `handle` is a live OS handle borrowed from
+    // `file`, which outlives this call, so the handle remains valid.
     unsafe {
-        extern "system" {
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
             fn SetStdHandle(nStdHandle: u32, hHandle: *mut std::ffi::c_void) -> i32;
         }
-        SetStdHandle(0xFFFF_FFF5, handle as *mut _); // STD_OUTPUT_HANDLE
-        SetStdHandle(0xFFFF_FFF4, handle as *mut _); // STD_ERROR_HANDLE
+        SetStdHandle(0xFFFF_FFF5, handle.cast()); // STD_OUTPUT_HANDLE
+        SetStdHandle(0xFFFF_FFF4, handle.cast()); // STD_ERROR_HANDLE
     }
 }
 
 /// Shared CLI entry point used by both `deadline` and `deadlinew` binaries.
 pub fn cli_main() {
+    // In debug builds the AWS Rust SDK's unoptimized S3 endpoint resolver
+    // (`aws_sdk_s3::config::endpoint::DefaultResolver::resolve_endpoint`, a huge
+    // generated function) uses a very large stack frame. Layered under our
+    // nested async download call tree it needs ~1.5 MiB of stack, which exceeds
+    // Windows' 1 MiB default main-thread stack. Release builds optimize this
+    // down to ~200 KiB, so shipped (release) binaries are unaffected and this
+    // wrapper is compiled out entirely under `not(debug_assertions)`. To keep
+    // debug builds (e.g. `cargo test`) working on Windows, run the work on a
+    // Unix-sized 8 MiB stack. An explicit thread stack size is honored
+    // regardless of the OS main-thread default.
+    #[cfg(debug_assertions)]
+    {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(cli_main_inner)
+            .expect("failed to spawn CLI worker thread")
+            .join()
+            .expect("CLI worker thread panicked");
+    }
+    #[cfg(not(debug_assertions))]
+    cli_main_inner();
+}
+
+/// Real CLI body. Invoked directly in release builds; in debug builds it runs
+/// on a large-stack worker thread (see `cli_main`).
+fn cli_main_inner() {
     // Rewrite `-ie` → `--include-exclude-config` before clap parses args.
     let args: Vec<String> = std::env::args()
         .map(|a| {

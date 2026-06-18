@@ -5,10 +5,13 @@ use insta_cmd::assert_cmd_snapshot;
 
 fn config_show_settings() -> insta::Settings {
     let mut settings = insta::Settings::clone_current();
-    settings.add_filter(r"(?m)^   /.*config$", "   [CONFIG_PATH]");
+    // Config-file path line — OS-agnostic (Unix `/...config`, Windows `C:\...config`).
+    settings.add_filter(r"(?m)^   \S+config$", "   [CONFIG_PATH]");
+    // job_history_dir is an absolute path with OS-specific separators; redact the
+    // whole value so the snapshot matches on every OS.
     settings.add_filter(
-        r"/.*/\.deadline/job_history/",
-        "[HOME]/.deadline/job_history/",
+        r"(?m)^settings\.job_history_dir: .*",
+        "settings.job_history_dir: [JOB_HISTORY_DIR]",
     );
     settings
 }

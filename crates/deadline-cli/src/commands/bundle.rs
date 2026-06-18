@@ -586,16 +586,40 @@ fn validate_submitter_info(
 
 /// Create a zip file from a directory's contents.
 fn create_zip_from_dir(src_dir: &std::path::Path, zip_path: &str) -> Result<(), String> {
-    let status = std::process::Command::new("zip")
-        .args(["-r", "-j", zip_path, "."])
-        .current_dir(src_dir)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map_err(|e| format!("Failed to run zip: {e}"))?;
-    if !status.success() {
-        return Err(format!("zip exited with status {status}"));
+    use std::io::{Read, Write};
+    let file =
+        std::fs::File::create(zip_path).map_err(|e| format!("Failed to create zip file: {e}"))?;
+    let mut archive = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    for entry in
+        std::fs::read_dir(src_dir).map_err(|e| format!("Failed to read source directory: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
+        let path = entry.path();
+        if path.is_file() {
+            let name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            archive
+                .start_file(&name, options)
+                .map_err(|e| format!("Failed to add file to zip: {e}"))?;
+            let mut f = std::fs::File::open(&path)
+                .map_err(|e| format!("Failed to open {}: {e}", path.display()))?;
+            let mut buf = Vec::new();
+            f.read_to_end(&mut buf)
+                .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+            archive
+                .write_all(&buf)
+                .map_err(|e| format!("Failed to write to zip: {e}"))?;
+        }
     }
+    archive
+        .finish()
+        .map_err(|e| format!("Failed to finalize zip: {e}"))?;
     Ok(())
 }
 

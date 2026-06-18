@@ -1,0 +1,89 @@
+name: Conformance (Python CLI parity)
+
+# Outer loop: replay deadline-cloud-python's own test/cli_e2e/ suite against the
+# Rust `deadline` binary, using the LATEST Python mainline as the oracle. This
+# catches parity gaps — behavior Python added/changed that Rust hasn't ported.
+#
+# Runs on a schedule (not per-PR): a Rust PR should not be blocked by unrelated
+# changes in the Python repo. See conformance/README.md.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # nightly ~07:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+  # deadline-cloud-python upstream
+  PYTHON_REPO: aws-deadline/deadline-cloud
+  PYTHON_REF: mainline
+
+jobs:
+  cli-conformance:
+    name: cli_e2e vs Rust binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deadline-cloud-rs
+        uses: actions/checkout@v4
+        with:
+          path: deadline-cloud-rs
+
+      - name: Checkout deadline-cloud-python (latest mainline)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PYTHON_REPO }}
+          ref: ${{ env.PYTHON_REF }}
+          path: deadline-cloud-python
+
+      - name: Set up pinned Rust toolchain
+        run: rustup show
+        working-directory: deadline-cloud-rs
+
+      - name: Build Rust deadline binary
+        run: cargo build -p deadline-cli --release
+        working-directory: deadline-cloud-rs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python package + test deps
+        working-directory: deadline-cloud-python
+        run: |
+          python -m pip install --upgrade pip
+          # Editable install of the Python package + OpenJD libs (needed by the
+          # mock backend for job-template handling) + the cli_e2e test deps.
+          pip install -e . pytest "moto[server]" openjd-sessions openjd-model
+
+      - name: Run cli_e2e against the Rust binary
+        working-directory: deadline-cloud-python
+        env:
+          # The Rust conformance plugin (localhost rewrite + xfail allowlist).
+          PYTHONPATH: ${{ github.workspace }}/deadline-cloud-rs/conformance
+        run: |
+          # Rust binary must win on PATH over any Python `deadline` entrypoint.
+          export PATH="${{ github.workspace }}/deadline-cloud-rs/target/release:$PATH"
+          echo "Using deadline binary: $(command -v deadline)"
+          deadline --version
+          python -m pytest \
+            -o addopts="" \
+            -p no:cacheprovider \
+            -p rust_conformance_plugin \
+            test/cli_e2e/ \
+            -q --junitxml="${{ github.workspace }}/conformance-results.xml"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-results
+          path: conformance-results.xml
+          if-no-files-found: warn
+
+      # TODO: on scheduled-run failure, open/update a tracking issue that links
+      # the run and feeds specs/python-parity-backlog-*.md. Kept out of the
+      # initial version to keep the workflow simple and permission-light.

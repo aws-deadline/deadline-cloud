@@ -14,11 +14,21 @@ use std::fs;
 
 fn bundle_settings() -> insta::Settings {
     let mut settings = insta::Settings::clone_current();
+    // macOS resolves symlinks for temp dirs and `/etc` (e.g. `/var/folders` ->
+    // `/private/var/folders`, `/etc` -> `/private/etc`). Normalize the `/private`
+    // prefix away first so symlink-resolution snapshots match Linux output.
+    settings.add_filter(r"/private/var/folders/[^\s]+", "[TEMP_PATH]");
+    settings.add_filter(r"/private/etc/", "/etc/");
     // Redact temp directory paths (vary per run)
     settings.add_filter(r"/var/folders/[^\s]+", "[TEMP_PATH]");
     settings.add_filter(r"/tmp/[^\s]+", "[TEMP_PATH]");
+    // Windows temp dirs (Windows CI)
+    crate::common::add_windows_temp_filters(&mut settings);
     // Redact timing and transfer rate values in summaries
     settings.add_filter(r"[\d.]+ seconds at .*/s", "[TIME] seconds at [RATE]/s");
+    // On Windows, normalize_path converts `/nonexistent/...` to `\nonexistent\...`
+    // (native separators). Normalize back so snapshots match across OSes.
+    settings.add_filter(r"\\nonexistent\\input\\dir", "/nonexistent/input/dir");
     settings
 }
 
@@ -150,7 +160,57 @@ assetReferences:
     dir.to_str().unwrap().to_owned()
 }
 
+/// Bundle whose input files live in a directory OUTSIDE the bundle directory
+/// (a sibling temp dir), so they are not covered by any known asset path.
+/// Used to exercise the "files outside known paths" safety check.
+fn create_bundle_with_external_inputs(harness: &TestHarness, name: &str) -> String {
+    let dir = harness.config_dir.path().join(name);
+    fs::create_dir_all(&dir).unwrap();
+    // External input dir: a sibling of the bundle dir, not nested inside it.
+    let input_dir = harness
+        .config_dir
+        .path()
+        .join(format!("{name}_external_inputs"));
+    fs::create_dir_all(&input_dir).unwrap();
+    fs::write(input_dir.join("data.txt"), "test file content").unwrap();
+    fs::write(
+        dir.join("template.yaml"),
+        "\
+specificationVersion: jobtemplate-2023-09
+name: AttachmentJob
+steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ['hello']
+",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("asset_references.yaml"),
+        format!(
+            "\
+assetReferences:
+  inputs:
+    directories:
+      - {input_dir}
+    filenames: []
+  outputs:
+    directories: []
+  referencedPaths: []
+",
+            input_dir = input_dir.display()
+        ),
+    )
+    .unwrap();
+    dir.to_str().unwrap().to_owned()
+}
+
 /// Bundle with a symlink that escapes the bundle directory.
+/// Only used by the `#[cfg(unix)]` symlink-escape test.
+#[cfg(unix)]
 fn create_bundle_with_escaping_symlink(harness: &TestHarness, name: &str) -> String {
     let dir = harness.config_dir.path().join(name);
     fs::create_dir_all(&dir).unwrap();
@@ -883,8 +943,9 @@ async fn bundle_submit_auto_accept_unknown_paths_cancels() {
     let harness = TestHarness::new().await;
     setup_config(&harness);
     mock_submit_with_attachments(&harness).await;
-    // Input files are in a temp dir which is NOT a known asset path.
-    let bundle_dir = create_bundle_with_attachments(&harness, "known_paths_warn");
+    // Input files live OUTSIDE the bundle directory, so they are not covered
+    // by any known asset path (the bundle dir is the only known path here).
+    let bundle_dir = create_bundle_with_external_inputs(&harness, "known_paths_warn");
     let _guard = bundle_settings().bind_to_scope();
     let output = harness
         .cmd(&["bundle", "submit", &bundle_dir, "--yes"])
