@@ -211,6 +211,36 @@ def _find_app(pid: int, baseline_names: set, timeout: float) -> xa11y.App:
     raise TimeoutError(f"No accessibility app found for PID {pid}")
 
 
+# Time to wait for the accessibility bridge to start responding to queries
+# before launching the first GUI. Only paid once per session (see the
+# ``_warm_accessibility_bridge`` fixture in conftest.py).
+BRIDGE_READY_TIMEOUT = 30.0
+
+
+def wait_for_accessibility_bridge(timeout: float = BRIDGE_READY_TIMEOUT) -> None:
+    """Block until the platform accessibility bridge answers a query.
+
+    ``xa11y.App.list()`` raises (or the bridge wedges) until the AT-SPI registry
+    (Linux), UIA (Windows), or AX (macOS) is actually serving requests. The CI
+    workflow only ``sleep``s a fixed amount after starting the bridge, which is
+    a guess; polling here turns that guess into a real readiness signal so the
+    first test isn't the one that discovers the bridge wasn't up yet.
+    """
+    end = time.monotonic() + timeout
+    last_exc: Optional[BaseException] = None
+    while time.monotonic() < end:
+        try:
+            xa11y.App.list()
+            return
+        except Exception as exc:  # noqa: BLE001 — any bridge error means "not ready"
+            last_exc = exc
+        time.sleep(0.25)
+    raise TimeoutError(
+        f"Accessibility bridge did not become queryable within {timeout}s"
+        + (f" (last error: {last_exc})" if last_exc is not None else "")
+    )
+
+
 # ---------------------------------------------------------------------------
 # Page objects
 # ---------------------------------------------------------------------------
@@ -410,6 +440,28 @@ class ConfigDialog(DeadlineApp):
         """Return the visible text of the Nth combo box in a group."""
         combo = self.locator(f'group[name="{group}"] combo_box').elements()[index]
         return combo.value or combo.name or ""
+
+
+def warm_up_gui(env: dict) -> None:
+    """Launch and close one real GUI to warm the session before tests run.
+
+    Two cold-start costs dominate the startup-time flakiness on hosted CI
+    runners, and both are one-time:
+
+    1. The accessibility bridge often only fully initialises when its first
+       client attaches; the very first test otherwise absorbs that latency.
+    2. The first GUI subprocess pays uncached Python ``.pyc`` and Qt-plugin
+       load costs that later launches don't.
+
+    Launching one ``deadline config gui`` here (after the bridge-readiness
+    probe) pays both up front, so steady-state launches are warm and land well
+    inside the existing ``STARTUP_TIMEOUT``. A failure here is surfaced as a
+    session-setup error with a clear message rather than a confusing first-test
+    failure.
+    """
+    wait_for_accessibility_bridge()
+    with ConfigDialog.open(env=env) as app:
+        app.dialog().wait_visible(timeout=STARTUP_TIMEOUT)
 
 
 class SubmitterDialog(DeadlineApp):

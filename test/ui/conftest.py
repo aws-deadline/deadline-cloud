@@ -19,7 +19,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common.mock_deadline_backend import MockDeadlineBackend, start_server  # noqa: E402
-from helpers import SAMPLE_TEMPLATE, SubmitterDialog, reap_all  # noqa: E402
+from helpers import SAMPLE_TEMPLATE, SubmitterDialog, reap_all, warm_up_gui  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -27,6 +27,41 @@ def _reap_ui_subprocesses() -> Iterator[None]:
     """Kill any GUI subprocesses still alive at test end."""
     yield
     reap_all()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _warm_accessibility_bridge(_mock_backend_server, tmp_path_factory) -> None:
+    """Warm the accessibility bridge + GUI process caches once per session.
+
+    Runs before any test (autouse) so the one-time cold-start cost of bringing
+    up the platform a11y bridge and the first PySide6 subprocess is paid in
+    session setup, not absorbed by — and flaking — the first test. See
+    ``helpers.warm_up_gui``.
+    """
+    _, deadline_url = _mock_backend_server
+
+    warm_dir = tmp_path_factory.mktemp("warmup")
+    config_file = warm_dir / "deadline.config"
+    config_file.write_text("")
+    shim_dir = warm_dir / "shim"
+    shim_dir.mkdir()
+    (shim_dir / "sitecustomize.py").write_text(_SITECUSTOMIZE)
+    fake_home = warm_dir / "home"
+    fake_home.mkdir()
+
+    env = {
+        **os.environ,
+        "HOME": str(fake_home),
+        "AWS_ENDPOINT_URL_DEADLINE": deadline_url,
+        "AWS_ACCESS_KEY_ID": "testing",
+        "AWS_SECRET_ACCESS_KEY": "testing",
+        "AWS_DEFAULT_REGION": "us-west-2",
+        "DEADLINE_CONFIG_FILE_PATH": str(config_file),
+        "DEADLINE_CLOUD_TELEMETRY_OPT_OUT": "true",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": str(shim_dir) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+    }
+    warm_up_gui(env)
 
 
 # ---------------------------------------------------------------------------

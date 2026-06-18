@@ -1191,6 +1191,18 @@ def _make_handler(routes, validator, backend):
             self.end_headers()
             self.wfile.write(data)
 
+        def handle_one_request(self):
+            # When a test gives up on a GUI subprocess whose accessibility
+            # bridge never attached, the subprocess is killed mid-request and
+            # the socket write raises BrokenPipeError/ConnectionError. That's an
+            # expected teardown race, not a backend bug — swallow it instead of
+            # letting BaseHTTPRequestHandler dump a traceback that buries the
+            # real (xa11y-side) failure in the CI log.
+            try:
+                super().handle_one_request()
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                self.close_connection = True
+
         def _dispatch(self, method):
             parsed = _urlparse(self.path)
             for route_method, pattern, handler_fn, op_name in routes:
@@ -1219,11 +1231,19 @@ def _make_handler(routes, validator, backend):
                     code = err.get("Code", "InternalServerException")
                     status = 404 if code == "ResourceNotFoundException" else 400
                     self._send_json(status, {"message": err.get("Message", "")}, error_code=code)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    # Client (GUI subprocess) disconnected mid-response — see
+                    # handle_one_request. Don't try to send a 500 back over a
+                    # dead socket; that just raises again.
+                    self.close_connection = True
                 except Exception as exc:  # noqa: BLE001
                     _traceback.print_exc()
-                    self._send_json(
-                        500, {"message": str(exc)}, error_code="InternalServerException"
-                    )
+                    try:
+                        self._send_json(
+                            500, {"message": str(exc)}, error_code="InternalServerException"
+                        )
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                        self.close_connection = True
                 return
             # Log 404s at stderr so a debugging CI run surfaces which path
             # the client hit without going through the mock's HTTP response
