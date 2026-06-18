@@ -25,6 +25,7 @@ from qtpy.QtWidgets import (  # type: ignore
 from .radio_button_widget import HoverRadioButton
 
 from ... import api
+from ...api._queue_parameters import _apply_deadline_cloud_v2_channel_migration
 from ...api._session import _resolve_region
 from ...config import get_setting
 from .._utils import tr
@@ -47,6 +48,9 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
             to override default queue parameter values from the queue. For example,
             a Rez queue environment may have a default "" for the RezPackages parameter, but a Maya
             submitter would override that default with "maya-2023" or similar.
+        use_deadline_cloud_v2_channel (bool): When True, prepend the "deadline-cloud-v2" Conda
+            channel ahead of the default "deadline-cloud" channel in the CondaChannels queue
+            parameter as it loads, keeping "deadline-cloud" as a fallback. Defaults to False.
         parent: The parent Qt Widget.
     """
 
@@ -60,6 +64,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         *,
         initial_settings: Any,
         initial_shared_parameter_values: dict[str, Any],
+        use_deadline_cloud_v2_channel: bool = False,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent=parent)
@@ -68,6 +73,8 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         # This is a dictionary {<name>: <value>} containing values to
         # override the queue parameter defaults.
         self.initial_shared_parameter_values = initial_shared_parameter_values
+
+        self.use_deadline_cloud_v2_channel = use_deadline_cloud_v2_channel
 
         self.shared_job_properties_box = SharedJobPropertiesWidget(
             initial_settings=initial_settings, parent=self
@@ -180,6 +187,9 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         """Handle queue parameters update from the controller."""
         self.__valid_queue = True
         self.valid_parameters.emit(True)
+        # Migrate channels before applying submitter overrides, so an explicit override wins.
+        if self.use_deadline_cloud_v2_channel:
+            _apply_deadline_cloud_v2_channel_migration(queue_parameters)
         # Apply the initial queue parameter values
         for parameter in queue_parameters:
             if parameter["name"] in self.initial_shared_parameter_values:

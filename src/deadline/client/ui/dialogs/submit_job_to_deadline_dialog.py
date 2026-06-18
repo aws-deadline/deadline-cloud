@@ -104,6 +104,10 @@ class SubmitJobToDeadlineDialog(QDialog):
         show_host_requirements_tab: Display the host requirements tab in dialog if set to True. Default
             to False.
         submitter_info (SubmitterInfo): Information related to the submitter window and application it's running in
+        use_deadline_cloud_v2_channel (bool): When True, prepend the "deadline-cloud-v2" Conda
+            channel ahead of the default "deadline-cloud" channel in the CondaChannels queue
+            parameter as it loads from the queue. The "deadline-cloud" channel is kept as a
+            fallback and other channels are left untouched. Defaults to False (no change).
     """
 
     _auto_select_complete = _Signal()
@@ -123,6 +127,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         host_requirements: Optional[HostRequirements] = None,
         submitter_info: Optional[SubmitterInfo] = None,
         known_asset_paths: Optional[list[str]] = None,
+        use_deadline_cloud_v2_channel: bool = False,
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
@@ -153,6 +158,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
         self.show_host_requirements_tab = show_host_requirements_tab
         self.known_asset_paths = known_asset_paths or []
+        self.use_deadline_cloud_v2_channel = use_deadline_cloud_v2_channel
         self.should_close = False
 
         # Runs the auto-select farm/queue API calls off the Qt event loop. Using a
@@ -423,6 +429,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.shared_job_settings = SharedJobSettingsWidget(
             initial_settings=initial_job_settings,
             initial_shared_parameter_values=initial_shared_parameter_values,
+            use_deadline_cloud_v2_channel=self.use_deadline_cloud_v2_channel,
             parent=self,
         )
         self.shared_job_settings.parameter_changed.connect(self.on_shared_job_parameter_changed)

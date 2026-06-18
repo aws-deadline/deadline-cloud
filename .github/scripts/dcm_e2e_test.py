@@ -83,6 +83,26 @@ def browser():
     fail(f"browser {BROWSER_NAME!r} not found; apps: {[a.name for a in xa11y.App.list()]}")
 
 
+def dismiss_firefox_welcome(br):
+    """Dismiss any Firefox first-run welcome dialogs/tabs that appear on launch.
+    Firefox shows a multi-step welcome dialog; keep clicking until none remain."""
+    for _ in range(5):
+        dismissed = False
+        for label in ("Continue", "Not now", "No thanks", "Skip", "Get Started"):
+            try:
+                btn = br.locator(f"button[name='{label}']")
+                btn.wait_visible(timeout=3)
+                btn.press()
+                print(f"prewarm: dismissed welcome: {label}", flush=True)
+                dismissed = True
+                time.sleep(1)
+                break
+            except Exception:
+                pass
+        if not dismissed:
+            break
+
+
 def prewarm_browser():
     """Launch Firefox with about:blank so the cold-start (profile init, privacy
     notice tab) doesn't run inside the IdC PAR token's short TTL window.
@@ -99,11 +119,12 @@ def prewarm_browser():
         stdin=subprocess.DEVNULL,
     )
     try:
-        browser()
+        br = browser()
     except Exception as e:
         print(f"prewarm: browser app not detected: {e}", flush=True)
         return
     time.sleep(3)
+    dismiss_firefox_welcome(br)
     print("prewarm: Firefox is running and idle on about:blank", flush=True)
 
 
@@ -154,17 +175,23 @@ def sign_in():
     """Drive the IdC sign-in flow. Returns True on success, False if the IdC
     /platform/authorize page returned 403 (caller should restart the login)."""
     br = browser()
-    # Dismiss any first-run welcome screens (Edge has several layered ones)
+    # Dismiss any first-run welcome screens (Edge and Firefox)
     for _ in range(6):
         dismissed = False
         for label in (
+            # Firefox welcome flow (dialog with "Continue" button)
+            "Continue",
+            "Not now",
+            "No thanks",
+            "Get Started",
+            # Edge welcome flow
             "Start without your data",
             "Confirm and continue",
             "Confirm and start browsing",
-            "Skip",
-            "Not now",
             "Continue without this data",
             "Continue without Microsoft data",
+            # Shared
+            "Skip",
         ):
             try:
                 btn = br.locator(f"button[name='{label}']")
