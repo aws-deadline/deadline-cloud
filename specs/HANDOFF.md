@@ -3,9 +3,78 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-## Active: None
+## Active: CI/CD Hardening — Phase 2
 
-No active work item. CI is green on all 3 OSes; PR #2 is ready to merge.
+**Status:** Phase 1 merged (PR #2). Phases 2–5 below to be done in a single PR.
+
+**Branch:** `ci/hardening` (create from mainline)
+
+---
+
+### Phase 1: Conformance workflow verification ✅ MERGED
+
+Completed in PR #2. Nightly conformance workflow dispatched manually
+post-merge — check result before starting Phase 2.
+
+### Phase 2: Verify conformance workflow passes
+
+The nightly conformance workflow (`conformance.yml`) was manually dispatched
+on 2026-06-18. Check its result:
+
+```bash
+gh run list --repo viknith/deadline-cloud-rs --workflow conformance.yml --limit 1
+```
+
+If failed, root-cause and fix. Key files:
+- `.github/workflows/conformance.yml`
+- `conformance/rust_conformance_plugin.py` (localhost-rewrite pytest plugin)
+- `conformance/xfail_allowlist.txt` (known parity gaps)
+- `conformance/run_conformance.sh`
+
+The workflow clones `deadline-cloud-python`, builds the Rust binary, then runs
+Python's `test/cli_e2e/` suite against it. Consider whether conformance should
+also run on PRs (openjd-rs does this) — currently nightly-only.
+
+### Phase 3: pyo3 0.24 → 0.28 upgrade
+
+- Current: pyo3 0.24, `deny.toml` ignores RUSTSEC-2026-0176/0177
+- Upgrade to 0.28 (major breaking changes — check https://pyo3.rs/v0.28/migration)
+- Key change: replace `unsafe impl Send/Sync` on `PySubmissionHandler` with `Py<PyAny>`
+- After upgrade: remove RUSTSEC ignores from `deny.toml`
+- Verify: `make build && make test-bindings`
+
+### Phase 4: Unpin rust-toolchain.toml
+
+- Currently pins stable 1.94.0 (newer stable had stricter clippy lints)
+- After pyo3 upgrade, remove `rust-toolchain.toml` entirely (or update to latest)
+- Fix any new clippy lints that surface
+- Verify: all 3 OSes still green in CI
+
+### Phase 5: xa11y GUI test workflow
+
+Add `.github/workflows/python.yml` that runs:
+- `make test-bindings` (PyO3 binding tests)
+- `make test-ui` (xa11y GUI accessibility tests)
+
+Requirements:
+- Needs `.venv`, PySide6, maturin, Xvfb on Linux
+- Use `xvfb-run` on ubuntu-latest for headless Qt
+- Consider macOS too (no Xvfb needed, native display)
+- Look at how tests run locally: `make setup-python && make build && make test-ui`
+
+### Phase 6: Windows test twins
+
+Add `#[cfg(windows)]` companion tests for features currently Unix-only:
+- Hook execution: `.cmd` batch scripts instead of `sh -c`
+- DCM monitor auth: `.cmd` monitor stub instead of `#!/bin/bash`
+- Symlink escape: directory junctions (no elevation needed)
+
+Search for `TODO: remove when Windows hook twins added` to find all sites.
+Files to update:
+- `crates/deadline-lib/src/bundle/hooks.rs` (10 L1 tests)
+- `crates/deadline-lib/tests/bundle/hooks.rs` (6 integration tests + TestHandler)
+- `crates/deadline-cli/tests/cli/auth.rs` (6 tests + helpers)
+- `crates/deadline-cli/tests/cli/bundle_hooks.rs` (8 tests + helpers)
 
 ---
 
@@ -23,111 +92,35 @@ Triggered on every push to `mainline` and every PR targeting
 | **Build & Test** | ubuntu, macOS, Windows (matrix) | Build all targets, clippy `-D warnings`, `cargo test --workspace`, doctests |
 | **Documentation** | ubuntu | `cargo doc --no-deps --workspace` with `-D warnings` |
 
-Key CI infrastructure:
-- `rust-toolchain.toml` pins stable 1.94.0 (avoids CI breakage from newer clippy)
-- `*.localhost` host entries added on macOS/Windows (AWS SDK's `management.` prefix)
-- Cargo cache keyed on `(os, rustc-version-hash, Cargo.lock-hash)` with stale target/ eviction
-- `concurrency` cancels in-progress PR runs on new pushes; never cancels mainline
-- `fail-fast: false` — all 3 OSes run to completion even if one fails
+Key infrastructure:
+- `rust-toolchain.toml` pins stable 1.94.0
+- `*.localhost` host entries on macOS/Windows (AWS SDK `management.` prefix)
+- Cargo cache keyed on `(os, rustc-hash, Cargo.lock-hash)` with stale eviction
+- `concurrency` cancels in-progress PR runs; never cancels mainline
+- `fail-fast: false` — all 3 OSes complete even if one fails
 
 ### Outer loop: `.github/workflows/conformance.yml`
 
-Nightly scheduled (07:00 UTC) + manual dispatch. Replays
-`deadline-cloud-python`'s `test/cli_e2e/` suite against the Rust binary
-to catch parity drift. Uses a localhost-rewrite pytest plugin
-(`conformance/`) and an xfail allowlist for known gaps.
-
-### What's NOT in CI yet (follow-up PRs)
-- xa11y GUI tests (need display server / Xvfb)
-- Python binding tests (`make test-bindings`)
-- Release builds / binary packaging
-- Coverage reporting
-
----
-
-## Recently completed
-
-- **Cross-OS CI — GitHub Actions (2026-06-18)** — PR #2, branch
-  `ci/github-workflows`. Full 3-OS CI gate: fmt, cargo-deny, doc,
-  build+clippy+test on ubuntu/macOS/Windows. Fixed 5 real Windows bugs
-  in production code (glob backslash escape, PID lock race, zip shell-out,
-  filter_redundant separator, manifest root_prefix mismatch). 425 CLI L2
-  tests + 513 lib L1 tests + 206 integration tests pass on Windows.
-  16 tests remain `#[cfg(unix)]`-gated (spawn `sh`); Windows twins tracked
-  in progress.md.
-
-- **Python repo parity — telemetry + UI (2026-05-28)** — process_start event,
-  stack trace sanitizer + record_error_with_trace, HoverRadioButton widget.
-  Merged to mainline (commits a5d99cf, ce941a8).
+Nightly (07:00 UTC) + manual dispatch. Replays `deadline-cloud-python`'s
+`test/cli_e2e/` against the Rust binary. Pytest plugin rewrites localhost
+URLs for the SDK's host prefix. xfail allowlist for known gaps.
 
 ---
 
 ## Deferred: Rust GUI Rewrite (QML)
 
 **Status:** Deferred indefinitely. Work preserved on branch `qml-gui-wip`.
-
-The attempt to replace the Python Qt GUI with Rust+QML (cxx-qt) was
-deferred due to fundamental QML limitations for forms-based UIs:
-
-- QML Repeater with JS array models destroys all delegates on any model
-  change, causing TextField focus loss during typing
-- No two-way binding — requires manual sync patterns
-- Nested Repeater index shadowing requires separate component files
-- DCC plugin extensibility (custom SceneSettingsWidget injection) has no
-  proven QML equivalent
-
-The Python Qt GUI in `gui/` remains the production GUI. CLI GUI commands
-(`bundle gui-submit`, `config gui`) spawn a Python subprocess.
-
-If revisited, the recommended approach is to use QML `ListModel` for
-editable dynamic forms instead of JS array models, and to spike DCC
-plugin integration before committing to the architecture.
+The Python Qt GUI in `gui/` remains the production GUI.
 
 ---
 
-## Completed items
+## Completed items (recent)
 
-- **Fix xa11y GUI test flakiness — `_find_app` false match (2026-05-28)** —
-  `_find_app` name-based fallback matched transient macOS system services
-  (e.g. `ThemeWidgetControlViewService`) instead of the test's GUI. Fixed
-  by filtering fallback to only match apps containing "python"/"deadline".
-  Same bug exists in `deadline-cloud-python/test/ui/helpers.py`.
+- **Cross-OS CI — GitHub Actions (2026-06-18)** — PR #2. Full 3-OS gate.
+  Fixed 5 real Windows bugs. 1,141 tests passing on Windows.
 
-- **#28d — Python linting + collect() audit (2026-05-27)** —
-  Added ruff linter/formatter for `gui/` and `pytests/`. Fixed 5 clippy
-  violations (unsafe impl comments, to_string on &str, collapsible if).
-  Audited all collect() sites — zero needless collects found. `make lint`
-  now includes `lint-python`; `make fmt` includes `fmt-python-check`.
-  37 xa11y tests pass, 1,355 Rust tests pass.
-
-- **Fix SIGBUS crash in _native.abi3.so (2026-05-27)** —
-  Stack overflow on QThread (512KB) during webpki cert parsing. Fixed
-  with `on_large_stack` (scoped thread, 8MB) + `py.allow_threads()`.
-  Cached STS account ID in SessionCache. Aligned xa11y test infra with
-  Python repo (SIGTERM handler, PYTHONUNBUFFERED, App.by_name). 37 xa11y
-  tests pass (was 31 + 4 xfailed/crashing).
-
-- **#35 Batch 2b — Queue Parameters + Attachments UI (2026-05-25)** —
-  ParameterListModel, AttachmentModel, QML dynamic parameter form,
-  attachment lists, ComboBox accessibility fix, farm/queue race fix,
-  xa11y test infrastructure fix, mock backend queue environment support.
-  1,483→1,488 Rust tests. 35→38 xa11y tests.
-
-- **#35 Batch 2a — Submit Action + Progress + Export (2026-05-24–25)** —
-  SubmitModel, ProgressModel, SubmitDialog.qml, ProgressDialog.qml,
-  logic/submit.rs, CLI gui-submit wiring, job history bundles, --output json,
-  dark mode, cancel handling, tilde expansion. 1,421→1,483 tests.
-
-- **#35 Batch 1 — Config/Auth/Resource Models (2026-05-21–22)** —
-  ConfigModel, AuthModel, ResourceModel, ConfigDialog.qml, logic.rs,
-  CLI config gui wiring, xa11y test infrastructure. 1,355→1,421 tests.
-
-- **#34 — Library/CLI boundary refactor (2026-05-20)** — Removed `&IniConfig`
-  from all library signatures. 1,355 Rust tests, 373 Python tests pass.
-
-- **Audit findings — Batches A-J (2026-05-15–16)** — 45 findings resolved.
-
-- **#31 — Crate Restructure (2026-05-14)** — All 12 steps done.
+- **Python repo parity — telemetry + UI (2026-05-28)** — process_start,
+  record_error_with_trace, HoverRadioButton. Merged (a5d99cf, ce941a8).
 
 ---
 
