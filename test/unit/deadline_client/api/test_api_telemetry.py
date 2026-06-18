@@ -12,6 +12,7 @@ from dataclasses import asdict
 from urllib import request
 
 from deadline.client import api, config
+from deadline.client.api._agent_detection import detect_invoking_agent
 from deadline.client.api._telemetry import (
     TelemetryClient,
     TelemetryEvent,
@@ -1023,3 +1024,143 @@ class TestGetMonitorSessionId:
 
         client = make_client()
         assert "monitor_session_id" not in client._common_details
+
+
+# Every env var that detect_invoking_agent() inspects. Cleared before each agent
+# detection test so the host environment (which may itself be an agent, e.g. a
+# developer running pytest inside Claude Code) can't leak into the assertions.
+_ALL_AGENT_ENV_VARS = (
+    "AI_AGENT",
+    "AGENT",
+    "CLAUDECODE",
+    "CLAUDE_CODE",
+    "CODEX_SANDBOX",
+    "CODEX_THREAD_ID",
+    "CURSOR_AGENT",
+    "REPL_ID",
+    "GEMINI_CLI",
+    "OPENCODE",
+    "AUGMENT_AGENT",
+    "GOOSE_PROVIDER",
+    "EDITOR",
+    "TERM_PROGRAM",
+)
+
+
+@pytest.fixture(name="clean_agent_env")
+def fixture_clean_agent_env(monkeypatch):
+    """Removes all agent-detection env vars so tests start from a 'human' baseline."""
+    for var in _ALL_AGENT_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    return monkeypatch
+
+
+def test_detect_invoking_agent_human(clean_agent_env):
+    """With no agent markers set, detection returns None (human / direct invocation)."""
+    assert detect_invoking_agent() is None
+
+
+@pytest.mark.parametrize(
+    "env_var, expected",
+    [
+        pytest.param("CLAUDECODE", "claude-code", id="claude-code"),
+        pytest.param("CLAUDE_CODE", "claude-code", id="claude-code-alt"),
+        pytest.param("CODEX_SANDBOX", "codex", id="codex-sandbox"),
+        pytest.param("CODEX_THREAD_ID", "codex", id="codex-thread"),
+        pytest.param("CURSOR_AGENT", "cursor", id="cursor"),
+        pytest.param("REPL_ID", "replit", id="replit"),
+        pytest.param("GEMINI_CLI", "gemini", id="gemini"),
+        pytest.param("OPENCODE", "opencode", id="opencode"),
+        pytest.param("AUGMENT_AGENT", "auggie", id="auggie"),
+        pytest.param("GOOSE_PROVIDER", "goose", id="goose"),
+    ],
+)
+def test_detect_invoking_agent_presence_markers(clean_agent_env, env_var, expected):
+    """Presence of a known agent marker env var resolves to its canonical name."""
+    clean_agent_env.setenv(env_var, "1")
+    assert detect_invoking_agent() == expected
+
+
+@pytest.mark.parametrize(
+    "env_var, value, expected",
+    [
+        pytest.param("EDITOR", "/usr/local/bin/devin-editor", "devin", id="devin-editor"),
+        pytest.param("TERM_PROGRAM", "kiro", "kiro", id="kiro-term"),
+        pytest.param("EDITOR", "vim", None, id="non-agent-editor"),
+    ],
+)
+def test_detect_invoking_agent_value_markers(clean_agent_env, env_var, value, expected):
+    """Value-substring markers (IDE/editor integrations) match on their value."""
+    clean_agent_env.setenv(env_var, value)
+    assert detect_invoking_agent() == expected
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        pytest.param("goose", "goose", id="named"),
+        pytest.param("claude-code_2-1-177_agent", "claude-code", id="versioned-token"),
+        pytest.param("1", "unknown", id="generic-true-numeric"),
+        pytest.param("true", "unknown", id="generic-true"),
+    ],
+)
+def test_detect_invoking_agent_generic_agent_var(clean_agent_env, value, expected):
+    """The proposed generic AGENT var carries a name, or 1/true -> 'unknown'."""
+    clean_agent_env.setenv("AGENT", value)
+    assert detect_invoking_agent() == expected
+
+
+def test_detect_invoking_agent_ai_agent_override(clean_agent_env):
+    """AI_AGENT takes priority and is lowercased to its leading token."""
+    clean_agent_env.setenv("AI_AGENT", "Claude-Code_1-2-3_agent")
+    clean_agent_env.setenv("CURSOR_AGENT", "1")  # would otherwise win
+    assert detect_invoking_agent() == "claude-code"
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        # Spaces/slashes/control chars are stripped so the User-Agent token and
+        # telemetry payload can't be corrupted by a malformed env value.
+        pytest.param("foo bar", "foobar", id="strips-space"),
+        pytest.param("a/b\\c", "abc", id="strips-slashes"),
+        pytest.param("name\nwith\rnewlines", "namewithnewlines", id="strips-control-chars"),
+        pytest.param("keep.this-name_x", "keep.this-name", id="keeps-safe-chars-splits-underscore"),
+        pytest.param("MixedCase", "mixedcase", id="lowercased"),
+        pytest.param("!@#$%", None, id="all-disallowed-falls-through"),
+        pytest.param("x" * 200, "x" * 64, id="length-capped"),
+    ],
+)
+def test_detect_invoking_agent_override_sanitized(clean_agent_env, value, expected):
+    """The user-controlled AI_AGENT/AGENT override is constrained to a safe charset/length."""
+    clean_agent_env.setenv("AI_AGENT", value)
+    assert detect_invoking_agent() == expected
+
+
+def test_detect_invoking_agent_presence_beats_ide(clean_agent_env):
+    """A specific presence marker is detected before a host IDE value marker."""
+    clean_agent_env.setenv("TERM_PROGRAM", "kiro")
+    clean_agent_env.setenv("CLAUDECODE", "1")
+    assert detect_invoking_agent() == "claude-code"
+
+
+def test_telemetry_client_tags_human(fresh_deadline_config, clean_agent_env):
+    """A client created with no agent env tags events invoked_by=HUMAN, no agent_name."""
+    # Opt out so __init__ skips network initialize(); _common_details is populated first.
+    config.set_setting("telemetry.opt_out", "true")
+    client = TelemetryClient(
+        "deadline-cloud-library", "test-version", config=config.config_file.read_config()
+    )
+    assert client._common_details["invoked_by"] == "HUMAN"
+    assert "agent_name" not in client._common_details
+
+
+def test_telemetry_client_tags_agent(fresh_deadline_config, clean_agent_env):
+    """A client created under an agent env tags invoked_by=AGENT with the agent_name."""
+    config.set_setting("telemetry.opt_out", "true")
+    clean_agent_env.setenv("CLAUDECODE", "1")
+    client = TelemetryClient(
+        "deadline-cloud-library", "test-version", config=config.config_file.read_config()
+    )
+    assert client._common_details["invoked_by"] == "AGENT"
+    assert client._common_details["agent_name"] == "claude-code"

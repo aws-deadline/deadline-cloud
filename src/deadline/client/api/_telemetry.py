@@ -22,6 +22,7 @@ from urllib import request, error
 
 from ...job_attachments.progress_tracker import SummaryStatistics
 
+from ._agent_detection import detect_invoking_agent
 from ._session import (
     get_monitor_id,
     get_user_and_identity_store_id,
@@ -131,6 +132,15 @@ class TelemetryClient:
         # If a different base package is provided, include info from this library as supplementary info
         if package_name != "deadline-cloud-library":
             self._common_details["deadline-cloud-version"] = version
+
+        # Tag every event with whether an AI agent / harness invoked the CLI so
+        # downstream metrics can distinguish agent-driven from human usage.
+        # Recorded in _common_details (not metadata) so it is queryable as an
+        # event_details field in RUM event patterns.
+        agent_name = detect_invoking_agent()
+        self._common_details["invoked_by"] = "AGENT" if agent_name else "HUMAN"
+        if agent_name:
+            self._common_details["agent_name"] = agent_name
         try:
             self._system_metadata = self._get_system_metadata(config=config)
         except Exception:

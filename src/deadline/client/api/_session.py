@@ -26,6 +26,7 @@ from botocore.exceptions import (  # type: ignore[import]
 from botocore.session import get_session as get_botocore_session
 
 from .. import version
+from ._agent_detection import detect_invoking_agent
 from ..config import get_setting, set_setting, config_file
 from ..exceptions import DeadlineOperationError
 from ...job_attachments._aws.aws_clients import get_s3_client
@@ -130,6 +131,11 @@ def get_default_client_config(**kwargs) -> botocore.config.Config:
         user_agent_extra += submitter_extra
     if session_context.get("cli-command-name"):
         user_agent_extra += f" cli-command/{session_context['cli-command-name']}"
+    # Attribute AI-agent-driven invocations on the service-side User-Agent so they
+    # are distinguishable in service logs (complements the RUM telemetry tagging).
+    agent_name = detect_invoking_agent()
+    if agent_name:
+        user_agent_extra += f" invoked-by/{agent_name}"
     client_config = botocore.config.Config(user_agent_extra=user_agent_extra, **kwargs)
     return client_config
 

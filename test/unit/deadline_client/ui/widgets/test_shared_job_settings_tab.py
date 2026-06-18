@@ -1,5 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+from unittest.mock import patch
+
 import pytest
 
 try:
@@ -20,6 +22,45 @@ def shared_job_settings_tab(qtbot, temp_job_bundle_dir) -> SharedJobSettingsWidg
     )
     qtbot.addWidget(widget)
     return widget
+
+
+@pytest.fixture(scope="function")
+def v2_channel_settings_tab(qtbot, temp_job_bundle_dir) -> SharedJobSettingsWidget:
+    """A SharedJobSettingsWidget opted into the deadline-cloud-v2 Conda channel migration."""
+    initial_settings = JobBundleSettings(input_job_bundle_dir=temp_job_bundle_dir, name="test-name")
+    widget = SharedJobSettingsWidget(
+        initial_settings=initial_settings,
+        initial_shared_parameter_values=dict(),
+        use_deadline_cloud_v2_channel=True,
+    )
+    qtbot.addWidget(widget)
+    return widget
+
+
+def test_v2_channel_migration_applied_when_enabled(
+    v2_channel_settings_tab: SharedJobSettingsWidget,
+):
+    """When use_deadline_cloud_v2_channel is True, the queue's CondaChannels gets v2 prepended."""
+    queue_parameters = [{"name": "CondaChannels", "value": "deadline-cloud conda-forge"}]
+    with patch.object(v2_channel_settings_tab.queue_parameters_box, "rebuild_ui") as mock_rebuild:
+        v2_channel_settings_tab._handle_queue_parameters_update(queue_parameters)
+
+    rebuilt = mock_rebuild.call_args.kwargs["parameter_definitions"]
+    conda_channels = next(p for p in rebuilt if p["name"] == "CondaChannels")
+    assert conda_channels["value"] == "deadline-cloud-v2 deadline-cloud conda-forge"
+
+
+def test_v2_channel_migration_not_applied_when_deactivated(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    """By default (flag off), the queue's CondaChannels is passed through unchanged."""
+    queue_parameters = [{"name": "CondaChannels", "value": "deadline-cloud conda-forge"}]
+    with patch.object(shared_job_settings_tab.queue_parameters_box, "rebuild_ui") as mock_rebuild:
+        shared_job_settings_tab._handle_queue_parameters_update(queue_parameters)
+
+    rebuilt = mock_rebuild.call_args.kwargs["parameter_definitions"]
+    conda_channels = next(p for p in rebuilt if p["name"] == "CondaChannels")
+    assert conda_channels["value"] == "deadline-cloud conda-forge"
 
 
 def test_name_should_be_truncated_to_openjd_spec_128_chars(

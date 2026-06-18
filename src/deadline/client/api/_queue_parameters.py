@@ -20,6 +20,50 @@ from ..job_bundle.parameters import (
 from ..ui._utils import tr
 
 
+# The default Conda channel that Deadline Cloud configures automatically, and its v2 successor.
+_DEADLINE_CLOUD_CHANNEL = "deadline-cloud"
+_DEADLINE_CLOUD_V2_CHANNEL = "deadline-cloud-v2"
+
+
+def _prepend_v2_channel(channels: str) -> str:
+    """
+    Inserts ``deadline-cloud-v2`` immediately ahead of the ``deadline-cloud`` channel in a
+    space-separated channel list, returning the new list.
+
+    Returns the input unchanged when ``deadline-cloud`` is absent, or when
+    ``deadline-cloud-v2`` is already present (so the operation is idempotent across repeated
+    queue-parameter reloads and queues that already list the v2 channel).
+    """
+    tokens = channels.split()
+    if _DEADLINE_CLOUD_CHANNEL not in tokens or _DEADLINE_CLOUD_V2_CHANNEL in tokens:
+        return channels
+    result: list[str] = []
+    for token in tokens:
+        # Insert v2 just before v1 so it takes precedence under Conda's channel priority.
+        if token == _DEADLINE_CLOUD_CHANNEL:
+            result.append(_DEADLINE_CLOUD_V2_CHANNEL)
+        result.append(token)
+    return " ".join(result)
+
+
+def _apply_deadline_cloud_v2_channel_migration(queue_parameters: list[JobParameter]) -> None:
+    """
+    Prepends ``deadline-cloud-v2`` ahead of ``deadline-cloud`` in the ``CondaChannels`` queue
+    parameter (see :func:`_prepend_v2_channel`), rewriting both the ``default`` and ``value``
+    fields in place.
+
+    Args:
+        queue_parameters (list[JobParameter]): The queue parameter definitions to modify.
+    """
+    for parameter in queue_parameters:
+        if parameter.get("name") != "CondaChannels":
+            continue
+        for field in ("default", "value"):
+            channels = parameter.get(field)
+            if isinstance(channels, str):
+                parameter[field] = _prepend_v2_channel(channels)
+
+
 @api.record_function_latency_telemetry_event()
 def get_queue_parameter_definitions(
     *, region: Optional[str] = None, farmId: str, queueId: str, config=None
