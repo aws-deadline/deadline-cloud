@@ -508,17 +508,20 @@ def sync_output(
 
         logger.echo()
 
-        updated_download_state, categorized_job_ids, download_candidate_jobs = (
-            _incremental_output_download(
-                boto3_session=boto3_session,
-                farm_id=farm_id,
-                queue=queue,
-                checkpoint=checkpoint,
-                file_conflict_resolution=FileConflictResolution[conflict_resolution],
-                config=config,
-                print_function_callback=logger.echo,
-                dry_run=dry_run,
-            )
+        (
+            updated_download_state,
+            categorized_job_ids,
+            download_candidate_jobs,
+            job_download_results,
+        ) = _incremental_output_download(
+            boto3_session=boto3_session,
+            farm_id=farm_id,
+            queue=queue,
+            checkpoint=checkpoint,
+            file_conflict_resolution=FileConflictResolution[conflict_resolution],
+            config=config,
+            print_function_callback=logger.echo,
+            dry_run=dry_run,
         )
 
         # Save status file and checkpoint if it's not a dry run
@@ -530,6 +533,7 @@ def sync_output(
                 local_storage_profile_id=local_storage_profile_id,
                 local_storage_profile=local_storage_profile if local_storage_profile_id else None,
                 checkpoint_dir=checkpoint_dir,
+                job_download_results=job_download_results,
                 print_function_callback=logger.echo,
             )
 

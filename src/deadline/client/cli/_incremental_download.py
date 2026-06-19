@@ -6,6 +6,7 @@ __all__ = ["CategorizedJobIds", "_incremental_output_download"]
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
 import difflib
+import os
 from typing import Optional
 from configparser import ConfigParser
 from typing import Any, Callable
@@ -27,7 +28,7 @@ from ...job_attachments._incremental_downloads.incremental_download_state import
 from ...job_attachments._incremental_downloads._manifest_s3_downloads import (
     _add_output_manifests_from_s3,
     _download_all_manifests_with_absolute_paths,
-    _merge_absolute_path_manifest_list,
+    _get_manifests_to_download,
     _download_manifest_paths,
 )
 from ...job_attachments._path_mapping import (
@@ -52,6 +53,30 @@ from ...job_attachments.progress_tracker import (
 from ._common import _cli_object_repr, sigint_handler
 
 SESSIONS_API_MAX_CONCURRENCY = 3
+
+
+def _classify_error(e: Exception) -> str:
+    """Classifies a download exception into a standard error code."""
+    if isinstance(e, PermissionError):
+        return "PERMISSION_DENIED"
+    if isinstance(e, OSError) and e.errno == 28:
+        return "DISK_FULL"
+    if isinstance(e, FileNotFoundError):
+        return "PATH_NOT_FOUND"
+    if isinstance(e, (ConnectionError, TimeoutError)):
+        return "NETWORK_ERROR"
+
+    # Fallback: check the error message for S3/boto errors
+    error_str = str(e).lower()
+    if "permission" in error_str or "access denied" in error_str:
+        return "PERMISSION_DENIED"
+    elif "no space" in error_str or "disk full" in error_str:
+        return "DISK_FULL"
+    elif "no such file" in error_str or "not found" in error_str:
+        return "PATH_NOT_FOUND"
+    elif "network" in error_str or "connection" in error_str or "timeout" in error_str:
+        return "NETWORK_ERROR"
+    return "UNKNOWN"
 
 
 @dataclass
@@ -991,7 +1016,12 @@ def _incremental_output_download(
     print_function_callback: Callable[[Any], None] = lambda msg: None,
     *,
     dry_run: bool = False,
-) -> tuple[IncrementalDownloadState, CategorizedJobIds, dict[str, dict[str, Any]]]:
+) -> tuple[
+    IncrementalDownloadState,
+    CategorizedJobIds,
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+]:
     """
     This function downloads all the task run outputs from the specified queue, that have become
     available since the last time the function was called. The checkpoint object
@@ -1174,15 +1204,26 @@ def _incremental_output_download(
             )
             print_function_callback(textwrap.indent(paths_summary, "      "))
 
-    # Merge the manifests ordered by the last modified timestamp
-    manifest_paths_to_download: list[BaseManifestPath] = _merge_absolute_path_manifest_list(
-        downloaded_manifests
+    # Build per-job file mapping by correlating downloaded manifests with their job IDs
+    manifests_to_download = _get_manifests_to_download(
+        queue["jobAttachmentSettings"]["rootPrefix"],
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
     )
+    job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
+    for i, (_, job_id, _, _) in enumerate(manifests_to_download):
+        manifest_tuple = downloaded_manifests[i]
+        if manifest_tuple is not None:
+            _, manifest = manifest_tuple
+            for manifest_path in manifest.paths:
+                job_manifest_paths.setdefault(job_id, []).append(manifest_path)
 
     # Print a summary of all the paths before starting the download
-    local_path_list = [manifest_path.path for manifest_path in manifest_paths_to_download]
+    all_manifest_paths = [path for paths in job_manifest_paths.values() for path in paths]
+    local_path_list = [manifest_path.path for manifest_path in all_manifest_paths]
     file_size_by_path = {
-        manifest_path.path: manifest_path.size for manifest_path in manifest_paths_to_download
+        manifest_path.path: manifest_path.size for manifest_path in all_manifest_paths
     }
     print_function_callback("")
     print_function_callback("Summary of paths to download:")
@@ -1191,43 +1232,70 @@ def _incremental_output_download(
     )
     print_function_callback("")
 
+    # Download per-job with error isolation
+    job_download_results: dict[str, dict[str, Any]] = {}
+
     if not dry_run:
-        print_function_callback(f"Downloading {len(manifest_paths_to_download)} files from S3...")
+        total_files = sum(len(paths) for paths in job_manifest_paths.values())
+        print_function_callback(
+            f"Downloading {total_files} files from S3 across {len(job_manifest_paths)} jobs..."
+        )
         start_t = time.perf_counter_ns()
         start_time = datetime.now(tz=timezone.utc)
 
-        # Incremental download is mostly a background thing, so don't print status too often while downloading
-        MIN_DELAY_BETWEEN_PRINTOUTS = 20
-        last_call_time = time.time() - MIN_DELAY_BETWEEN_PRINTOUTS
-        printed_100_percent = False
+        for job_id, job_files in job_manifest_paths.items():
+            job_name = download_candidate_jobs.get(job_id, {}).get("name", job_id)
+            print_function_callback(f"  Downloading {len(job_files)} files for job: {job_name}")
 
-        def _update_download_progress(
-            download_metadata: ProgressReportMetadata,
-        ) -> bool:
-            nonlocal last_call_time, printed_100_percent
+            MIN_DELAY_BETWEEN_PRINTOUTS = 20
+            last_call_time = time.time() - MIN_DELAY_BETWEEN_PRINTOUTS
+            printed_100_percent = False
 
-            if not printed_100_percent and download_metadata.progress == 100:
-                print_function_callback(f"{download_metadata.progressMessage}")
-                last_call_time = time.time()
-                printed_100_percent = True
-            elif (
-                not printed_100_percent
-                and time.time() - last_call_time > MIN_DELAY_BETWEEN_PRINTOUTS
-            ):
-                print_function_callback(f"{download_metadata.progressMessage}")
-                last_call_time = time.time()
+            def _update_download_progress(
+                download_metadata: ProgressReportMetadata,
+            ) -> bool:
+                nonlocal last_call_time, printed_100_percent
 
-            return sigint_handler.continue_operation
+                if not printed_100_percent and download_metadata.progress == 100:
+                    print_function_callback(f"    {download_metadata.progressMessage}")
+                    last_call_time = time.time()
+                    printed_100_percent = True
+                elif (
+                    not printed_100_percent
+                    and time.time() - last_call_time > MIN_DELAY_BETWEEN_PRINTOUTS
+                ):
+                    print_function_callback(f"    {download_metadata.progressMessage}")
+                    last_call_time = time.time()
 
-        _download_manifest_paths(
-            manifest_paths_to_download,
-            HashAlgorithm.XXH128,
-            queue,
-            boto3_session_for_s3,
-            file_conflict_resolution,
-            on_downloading_files=_update_download_progress,
-            print_function_callback=print_function_callback,
-        )
+                return sigint_handler.continue_operation
+
+            try:
+                _download_manifest_paths(
+                    job_files,
+                    HashAlgorithm.XXH128,
+                    queue,
+                    boto3_session_for_s3,
+                    file_conflict_resolution,
+                    on_downloading_files=_update_download_progress,
+                    print_function_callback=print_function_callback,
+                )
+                job_download_results[job_id] = {
+                    "total_files": len(job_files),
+                    "downloaded_files": len(job_files),
+                    "failed_files": 0,
+                    "error_code": None,
+                    "error_message": None,
+                }
+            except Exception as e:
+                downloaded_count = sum(1 for f in job_files if os.path.exists(f.path))
+                job_download_results[job_id] = {
+                    "total_files": len(job_files),
+                    "downloaded_files": downloaded_count,
+                    "failed_files": len(job_files) - downloaded_count,
+                    "error_code": _classify_error(e),
+                    "error_message": str(e),
+                }
+                print_function_callback(f"  ERROR downloading job {job_name} ({job_id}): {e}")
 
         durations.download = time.perf_counter_ns() - start_t
         duration = datetime.now(tz=timezone.utc) - start_time
@@ -1235,8 +1303,18 @@ def _incremental_output_download(
     else:
         print_function_callback("Skipping downloads due to DRY RUN")
 
-    # Update the timestamp in the state object to reflect the downloads that were completed
-    checkpoint.downloads_completed_timestamp = new_completed_timestamp
+    # Update the timestamp only if all jobs succeeded — if any failed, keep the old timestamp
+    # so the next run's SearchJobs query window still covers the failed jobs
+    has_download_failures = any(r.get("failed_files", 0) > 0 for r in job_download_results.values())
+    if not has_download_failures:
+        checkpoint.downloads_completed_timestamp = new_completed_timestamp
+
+    # Remove failed jobs from checkpoint entirely so they're treated as new (added) next run
+    failed_job_ids = {
+        job_id for job_id, r in job_download_results.items() if r.get("failed_files", 0) > 0
+    }
+    if failed_job_ids:
+        checkpoint.jobs = [job for job in checkpoint.jobs if job.job_id not in failed_job_ids]
 
     stats: dict[str, Any] = {
         "downloaded_session_actions": sum(
@@ -1244,8 +1322,8 @@ def _incremental_output_download(
             for session_list in job_sessions.values()
             for session in session_list
         ),
-        "downloaded_files": len(manifest_paths_to_download),
-        "downloaded_bytes": sum(path.size for path in manifest_paths_to_download),
+        "downloaded_files": len(all_manifest_paths),
+        "downloaded_bytes": sum(path.size for path in all_manifest_paths),
         "jobs_with_downloads": {
             "completed": len(categorized_job_ids.completed),
             "added": len(categorized_job_ids.added),
@@ -1294,4 +1372,4 @@ def _incremental_output_download(
     print_function_callback(f"    unchanged: {stats['jobs_without_downloads']['unchanged']}")
     print_function_callback(f"    inactive: {stats['jobs_without_downloads']['inactive']}")
 
-    return checkpoint, categorized_job_ids, download_candidate_jobs
+    return checkpoint, categorized_job_ids, download_candidate_jobs, job_download_results
