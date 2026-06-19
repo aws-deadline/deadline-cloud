@@ -80,7 +80,7 @@ workflow (`conformance.yml`) replays `deadline-cloud-python`'s `cli_e2e/` tests
 against the Rust binary.
 
 Key CI notes:
-- `rust-toolchain.toml` pins the Rust version — CI uses this exact version.
+- No `rust-toolchain.toml` — CI uses latest stable Rust.
 - Some tests are `#[cfg(unix)]` (spawn `sh`); Windows twins are TODO.
 - If you add a new `#[cfg(unix)]` gate, add a TODO comment and update `specs/progress.md`.
 - Snapshot tests run on all 3 OSes — use cross-OS filters in `insta::Settings`.

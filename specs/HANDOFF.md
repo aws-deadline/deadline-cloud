@@ -5,9 +5,9 @@ consulting the Work Items table in `specs/progress.md`.
 
 ## Active: CI/CD Hardening — Phase 5
 
-**Status:** Phases 1–4 complete. Phase 5–6 remain.
+**Status:** Phases 1–4 merged (PR #2, PR #3). Phases 5–6 remain.
 
-**Branch:** `ci/hardening`
+**Branch:** create new from mainline for next PR
 
 ---
 
@@ -79,7 +79,7 @@ Triggered on every push to `mainline` and every PR targeting
 | **Documentation** | ubuntu | `cargo doc --no-deps --workspace` with `-D warnings` |
 
 Key infrastructure:
-- `rust-toolchain.toml` pins stable 1.94.0
+- No toolchain pin — CI uses latest stable (removed in PR #3)
 - `*.localhost` host entries on macOS/Windows (AWS SDK `management.` prefix)
 - Cargo cache keyed on `(os, rustc-hash, Cargo.lock-hash)` with stale eviction
 - `concurrency` cancels in-progress PR runs; never cancels mainline
@@ -87,9 +87,10 @@ Key infrastructure:
 
 ### Outer loop: `.github/workflows/conformance.yml`
 
-Nightly (07:00 UTC) + manual dispatch. Replays `deadline-cloud-python`'s
-`test/cli_e2e/` against the Rust binary. Pytest plugin rewrites localhost
-URLs for the SDK's host prefix. xfail allowlist for known gaps.
+Nightly (07:00 UTC) + PR (path-filtered) + manual dispatch. Replays
+`deadline-cloud-python`'s `test/cli_e2e/` against the Rust binary. Pytest
+plugin rewrites localhost URLs for the SDK's host prefix. xfail allowlist
+for known gaps.
 
 ---
 
@@ -101,6 +102,10 @@ The Python Qt GUI in `gui/` remains the production GUI.
 ---
 
 ## Completed items (recent)
+
+- **CI/CD Hardening phases 2–4 (2026-06-19)** — PR #3. Conformance PR trigger,
+  pyo3 0.24→0.29 (removed 2 security advisory ignores), unpinned toolchain
+  (Rust 1.96, 8 clippy lints fixed). All 7 CI checks green on 3 OSes.
 
 - **Cross-OS CI — GitHub Actions (2026-06-18)** — PR #2. Full 3-OS gate.
   Fixed 5 real Windows bugs. 1,141 tests passing on Windows.
