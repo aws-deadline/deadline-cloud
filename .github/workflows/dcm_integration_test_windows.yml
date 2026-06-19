@@ -28,7 +28,7 @@ jobs:
       OPEN_LINK_LABELS: "Open,Open Link,Open link,Yes"
       SCREENSHOT_DIR: ${{ github.workspace }}\screenshots
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
