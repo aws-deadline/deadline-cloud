@@ -3,52 +3,38 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-## Active: CI/CD Hardening — Phase 2
+## Active: CI/CD Hardening — Phase 5
 
-**Status:** Phase 1 merged (PR #2). Phases 2–5 below to be done in a single PR.
+**Status:** Phases 1–4 complete. Phase 5–6 remain.
 
-**Branch:** `ci/hardening` (create from mainline)
+**Branch:** `ci/hardening`
 
 ---
 
 ### Phase 1: Conformance workflow verification ✅ MERGED
 
 Completed in PR #2. Nightly conformance workflow dispatched manually
-post-merge — check result before starting Phase 2.
+post-merge — confirmed passing.
 
-### Phase 2: Verify conformance workflow passes
+### Phase 2: Verify conformance workflow passes ✅ DONE
 
-The nightly conformance workflow (`conformance.yml`) was manually dispatched
-on 2026-06-18. Check its result:
+Conformance run passed (2026-06-19, 8m8s). Added `pull_request` trigger
+with path filters (`crates/`, `conformance/`, `Cargo.toml`, `Cargo.lock`)
+so conformance runs on code-touching PRs in addition to the nightly schedule.
 
-```bash
-gh run list --repo viknith/deadline-cloud-rs --workflow conformance.yml --limit 1
-```
+### Phase 3: pyo3 0.24 → 0.29 upgrade ✅ DONE
 
-If failed, root-cause and fix. Key files:
-- `.github/workflows/conformance.yml`
-- `conformance/rust_conformance_plugin.py` (localhost-rewrite pytest plugin)
-- `conformance/xfail_allowlist.txt` (known parity gaps)
-- `conformance/run_conformance.sh`
+Upgraded pyo3 and pythonize to 0.29.0. Migration changes:
+- `Python::with_gil` → `Python::attach`, `allow_threads` → `detach`
+- `PyObject` → `Py<PyAny>`, `FromPyObject` → dual-lifetime + `FromPyObjectOwned`
+- Removed `unsafe impl Send` (Py<PyAny> is Send); kept `unsafe impl Sync`
+- Removed RUSTSEC-2026-0176/0177 from deny.toml
 
-The workflow clones `deadline-cloud-python`, builds the Rust binary, then runs
-Python's `test/cli_e2e/` suite against it. Consider whether conformance should
-also run on PRs (openjd-rs does this) — currently nightly-only.
+### Phase 4: Unpin rust-toolchain.toml ✅ DONE
 
-### Phase 3: pyo3 0.24 → 0.28 upgrade
-
-- Current: pyo3 0.24, `deny.toml` ignores RUSTSEC-2026-0176/0177
-- Upgrade to 0.28 (major breaking changes — check https://pyo3.rs/v0.28/migration)
-- Key change: replace `unsafe impl Send/Sync` on `PySubmissionHandler` with `Py<PyAny>`
-- After upgrade: remove RUSTSEC ignores from `deny.toml`
-- Verify: `make build && make test-bindings`
-
-### Phase 4: Unpin rust-toolchain.toml
-
-- Currently pins stable 1.94.0 (newer stable had stricter clippy lints)
-- After pyo3 upgrade, remove `rust-toolchain.toml` entirely (or update to latest)
-- Fix any new clippy lints that surface
-- Verify: all 3 OSes still green in CI
+Removed `rust-toolchain.toml` (was 1.94.0). CI now uses latest stable.
+Fixed 8 new clippy lints from Rust 1.96: `map_unwrap_or`, `is_ok_and`,
+`checked_div`, `sort_by_key(Reverse)`, trailing comma, `from_mins`.
 
 ### Phase 5: xa11y GUI test workflow
 

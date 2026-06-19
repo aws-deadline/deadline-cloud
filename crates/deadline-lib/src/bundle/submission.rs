@@ -1150,7 +1150,7 @@ fn write_s3_copy_commands(
     continuation: &str,
 ) -> std::io::Result<()> {
     for subdir in ["Data", "Manifests"] {
-        write!(w, "aws s3 cp{continuation}",)?;
+        write!(w, "aws s3 cp{continuation}")?;
         write!(w, "    --recursive{continuation}")?;
         write!(w, "    ./{subdir}{continuation}")?;
         writeln!(w, "    {s3_base}/{subdir}")?;

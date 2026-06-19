@@ -1992,11 +1992,7 @@ async fn download_input_impl(
         .download(
             resolution,
             Some(Box::new(move |processed, total| {
-                let pct = if total > 0 {
-                    processed * 100 / total
-                } else {
-                    100
-                };
+                let pct = (processed * 100).checked_div(total).unwrap_or(100);
                 progress_mgr.lock().expect("lock poisoned").callback(pct);
                 crate::common::should_continue()
             })),
@@ -2955,11 +2951,7 @@ pub(crate) async fn download_output_impl(
         .download(
             resolution,
             Some(Box::new(move |processed, total| {
-                let pct = if total > 0 {
-                    processed * 100 / total
-                } else {
-                    100
-                };
+                let pct = (processed * 100).checked_div(total).unwrap_or(100);
                 progress_mgr.lock().expect("lock poisoned").callback(pct);
                 crate::common::should_continue()
             })),

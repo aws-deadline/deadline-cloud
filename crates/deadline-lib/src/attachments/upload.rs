@@ -243,7 +243,7 @@ fn classify_and_group_paths(
     for group in &asset_groups {
         for input in &group.inputs {
             total_input_files += 1;
-            total_input_bytes += std::fs::metadata(input).map(|m| m.len()).unwrap_or(0);
+            total_input_bytes += std::fs::metadata(input).map_or(0, |m| m.len());
         }
     }
 
@@ -519,7 +519,7 @@ pub async fn upload_assets(
     for group in asset_groups {
         for input in &group.inputs {
             total_files += 1;
-            total_bytes += std::fs::metadata(input).map(|m| m.len()).unwrap_or(0);
+            total_bytes += std::fs::metadata(input).map_or(0, |m| m.len());
         }
     }
 

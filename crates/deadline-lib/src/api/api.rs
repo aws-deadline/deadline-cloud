@@ -609,7 +609,7 @@ pub async fn wait_for_create_job_to_complete(
 ) -> Result<(bool, String), DeadlineError> {
     let initial_delay = std::time::Duration::from_millis(300);
     let max_delay = std::time::Duration::from_secs(5);
-    let timeout = std::time::Duration::from_secs(300);
+    let timeout = std::time::Duration::from_mins(5);
 
     let start = std::time::Instant::now();
     let mut delay = initial_delay;

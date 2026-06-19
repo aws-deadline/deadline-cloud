@@ -27,7 +27,7 @@ pub fn set_setting(name: &str, value: &str, config_path: Option<&str>) -> PyResu
 
 #[pyfunction]
 #[pyo3(signature = (config_path=None))]
-pub fn read_config(py: Python<'_>, config_path: Option<&str>) -> PyResult<PyObject> {
+pub fn read_config(py: Python<'_>, config_path: Option<&str>) -> PyResult<Py<PyAny>> {
     let config = crate::load_config(config_path)?;
     let outer = pyo3::types::PyDict::new(py);
     for (section, keys) in config.iter_sections() {

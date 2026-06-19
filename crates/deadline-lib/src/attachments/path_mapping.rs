@@ -104,7 +104,7 @@ impl PathMappingRuleApplier {
                 destination_path: r.destination_path.clone(),
             })
             .collect();
-        openjd_rules.sort_by(|a, b| b.source_path.len().cmp(&a.source_path.len()));
+        openjd_rules.sort_by_key(|a| std::cmp::Reverse(a.source_path.len()));
 
         Ok(Self {
             source_path_format: Some(format.clone()),

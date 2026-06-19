@@ -65,49 +65,41 @@ fn extract_submission_config(
     reason = "cb suffix clarifies these are callbacks"
 )]
 struct PySubmissionHandler {
-    print_cb: Option<PyObject>,
-    confirm_cb: Option<PyObject>,
-    continue_cb: Option<PyObject>,
+    print_cb: Option<Py<PyAny>>,
+    confirm_cb: Option<Py<PyAny>>,
+    continue_cb: Option<Py<PyAny>>,
 }
 
 #[allow(
     unsafe_code,
-    reason = "PyObject requires manual Send/Sync for cross-thread use with GIL"
+    reason = "Py<PyAny> is Send but not Sync; we guarantee Sync via GIL-gated access"
 )]
-// SAFETY: `PyObject` is only accessed via `Python::with_gil` which acquires the GIL,
-// ensuring exclusive access to the Python interpreter from any thread.
-unsafe impl Send for PySubmissionHandler {}
-#[allow(
-    unsafe_code,
-    reason = "PyObject requires manual Send/Sync for cross-thread use with GIL"
-)]
-// SAFETY: All `PyObject` access is gated by `with_gil`.
+// SAFETY: All `Py<PyAny>` fields are only accessed via `Python::attach` which acquires
+// the GIL, ensuring exclusive access to the Python interpreter from any thread.
 unsafe impl Sync for PySubmissionHandler {}
 
 impl deadline_lib::bundle::SubmissionHandler for PySubmissionHandler {
     fn on_message(&self, msg: &str) {
         if let Some(ref cb) = self.print_cb {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let _ = cb.call1(py, (msg,));
             });
         }
     }
     fn confirm(&self, msg: &str, default: bool) -> bool {
         match &self.confirm_cb {
-            Some(cb) => Python::with_gil(|py| {
+            Some(cb) => Python::attach(|py| {
                 cb.call1(py, (msg, default))
-                    .map(|r| r.is_truthy(py).unwrap_or(default))
-                    .unwrap_or(default)
+                    .map_or(default, |r| r.is_truthy(py).unwrap_or(default))
             }),
             None => default,
         }
     }
     fn should_continue(&self) -> bool {
         match &self.continue_cb {
-            Some(cb) => Python::with_gil(|py| {
+            Some(cb) => Python::attach(|py| {
                 cb.call0(py)
-                    .map(|r| r.is_truthy(py).unwrap_or(true))
-                    .unwrap_or(true)
+                    .map_or(true, |r| r.is_truthy(py).unwrap_or(true))
             }),
             None => true,
         }
@@ -118,7 +110,7 @@ impl deadline_lib::bundle::SubmissionHandler for PySubmissionHandler {
     ) {
         if let Some(ref cb) = self.print_cb {
             let msg = stats.format_upload_summary();
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let _ = cb.call1(py, (msg,));
             });
         }
@@ -130,12 +122,12 @@ impl deadline_lib::bundle::SubmissionHandler for PySubmissionHandler {
 pub fn create_job_from_job_bundle(
     py: Python<'_>,
     params: &Bound<'_, PyDict>,
-    on_print: Option<PyObject>,
-    on_hashing_progress: Option<PyObject>,
-    on_upload_progress: Option<PyObject>,
-    on_confirm: Option<PyObject>,
-    on_continue: Option<PyObject>,
-) -> PyResult<PyObject> {
+    on_print: Option<Py<PyAny>>,
+    on_hashing_progress: Option<Py<PyAny>>,
+    on_upload_progress: Option<Py<PyAny>>,
+    on_confirm: Option<Py<PyAny>>,
+    on_continue: Option<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
     // Extract job_bundle_dir (required)
     let job_bundle_dir: String = params
         .get_item("job_bundle_dir")?
@@ -195,7 +187,7 @@ pub fn create_job_from_job_bundle(
     let hashing_cb = on_hashing_progress.map(
         |cb| -> deadline_lib::attachments::progress_tracker::ProgressFn {
             Box::new(move |processed, total| {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     let dict = PyDict::new(py);
                     let pct = if total > 0 {
                         (processed as f64 / total as f64) * 100.0
@@ -220,8 +212,7 @@ pub fn create_job_from_job_bundle(
                     let _ = dict.set_item("processedBytes", processed);
                     let _ = dict.set_item("totalBytes", total);
                     cb.call1(py, (dict,))
-                        .map(|r| r.is_truthy(py).unwrap_or(true))
-                        .unwrap_or(true)
+                        .map_or(true, |r| r.is_truthy(py).unwrap_or(true))
                 })
             })
         },
@@ -230,7 +221,7 @@ pub fn create_job_from_job_bundle(
     let upload_cb = on_upload_progress.map(
         |cb| -> deadline_lib::attachments::progress_tracker::ProgressFn {
             Box::new(move |processed, total| {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     let dict = PyDict::new(py);
                     let pct = if total > 0 {
                         (processed as f64 / total as f64) * 100.0
@@ -255,8 +246,7 @@ pub fn create_job_from_job_bundle(
                     let _ = dict.set_item("processedBytes", processed);
                     let _ = dict.set_item("totalBytes", total);
                     cb.call1(py, (dict,))
-                        .map(|r| r.is_truthy(py).unwrap_or(true))
-                        .unwrap_or(true)
+                        .map_or(true, |r| r.is_truthy(py).unwrap_or(true))
                 })
             })
         },
@@ -297,7 +287,7 @@ pub fn create_job_from_job_bundle(
 
     let rt = crate::make_runtime()?;
     let job_id = py
-        .allow_threads(|| {
+        .detach(|| {
             crate::on_large_stack(|| {
                 rt.block_on(deadline_lib::bundle::create_job_from_job_bundle(
                     submit_params,
@@ -312,12 +302,12 @@ pub fn create_job_from_job_bundle(
 }
 
 /// Extract an optional typed value from a `PyDict`.
-fn extract_opt<'py, T: FromPyObject<'py>>(
+fn extract_opt<'py, T: FromPyObjectOwned<'py>>(
     dict: &Bound<'py, PyDict>,
     key: &str,
 ) -> PyResult<Option<T>> {
     match dict.get_item(key)? {
-        Some(item) if !item.is_none() => Ok(Some(item.extract()?)),
+        Some(item) if !item.is_none() => Ok(Some(item.extract().map_err(Into::into)?)),
         _ => Ok(None),
     }
 }

@@ -303,20 +303,12 @@ async fn run_async(action: BundleAction) -> Result<(), CliError> {
                 debug_snapshot_dir: effective_snapshot_dir.map(PathBuf::from),
                 handler: &CliSubmissionHandler,
                 hashing_progress_callback: Some(Box::new(move |processed, total| {
-                    let pct = if total > 0 {
-                        processed * 100 / total
-                    } else {
-                        100
-                    };
+                    let pct = (processed * 100).checked_div(total).unwrap_or(100);
                     hash_progress.lock().expect("lock poisoned").callback(pct);
                     true
                 })),
                 upload_progress_callback: Some(Box::new(move |processed, total| {
-                    let pct = if total > 0 {
-                        processed * 100 / total
-                    } else {
-                        100
-                    };
+                    let pct = (processed * 100).checked_div(total).unwrap_or(100);
                     upload_progress.lock().expect("lock poisoned").callback(pct);
                     true
                 })),

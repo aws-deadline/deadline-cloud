@@ -4,12 +4,18 @@ name: Conformance (Python CLI parity)
 # Rust `deadline` binary, using the LATEST Python mainline as the oracle. This
 # catches parity gaps — behavior Python added/changed that Rust hasn't ported.
 #
-# Runs on a schedule (not per-PR): a Rust PR should not be blocked by unrelated
-# changes in the Python repo. See conformance/README.md.
+# Runs nightly to detect Python-side drift, and on PRs that change Rust code
+# to catch regressions before merge.
 
 on:
   schedule:
     - cron: "0 7 * * *" # nightly ~07:00 UTC
+  pull_request:
+    paths:
+      - "crates/**"
+      - "conformance/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
   workflow_dispatch: {}
 
 permissions:

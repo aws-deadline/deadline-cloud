@@ -35,12 +35,7 @@ fn walk_and_check(resolved_root: &Path, dir: &Path) -> Result<(), DeadlineError>
                 resolved.display()
             )));
         }
-        if path.is_dir()
-            && !path
-                .symlink_metadata()
-                .map(|m| m.is_symlink())
-                .unwrap_or(false)
-        {
+        if path.is_dir() && !path.symlink_metadata().is_ok_and(|m| m.is_symlink()) {
             walk_and_check(resolved_root, &path)?;
         }
     }

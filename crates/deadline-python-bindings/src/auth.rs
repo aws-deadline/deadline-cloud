@@ -20,7 +20,7 @@ pub fn get_credentials_source(config_path: Option<&str>) -> PyResult<String> {
 
 #[pyfunction]
 #[pyo3(signature = (config_path=None))]
-pub fn check_auth_status(py: Python<'_>, config_path: Option<&str>) -> PyResult<PyObject> {
+pub fn check_auth_status(py: Python<'_>, config_path: Option<&str>) -> PyResult<Py<PyAny>> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
     let profile = crate::extract_profile(&config);
@@ -47,14 +47,14 @@ pub fn check_auth_status(py: Python<'_>, config_path: Option<&str>) -> PyResult<
 pub fn check_auth_status_with_progress(
     py: Python<'_>,
     config_path: Option<&str>,
-    on_progress: Option<PyObject>,
-) -> PyResult<PyObject> {
+    on_progress: Option<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
     let profile = crate::extract_profile(&config);
     let notify = |msg: &str| {
         if let Some(ref cb) = on_progress {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let _ = cb.call1(py, (msg,));
             });
         }
@@ -99,8 +99,8 @@ pub fn check_api_available(config_path: Option<&str>) -> PyResult<bool> {
 #[pyo3(signature = (config_path=None, on_pending_authorization=None, on_cancellation_check=None))]
 pub fn login(
     config_path: Option<&str>,
-    on_pending_authorization: Option<PyObject>,
-    on_cancellation_check: Option<PyObject>,
+    on_pending_authorization: Option<Py<PyAny>>,
+    on_cancellation_check: Option<Py<PyAny>>,
 ) -> PyResult<String> {
     let config = crate::load_config(config_path)
         .unwrap_or_else(|_| deadline_lib::config::ini::IniConfig::new());
@@ -113,7 +113,7 @@ pub fn login(
 
     let pending_cb = on_pending_authorization.as_ref().map(|cb| {
         move |source: deadline_lib::api::auth::AwsCredentialsSource| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let kwargs = pyo3::types::PyDict::new(py);
                 let source_enum = py
                     .import("deadline.client._compat")
@@ -129,11 +129,7 @@ pub fn login(
 
     let cancel_cb = on_cancellation_check.as_ref().map(|cb| {
         move || -> bool {
-            Python::with_gil(|py| {
-                cb.call0(py)
-                    .map(|r| r.is_truthy(py).unwrap_or(false))
-                    .unwrap_or(false)
-            })
+            Python::attach(|py| cb.call0(py).is_ok_and(|r| r.is_truthy(py).unwrap_or(false)))
         }
     });
 
