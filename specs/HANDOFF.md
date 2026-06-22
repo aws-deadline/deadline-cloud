@@ -3,11 +3,11 @@
 Current in-flight work. Read this at the start of every session before
 consulting the Work Items table in `specs/progress.md`.
 
-## Active: CI/CD Hardening — Phase 5
+## Active: CI/CD Hardening — ✅ Complete
 
-**Status:** Phases 1–4 merged (PR #2, PR #3). Phases 5–6 remain.
+**Status:** All phases (1–6) merged. CI/CD hardening is done.
 
-**Branch:** create new from mainline for next PR
+**Branch:** `ci/windows-test-twins` (Phase 6, pending PR)
 
 ---
 
@@ -52,19 +52,20 @@ Added two workflows:
 - Compares against our `pytests/ui_accessibility/` test function names
 - Fails if Python repo has tests we haven't ported (surfaces new GUI tests)
 
-### Phase 6: Windows test twins
+### Phase 6: Windows test twins ✅ DONE
 
-Add `#[cfg(windows)]` companion tests for features currently Unix-only:
-- Hook execution: `.cmd` batch scripts instead of `sh -c`
-- DCM monitor auth: `.cmd` monitor stub instead of `#!/bin/bash`
-- Symlink escape: directory junctions (no elevation needed)
+Made 35 unix-only tests cross-platform using `cfg!(windows)` branches
+for platform-appropriate commands (.cmd vs .sh, Windows symlink APIs).
+No production code changes. Branch: `ci/windows-test-twins`.
 
-Search for `TODO: remove when Windows hook twins added` to find all sites.
-Files to update:
-- `crates/deadline-lib/src/bundle/hooks.rs` (10 L1 tests)
+Files updated:
+- `crates/deadline-lib/src/bundle/hooks.rs` (10 unit tests)
 - `crates/deadline-lib/tests/bundle/hooks.rs` (6 integration tests + TestHandler)
 - `crates/deadline-cli/tests/cli/auth.rs` (6 tests + helpers)
 - `crates/deadline-cli/tests/cli/bundle_hooks.rs` (8 tests + helpers)
+- `crates/deadline-cli/tests/cli/bundle.rs` (1 symlink test)
+- `crates/deadline-lib/tests/bundle/loader.rs` (3 symlink tests)
+- `crates/deadline-cli/tests/cli/queue_sync_output.rs` (1 read-only path test)
 
 ---
 
@@ -126,6 +127,9 @@ The Python Qt GUI in `gui/` remains the production GUI.
 ---
 
 ## Completed items (recent)
+
+- **CI/CD Hardening phase 6 (2026-06-22)** — Windows test twins. 35 unix-only
+  tests made cross-platform. All CI/CD hardening phases (1–6) complete.
 
 - **CI/CD Hardening phases 2–4 (2026-06-19)** — PR #3. Conformance PR trigger,
   pyo3 0.24→0.29 (removed 2 security advisory ignores), unpinned toolchain

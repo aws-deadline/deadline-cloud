@@ -41,7 +41,7 @@ All core product features are implemented and audited. 1,367+ Rust tests pass.
 
 | # | Item | Notes |
 |---|------|-------|
-| — | Windows test twins for `#[cfg(unix)]`-gated features | The CI branch gates ~19 tests as Unix-only because they spawn `sh`/bash scripts or use Unix symlinks. The underlying features (DCM monitor auth, hook execution, symlink escape) are cross-platform code with zero Windows test coverage. Add `#[cfg(windows)]` companion tests using `.cmd` batch scripts (hooks, monitor) and directory junctions (symlink containment). When done, remove the `#[cfg(unix)]` gates on: `TestHandler`/`CapturingHandler` structs and their impls, all `execute_hook_*` tests in `crates/deadline-lib/tests/bundle/hooks.rs`, all `pre_hook_*`/`post_hook_runs_after_success` tests in `crates/deadline-lib/src/bundle/hooks.rs`. Search for `TODO: remove #[cfg(unix)] when Windows hook twins` to find all sites. |
+| — | ~~Windows test twins for `#[cfg(unix)]`-gated features~~ | ✅ Done (2026-06-22). Tests made cross-platform using `cfg!(windows)` branches. |
 | 33 | Error type parity audit | Python exception types flattened into generic Rust errors (`NonValidInputError` → `AssetSync`, `VFSLaunchScriptMissingError`/`VFSRunPathNotSetError` → missing, `UnsupportedProfileTypeForLoginLogout`/`PidLockAlreadyHeld`/`JobFetchFailure` → `OperationError`). Also audit openjd-rs `SnapshotError` → `JobAttachmentsError` mapping. |
 | 23 | Failure case handling analysis | Systematic error handling audit across all crates |
 | 22 | Fuzz testing | Robustness testing |
@@ -65,7 +65,7 @@ All core product features are implemented and audited. 1,367+ Rust tests pass.
 | Crate | Current → Target | Notes |
 |-------|-----------------|-------|
 | rusqlite | 0.32 → 0.39 | Major, breaking changes likely |
-| pyo3 | 0.24 → 0.28 | Major, breaking API changes. Would eliminate `unsafe impl Send/Sync` on `PySubmissionHandler` (use `Py<PyAny>` instead). |
+| pyo3 | ~~0.24 → 0.28~~ | ✅ Done (upgraded to 0.29.0 in Phase 3) |
 | rustls-webpki | Pinned | Advisories pinned by transitive hyper-rustls 0.24, awaiting AWS SDK upstream fix. See `deny.toml`. |
 
 ## Audit Status

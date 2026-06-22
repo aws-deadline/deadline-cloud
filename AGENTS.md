@@ -81,8 +81,9 @@ against the Rust binary.
 
 Key CI notes:
 - No `rust-toolchain.toml` — CI uses latest stable Rust.
-- Some tests are `#[cfg(unix)]` (spawn `sh`); Windows twins are TODO.
-- If you add a new `#[cfg(unix)]` gate, add a TODO comment and update `specs/progress.md`.
+- Tests are cross-platform (run on all 3 OSes). A few `#[cfg(unix)]` blocks
+  remain for chmod calls inside tests (no-op on Windows) and production
+  SIGKILL code.
 - Snapshot tests run on all 3 OSes — use cross-OS filters in `insta::Settings`.
 
 ### Python GUI development

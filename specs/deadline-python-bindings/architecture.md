@@ -57,7 +57,7 @@ fields from typed SDK output — no full response dump, no raw JSON
 passthrough.
 
 **Python callables for callbacks.** Submission progress and confirmation
-callbacks accept `PyObject` (any Python callable). PyO3 calls them via
+callbacks accept `Py<PyAny>` (any Python callable). PyO3 calls them via
 `callback.call1(py, (args,))`. No C function pointers or `user_data`.
 
 **`DeadlineOperationError` exception.** Created via
@@ -80,10 +80,10 @@ MAIN THREAD (Qt event loop)          WORKER THREAD (QThread, 512KB stack)
 QDialog                              QThread
   status label  ◄──── Qt signal ──── 1. Call deadline._native.create_job_from_job_bundle()
   updates widget      (queued)       2. PyO3 trampoline enters Rust
-                                     3. py.allow_threads() releases GIL
+                                     3. py.detach() releases GIL
                                      4. on_large_stack() spawns scoped thread (8MB stack)
                                      5. Scoped thread: tokio block_on(async work)
-                                     6. Callbacks: Python::with_gil() re-acquires GIL
+                                     6. Callbacks: Python::attach() re-acquires GIL
                                      7. Result returned to Python
 ```
 
@@ -99,9 +99,9 @@ stack (8MB on macOS/Linux). The closure can borrow from the caller's
 stack frame because `scope` guarantees the thread completes before
 returning.
 
-**GIL release:** `py.allow_threads()` releases the GIL before entering
+**GIL release:** `py.detach()` releases the GIL before entering
 `on_large_stack`, so callbacks on the scoped thread can re-acquire it
-via `Python::with_gil()` without deadlocking.
+via `Python::attach()` without deadlocking.
 
 This pattern is applied to all PyO3 entry points that call async Rust
 code: `create_job_from_job_bundle`, `check_auth_status`, `login`,

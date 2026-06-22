@@ -238,6 +238,111 @@ When adding a new integration test crate, include the same allow at the
 top of its entry file.
 
 
+## Continuous Integration
+
+Four GitHub Actions workflows enforce quality. All live in
+`.github/workflows/`.
+
+### `ci.yml` — Core Rust gate (PR + mainline)
+
+**Triggers:** Every push to `mainline`, every PR targeting `mainline`,
+`release`, `patch_*`, `feature_*`.
+
+| Job | Runs on | What it does |
+|-----|---------|-------------|
+| Rustfmt | ubuntu | `cargo fmt --all -- --check` |
+| cargo-deny | ubuntu | License, advisory, ban, source checks |
+| Build & Test | ubuntu, macOS, Windows (matrix) | Build, clippy `-D warnings`, `cargo test --workspace` |
+| Documentation | ubuntu | `cargo doc --no-deps --workspace -D warnings` |
+
+**Key infrastructure:**
+- No `rust-toolchain.toml` — CI uses latest stable Rust
+- `*.localhost` host entries on macOS/Windows (AWS SDK host prefix resolution)
+- Cargo cache keyed on `(os, rustc-hash, Cargo.lock-hash)` with stale eviction
+- `concurrency` cancels in-progress PR runs; never cancels mainline
+- `fail-fast: false` — all 3 OSes complete even if one fails
+
+### `conformance.yml` — Python CLI parity (nightly + PR)
+
+**Triggers:** Nightly 07:00 UTC, PRs touching `crates/`, `conformance/`,
+`Cargo.toml`, `Cargo.lock`, and manual dispatch.
+
+Replays `deadline-cloud-python`'s `test/cli_e2e/` test suite against the
+Rust `deadline` binary. Catches parity drift — behavior Python
+added/changed that Rust hasn't ported.
+
+**How it works:**
+1. Checks out both repos (Rust + latest Python mainline)
+2. Builds the Rust binary
+3. Installs Python test deps from the Python repo
+4. Runs `pytest test/cli_e2e/` with a conftest plugin that:
+   - Rewrites `AWS_ENDPOINT_URL_DEADLINE` → localhost stub
+   - Points `DEADLINE_CLI_PATH` at the Rust binary
+5. Uses an xfail allowlist (`conformance/xfail.txt`) for known gaps
+
+### `python.yml` — Bindings + GUI accessibility (PR)
+
+**Triggers:** PRs touching `crates/deadline-python-bindings/`, `gui/`,
+`pytests/`, `pyproject.toml`, `Cargo.toml`, `Cargo.lock`.
+
+Two job groups:
+
+**Bindings tests** (all 3 OSes): Builds the PyO3 extension module via
+maturin, runs `pytests/bindings/` — verifies `deadline._native` still
+works for DCC plugin consumers.
+
+**GUI xa11y tests** (all 3 OSes): Drives the real Qt GUI through the OS
+accessibility tree using `xa11y`. Platform-specific setup:
+
+| OS | Setup | Notes |
+|----|-------|-------|
+| Linux | Xvfb + dbus + AT-SPI2 | Virtual display, accessibility bus |
+| macOS | TCC accessibility permission grant | `tccutil` before test run |
+| Windows | No extra setup | UIA works natively |
+
+**xa11y test infrastructure (`pytests/ui_accessibility/`):**
+
+- `conftest.py` starts `MockDeadlineBackend` (Python HTTP server, 1,273
+  lines in `pytests/_common/mock_deadline_backend.py`) — a stateful
+  in-memory Deadline Cloud simulator that validates requests against the
+  botocore service model
+- `helpers.py` provides `SubmitterDialog` page object wrapping `xa11y.App`
+- `sitecustomize.py` (injected via `PYTHONPATH`):
+  - Installs SIGTERM handler → `QApplication.quit()` for clean shutdown
+  - QTimer pulse (100ms) so Python signal handlers fire inside Qt's C++ loop
+- `PYTHONUNBUFFERED=1` ensures stdout flushes before exit
+- `AWS_ENDPOINT_URL_DEADLINE` points at the mock (not `AWS_ENDPOINT_URL` —
+  STS calls use the cached account ID, not the mock)
+
+### `gui-drift.yml` — GUI test parity tracker (nightly)
+
+**Triggers:** Nightly 07:30 UTC (after conformance), manual dispatch.
+
+Clones `deadline-cloud-python`, extracts `test/ui/` test function names,
+compares against our `pytests/ui_accessibility/` test function names.
+Fails if the Python repo has tests we haven't ported — surfaces new GUI
+tests without executing them.
+
+### Mock Backends
+
+The repo uses two separate mock backends:
+
+| Backend | Language | Used by | Location |
+|---------|----------|---------|----------|
+| `deadline-test-server` | Rust (wiremock) | Rust CLI L2 tests, PyO3 binding tests | `crates/deadline-test-server/` |
+| `MockDeadlineBackend` | Python (http.server) | xa11y GUI tests | `pytests/_common/mock_deadline_backend.py` |
+
+**Why two?** The Rust wiremock server is static (canned responses, no
+state). The Python mock is stateful — it supports create/list/get
+workflows that the GUI exercises across multiple API calls in a single
+test (e.g., create farm → list farms → select → submit). It also
+validates request shapes against the botocore service model.
+
+Both mock the same Deadline Cloud API surface. The Python mock additionally
+mocks STS `GetCallerIdentity` and the `AssumeQueueRoleForUser` credential
+exchange. See `specs/deadline-test-server/` for the Rust server docs.
+
+
 ## Build & Test Performance
 
 Benchmarked 2026-05-21 on macOS arm64 (M-series).
@@ -255,7 +360,7 @@ Benchmarked 2026-05-21 on macOS arm64 (M-series).
 
 | Scenario | Time | Notes |
 |----------|------|-------|
-| Full suite (`cargo test`) | ~75s | 1,355 tests |
+| Full suite (`cargo test`) | ~75s | 1,372 tests |
 | CLI tests only (`-p deadline-cli`) | ~53s | 441 subprocess tests |
 | Lib tests only (`-p deadline-lib`) | ~7s | 140 integration tests |
 
