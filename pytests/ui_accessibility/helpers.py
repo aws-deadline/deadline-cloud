@@ -23,9 +23,11 @@ import xa11y
 
 def _deadline_binary() -> str:
     """Locate the Rust deadline binary from cargo build output."""
+    import sys
     repo_root = Path(__file__).resolve().parent.parent.parent
+    ext = ".exe" if sys.platform == "win32" else ""
     for profile in ("debug", "release"):
-        candidate = repo_root / "target" / profile / "deadline"
+        candidate = repo_root / "target" / profile / f"deadline{ext}"
         if candidate.exists():
             return str(candidate)
     raise FileNotFoundError("deadline binary not found. Run: cargo build -p deadline-cli")
@@ -37,12 +39,12 @@ def _deadline_binary() -> str:
 # Tuned for mock-backend runs over localhost HTTP. Generous ceilings
 # because Qt/AT-SPI startup under Xvfb on Linux CI and Windows UIA can
 # be substantially slower than a developer workstation.
-STARTUP_TIMEOUT = 15.0
+STARTUP_TIMEOUT = 45.0
 CLOSE_TIMEOUT = 10.0
 TERMINATE_TIMEOUT = 3.0
-SUBMIT_TIMEOUT = 20.0
+SUBMIT_TIMEOUT = 30.0
 CANCEL_TIMEOUT = 10.0
-FARM_RESOLVE_TIMEOUT = 10.0
+FARM_RESOLVE_TIMEOUT = 30.0
 EXPORT_TIMEOUT = 10.0
 
 # ---------------------------------------------------------------------------

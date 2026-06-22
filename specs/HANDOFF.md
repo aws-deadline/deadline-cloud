@@ -36,17 +36,21 @@ Removed `rust-toolchain.toml` (was 1.94.0). CI now uses latest stable.
 Fixed 8 new clippy lints from Rust 1.96: `map_unwrap_or`, `is_ok_and`,
 `checked_div`, `sort_by_key(Reverse)`, trailing comma, `from_mins`.
 
-### Phase 5: xa11y GUI test workflow
+### Phase 5: Python test workflows ✅ DONE
 
-Add `.github/workflows/python.yml` that runs:
-- `make test-bindings` (PyO3 binding tests)
-- `make test-ui` (xa11y GUI accessibility tests)
+Added two workflows:
 
-Requirements:
-- Needs `.venv`, PySide6, maturin, Xvfb on Linux
-- Use `xvfb-run` on ubuntu-latest for headless Qt
-- Consider macOS too (no Xvfb needed, native display)
-- Look at how tests run locally: `make setup-python && make build && make test-ui`
+**`.github/workflows/python.yml`** (PR-triggered, path-filtered):
+- Bindings tests (`pytests/bindings/`) on all 3 OSes
+- xa11y GUI accessibility tests (`pytests/ui_accessibility/`) on all 3 OSes
+- Linux: Xvfb + dbus + AT-SPI2 (mirrors deadline-cloud-python's ui_tests.yml)
+- macOS: TCC accessibility permission grant
+- Windows: UIA works out of the box
+
+**`.github/workflows/gui-drift.yml`** (nightly):
+- Clones deadline-cloud-python, extracts `test/ui/` test function names
+- Compares against our `pytests/ui_accessibility/` test function names
+- Fails if Python repo has tests we haven't ported (surfaces new GUI tests)
 
 ### Phase 6: Windows test twins
 
@@ -91,6 +95,26 @@ Nightly (07:00 UTC) + PR (path-filtered) + manual dispatch. Replays
 `deadline-cloud-python`'s `test/cli_e2e/` against the Rust binary. Pytest
 plugin rewrites localhost URLs for the SDK's host prefix. xfail allowlist
 for known gaps.
+
+### Python tests: `.github/workflows/python.yml`
+
+PR-triggered (path-filtered: `crates/deadline-python-bindings/`, `gui/`,
+`pytests/`, `pyproject.toml`). Runs:
+- **Bindings** (`pytests/bindings/`) — tests `deadline._native` PyO3 module, all 3 OSes
+- **GUI xa11y** (`pytests/ui_accessibility/`) — accessibility-driven tests of
+  the real Qt GUI, all 3 OSes. Linux needs Xvfb + AT-SPI; macOS needs TCC
+  grant; Windows UIA works natively.
+
+Our `pytests/ui_accessibility/` is a superset of `deadline-cloud-python`'s
+`test/ui/` — both test the same GUI code but ours uses `_gui_entry.py`
+directly (no CLI indirection) and includes additional coverage.
+
+### GUI drift detection: `.github/workflows/gui-drift.yml`
+
+Nightly (07:30 UTC). Clones `deadline-cloud-python`, compares test function
+names in their `test/ui/` against our `pytests/ui_accessibility/`. Fails if
+they've added tests we haven't ported. Does not execute tests — just a
+parity tracker.
 
 ---
 

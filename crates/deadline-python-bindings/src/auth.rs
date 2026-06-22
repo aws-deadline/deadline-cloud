@@ -60,17 +60,19 @@ pub fn check_auth_status_with_progress(
         }
     };
     let rt = crate::make_runtime()?;
-    let result = crate::on_large_stack(|| {
-        rt.block_on(async {
-            notify("Checking credentials source...");
-            let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
-            notify("Checking authentication status...");
-            let status =
-                deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
-            let api_available =
-                status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
-            notify("Done");
-            (source.to_string(), status.to_string(), api_available)
+    let result = py.detach(|| {
+        crate::on_large_stack(|| {
+            rt.block_on(async {
+                notify("Checking credentials source...");
+                let source = deadline_lib::api::auth::get_credentials_source(profile.as_deref());
+                notify("Checking authentication status...");
+                let status =
+                    deadline_lib::api::auth::check_authentication_status(profile.as_deref()).await;
+                let api_available =
+                    status == deadline_lib::api::auth::AwsAuthenticationStatus::Authenticated;
+                notify("Done");
+                (source.to_string(), status.to_string(), api_available)
+            })
         })
     })?;
     let dict = pyo3::types::PyDict::new(py);

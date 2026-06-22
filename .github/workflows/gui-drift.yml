@@ -1,0 +1,93 @@
+name: GUI Test Drift Detection
+
+# Nightly check: compare Python repo's test/ui/ test functions against our
+# pytests/ui_accessibility/ to surface new tests we haven't ported yet.
+
+on:
+  schedule:
+    - cron: "30 7 * * *" # nightly ~07:30 UTC (after conformance)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check-drift:
+    name: Compare GUI test coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deadline-cloud-rs
+        uses: actions/checkout@v4
+        with:
+          path: deadline-cloud-rs
+
+      - name: Checkout deadline-cloud-python (latest mainline)
+        uses: actions/checkout@v4
+        with:
+          repository: aws-deadline/deadline-cloud
+          ref: mainline
+          path: deadline-cloud-python
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Extract test function names and compare
+        run: |
+          python3 << 'EOF'
+          import ast
+          import sys
+          from pathlib import Path
+
+          def extract_test_functions(directory: Path) -> set[str]:
+              """Extract all test function/method names from pytest files."""
+              tests = set()
+              for py_file in sorted(directory.glob("test_*.py")):
+                  try:
+                      tree = ast.parse(py_file.read_text())
+                  except SyntaxError:
+                      continue
+                  for node in ast.walk(tree):
+                      if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                          tests.add(f"{py_file.name}::{node.name}")
+                      elif isinstance(node, ast.ClassDef):
+                          for item in node.body:
+                              if isinstance(item, ast.FunctionDef) and item.name.startswith("test_"):
+                                  tests.add(f"{py_file.name}::{node.name}::{item.name}")
+              return tests
+
+          python_dir = Path("deadline-cloud-python/test/ui")
+          rust_dir = Path("deadline-cloud-rs/pytests/ui_accessibility")
+
+          if not python_dir.exists():
+              print("WARNING: Python repo test/ui/ not found (repo may be private)")
+              sys.exit(0)
+
+          python_tests = extract_test_functions(python_dir)
+          rust_tests = extract_test_functions(rust_dir)
+
+          missing = python_tests - rust_tests
+          extra = rust_tests - python_tests
+
+          print(f"Python repo GUI tests: {len(python_tests)}")
+          print(f"Rust repo GUI tests:   {len(rust_tests)}")
+          print(f"Missing in Rust repo:  {len(missing)}")
+          print(f"Extra in Rust repo:    {len(extra)}")
+
+          if missing:
+              print("\n=== Tests in Python repo NOT in Rust repo ===")
+              for t in sorted(missing):
+                  print(f"  - {t}")
+              print(f"\n::error::GUI test drift detected: {len(missing)} test(s) in deadline-cloud-python/test/ui/ not found in pytests/ui_accessibility/")
+              sys.exit(1)
+          else:
+              print("\n✅ No drift — Rust repo covers all Python repo GUI tests")
+          EOF
+
+      - name: Upload drift report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-drift-report
+          path: "*.txt"
+          if-no-files-found: ignore

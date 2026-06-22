@@ -25,10 +25,12 @@ CLEAN_VARS = [
 
 def _find_server_binary() -> str:
     """Find the ffi-test-server binary."""
+    import sys
     repo_root = Path(__file__).resolve().parent.parent.parent
+    ext = ".exe" if sys.platform == "win32" else ""
     candidates = [
-        repo_root / "target" / "debug" / "ffi-test-server",
-        repo_root / "target" / "release" / "ffi-test-server",
+        repo_root / "target" / "debug" / f"ffi-test-server{ext}",
+        repo_root / "target" / "release" / f"ffi-test-server{ext}",
     ]
     for c in candidates:
         if c.exists():
