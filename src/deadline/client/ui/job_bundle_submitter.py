@@ -339,16 +339,17 @@ def show_job_bundle_submitter(
 
     # Run pre-GUI hooks to allow studios to pre-populate dialog fields.
     pre_gui_output: dict[str, Any] = {}
-    allow_env_hooks = _config_file.str2bool(_get_setting("settings.allow_environment_hooks"))
     allow_bundle_hooks = _config_file.str2bool(_get_setting("settings.allow_bundle_hooks"))
     hook_manager = _HookManager(input_job_bundle_dir, logger.info)
     hooks = hook_manager.load_hooks()
-    if hooks and hooks.pre_gui and not allow_bundle_hooks and not allow_env_hooks:
+
+    if hooks and hooks.pre_gui and not allow_bundle_hooks:
         logger.warning(
             "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
             "Enable with: deadline config set settings.allow_bundle_hooks true"
         )
-    if (allow_env_hooks or allow_bundle_hooks) and hooks and hooks.pre_gui:
+
+    if hooks and hooks.pre_gui and allow_bundle_hooks:
         if not _config_file.str2bool(_get_setting("settings.auto_accept")):
             confirmation_msg = (
                 _generate_hooks_confirmation_message(hooks, input_job_bundle_dir)
