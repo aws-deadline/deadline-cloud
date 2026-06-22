@@ -667,11 +667,9 @@ mod tests {
     }
 
     /// Test handler that captures messages.
-    #[cfg(unix)] // only used by cfg(unix) hook-execution tests
     struct CapturingHandler {
         messages: std::sync::Mutex<Vec<String>>,
     }
-    #[cfg(unix)]
     impl CapturingHandler {
         fn new() -> Self {
             Self {
@@ -682,7 +680,6 @@ mod tests {
             self.messages.lock().unwrap().clone()
         }
     }
-    #[cfg(unix)]
     impl SubmissionHandler for CapturingHandler {
         fn on_message(&self, msg: &str) {
             self.messages.lock().unwrap().push(msg.to_owned());
@@ -1134,17 +1131,18 @@ mod tests {
         }
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_success_no_output() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
+        let (cmd, args) = if cfg!(windows) {
+            ("cmd.exe", r#"["/c", "exit /b 0"]"#)
+        } else {
+            ("sh", r#"["-c", "exit 0"]"#)
+        };
         write_hooks_yaml(
             dir.path(),
-            &format!(
-                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"exit 0\"]\n",
-                sh_cmd()
-            ),
+            &format!("preSubmission:\n  - command: {cmd}\n    args: {args}\n"),
         );
         let handler = CapturingHandler::new();
         let mut mgr = HookManager::new(Path::new(dir_str), &handler, None);
@@ -1161,19 +1159,18 @@ mod tests {
         );
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_modifies_payload() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        // Hook outputs JSON to stdout that changes priority
-        write_hooks_yaml(
-            dir.path(),
-            &format!(
-                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"echo '{{\\\"priority\\\": 100}}'\"]\n",
-                sh_cmd()
-            ),
-        );
+        let hook_yaml = if cfg!(windows) {
+            "preSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"echo {\\\"priority\\\": 100}\"]\n"
+                .to_owned()
+        } else {
+            "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo '{\\\"priority\\\": 100}'\"]\n"
+                .to_owned()
+        };
+        write_hooks_yaml(dir.path(), &hook_yaml);
         let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler, None);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
@@ -1183,17 +1180,18 @@ mod tests {
         assert_eq!(result["priority"], 100);
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_failure_blocks() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
+        let (cmd, args) = if cfg!(windows) {
+            ("cmd.exe", r#"["/c", "exit /b 1"]"#)
+        } else {
+            ("sh", r#"["-c", "exit 1"]"#)
+        };
         write_hooks_yaml(
             dir.path(),
-            &format!(
-                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"exit 1\"]\n",
-                sh_cmd()
-            ),
+            &format!("preSubmission:\n  - command: {cmd}\n    args: {args}\n"),
         );
         let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler, None);
         mgr.load_hooks().unwrap();
@@ -1205,17 +1203,18 @@ mod tests {
         assert!(err.contains("failed with exit code"), "got: {err}");
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_timeout() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
+        let (cmd, args) = if cfg!(windows) {
+            ("cmd.exe", r#"["/c", "timeout /t 10 /nobreak >nul"]"#)
+        } else {
+            ("sh", r#"["-c", "sleep 10"]"#)
+        };
         write_hooks_yaml(
             dir.path(),
-            &format!(
-                "preSubmission:\n  - command: {}\n    args: [\"-c\", \"sleep 10\"]\n    timeout: 1\n",
-                sh_cmd()
-            ),
+            &format!("preSubmission:\n  - command: {cmd}\n    args: {args}\n    timeout: 1\n"),
         );
         let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler, None);
         mgr.load_hooks().unwrap();
@@ -1248,7 +1247,6 @@ mod tests {
         assert!(err.contains("invalid JSON"), "got: {err}");
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_receives_stdin() {
         let dir = TempDir::new().unwrap();
@@ -1271,19 +1269,22 @@ mod tests {
         assert_eq!(content, "StdinTestJob");
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_receives_env_vars() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
         let output_file = dir.path().join("env_out.txt");
         let escaped = output_file.to_str().unwrap().replace('\\', "\\\\");
-        write_hooks_yaml(
-            dir.path(),
-            &format!(
+        let hook_yaml = if cfg!(windows) {
+            format!(
+                "preSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"echo %DEADLINE_JOB_NAME%> {escaped}\"]\n"
+            )
+        } else {
+            format!(
                 "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo $DEADLINE_JOB_NAME > '{escaped}'\"]\n"
-            ),
-        );
+            )
+        };
+        write_hooks_yaml(dir.path(), &hook_yaml);
         let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler, None);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
@@ -1297,19 +1298,22 @@ mod tests {
         assert_eq!(content, "MyTestJob");
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_receives_custom_env() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
         let output_file = dir.path().join("custom_env.txt");
         let escaped = output_file.to_str().unwrap().replace('\\', "\\\\");
-        write_hooks_yaml(
-            dir.path(),
-            &format!(
+        let hook_yaml = if cfg!(windows) {
+            format!(
+                "preSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"echo %CUSTOM_VAR%> {escaped}\"]\n    env:\n      CUSTOM_VAR: custom_value\n"
+            )
+        } else {
+            format!(
                 "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo $CUSTOM_VAR > '{escaped}'\"]\n    env:\n      CUSTOM_VAR: custom_value\n"
-            ),
-        );
+            )
+        };
+        write_hooks_yaml(dir.path(), &hook_yaml);
         let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler, None);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(dir_str);
@@ -1340,20 +1344,18 @@ mod tests {
         assert!(err.contains("not found"), "got: {err}");
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_absolute_command() {
         let dir = TempDir::new().unwrap();
         let dir_str = dir.path().to_str().unwrap();
-        // Use sh with absolute path
-        let sh_path = if cfg!(windows) {
-            "C:\\Windows\\System32\\cmd.exe"
+        let (sh_path, args) = if cfg!(windows) {
+            ("C:\\Windows\\System32\\cmd.exe", r#"["/c", "exit /b 0"]"#)
         } else {
-            "/bin/sh"
+            ("/bin/sh", r#"["-c", "exit 0"]"#)
         };
         write_hooks_yaml(
             dir.path(),
-            &format!("preSubmission:\n  - command: {sh_path}\n    args: [\"-c\", \"exit 0\"]\n"),
+            &format!("preSubmission:\n  - command: {sh_path}\n    args: {args}\n"),
         );
         let mut mgr = HookManager::new(Path::new(dir_str), &NullHandler, None);
         mgr.load_hooks().unwrap();
@@ -1362,15 +1364,19 @@ mod tests {
             .unwrap();
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn pre_hook_hooks_origin_resolution() {
         let dir = TempDir::new().unwrap();
         // Create original bundle dir with script
         let original_dir = dir.path().join("original");
         std::fs::create_dir_all(&original_dir).unwrap();
-        let script = original_dir.join("myscript.sh");
-        std::fs::write(&script, "#!/bin/sh\nexit 0\n").unwrap();
+        let (script_name, script_content) = if cfg!(windows) {
+            ("myscript.cmd", "@echo off\nexit /b 0\n")
+        } else {
+            ("myscript.sh", "#!/bin/sh\nexit 0\n")
+        };
+        let script = original_dir.join(script_name);
+        std::fs::write(&script, script_content).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1379,7 +1385,10 @@ mod tests {
         // Create history bundle dir with hooks.yaml and .hooks_origin
         let history_dir = dir.path().join("history");
         std::fs::create_dir_all(&history_dir).unwrap();
-        write_hooks_yaml(&history_dir, "preSubmission:\n  - command: myscript.sh\n");
+        write_hooks_yaml(
+            &history_dir,
+            &format!("preSubmission:\n  - command: {script_name}\n"),
+        );
         std::fs::write(
             history_dir.join(".hooks_origin"),
             original_dir.to_str().unwrap(),
@@ -1390,7 +1399,7 @@ mod tests {
         let mut mgr = HookManager::new(Path::new(history_str), &NullHandler, None);
         mgr.load_hooks().unwrap();
         let mut meta = make_metadata_for_dir(history_str);
-        // Should resolve myscript.sh from original_dir via .hooks_origin
+        // Should resolve script from original_dir via .hooks_origin
         mgr.execute_pre_submission_hooks(&mut meta, json!({}))
             .unwrap();
     }
@@ -1458,14 +1467,24 @@ mod tests {
         assert!(!marker.exists());
     }
 
-    #[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
     #[test]
     fn post_hook_runs_after_success() {
         let dir = TempDir::new().unwrap();
         let marker = dir.path().join("post_hook_ran");
         let marker_escaped = marker.to_str().unwrap().replace('\\', "\\\\");
-        let script = dir.path().join("marker.sh");
-        std::fs::write(&script, format!("#!/bin/sh\ntouch '{marker_escaped}'\n")).unwrap();
+        let (script_name, script_content) = if cfg!(windows) {
+            (
+                "marker.cmd",
+                format!("@echo off\necho.> \"{}\"\n", marker.to_str().unwrap()),
+            )
+        } else {
+            (
+                "marker.sh",
+                format!("#!/bin/sh\ntouch '{marker_escaped}'\n"),
+            )
+        };
+        let script = dir.path().join(script_name);
+        std::fs::write(&script, script_content).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

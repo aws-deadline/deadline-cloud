@@ -5,20 +5,21 @@ use deadline_test_server::deadline_api::farms;
 use insta_cmd::assert_cmd_snapshot;
 use serde_json::json;
 
-/// Make a file executable. Only compiled for Unix: the DCM monitor tests that
-/// use it run a `#!/bin/bash` fake monitor, which Windows can't execute, so
-/// those tests are `#[cfg(unix)]` (mirrors Python mocking `subprocess.Popen`).
+/// Make a file executable. On Unix, sets the executable permission bit.
+/// On Windows, this is a no-op since `.cmd` files are inherently executable.
 #[cfg(unix)]
 fn make_executable(path: &std::path::Path) {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
+#[cfg(windows)]
+fn make_executable(_path: &std::path::Path) {}
+
 /// Set up a fake DCM environment in the harness temp dir:
 /// - AWS config with a DCM profile (has `monitor_id`)
 /// - Deadline config pointing to the DCM profile and fake monitor binary
-/// - A fake monitor shell script at the given path
-#[cfg(unix)]
+/// - A fake monitor script at the given path
 fn setup_dcm_env(harness: &TestHarness, monitor_script: &str) {
     let dir = harness.config_dir.path();
 
@@ -36,7 +37,12 @@ identity_store_id = d-fake789
     .unwrap();
 
     // Fake monitor binary
-    let monitor_path = dir.join("fake-monitor");
+    let monitor_name = if cfg!(windows) {
+        "fake-monitor.cmd"
+    } else {
+        "fake-monitor"
+    };
+    let monitor_path = dir.join(monitor_name);
     std::fs::write(&monitor_path, monitor_script).unwrap();
     make_executable(&monitor_path);
 
@@ -58,7 +64,6 @@ path = {}
 }
 
 /// Build a command with the fake AWS config file set.
-#[cfg(unix)]
 fn dcm_cmd(harness: &TestHarness, args: &[&str]) -> std::process::Command {
     let mut cmd = harness.cmd(args);
     let aws_config_path = harness.config_dir.path().join("aws_config");
@@ -147,7 +152,7 @@ async fn auth_logout_non_dcm_profile_prints_error() {
 // Login polling now uses ListFarms instead of STS.
 
 // DCM login happy path — monitor starts, ListFarms succeeds
-#[cfg(unix)] // runs a `#!/bin/bash` fake monitor; Windows parity covered by Python mocking Popen
+// DCM login happy path — monitor starts, ListFarms succeeds
 #[tokio::test]
 async fn auth_login_dcm_profile_succeeds() {
     let harness = TestHarness::new().await;
@@ -155,29 +160,34 @@ async fn auth_login_dcm_profile_succeeds() {
     farms::mock_list_farms(&harness.server, &[]).await;
 
     // Fake monitor that exits immediately (login is non-blocking, polling handles auth)
-    setup_dcm_env(&harness, "#!/bin/bash\nexit 0\n");
+    let script = if cfg!(windows) {
+        "@echo off\nexit /b 0\n"
+    } else {
+        "#!/bin/bash\nexit 0\n"
+    };
+    setup_dcm_env(&harness, script);
 
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "login"]));
 }
 
 // monitor exits before auth succeeds
-#[cfg(unix)]
 #[tokio::test]
 async fn auth_login_dcm_monitor_exits_with_error() {
     let harness = TestHarness::new().await;
     // No ListFarms mock → auth check fails → login fails
 
     // Fake monitor that prints an error and exits non-zero
-    setup_dcm_env(
-        &harness,
-        "#!/bin/bash\necho 'Monitor login failed'\nexit 1\n",
-    );
+    let script = if cfg!(windows) {
+        "@echo off\necho Monitor login failed\nexit /b 1\n"
+    } else {
+        "#!/bin/bash\necho 'Monitor login failed'\nexit 1\n"
+    };
+    setup_dcm_env(&harness, script);
 
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "login"]));
 }
 
 // monitor executable not found
-#[cfg(unix)] // output embeds an OS-specific monitor path; covered on Unix
 #[tokio::test]
 async fn auth_login_dcm_monitor_not_found() {
     let harness = TestHarness::new().await;
@@ -213,24 +223,32 @@ path = /nonexistent/path/to/monitor
 // --- auth logout (DCM profile) ---
 
 // DCM logout happy path
-#[cfg(unix)]
 #[tokio::test]
 async fn auth_logout_dcm_profile_succeeds() {
     let harness = TestHarness::new().await;
 
     // Fake monitor that prints success and exits 0
-    setup_dcm_env(&harness, "#!/bin/bash\necho 'Logged out'\nexit 0\n");
+    let script = if cfg!(windows) {
+        "@echo off\necho Logged out\nexit /b 0\n"
+    } else {
+        "#!/bin/bash\necho 'Logged out'\nexit 0\n"
+    };
+    setup_dcm_env(&harness, script);
 
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "logout"]));
 }
 
 // logout subprocess returns non-zero
-#[cfg(unix)]
 #[tokio::test]
 async fn auth_logout_dcm_monitor_fails() {
     let harness = TestHarness::new().await;
 
-    setup_dcm_env(&harness, "#!/bin/bash\necho 'Logout error'\nexit 1\n");
+    let script = if cfg!(windows) {
+        "@echo off\necho Logout error\nexit /b 1\n"
+    } else {
+        "#!/bin/bash\necho 'Logout error'\nexit 1\n"
+    };
+    setup_dcm_env(&harness, script);
 
     assert_cmd_snapshot!(dcm_cmd(&harness, &["auth", "logout"]));
 }
@@ -264,7 +282,6 @@ async fn auth_status_output_json_uppercase_produces_json() {
 // This test uses credential_process in the AWS profile (no env-var credentials)
 // to prove that cache invalidation is required. The monitor script writes
 // credential_process to the profile after a delay, simulating DCM's behavior.
-#[cfg(unix)]
 #[tokio::test]
 async fn auth_login_dcm_picks_up_credentials_written_mid_login() {
     let harness = TestHarness::new().await;
@@ -274,12 +291,13 @@ async fn auth_login_dcm_picks_up_credentials_written_mid_login() {
     farms::mock_list_farms_with_principal_id(&harness.server, "user-fake456", &[]).await;
 
     // Credential helper script that outputs valid AWS credentials JSON
-    let cred_helper = dir.join("cred-helper");
-    std::fs::write(
-        &cred_helper,
-        "#!/bin/bash\necho '{\"Version\": 1, \"AccessKeyId\": \"AKIAIOSFODNN7EXAMPLE\", \"SecretAccessKey\": \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\", \"SessionToken\": \"token\", \"Expiration\": \"2099-01-01T00:00:00Z\"}'\n",
-    )
-    .unwrap();
+    let (cred_helper_name, cred_helper_content) = if cfg!(windows) {
+        ("cred-helper.cmd", "@echo off\necho {\"Version\": 1, \"AccessKeyId\": \"AKIAIOSFODNN7EXAMPLE\", \"SecretAccessKey\": \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\", \"SessionToken\": \"token\", \"Expiration\": \"2099-01-01T00:00:00Z\"}\n".to_owned())
+    } else {
+        ("cred-helper", "#!/bin/bash\necho '{\"Version\": 1, \"AccessKeyId\": \"AKIAIOSFODNN7EXAMPLE\", \"SecretAccessKey\": \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\", \"SessionToken\": \"token\", \"Expiration\": \"2099-01-01T00:00:00Z\"}'\n".to_owned())
+    };
+    let cred_helper = dir.join(cred_helper_name);
+    std::fs::write(&cred_helper, cred_helper_content).unwrap();
     make_executable(&cred_helper);
 
     // AWS config: has monitor_id and user_id but NO credential_process initially.
@@ -293,12 +311,26 @@ async fn auth_login_dcm_picks_up_credentials_written_mid_login() {
 
     // Monitor script: waits briefly, then writes credential_process to the
     // AWS config (simulating DCM completing login and writing credentials).
-    let monitor_script = format!(
-        "#!/bin/bash\nsleep 0.3\necho \"credential_process = {}\" >> {}\nsleep 10\n",
-        cred_helper.display(),
-        aws_config_path.display()
-    );
-    let monitor_path = dir.join("fake-monitor");
+    let (monitor_name, monitor_script) = if cfg!(windows) {
+        (
+            "fake-monitor.cmd",
+            format!(
+                "@echo off\ntimeout /t 1 /nobreak >nul\necho credential_process = {} >> {}\ntimeout /t 10 /nobreak >nul\n",
+                cred_helper.display(),
+                aws_config_path.display()
+            ),
+        )
+    } else {
+        (
+            "fake-monitor",
+            format!(
+                "#!/bin/bash\nsleep 0.3\necho \"credential_process = {}\" >> {}\nsleep 10\n",
+                cred_helper.display(),
+                aws_config_path.display()
+            ),
+        )
+    };
+    let monitor_path = dir.join(monitor_name);
     std::fs::write(&monitor_path, &monitor_script).unwrap();
     make_executable(&monitor_path);
 
@@ -320,6 +352,8 @@ async fn auth_login_dcm_picks_up_credentials_written_mid_login() {
     cmd.env("AWS_DEFAULT_REGION", "us-west-2");
     cmd.env("DEADLINE_CONFIG_FILE_PATH", &harness.config_path);
     cmd.env("HOME", dir);
+    #[cfg(windows)]
+    cmd.env("USERPROFILE", dir);
     // Remove credential env vars so SDK must use credential_process from profile
     cmd.env_remove("AWS_ACCESS_KEY_ID");
     cmd.env_remove("AWS_SECRET_ACCESS_KEY");

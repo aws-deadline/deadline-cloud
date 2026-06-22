@@ -58,35 +58,36 @@ steps:
 /// Create a bundle with hooks.yaml containing a noop pre-submission hook.
 fn create_bundle_with_hooks(harness: &TestHarness, name: &str) -> String {
     let dir = create_bundle(harness, name);
-    fs::write(
-        std::path::Path::new(&dir).join("hooks.yaml"),
-        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 0\"]\n",
-    )
-    .unwrap();
+    let hook_yaml = if cfg!(windows) {
+        "preSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"exit /b 0\"]\n"
+    } else {
+        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 0\"]\n"
+    };
+    fs::write(std::path::Path::new(&dir).join("hooks.yaml"), hook_yaml).unwrap();
     dir
 }
 
 /// Create a bundle with a pre-hook that outputs JSON to modify priority.
-#[cfg(unix)] // only used by cfg(unix) hook-execution tests
 fn create_bundle_with_modifying_hook(harness: &TestHarness, name: &str) -> String {
     let dir = create_bundle(harness, name);
-    fs::write(
-        std::path::Path::new(&dir).join("hooks.yaml"),
-        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo '{\\\"priority\\\": 100}'\"]\n",
-    )
-    .unwrap();
+    let hook_yaml = if cfg!(windows) {
+        "preSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"echo {\\\"priority\\\": 100}\"]\n"
+    } else {
+        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"echo '{\\\"priority\\\": 100}'\"]\n"
+    };
+    fs::write(std::path::Path::new(&dir).join("hooks.yaml"), hook_yaml).unwrap();
     dir
 }
 
 /// Create a bundle with a pre-hook that fails.
-#[cfg(unix)] // only used by cfg(unix) hook-execution tests
 fn create_bundle_with_failing_hook(harness: &TestHarness, name: &str) -> String {
     let dir = create_bundle(harness, name);
-    fs::write(
-        std::path::Path::new(&dir).join("hooks.yaml"),
-        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 1\"]\n",
-    )
-    .unwrap();
+    let hook_yaml = if cfg!(windows) {
+        "preSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"exit /b 1\"]\n"
+    } else {
+        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 1\"]\n"
+    };
+    fs::write(std::path::Path::new(&dir).join("hooks.yaml"), hook_yaml).unwrap();
     dir
 }
 
@@ -94,27 +95,31 @@ fn create_bundle_with_failing_hook(harness: &TestHarness, name: &str) -> String 
 fn create_env_hooks_dir(harness: &TestHarness, name: &str) -> String {
     let dir = harness.config_dir.path().join(name);
     fs::create_dir_all(&dir).unwrap();
-    fs::write(
-        dir.join("hooks.yaml"),
-        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 0\"]\n",
-    )
-    .unwrap();
+    let hook_yaml = if cfg!(windows) {
+        "preSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"exit /b 0\"]\n"
+    } else {
+        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"exit 0\"]\n"
+    };
+    fs::write(dir.join("hooks.yaml"), hook_yaml).unwrap();
     dir.to_str().unwrap().to_owned()
 }
 
 /// Create a bundle with a post-submission hook that writes a marker file.
-#[cfg(unix)] // only used by cfg(unix) hook-execution tests
 fn create_bundle_with_post_hook(harness: &TestHarness, name: &str) -> (String, String) {
     let dir = create_bundle(harness, name);
     let marker = harness.config_dir.path().join(format!("{name}_marker"));
     let marker_escaped = marker.to_str().unwrap().replace('\\', "\\\\");
-    fs::write(
-        std::path::Path::new(&dir).join("hooks.yaml"),
+    let hook_yaml = if cfg!(windows) {
+        format!(
+            "postSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"echo.> \\\"{}\\\"\"]\n",
+            marker.to_str().unwrap().replace('\\', "\\\\")
+        )
+    } else {
         format!(
             "postSubmission:\n  - command: sh\n    args: [\"-c\", \"touch '{marker_escaped}'\"]\n"
-        ),
-    )
-    .unwrap();
+        )
+    };
+    fs::write(std::path::Path::new(&dir).join("hooks.yaml"), hook_yaml).unwrap();
     (dir, marker.to_str().unwrap().to_owned())
 }
 
@@ -148,7 +153,6 @@ async fn mock_submit_no_attachments(harness: &TestHarness) {
 // Bundle hooks enabled — pre-hooks run, submission proceeds
 // =====================================================================
 
-#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_hooks_enabled() {
     let harness = TestHarness::new().await;
@@ -182,7 +186,6 @@ async fn bundle_submit_hooks_disabled_note() {
 // Environment hooks enabled
 // =====================================================================
 
-#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_env_hooks_enabled() {
     let harness = TestHarness::new().await;
@@ -226,7 +229,6 @@ async fn bundle_submit_env_hooks_disabled_warning() {
 // Both bundle and env hooks enabled — env runs first
 // =====================================================================
 
-#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_both_hook_sources() {
     let harness = TestHarness::new().await;
@@ -254,7 +256,6 @@ async fn bundle_submit_both_hook_sources() {
 // Pre-hook modifies payload with --yes
 // =====================================================================
 
-#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_pre_hook_modifies_payload() {
     let harness = TestHarness::new().await;
@@ -273,7 +274,6 @@ async fn bundle_submit_pre_hook_modifies_payload() {
 // Pre-hook fails — submission canceled
 // =====================================================================
 
-#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_pre_hook_failure_cancels() {
     let harness = TestHarness::new().await;
@@ -292,7 +292,6 @@ async fn bundle_submit_pre_hook_failure_cancels() {
 // Post-hook runs after successful submission
 // =====================================================================
 
-#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_post_hook_after_success() {
     let harness = TestHarness::new().await;
@@ -317,7 +316,6 @@ async fn bundle_submit_post_hook_after_success() {
 // Hooks confirmation prompt shown (not --yes)
 // =====================================================================
 
-#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_hooks_confirmation_prompt() {
     let harness = TestHarness::new().await;
@@ -338,7 +336,6 @@ async fn bundle_submit_hooks_confirmation_prompt() {
 // Pre-hook timeout — submission canceled with timeout message (Batch B)
 // =====================================================================
 
-#[cfg(unix)] // executes a `sh` hook; Windows parity covered by Python's data-model unit tests
 #[tokio::test]
 async fn bundle_submit_pre_hook_timeout_cancels() {
     let harness = TestHarness::new().await;
@@ -351,11 +348,12 @@ async fn bundle_submit_pre_hook_timeout_cancels() {
 
     // Create bundle with a hook that sleeps longer than its timeout
     let dir = create_bundle(&harness, "hook_timeout");
-    fs::write(
-        std::path::Path::new(&dir).join("hooks.yaml"),
-        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"sleep 60\"]\n    timeout: 1\n",
-    )
-    .unwrap();
+    let hook_yaml = if cfg!(windows) {
+        "preSubmission:\n  - command: cmd.exe\n    args: [\"/c\", \"timeout /t 60 /nobreak >nul\"]\n    timeout: 1\n"
+    } else {
+        "preSubmission:\n  - command: sh\n    args: [\"-c\", \"sleep 60\"]\n    timeout: 1\n"
+    };
+    fs::write(std::path::Path::new(&dir).join("hooks.yaml"), hook_yaml).unwrap();
 
     let _guard = bundle_hooks_settings().bind_to_scope();
     assert_cmd_snapshot!(harness.cmd(&["bundle", "submit", &dir, "--yes"]));

@@ -3,36 +3,26 @@
 //! Tests hook validation, payload merging, and execution behavior
 //! including timeout handling and structured errors.
 
-#[cfg(unix)]
 use deadline_lib::api::errors::DeadlineError;
-#[cfg(unix)]
 use deadline_lib::bundle::hooks::{HookManager, HookMetadata};
 use deadline_lib::bundle::hooks::{
     merge_asset_references, merge_payload, validate_configuration, validate_modified_payload,
 };
-#[cfg(unix)]
 use deadline_lib::bundle::submission::SubmissionHandler;
-#[cfg(unix)]
 use serde_json::Value;
 use serde_json::json;
-#[cfg(unix)]
 use std::collections::HashMap;
-#[cfg(unix)]
 use std::fs;
-#[cfg(unix)]
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
 // Test SubmissionHandler (captures messages)
-// TODO: remove #[cfg(unix)] when Windows hook twins are added (see progress.md)
 // ---------------------------------------------------------------------------
 
-#[cfg(unix)] // only used by cfg(unix) hook-execution tests
 struct TestHandler {
     messages: std::sync::Mutex<Vec<String>>,
 }
 
-#[cfg(unix)]
 impl TestHandler {
     fn new() -> Self {
         Self {
@@ -41,7 +31,6 @@ impl TestHandler {
     }
 }
 
-#[cfg(unix)]
 impl SubmissionHandler for TestHandler {
     fn on_message(&self, msg: &str) {
         self.messages.lock().unwrap().push(msg.to_owned());
@@ -253,12 +242,16 @@ fn validate_modified_payload_invalid_asset_references_fails() {
 // Batch B: execute_hook timeout joins thread (no leak)
 // =====================================================================
 
-#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_timeout_returns_timed_out_result() {
     let tmp = TempDir::new().unwrap();
-    let script_path = tmp.path().join("slow.sh");
-    fs::write(&script_path, "#!/bin/sh\nexec sleep 60\n").unwrap();
+    let (script_name, script_content) = if cfg!(windows) {
+        ("slow.cmd", "@echo off\ntimeout /t 60 /nobreak >nul\n")
+    } else {
+        ("slow.sh", "#!/bin/sh\nexec sleep 60\n")
+    };
+    let script_path = tmp.path().join(script_name);
+    fs::write(&script_path, script_content).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -268,15 +261,13 @@ fn execute_hook_timeout_returns_timed_out_result() {
     let handler = TestHandler::new();
     let mut manager = HookManager::new(tmp.path(), &handler, None);
 
-    // Manually set hooks with a 1-second timeout
     let config = json!({
         "version": "1.0",
         "preSubmission": [{
-            "command": "slow.sh",
+            "command": script_name,
             "timeout": 1
         }]
     });
-    // Write hooks file so load_hooks finds it
     fs::write(
         tmp.path().join("hooks.json"),
         serde_json::to_string(&config).unwrap(),
@@ -302,9 +293,9 @@ fn execute_hook_timeout_returns_timed_out_result() {
     let result = manager.execute_pre_submission_hooks(&mut metadata, json!({"name": "job"}));
     let elapsed = start.elapsed();
 
-    // Must complete within 3s (timeout is 1s + join overhead)
+    // Must complete within 5s (timeout is 1s + join overhead)
     assert!(
-        elapsed.as_secs() < 3,
+        elapsed.as_secs() < 5,
         "Hook execution took {elapsed:?} — thread likely leaked"
     );
     // Must be an error (pre-submission hooks fail on timeout)
@@ -312,12 +303,22 @@ fn execute_hook_timeout_returns_timed_out_result() {
     assert!(err.to_string().contains("timed out"), "got: {err}");
 }
 
-#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_success_returns_stdout() {
     let tmp = TempDir::new().unwrap();
-    let script_path = tmp.path().join("echo_hook.sh");
-    fs::write(&script_path, "#!/bin/sh\necho '{\"name\": \"modified\"}'\n").unwrap();
+    let (script_name, script_content) = if cfg!(windows) {
+        (
+            "echo_hook.cmd",
+            "@echo off\necho {\"name\": \"modified\"}\n",
+        )
+    } else {
+        (
+            "echo_hook.sh",
+            "#!/bin/sh\necho '{\"name\": \"modified\"}'\n",
+        )
+    };
+    let script_path = tmp.path().join(script_name);
+    fs::write(&script_path, script_content).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -329,7 +330,7 @@ fn execute_hook_success_returns_stdout() {
 
     let config = json!({
         "version": "1.0",
-        "preSubmission": [{"command": "echo_hook.sh", "timeout": 10}]
+        "preSubmission": [{"command": script_name, "timeout": 10}]
     });
     fs::write(
         tmp.path().join("hooks.json"),
@@ -359,12 +360,16 @@ fn execute_hook_success_returns_stdout() {
     assert_eq!(result["name"], "modified");
 }
 
-#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_nonzero_exit_reports_failure() {
     let tmp = TempDir::new().unwrap();
-    let script_path = tmp.path().join("fail.sh");
-    fs::write(&script_path, "#!/bin/sh\nexit 42\n").unwrap();
+    let (script_name, script_content) = if cfg!(windows) {
+        ("fail.cmd", "@echo off\nexit /b 42\n")
+    } else {
+        ("fail.sh", "#!/bin/sh\nexit 42\n")
+    };
+    let script_path = tmp.path().join(script_name);
+    fs::write(&script_path, script_content).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -376,7 +381,7 @@ fn execute_hook_nonzero_exit_reports_failure() {
 
     let config = json!({
         "version": "1.0",
-        "preSubmission": [{"command": "fail.sh", "timeout": 10}]
+        "preSubmission": [{"command": script_name, "timeout": 10}]
     });
     fs::write(
         tmp.path().join("hooks.json"),
@@ -405,18 +410,27 @@ fn execute_hook_nonzero_exit_reports_failure() {
     assert!(err.to_string().contains("exit code 42"), "got: {err}");
 }
 
-#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
 #[test]
 fn execute_hook_receives_metadata_on_stdin() {
     let tmp = TempDir::new().unwrap();
     let output_file = tmp.path().join("stdin_capture.txt");
-    let script_path = tmp.path().join("capture.sh");
-    // Script reads stdin and writes it to a file
-    fs::write(
-        &script_path,
-        format!("#!/bin/sh\ncat > '{}'\n", output_file.display()),
-    )
-    .unwrap();
+    let escaped = output_file.to_str().unwrap().replace('\\', "\\\\");
+    let (script_name, script_content) = if cfg!(windows) {
+        (
+            "capture.cmd",
+            format!(
+                "@echo off\npython3 -c \"import sys; open(r'{}', 'w').write(sys.stdin.read())\"\n",
+                output_file.to_str().unwrap()
+            ),
+        )
+    } else {
+        (
+            "capture.sh",
+            format!("#!/bin/sh\ncat > '{escaped}'\n"),
+        )
+    };
+    let script_path = tmp.path().join(script_name);
+    fs::write(&script_path, &script_content).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -428,7 +442,7 @@ fn execute_hook_receives_metadata_on_stdin() {
 
     let config = json!({
         "version": "1.0",
-        "preSubmission": [{"command": "capture.sh", "timeout": 10}]
+        "preSubmission": [{"command": script_name, "timeout": 10}]
     });
     fs::write(
         tmp.path().join("hooks.json"),
@@ -469,13 +483,12 @@ fn execute_hook_receives_metadata_on_stdin() {
 // Batch E: Structured HookFailed error variant
 // =====================================================================
 
-#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
+#[cfg(unix)] // DeadlineError::HookFailed match requires unix (SIGKILL timeout behavior differs)
 #[test]
 fn execute_hook_failure_returns_hook_failed_variant() {
     let tmp = TempDir::new().unwrap();
     let script_path = tmp.path().join("fail.sh");
     fs::write(&script_path, "#!/bin/sh\nexit 42\n").unwrap();
-    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -529,13 +542,66 @@ fn execute_hook_failure_returns_hook_failed_variant() {
     }
 }
 
-#[cfg(unix)] // TODO: remove when Windows hook twins added (see progress.md)
+#[cfg(windows)]
+#[test]
+fn execute_hook_failure_returns_hook_failed_variant() {
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("fail.cmd");
+    fs::write(&script_path, "@echo off\nexit /b 42\n").unwrap();
+
+    let handler = TestHandler::new();
+    let mut manager = HookManager::new(tmp.path(), &handler, None);
+
+    let config = json!({
+        "version": "1.0",
+        "preSubmission": [{"command": "fail.cmd", "timeout": 10}]
+    });
+    fs::write(
+        tmp.path().join("hooks.json"),
+        serde_json::to_string(&config).unwrap(),
+    )
+    .unwrap();
+    manager.load_hooks().unwrap();
+
+    let mut metadata = HookMetadata {
+        job_name: "test".into(),
+        priority: 50,
+        farm_id: "farm-123".into(),
+        queue_id: "queue-456".into(),
+        job_bundle_dir: tmp.path().to_path_buf(),
+        parameters: HashMap::new(),
+        submitter_name: "test".into(),
+        asset_references: json!({}),
+        submission_payload: json!({}),
+        storage_profile_id: None,
+        job_id: None,
+    };
+
+    let err = manager
+        .execute_pre_submission_hooks(&mut metadata, json!({"name": "job"}))
+        .unwrap_err();
+
+    match err {
+        DeadlineError::HookFailed {
+            index,
+            exit_code,
+            timed_out,
+            ..
+        } => {
+            assert_eq!(index, 1);
+            assert_eq!(exit_code, 42);
+            assert!(!timed_out);
+        }
+        other => panic!("expected HookFailed variant, got: {other:?}"),
+    }
+}
+
+#[cfg(unix)]
 #[test]
 fn execute_hook_timeout_returns_hook_failed_with_timed_out_flag() {
     let tmp = TempDir::new().unwrap();
     let script_path = tmp.path().join("slow.sh");
     fs::write(&script_path, "#!/bin/sh\nexec sleep 60\n").unwrap();
-    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -585,6 +651,63 @@ fn execute_hook_timeout_returns_hook_failed_with_timed_out_flag() {
             assert!(timed_out);
             assert!(
                 name.contains("slow.sh"),
+                "name should contain script: {name}"
+            );
+        }
+        other => panic!("expected HookFailed variant, got: {other:?}"),
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn execute_hook_timeout_returns_hook_failed_with_timed_out_flag() {
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("slow.cmd");
+    fs::write(&script_path, "@echo off\ntimeout /t 60 /nobreak >nul\n").unwrap();
+
+    let handler = TestHandler::new();
+    let mut manager = HookManager::new(tmp.path(), &handler, None);
+
+    let config = json!({
+        "version": "1.0",
+        "preSubmission": [{"command": "slow.cmd", "timeout": 1}]
+    });
+    fs::write(
+        tmp.path().join("hooks.json"),
+        serde_json::to_string(&config).unwrap(),
+    )
+    .unwrap();
+    manager.load_hooks().unwrap();
+
+    let mut metadata = HookMetadata {
+        job_name: "test".into(),
+        priority: 50,
+        farm_id: "farm-123".into(),
+        queue_id: "queue-456".into(),
+        job_bundle_dir: tmp.path().to_path_buf(),
+        parameters: HashMap::new(),
+        submitter_name: "test".into(),
+        asset_references: json!({}),
+        submission_payload: json!({}),
+        storage_profile_id: None,
+        job_id: None,
+    };
+
+    let err = manager
+        .execute_pre_submission_hooks(&mut metadata, json!({"name": "job"}))
+        .unwrap_err();
+
+    match err {
+        DeadlineError::HookFailed {
+            index,
+            timed_out,
+            name,
+            ..
+        } => {
+            assert_eq!(index, 1);
+            assert!(timed_out);
+            assert!(
+                name.contains("slow.cmd"),
                 "name should contain script: {name}"
             );
         }

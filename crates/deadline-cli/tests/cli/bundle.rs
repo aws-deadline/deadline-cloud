@@ -209,8 +209,6 @@ assetReferences:
 }
 
 /// Bundle with a symlink that escapes the bundle directory.
-/// Only used by the `#[cfg(unix)]` symlink-escape test.
-#[cfg(unix)]
 fn create_bundle_with_escaping_symlink(harness: &TestHarness, name: &str) -> String {
     let dir = harness.config_dir.path().join(name);
     fs::create_dir_all(&dir).unwrap();
@@ -229,8 +227,15 @@ steps:
     )
     .unwrap();
     // Create a symlink pointing outside the bundle
+    let target = if cfg!(windows) {
+        "C:\\Windows\\System32\\drivers\\etc\\hosts"
+    } else {
+        "/etc/hosts"
+    };
     #[cfg(unix)]
-    std::os::unix::fs::symlink("/etc/hosts", dir.join("escape_link")).unwrap();
+    std::os::unix::fs::symlink(target, dir.join("escape_link")).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(target, dir.join("escape_link")).unwrap();
     dir.to_str().unwrap().to_owned()
 }
 
@@ -567,7 +572,6 @@ async fn bundle_submit_json_template() {
 // symlink containment — symlink escapes bundle
 // =====================================================================
 
-#[cfg(unix)]
 #[tokio::test]
 async fn bundle_submit_symlink_outside_bundle_exits_with_error() {
     let harness = TestHarness::new().await;

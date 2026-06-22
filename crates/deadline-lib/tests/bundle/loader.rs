@@ -8,8 +8,6 @@ use deadline_lib::bundle::loader::{
     save_yaml_or_json_to_file, validate_directory_symlink_containment,
 };
 use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs as unix_fs;
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -22,7 +20,6 @@ fn validate_symlinks_no_symlinks_succeeds() {
     validate_directory_symlink_containment(dir.path()).unwrap();
 }
 
-#[cfg(unix)]
 #[test]
 fn validate_symlinks_bundle_is_symlink_succeeds() {
     let dir = TempDir::new().unwrap();
@@ -30,7 +27,10 @@ fn validate_symlinks_bundle_is_symlink_succeeds() {
     fs::create_dir(&real_dir).unwrap();
     fs::write(real_dir.join("template.yaml"), "spec: 1").unwrap();
     let link = dir.path().join("link");
-    unix_fs::symlink(&real_dir, &link).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&real_dir, &link).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(&real_dir, &link).unwrap();
     validate_directory_symlink_containment(&link).unwrap();
 }
 
@@ -43,7 +43,6 @@ fn validate_symlinks_not_a_directory_returns_error() {
     assert!(err.to_string().contains("not a directory"), "got: {err}");
 }
 
-#[cfg(unix)]
 #[test]
 fn validate_symlinks_outside_bundle_returns_error() {
     let dir = TempDir::new().unwrap();
@@ -51,19 +50,24 @@ fn validate_symlinks_outside_bundle_returns_error() {
     fs::create_dir(&bundle).unwrap();
     let outside = dir.path().join("outside.txt");
     fs::write(&outside, "secret").unwrap();
-    unix_fs::symlink(&outside, bundle.join("link.txt")).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside, bundle.join("link.txt")).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(&outside, bundle.join("link.txt")).unwrap();
     let err = validate_directory_symlink_containment(&bundle).unwrap_err();
     assert!(err.to_string().contains("resolves outside"), "got: {err}");
 }
 
-#[cfg(unix)]
 #[test]
 fn validate_symlinks_inside_bundle_succeeds() {
     let dir = TempDir::new().unwrap();
     let bundle = dir.path().join("bundle");
     fs::create_dir(&bundle).unwrap();
     fs::write(bundle.join("real.txt"), "data").unwrap();
-    unix_fs::symlink(bundle.join("real.txt"), bundle.join("link.txt")).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(bundle.join("real.txt"), bundle.join("link.txt")).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(bundle.join("real.txt"), bundle.join("link.txt")).unwrap();
     validate_directory_symlink_containment(&bundle).unwrap();
 }
 
