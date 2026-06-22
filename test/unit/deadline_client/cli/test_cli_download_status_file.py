@@ -120,19 +120,6 @@ class TestDetermineJobDownloadStatus:
         result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
         assert result["download_status"] == "in_progress"
 
-    def test_inactive_job_all_succeeded_returns_downloaded(self):
-        cjids = _make_categorized_job_ids(inactive={MOCK_JOB_ID})
-        job = _make_job(MOCK_JOB_ID, succeeded=5, total=5)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
-        assert result["download_status"] == "downloaded"
-
-    def test_inactive_job_not_all_succeeded_returns_skipped(self):
-        """Canceled/failed inactive jobs should not be marked as downloaded."""
-        cjids = _make_categorized_job_ids(inactive={MOCK_JOB_ID})
-        job = _make_job(MOCK_JOB_ID, succeeded=2, total=5, ended=True)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
-        assert result["download_status"] == "skipped"
-
     def test_attachments_free_returns_skipped(self):
         cjids = _make_categorized_job_ids(attachments_free={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, attachments=False)

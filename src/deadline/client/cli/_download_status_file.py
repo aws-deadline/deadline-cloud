@@ -101,24 +101,6 @@ def _determine_job_download_status(
             "error_message": None,
         }
 
-    if job_id in categorized_job_ids.inactive:
-        task_counts = job.get("taskRunStatusCounts", {})
-        succeeded = task_counts.get("SUCCEEDED", 0)
-        total = sum(task_counts.values()) if task_counts else 0
-        if succeeded == total and total > 0:
-            status = "downloaded"
-        else:
-            status = "skipped"
-        return {
-            "download_status": status,
-            "total_files": 0,
-            "downloaded_files": 0,
-            "failed_files": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "error_code": None,
-            "error_message": None,
-        }
-
     # unchanged jobs — check if all tasks succeeded to determine if fully downloaded
     if job_id in categorized_job_ids.unchanged:
         task_counts = job.get("taskRunStatusCounts", {})
@@ -169,12 +151,13 @@ def _build_status_file_content(
     jobs_status: dict[str, Any] = dict(existing_jobs) if existing_jobs else {}
 
     # Update/add entries from this run's categorized jobs
+    # Inactive jobs are excluded — they dropped out of download_candidate_jobs so we can't
+    # look up their task counts. Their existing entry from the merge is preserved as-is.
     all_job_ids = (
         categorized_job_ids.completed
         | categorized_job_ids.added
         | categorized_job_ids.updated
         | categorized_job_ids.unchanged
-        | categorized_job_ids.inactive
         | categorized_job_ids.attachments_free
         | categorized_job_ids.missing_storage_profile
     )
