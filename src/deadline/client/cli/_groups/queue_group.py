@@ -437,8 +437,7 @@ def sync_output(
         logger.echo()
 
     # Pre-flight validation: verify all storage profile file system locations are accessible
-    # Skipped on dry-run since no files will be written
-    if local_storage_profile_id and local_storage_profile and not dry_run:
+    if local_storage_profile_id and local_storage_profile:
         inaccessible_locations = []
         for location in local_storage_profile["fileSystemLocations"]:
             location_path = location["path"]
