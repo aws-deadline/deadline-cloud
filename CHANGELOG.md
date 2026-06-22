@@ -1,3 +1,10 @@
+## 0.59.1 (2026-06-22)
+
+### DEPRECATIONS
+* `check_deadline_api_available()` is now deprecated. It has been replaced by `check_authentication_status()`, which provides the same functionality. The old function still works but delegates to the new one. (#1201)
+
+### Bug Fixes
+* Fixed duplicate ListFarms API calls being made during authentication checks. The CLI and GUI were previously issuing two identical calls per refresh; now only one is made. (#1201)
 ## 0.59.0 (2026-06-17)
 
 ### BREAKING CHANGES
