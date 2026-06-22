@@ -256,7 +256,7 @@ def write_download_status_file(
     """
     Writes the download status JSON file to the shared filesystem (or local default path).
 
-    This is called at the end of each sync-output run, inside the PID lock, after the
+    This is called at the end of each sync-output run, inside the PID lock, before the
     checkpoint is saved. If the write fails, it logs a warning but does not abort.
 
     Args:
