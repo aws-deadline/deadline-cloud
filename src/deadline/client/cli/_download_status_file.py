@@ -67,8 +67,7 @@ def _determine_job_download_status(
         succeeded = task_counts.get("SUCCEEDED", 0)
         total = sum(task_counts.values()) if task_counts else 0
         active_tasks = sum(
-            task_counts.get(s, 0)
-            for s in ["READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED"]
+            task_counts.get(s, 0) for s in ["READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED"]
         )
         if succeeded == total and total > 0 and active_tasks == 0 and "endedAt" in job:
             status = "downloaded"
@@ -103,8 +102,15 @@ def _determine_job_download_status(
         }
 
     if job_id in categorized_job_ids.inactive:
+        task_counts = job.get("taskRunStatusCounts", {})
+        succeeded = task_counts.get("SUCCEEDED", 0)
+        total = sum(task_counts.values()) if task_counts else 0
+        if succeeded == total and total > 0:
+            status = "downloaded"
+        else:
+            status = "skipped"
         return {
-            "download_status": "downloaded",
+            "download_status": status,
             "total_files": 0,
             "downloaded_files": 0,
             "failed_files": 0,
@@ -203,7 +209,7 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
                 data = json.load(f)
             return data.get("jobs", {})
     except (json.JSONDecodeError, OSError, KeyError):
-        pass
+        pass  # Gracefully handle corrupt or inaccessible status files
     return {}
 
 
@@ -223,7 +229,7 @@ def _atomic_write_json(file_path: str, data: dict[str, Any]) -> None:
         try:
             os.unlink(tmp_path)
         except OSError:
-            pass
+            pass  # Best-effort cleanup of temp file
         raise
 
 

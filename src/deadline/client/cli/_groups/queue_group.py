@@ -29,7 +29,7 @@ from ....job_attachments.models import (
 )
 from .click_logger import ClickLogger
 from .._main import deadline as main
-from .._incremental_download import _incremental_output_download, CategorizedJobIds
+from .._incremental_download import _incremental_output_download
 from .._download_status_file import write_download_status_file
 from .._pid_file_lock import PidFileLock
 from ....job_attachments._incremental_downloads.incremental_download_state import (
@@ -427,6 +427,7 @@ def sync_output(
     logger.echo()
 
     if local_storage_profile_id:
+        assert local_storage_profile is not None
         logger.echo(
             f"Mapping job output paths to the local storage profile {local_storage_profile['displayName']} ({local_storage_profile_id})"
         )
@@ -436,14 +437,19 @@ def sync_output(
         logger.echo()
 
     # Pre-flight validation: verify all storage profile file system locations are accessible
-    if local_storage_profile_id and local_storage_profile:
+    # Skipped on dry-run since no files will be written
+    if local_storage_profile_id and local_storage_profile and not dry_run:
         inaccessible_locations = []
         for location in local_storage_profile["fileSystemLocations"]:
             location_path = location["path"]
             if not os.path.isdir(location_path):
-                inaccessible_locations.append(f"  {location['name']}: {location_path} (does not exist)")
+                inaccessible_locations.append(
+                    f"  {location['name']}: {location_path} (does not exist)"
+                )
             elif not os.access(location_path, os.W_OK):
-                inaccessible_locations.append(f"  {location['name']}: {location_path} (not writable)")
+                inaccessible_locations.append(
+                    f"  {location['name']}: {location_path} (not writable)"
+                )
         if inaccessible_locations:
             raise DeadlineOperationError(
                 "The following file system locations in the storage profile are not accessible:\n"

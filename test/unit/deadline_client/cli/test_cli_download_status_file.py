@@ -6,9 +6,7 @@ Tests for the CLI download status file module.
 
 import json
 import os
-import tempfile
-
-import pytest
+from typing import Any, Optional
 
 from deadline.client.cli._download_status_file import (
     _atomic_write_json,
@@ -45,10 +43,10 @@ def _make_job(
     total: int = 1,
     ended: bool = True,
     attachments: bool = True,
-    storage_profile_id: str = MOCK_STORAGE_PROFILE_ID,
-) -> dict:
+    storage_profile_id: Optional[str] = MOCK_STORAGE_PROFILE_ID,
+) -> dict[str, Any]:
     """Helper to create a fake job dict."""
-    job = {
+    job: dict[str, Any] = {
         "jobId": job_id,
         "name": f"test-job-{job_id[-8:]}",
         "taskRunStatusCounts": {
@@ -122,11 +120,18 @@ class TestDetermineJobDownloadStatus:
         result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
         assert result["download_status"] == "in_progress"
 
-    def test_inactive_job_returns_downloaded(self):
+    def test_inactive_job_all_succeeded_returns_downloaded(self):
         cjids = _make_categorized_job_ids(inactive={MOCK_JOB_ID})
-        job = _make_job(MOCK_JOB_ID)
+        job = _make_job(MOCK_JOB_ID, succeeded=5, total=5)
         result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
         assert result["download_status"] == "downloaded"
+
+    def test_inactive_job_not_all_succeeded_returns_skipped(self):
+        """Canceled/failed inactive jobs should not be marked as downloaded."""
+        cjids = _make_categorized_job_ids(inactive={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=2, total=5, ended=True)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        assert result["download_status"] == "skipped"
 
     def test_attachments_free_returns_skipped(self):
         cjids = _make_categorized_job_ids(attachments_free={MOCK_JOB_ID})
@@ -181,7 +186,10 @@ class TestGetStatusFilePaths:
             checkpoint_dir="/home/user/.deadline/incremental_download",
         )
         assert len(paths) == 1
-        assert paths[0] == f"/mnt/nas/renders/.deadline/{MOCK_QUEUE_ID}_download_status.json"
+        expected = os.path.join(
+            "/mnt/nas/renders", ".deadline", f"{MOCK_QUEUE_ID}_download_status.json"
+        )
+        assert paths[0] == expected
 
     def test_storage_profile_multiple_locations(self):
         profile = {
@@ -198,9 +206,18 @@ class TestGetStatusFilePaths:
             checkpoint_dir="/home/user/.deadline/incremental_download",
         )
         assert len(paths) == 3
-        assert f"/mnt/nas/renders/.deadline/{MOCK_QUEUE_ID}_download_status.json" in paths
-        assert f"/mnt/nas/projects/.deadline/{MOCK_QUEUE_ID}_download_status.json" in paths
-        assert f"/mnt/nas/tools/.deadline/{MOCK_QUEUE_ID}_download_status.json" in paths
+        assert (
+            os.path.join("/mnt/nas/renders", ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
+            in paths
+        )
+        assert (
+            os.path.join("/mnt/nas/projects", ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
+            in paths
+        )
+        assert (
+            os.path.join("/mnt/nas/tools", ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
+            in paths
+        )
 
 
 class TestBuildStatusFileContent:
@@ -356,7 +373,7 @@ class TestWriteDownloadStatusFile:
         }
         cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
         jobs = {MOCK_JOB_ID: _make_job(MOCK_JOB_ID)}
-        messages = []
+        messages: list[str] = []
 
         write_download_status_file(
             queue_id=MOCK_QUEUE_ID,
@@ -380,7 +397,7 @@ class TestWriteDownloadStatusFile:
         checkpoint_dir.mkdir()
         cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
         jobs = {MOCK_JOB_ID: _make_job(MOCK_JOB_ID, succeeded=3, total=10, ended=False)}
-        messages = []
+        messages: list[str] = []
 
         write_download_status_file(
             queue_id=MOCK_QUEUE_ID,
@@ -392,7 +409,9 @@ class TestWriteDownloadStatusFile:
             print_function_callback=messages.append,
         )
 
-        status_file = checkpoint_dir / f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        status_file = (
+            checkpoint_dir / f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
         assert status_file.exists()
         with open(status_file) as f:
             data = json.load(f)
@@ -425,14 +444,17 @@ class TestWriteDownloadStatusFile:
         assert (projects_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json").exists()
 
     def test_warns_on_write_failure_does_not_raise(self, tmp_path):
+        # Use a path nested under a file (not a directory) to guarantee failure on all platforms
+        blocker_file = tmp_path / "blocker"
+        blocker_file.write_text("not a directory")
         profile = {
             "fileSystemLocations": [
-                {"name": "renders", "path": "/nonexistent/path/that/cannot/be/created"},
+                {"name": "renders", "path": str(blocker_file / "nested" / "path")},
             ]
         }
         cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
         jobs = {MOCK_JOB_ID: _make_job(MOCK_JOB_ID)}
-        messages = []
+        messages: list[str] = []
 
         write_download_status_file(
             queue_id=MOCK_QUEUE_ID,
@@ -469,7 +491,9 @@ class TestWriteDownloadStatusFile:
             checkpoint_dir=str(checkpoint_dir),
         )
 
-        status_file = checkpoint_dir / f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        status_file = (
+            checkpoint_dir / f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
         with open(status_file) as f:
             data = json.load(f)
 

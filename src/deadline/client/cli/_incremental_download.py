@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
 
-__all__ = ["_incremental_output_download", "CategorizedJobIds"]
+__all__ = ["CategorizedJobIds", "_incremental_output_download"]
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
