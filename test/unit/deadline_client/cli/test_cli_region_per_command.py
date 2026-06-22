@@ -519,7 +519,9 @@ def test_cli_queue_sync_output_region(fresh_deadline_config, tmp_path):
             queue_group, "get_session_client", return_value=deadline_client
         ) as mock_get_session_client,
         patch.object(
-            queue_group, "_incremental_output_download", return_value=(MagicMock(), MagicMock(), {})
+            queue_group,
+            "_incremental_output_download",
+            return_value=(MagicMock(), MagicMock(), {}, {}),
         ),
     ):
         runner = CliRunner()

@@ -1045,7 +1045,7 @@ def _incremental_output_download(
         dry_run: If True, the operation will print out information but not perform any data downloads.
 
     Returns:
-        A tuple of (updated checkpoint, categorized job IDs, download candidate jobs dict).
+        A tuple of (updated checkpoint, categorized job IDs, download candidate jobs dict, per-job download results).
     """
     durations = IncrementalOutputDownloadLatencies()
     # Operations here are within a single farm, so scope the deadline client to that
@@ -1211,13 +1211,22 @@ def _incremental_output_download(
         job_sessions,
         path_mapping_rule_appliers,
     )
+    if len(manifests_to_download) != len(downloaded_manifests):
+        raise RuntimeError(
+            f"Manifest list length mismatch: {len(manifests_to_download)} vs {len(downloaded_manifests)}"
+        )
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
+    job_seen_paths: dict[str, set[str]] = {}
     for i, (_, job_id, _, _) in enumerate(manifests_to_download):
         manifest_tuple = downloaded_manifests[i]
         if manifest_tuple is not None:
             _, manifest = manifest_tuple
             for manifest_path in manifest.paths:
-                job_manifest_paths.setdefault(job_id, []).append(manifest_path)
+                normcased = os.path.normcase(manifest_path.path)
+                seen = job_seen_paths.setdefault(job_id, set())
+                if normcased not in seen:
+                    seen.add(normcased)
+                    job_manifest_paths.setdefault(job_id, []).append(manifest_path)
 
     # Print a summary of all the paths before starting the download
     all_manifest_paths = [path for paths in job_manifest_paths.values() for path in paths]
@@ -1305,13 +1314,15 @@ def _incremental_output_download(
 
     # Update the timestamp only if all jobs succeeded — if any failed, keep the old timestamp
     # so the next run's SearchJobs query window still covers the failed jobs
-    has_download_failures = any(r.get("failed_files", 0) > 0 for r in job_download_results.values())
+    has_download_failures = any(
+        r.get("error_code") is not None for r in job_download_results.values()
+    )
     if not has_download_failures:
         checkpoint.downloads_completed_timestamp = new_completed_timestamp
 
     # Remove failed jobs from checkpoint entirely so they're treated as new (added) next run
     failed_job_ids = {
-        job_id for job_id, r in job_download_results.items() if r.get("failed_files", 0) > 0
+        job_id for job_id, r in job_download_results.items() if r.get("error_code") is not None
     }
     if failed_job_ids:
         checkpoint.jobs = [job for job in checkpoint.jobs if job.job_id not in failed_job_ids]
