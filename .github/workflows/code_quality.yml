@@ -32,7 +32,7 @@ jobs:
     name: Attributions
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{inputs.tag}}
       - uses: actions/setup-python@v6
