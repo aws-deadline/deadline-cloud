@@ -396,9 +396,7 @@ class TestResolveCrossRegionEndpointUrl:
             "us-west-2",
             services_name="custom-svc",
             services_defs={
-                "custom-svc": {
-                    "deadline": {"endpoint_url": "https://custom-endpoint.example.com"}
-                }
+                "custom-svc": {"deadline": {"endpoint_url": "https://custom-endpoint.example.com"}}
             },
         )
         assert _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1") is None
@@ -425,9 +423,7 @@ def test_get_session_client_cross_region_overrides_endpoint():
     session._session.full_config = {
         "services": {
             "deadline-gamma-us-west-2": {
-                "deadline": {
-                    "endpoint_url": "https://gamma.bealine-dev.us-west-2.amazonaws.com"
-                }
+                "deadline": {"endpoint_url": "https://gamma.bealine-dev.us-west-2.amazonaws.com"}
             }
         }
     }
