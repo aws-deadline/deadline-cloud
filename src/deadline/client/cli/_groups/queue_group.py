@@ -453,7 +453,8 @@ def sync_output(
             raise DeadlineOperationError(
                 "The following file system locations in the storage profile are not accessible:\n"
                 + "\n".join(inaccessible_locations)
-                + "\n\nEnsure all file system locations are mounted and writable before running sync-output."
+                + "\n\nLocations marked 'does not exist' need to be mounted."
+                + "\nLocations marked 'not writable' need write permissions granted."
             )
 
     # Perform incremental download while holding a process id lock

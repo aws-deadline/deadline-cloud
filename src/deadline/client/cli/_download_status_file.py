@@ -18,6 +18,40 @@ logger = logging.getLogger(__name__)
 DOWNLOAD_STATUS_FILE_SCHEMA_VERSION = 1
 
 
+def _make_status_entry(
+    status: str,
+    total_files: int = 0,
+    downloaded_files: int = 0,
+    failed_files: int = 0,
+    error_code: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> dict[str, Any]:
+    """Constructs a per-job status entry for the status file."""
+    return {
+        "download_status": status,
+        "total_files": total_files,
+        "downloaded_files": downloaded_files,
+        "failed_files": failed_files,
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "error_code": error_code,
+        "error_message": error_message,
+    }
+
+
+def _is_job_fully_complete(job: dict[str, Any], check_active_tasks: bool = False) -> bool:
+    """Returns True if all tasks succeeded and the job has ended."""
+    task_counts = job.get("taskRunStatusCounts", {})
+    succeeded = task_counts.get("SUCCEEDED", 0)
+    total = sum(task_counts.values()) if task_counts else 0
+    if check_active_tasks:
+        active_tasks = sum(
+            task_counts.get(s, 0) for s in ["READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED"]
+        )
+        if active_tasks > 0:
+            return False
+    return succeeded == total and "endedAt" in job
+
+
 def _determine_job_download_status(
     job_id: str,
     job: dict[str, Any],
@@ -30,106 +64,30 @@ def _determine_job_download_status(
     Returns a dict representing the job's status in the status file.
     """
     if job_id in categorized_job_ids.attachments_free:
-        return {
-            "download_status": "skipped",
-            "total_files": 0,
-            "downloaded_files": 0,
-            "failed_files": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "error_code": None,
-            "error_message": None,
-        }
+        return _make_status_entry("skipped")
 
     if job_id in categorized_job_ids.missing_storage_profile:
-        return {
-            "download_status": "skipped",
-            "total_files": 0,
-            "downloaded_files": 0,
-            "failed_files": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "error_code": None,
-            "error_message": None,
-        }
+        return _make_status_entry("skipped")
 
     if job_id in categorized_job_ids.completed:
-        return {
-            "download_status": "downloaded",
-            "total_files": 0,
-            "downloaded_files": 0,
-            "failed_files": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "error_code": None,
-            "error_message": None,
-        }
+        return _make_status_entry("downloaded")
 
     if job_id in categorized_job_ids.added:
-        task_counts = job.get("taskRunStatusCounts", {})
-        succeeded = task_counts.get("SUCCEEDED", 0)
-        total = sum(task_counts.values()) if task_counts else 0
-        active_tasks = sum(
-            task_counts.get(s, 0) for s in ["READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED"]
-        )
-        if succeeded == total and total > 0 and active_tasks == 0 and "endedAt" in job:
-            status = "downloaded"
-        else:
-            status = "in_progress"
-        return {
-            "download_status": status,
-            "total_files": 0,
-            "downloaded_files": 0,
-            "failed_files": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "error_code": None,
-            "error_message": None,
-        }
+        if _is_job_fully_complete(job, check_active_tasks=True):
+            return _make_status_entry("downloaded")
+        return _make_status_entry("in_progress")
 
     if job_id in categorized_job_ids.updated:
-        task_counts = job.get("taskRunStatusCounts", {})
-        succeeded = task_counts.get("SUCCEEDED", 0)
-        total = sum(task_counts.values()) if task_counts else 0
-        if succeeded == total and total > 0 and "endedAt" in job:
-            status = "downloaded"
-        else:
-            status = "in_progress"
-        return {
-            "download_status": status,
-            "total_files": 0,
-            "downloaded_files": 0,
-            "failed_files": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "error_code": None,
-            "error_message": None,
-        }
+        if _is_job_fully_complete(job):
+            return _make_status_entry("downloaded")
+        return _make_status_entry("in_progress")
 
-    # unchanged jobs — check if all tasks succeeded to determine if fully downloaded
     if job_id in categorized_job_ids.unchanged:
-        task_counts = job.get("taskRunStatusCounts", {})
-        succeeded = task_counts.get("SUCCEEDED", 0)
-        total = sum(task_counts.values()) if task_counts else 0
-        if succeeded == total and total > 0 and "endedAt" in job:
-            status = "downloaded"
-        else:
-            status = "in_progress"
-        return {
-            "download_status": status,
-            "total_files": 0,
-            "downloaded_files": 0,
-            "failed_files": 0,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "error_code": None,
-            "error_message": None,
-        }
+        if _is_job_fully_complete(job):
+            return _make_status_entry("downloaded")
+        return _make_status_entry("in_progress")
 
-    # fallback — should not typically reach here
-    return {
-        "download_status": "in_progress",
-        "total_files": 0,
-        "downloaded_files": 0,
-        "failed_files": 0,
-        "last_updated": datetime.now(timezone.utc).isoformat(),
-        "error_code": None,
-        "error_message": None,
-    }
+    return _make_status_entry("in_progress")
 
 
 def _build_status_file_content(
