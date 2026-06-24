@@ -158,20 +158,33 @@ def _resolve_cross_region_endpoint_url(
     if not session_region or target_region == session_region:
         return None
 
-    # Build a client using the session defaults to discover the effective endpoint.
-    default_client = session.client(service_name, config=get_default_client_config())
-    default_endpoint = default_client.meta.endpoint_url
+    # Inspect the botocore session config for a service endpoint override.
+    # The profile's scoped config has a ``services`` key that names a services definition
+    # (e.g. "deadline-gamma-us-west-2"), and the actual endpoint URLs live in
+    # ``full_config['services'][<name>][<service>]['endpoint_url']``.
+    endpoint_url = None
+    try:
+        scoped_config = session._session.get_scoped_config()
+        services_name = scoped_config.get("services")
+        if services_name and isinstance(services_name, str):
+            services_defs = session._session.full_config.get("services", {})
+            service_config = services_defs.get(services_name, {}).get(service_name, {})
+            if isinstance(service_config, dict):
+                endpoint_url = service_config.get("endpoint_url")
+    except Exception:
+        pass
 
-    # Standard endpoints follow the pattern ``https://{service}.{region}.amazonaws.com``.
-    # If the endpoint matches that pattern for the session region, boto3 will resolve the
-    # target region's endpoint natively — no fixup needed.
-    standard_endpoint = f"https://{service_name}.{session_region}.amazonaws.com"
-    if default_endpoint == standard_endpoint:
+    if not endpoint_url:
+        import os
+
+        endpoint_url = os.environ.get(f"AWS_ENDPOINT_URL_{service_name.upper()}")
+
+    if not endpoint_url:
         return None
 
     # Non-standard endpoint (gamma, beta, custom): replace the session region with the target.
-    if session_region in default_endpoint:
-        return default_endpoint.replace(session_region, target_region)
+    if session_region in endpoint_url:
+        return endpoint_url.replace(session_region, target_region)
 
     return None
 
