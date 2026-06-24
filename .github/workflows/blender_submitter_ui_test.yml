@@ -27,7 +27,7 @@ jobs:
           cache: pip
 
       - name: Cache apt packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: cache-apt
         with:
           path: ~/apt-cache
@@ -52,7 +52,7 @@ jobs:
           cp /var/cache/apt/archives/*.deb ~/apt-cache/ 2>/dev/null || true
 
       - name: Cache Blender
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: cache-blender
         with:
           path: /opt/blender-${{ env.BLENDER_VERSION }}-linux-x64
@@ -114,7 +114,7 @@ jobs:
           cache: pip
 
       - name: Cache Blender
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: cache-blender
         with:
           path: /Applications/Blender.app
@@ -178,7 +178,7 @@ jobs:
           cache: pip
 
       - name: Cache Blender
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: cache-blender
         with:
           path: C:\Tools\blender-${{ env.BLENDER_VERSION }}-windows-x64

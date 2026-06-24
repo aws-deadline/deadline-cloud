@@ -8,4 +8,4 @@ xa11y >= 0.9.1, < 0.10
 # realistic step/task structure for the submitter to poll. Without it
 # CreateJob returns a 500 InternalServerException and the submission
 # progress dialog hangs on "Preparing files..."
-openjd-model >= 0.9.0
+openjd-model >= 0.10.0
