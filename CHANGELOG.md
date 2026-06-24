@@ -1,3 +1,10 @@
+## 0.59.1 (2026-06-24)
+
+### DEPRECATIONS
+* `check_deadline_api_available` is now deprecated and delegates to `check_authentication_status`. Previously both functions issued redundant ListFarms API calls; this consolidation reduces duplicate API calls during CLI and GUI authentication checks. (#1201)
+
+### Bug Fixes
+* Fixed a security issue where preGUI bundle hooks in the GUI submitter could run when only `allow_environment_hooks` was enabled, bypassing the `allow_bundle_hooks=false` setting. PreGUI hooks are now correctly gated exclusively on the `allow_bundle_hooks` permission, matching CLI behavior. (#1221)
 ## 0.59.0 (2026-06-17)
 
 ### BREAKING CHANGES
