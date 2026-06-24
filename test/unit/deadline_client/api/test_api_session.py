@@ -15,6 +15,7 @@ from deadline.client.api._session import (
     get_session_client,
     precache_clients,
     _resolve_region,
+    _resolve_cross_region_endpoint_url,
 )
 
 
@@ -343,6 +344,80 @@ def test_get_session_client_same_region_cached():
     client2 = get_session_client(session, "s3", region="eu-west-1")
 
     assert client1 is client2
+
+
+class TestResolveCrossRegionEndpointUrl:
+    """Tests for _resolve_cross_region_endpoint_url."""
+
+    def test_returns_none_when_target_matches_session_region(self):
+        session = MagicMock()
+        session.region_name = "us-west-2"
+        assert _resolve_cross_region_endpoint_url(session, "deadline", "us-west-2") is None
+
+    def test_returns_none_when_session_has_no_region(self):
+        session = MagicMock()
+        session.region_name = None
+        assert _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1") is None
+
+    def test_returns_none_for_standard_endpoint(self):
+        session = MagicMock()
+        session.region_name = "us-west-2"
+        mock_client = MagicMock()
+        mock_client.meta.endpoint_url = "https://deadline.us-west-2.amazonaws.com"
+        session.client.return_value = mock_client
+
+        assert _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1") is None
+
+    def test_replaces_region_in_custom_endpoint(self):
+        session = MagicMock()
+        session.region_name = "us-west-2"
+        mock_client = MagicMock()
+        mock_client.meta.endpoint_url = "https://gamma.bealine-dev.us-west-2.amazonaws.com"
+        session.client.return_value = mock_client
+
+        result = _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1")
+        assert result == "https://gamma.bealine-dev.us-east-1.amazonaws.com"
+
+    def test_returns_none_when_session_region_not_in_endpoint(self):
+        session = MagicMock()
+        session.region_name = "us-west-2"
+        mock_client = MagicMock()
+        mock_client.meta.endpoint_url = "https://custom-endpoint.example.com"
+        session.client.return_value = mock_client
+
+        assert _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1") is None
+
+
+def test_get_session_client_cross_region_overrides_endpoint():
+    """
+    When a profile has a non-standard endpoint override (e.g. gamma), creating a
+    client for a different region must regionalize the endpoint URL so that the
+    SigV4 signing region matches the endpoint.
+    """
+    get_session_client.cache_clear()
+    session = MagicMock()
+    session.region_name = "us-west-2"
+
+    default_client = MagicMock()
+    default_client.meta.endpoint_url = "https://gamma.bealine-dev.us-west-2.amazonaws.com"
+
+    cross_region_client = MagicMock()
+
+    def mock_client_factory(service_name, config=None, region_name=None, endpoint_url=None):
+        if endpoint_url and "us-east-1" in endpoint_url:
+            return cross_region_client
+        return default_client
+
+    session.client.side_effect = mock_client_factory
+
+    result = get_session_client(session, "deadline", "us-east-1")
+    assert result is cross_region_client
+    session.client.assert_any_call(
+        "deadline",
+        config=ANY,
+        region_name="us-east-1",
+        endpoint_url="https://gamma.bealine-dev.us-east-1.amazonaws.com",
+    )
 
 
 def test_get_queue_user_boto3_session_uses_resolved_farm_region(fresh_deadline_config):

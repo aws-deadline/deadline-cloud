@@ -140,6 +140,42 @@ def get_default_client_config(**kwargs) -> botocore.config.Config:
     return client_config
 
 
+def _resolve_cross_region_endpoint_url(
+    session: boto3.Session, service_name: str, target_region: str
+) -> Optional[str]:
+    """
+    When the session has a profile-level endpoint override (e.g. via the ``[services ...]``
+    section in ``~/.aws/config``), boto3 applies it regardless of the ``region_name`` passed
+    to ``.client()``. This causes SigV4 credential-scope mismatches for cross-region calls.
+
+    This function detects the override and replaces the session's default region in the URL
+    with the target region so that the endpoint and signing region stay consistent.
+
+    Returns the regionalized endpoint URL, or None if no override is active or the target
+    region matches the session's default region (no fixup needed).
+    """
+    session_region = session.region_name
+    if not session_region or target_region == session_region:
+        return None
+
+    # Build a client using the session defaults to discover the effective endpoint.
+    default_client = session.client(service_name, config=get_default_client_config())
+    default_endpoint = default_client.meta.endpoint_url
+
+    # Standard endpoints follow the pattern ``https://{service}.{region}.amazonaws.com``.
+    # If the endpoint matches that pattern for the session region, boto3 will resolve the
+    # target region's endpoint natively — no fixup needed.
+    standard_endpoint = f"https://{service_name}.{session_region}.amazonaws.com"
+    if default_endpoint == standard_endpoint:
+        return None
+
+    # Non-standard endpoint (gamma, beta, custom): replace the session region with the target.
+    if session_region in default_endpoint:
+        return default_endpoint.replace(session_region, target_region)
+
+    return None
+
+
 @lru_cache
 def get_session_client(session: boto3.Session, service_name: str, region: Optional[str] = None):
     """
@@ -161,6 +197,15 @@ def get_session_client(session: boto3.Session, service_name: str, region: Option
     """
     if region is None:
         return session.client(service_name, config=get_default_client_config())
+
+    endpoint_url = _resolve_cross_region_endpoint_url(session, service_name, region)
+    if endpoint_url:
+        return session.client(
+            service_name,
+            config=get_default_client_config(),
+            region_name=region,
+            endpoint_url=endpoint_url,
+        )
     return session.client(service_name, config=get_default_client_config(), region_name=region)
 
 
