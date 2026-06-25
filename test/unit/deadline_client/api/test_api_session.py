@@ -401,11 +401,26 @@ class TestResolveCrossRegionEndpointUrl:
         )
         assert _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1") is None
 
-    def test_falls_back_to_env_var(self, monkeypatch):
+    def test_falls_back_to_service_env_var(self, monkeypatch):
         session = self._make_session("us-west-2")
         monkeypatch.setenv(
             "AWS_ENDPOINT_URL_DEADLINE", "https://gamma.bealine-dev.us-west-2.amazonaws.com"
         )
+        result = _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1")
+        assert result == "https://gamma.bealine-dev.us-east-1.amazonaws.com"
+
+    def test_falls_back_to_global_env_var(self, monkeypatch):
+        session = self._make_session("us-west-2")
+        monkeypatch.setenv("AWS_ENDPOINT_URL", "https://gamma.bealine-dev.us-west-2.amazonaws.com")
+        result = _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1")
+        assert result == "https://gamma.bealine-dev.us-east-1.amazonaws.com"
+
+    def test_service_env_var_takes_precedence_over_global(self, monkeypatch):
+        session = self._make_session("us-west-2")
+        monkeypatch.setenv(
+            "AWS_ENDPOINT_URL_DEADLINE", "https://gamma.bealine-dev.us-west-2.amazonaws.com"
+        )
+        monkeypatch.setenv("AWS_ENDPOINT_URL", "https://wrong.us-west-2.amazonaws.com")
         result = _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1")
         assert result == "https://gamma.bealine-dev.us-east-1.amazonaws.com"
 

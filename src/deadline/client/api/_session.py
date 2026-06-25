@@ -156,12 +156,14 @@ def _resolve_cross_region_endpoint_url(
     region matches the session's default region (no fixup needed).
     """
     session_region = session.region_name
-    if not session_region or target_region == session_region:
+    if not isinstance(session_region, str) or not session_region or target_region == session_region:
         return None
 
     # Resolve the effective endpoint override using botocore's precedence:
-    # env var (AWS_ENDPOINT_URL_<SERVICE>) > profile [services] section.
-    endpoint_url = os.environ.get(f"AWS_ENDPOINT_URL_{service_name.upper()}")
+    # AWS_ENDPOINT_URL_<SERVICE> > AWS_ENDPOINT_URL (global) > profile [services] section.
+    endpoint_url = os.environ.get(
+        f"AWS_ENDPOINT_URL_{service_name.upper()}", os.environ.get("AWS_ENDPOINT_URL")
+    )
 
     if not endpoint_url:
         # Fall back to the profile's [services] section. The scoped config has a ``services``
