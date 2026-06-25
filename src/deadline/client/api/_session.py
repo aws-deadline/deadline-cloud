@@ -173,12 +173,16 @@ def _resolve_cross_region_endpoint_url(
             scoped_config = session._session.get_scoped_config()
             services_name = scoped_config.get("services")
             if services_name and isinstance(services_name, str):
-                services_defs = session._session.full_config.get("services", {})
-                service_config = services_defs.get(services_name, {}).get(service_name, {})
-                if isinstance(service_config, dict):
-                    endpoint_url = service_config.get("endpoint_url")
-        except (ProfileNotFound, KeyError):
-            # Profile may not exist or config structure may be unexpected; fall through.
+                full_config = session._session.full_config
+                if isinstance(full_config, dict):
+                    services_defs = full_config.get("services", {})
+                    if isinstance(services_defs, dict):
+                        service_config = services_defs.get(services_name, {}).get(service_name, {})
+                        if isinstance(service_config, dict):
+                            endpoint_url = service_config.get("endpoint_url")
+        except Exception:
+            # Session internals may not be accessible (e.g. profile doesn't exist,
+            # unexpected config structure, or test mocks). Fall through safely.
             pass
 
     if not endpoint_url:

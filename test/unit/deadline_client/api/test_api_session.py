@@ -355,13 +355,18 @@ class TestResolveCrossRegionEndpointUrl:
         - scoped_config["services"] is the *name* of the services definition (a string)
         - full_config["services"][name] holds the actual endpoint URLs
         """
-        session = MagicMock()
-        session.region_name = region
+        # Use a concrete inner mock to avoid MagicMock attribute-access instability
+        # across Python versions when setting dict attributes on child mocks.
+        inner_session = MagicMock()
         scoped_config = {}
         if services_name is not None:
             scoped_config["services"] = services_name
-        session._session.get_scoped_config.return_value = scoped_config
-        session._session.full_config = {"services": services_defs or {}}
+        inner_session.get_scoped_config.return_value = scoped_config
+        inner_session.full_config = {"services": services_defs or {}}
+
+        session = MagicMock()
+        session.region_name = region
+        session._session = inner_session
         return session
 
     def test_returns_none_when_target_matches_session_region(self):
@@ -432,16 +437,20 @@ def test_get_session_client_cross_region_overrides_endpoint():
     SigV4 signing region matches the endpoint.
     """
     get_session_client.cache_clear()
-    session = MagicMock()
-    session.region_name = "us-west-2"
-    session._session.get_scoped_config.return_value = {"services": "deadline-gamma-us-west-2"}
-    session._session.full_config = {
+
+    inner_session = MagicMock()
+    inner_session.get_scoped_config.return_value = {"services": "deadline-gamma-us-west-2"}
+    inner_session.full_config = {
         "services": {
             "deadline-gamma-us-west-2": {
                 "deadline": {"endpoint_url": "https://gamma.bealine-dev.us-west-2.amazonaws.com"}
             }
         }
     }
+
+    session = MagicMock()
+    session.region_name = "us-west-2"
+    session._session = inner_session
 
     cross_region_client = MagicMock()
     session.client.return_value = cross_region_client
