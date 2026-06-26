@@ -748,7 +748,7 @@ class TestFileCountPreservation:
                 "error_message": None,
             }
         }
-        cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
+        cjids = _make_categorized_job_ids(updated={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, succeeded=2, total=5, ended=False)
         jobs = {MOCK_JOB_ID: job}
         result = _build_status_file_content(

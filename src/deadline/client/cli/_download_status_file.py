@@ -119,18 +119,18 @@ def _make_status_entry(
     }
 
 
-def _is_job_fully_complete(job: dict[str, Any], check_active_tasks: bool = False) -> bool:
-    """Returns True if all tasks succeeded and the job has ended."""
+def _is_job_fully_complete(job: dict[str, Any]) -> bool:
+    """Returns True if the job has ended with no active tasks remaining.
+
+    A job is considered complete when it has ended and no tasks are still
+    active — even if some tasks failed or were canceled. All available
+    outputs from succeeded tasks have been downloaded.
+    """
     task_counts = job.get("taskRunStatusCounts", {})
-    succeeded = task_counts.get("SUCCEEDED", 0)
-    total = sum(task_counts.values()) if task_counts else 0
-    if check_active_tasks:
-        active_tasks = sum(
-            task_counts.get(s, 0) for s in ["READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED"]
-        )
-        if active_tasks > 0:
-            return False
-    return succeeded == total and "endedAt" in job
+    active_tasks = sum(
+        task_counts.get(s, 0) for s in ["READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED"]
+    )
+    return "endedAt" in job and active_tasks == 0
 
 
 def _determine_job_download_status(
@@ -173,7 +173,7 @@ def _determine_job_download_status(
         return _make_status_entry("downloaded", total_files, downloaded_files)
 
     if job_id in categorized_job_ids.added:
-        if _is_job_fully_complete(job, check_active_tasks=True):
+        if _is_job_fully_complete(job):
             return _make_status_entry("downloaded", total_files, downloaded_files)
         return _make_status_entry("in_progress", total_files, downloaded_files)
 
@@ -226,18 +226,29 @@ def _build_status_file_content(
             job_id, job, categorized_job_ids, job_download_results
         )
         existing_entry = jobs_status.get(job_id)
-        # Don't overwrite an existing entry that has file counts with one that has none
         if (
             existing_entry
             and existing_entry.get("total_files", 0) > 0
             and new_entry.get("total_files", 0) == 0
         ):
-            # Preserve existing entry but update the status if it changed
+            # No download this run — preserve existing counts, update status if changed
             if new_entry["download_status"] != existing_entry["download_status"]:
                 existing_entry["download_status"] = new_entry["download_status"]
                 existing_entry["last_updated"] = new_entry["last_updated"]
         else:
             jobs_status[job_id] = new_entry
+
+    # Update inactive jobs with non-terminal status to a terminal state
+    for job_id in categorized_job_ids.inactive:
+        existing_entry = jobs_status.get(job_id)
+        if existing_entry and existing_entry.get("download_status") == "in_progress":
+            if existing_entry.get("downloaded_files", 0) > 0:
+                # Had some downloads — mark as downloaded (all available outputs are on disk)
+                existing_entry["download_status"] = "downloaded"
+            else:
+                # No downloads at all — mark as skipped (job stopped before any output)
+                existing_entry["download_status"] = "skipped"
+            existing_entry["last_updated"] = now
 
     # Determine run status — "failed" if any job in this run had errors
     has_failures = any(

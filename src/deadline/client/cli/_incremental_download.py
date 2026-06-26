@@ -1216,6 +1216,8 @@ def _incremental_output_download(
             f"Manifest list length mismatch: {len(manifests_to_download)} vs {len(downloaded_manifests)}"
         )
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
+    # Dedup is per-job only. Cross-job path collisions are not expected since each job
+    # writes to its own output path. file_conflict_resolution handles any actual conflicts.
     job_seen_paths: dict[str, set[str]] = {}
     for i, (_, job_id, _, _) in enumerate(manifests_to_download):
         manifest_tuple = downloaded_manifests[i]
@@ -1312,20 +1314,17 @@ def _incremental_output_download(
     else:
         print_function_callback("Skipping downloads due to DRY RUN")
 
-    # Update the timestamp only if all jobs succeeded — if any failed, keep the old timestamp
-    # so the next run's SearchJobs query window still covers the failed jobs
-    has_download_failures = any(
-        r.get("error_code") is not None for r in job_download_results.values()
-    )
-    if not has_download_failures:
-        checkpoint.downloads_completed_timestamp = new_completed_timestamp
-
     # Remove failed jobs from checkpoint entirely so they're treated as new (added) next run
     failed_job_ids = {
         job_id for job_id, r in job_download_results.items() if r.get("error_code") is not None
     }
     if failed_job_ids:
         checkpoint.jobs = [job for job in checkpoint.jobs if job.job_id not in failed_job_ids]
+
+    # Update the timestamp only if all jobs succeeded — if any failed, keep the old timestamp
+    # so the next run's SearchJobs query window still covers the failed jobs
+    if not failed_job_ids:
+        checkpoint.downloads_completed_timestamp = new_completed_timestamp
 
     stats: dict[str, Any] = {
         "downloaded_session_actions": sum(
