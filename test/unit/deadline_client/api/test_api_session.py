@@ -15,7 +15,6 @@ from deadline.client.api._session import (
     get_session_client,
     precache_clients,
     _resolve_region,
-    _resolve_cross_region_endpoint_url,
 )
 
 
@@ -346,123 +345,91 @@ def test_get_session_client_same_region_cached():
     assert client1 is client2
 
 
-class TestResolveCrossRegionEndpointUrl:
-    """Tests for _resolve_cross_region_endpoint_url."""
+class TestGetSessionClientCrossRegion:
+    """Tests for cross-region endpoint override handling in get_session_client."""
 
-    def _make_session(self, region, services_name=None, services_defs=None):
+    def _make_session(self, region, endpoint_url):
         """
-        Build a mock session that mimics botocore's config structure:
-        - scoped_config["services"] is the *name* of the services definition (a string)
-        - full_config["services"][name] holds the actual endpoint URLs
+        Build a mock session whose .client() returns a mock with the given endpoint_url
+        on meta.endpoint_url, simulating boto3's endpoint resolution behavior.
         """
-        # Use a concrete inner mock to avoid MagicMock attribute-access instability
-        # across Python versions when setting dict attributes on child mocks.
-        inner_session = MagicMock()
-        scoped_config = {}
-        if services_name is not None:
-            scoped_config["services"] = services_name
-        inner_session.get_scoped_config.return_value = scoped_config
-        inner_session.full_config = {"services": services_defs or {}}
-
         session = MagicMock()
         session.region_name = region
-        session._session = inner_session
+
+        client_mock = MagicMock()
+        client_mock.meta.endpoint_url = endpoint_url
+        session.client.return_value = client_mock
         return session
 
-    def test_returns_none_when_target_matches_session_region(self):
-        session = self._make_session("us-west-2")
-        assert _resolve_cross_region_endpoint_url(session, "deadline", "us-west-2") is None
+    def test_cross_region_regionalizes_override(self):
+        """
+        When the resolved endpoint contains the session region but not the target
+        region, get_session_client recreates the client with a regionalized URL.
+        """
+        get_session_client.cache_clear()
+        session = self._make_session("us-west-2", "https://custom.deadline.us-west-2.example.com")
 
-    def test_returns_none_when_session_has_no_region(self):
-        session = self._make_session(None)
-        assert _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1") is None
+        cross_region_client = MagicMock()
+        # First call returns the client with the wrong region; second returns the fixed one.
+        session.client.side_effect = [
+            session.client.return_value,
+            cross_region_client,
+        ]
 
-    def test_returns_none_when_no_endpoint_override(self):
-        session = self._make_session("us-west-2", services_name="my-services", services_defs={})
-        assert _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1") is None
-
-    def test_replaces_region_in_custom_endpoint(self):
-        session = self._make_session(
-            "us-west-2",
-            services_name="deadline-gamma-us-west-2",
-            services_defs={
-                "deadline-gamma-us-west-2": {
-                    "deadline": {
-                        "endpoint_url": "https://gamma.bealine-dev.us-west-2.amazonaws.com"
-                    }
-                }
-            },
+        result = get_session_client(session, "deadline", "us-east-1")
+        assert result is cross_region_client
+        assert session.client.call_count == 2
+        second_call = session.client.call_args_list[1]
+        assert second_call == call(
+            "deadline",
+            config=ANY,
+            region_name="us-east-1",
+            endpoint_url="https://custom.deadline.us-east-1.example.com",
         )
-        result = _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1")
-        assert result == "https://gamma.bealine-dev.us-east-1.amazonaws.com"
 
-    def test_returns_none_when_session_region_not_in_endpoint(self):
-        session = self._make_session(
-            "us-west-2",
-            services_name="custom-svc",
-            services_defs={
-                "custom-svc": {"deadline": {"endpoint_url": "https://custom-endpoint.example.com"}}
-            },
-        )
-        assert _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1") is None
+    def test_cross_region_no_override_needed(self):
+        """
+        When the resolved endpoint already contains the target region, no
+        recreation is needed.
+        """
+        get_session_client.cache_clear()
+        session = self._make_session("us-west-2", "https://deadline.us-east-1.amazonaws.com")
 
-    def test_falls_back_to_service_env_var(self, monkeypatch):
-        session = self._make_session("us-west-2")
-        monkeypatch.setenv(
-            "AWS_ENDPOINT_URL_DEADLINE", "https://gamma.bealine-dev.us-west-2.amazonaws.com"
-        )
-        result = _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1")
-        assert result == "https://gamma.bealine-dev.us-east-1.amazonaws.com"
+        result = get_session_client(session, "deadline", "us-east-1")
+        assert result is session.client.return_value
+        session.client.assert_called_once()
 
-    def test_falls_back_to_global_env_var(self, monkeypatch):
-        session = self._make_session("us-west-2")
-        monkeypatch.setenv("AWS_ENDPOINT_URL", "https://gamma.bealine-dev.us-west-2.amazonaws.com")
-        result = _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1")
-        assert result == "https://gamma.bealine-dev.us-east-1.amazonaws.com"
+    def test_cross_region_no_session_region(self):
+        """
+        When the session has no region_name, the initial client is returned as-is.
+        """
+        get_session_client.cache_clear()
+        session = self._make_session(None, "https://deadline.us-east-1.amazonaws.com")
 
-    def test_service_env_var_takes_precedence_over_global(self, monkeypatch):
-        session = self._make_session("us-west-2")
-        monkeypatch.setenv(
-            "AWS_ENDPOINT_URL_DEADLINE", "https://gamma.bealine-dev.us-west-2.amazonaws.com"
-        )
-        monkeypatch.setenv("AWS_ENDPOINT_URL", "https://wrong.us-west-2.amazonaws.com")
-        result = _resolve_cross_region_endpoint_url(session, "deadline", "us-east-1")
-        assert result == "https://gamma.bealine-dev.us-east-1.amazonaws.com"
+        result = get_session_client(session, "deadline", "us-east-1")
+        assert result is session.client.return_value
+        session.client.assert_called_once()
 
+    def test_cross_region_session_region_not_in_endpoint(self):
+        """
+        When the resolved endpoint doesn't contain the session region at all,
+        no regionalization is attempted.
+        """
+        get_session_client.cache_clear()
+        session = self._make_session("us-west-2", "https://custom-endpoint.example.com")
 
-def test_get_session_client_cross_region_overrides_endpoint():
-    """
-    When a profile has a non-standard endpoint override (e.g. gamma), creating a
-    client for a different region must regionalize the endpoint URL so that the
-    SigV4 signing region matches the endpoint.
-    """
-    get_session_client.cache_clear()
+        result = get_session_client(session, "deadline", "us-east-1")
+        assert result is session.client.return_value
+        session.client.assert_called_once()
 
-    inner_session = MagicMock()
-    inner_session.get_scoped_config.return_value = {"services": "deadline-gamma-us-west-2"}
-    inner_session.full_config = {
-        "services": {
-            "deadline-gamma-us-west-2": {
-                "deadline": {"endpoint_url": "https://gamma.bealine-dev.us-west-2.amazonaws.com"}
-            }
-        }
-    }
+    def test_no_region_uses_session_default(self):
+        """When region is None, a simple client with session defaults is returned."""
+        get_session_client.cache_clear()
+        session = self._make_session("us-west-2", "https://deadline.us-west-2.amazonaws.com")
 
-    session = MagicMock()
-    session.region_name = "us-west-2"
-    session._session = inner_session
-
-    cross_region_client = MagicMock()
-    session.client.return_value = cross_region_client
-
-    result = get_session_client(session, "deadline", "us-east-1")
-    assert result is cross_region_client
-    session.client.assert_called_once_with(
-        "deadline",
-        config=ANY,
-        region_name="us-east-1",
-        endpoint_url="https://gamma.bealine-dev.us-east-1.amazonaws.com",
-    )
+        result = get_session_client(session, "deadline", None)
+        assert result is session.client.return_value
+        session.client.assert_called_once_with("deadline", config=ANY)
 
 
 def test_get_queue_user_boto3_session_uses_resolved_farm_region(fresh_deadline_config):

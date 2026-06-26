@@ -8,7 +8,6 @@ of the Deadline-configured IAM credentials.
 from __future__ import annotations
 
 import logging
-import os
 from configparser import ConfigParser
 from contextlib import contextmanager
 from enum import Enum
@@ -141,60 +140,6 @@ def get_default_client_config(**kwargs) -> botocore.config.Config:
     return client_config
 
 
-def _resolve_cross_region_endpoint_url(
-    session: boto3.Session, service_name: str, target_region: str
-) -> Optional[str]:
-    """
-    When the session has a profile-level endpoint override (e.g. via the ``[services ...]``
-    section in ``~/.aws/config``), boto3 applies it regardless of the ``region_name`` passed
-    to ``.client()``. This causes SigV4 credential-scope mismatches for cross-region calls.
-
-    This function detects the override and replaces the session's default region in the URL
-    with the target region so that the endpoint and signing region stay consistent.
-
-    Returns the regionalized endpoint URL, or None if no override is active or the target
-    region matches the session's default region (no fixup needed).
-    """
-    session_region = session.region_name
-    if not isinstance(session_region, str) or not session_region or target_region == session_region:
-        return None
-
-    # Resolve the effective endpoint override using botocore's precedence:
-    # AWS_ENDPOINT_URL_<SERVICE> > AWS_ENDPOINT_URL (global) > profile [services] section.
-    endpoint_url = os.environ.get(
-        f"AWS_ENDPOINT_URL_{service_name.upper()}", os.environ.get("AWS_ENDPOINT_URL")
-    )
-
-    if not endpoint_url:
-        # Fall back to the profile's [services] section. The scoped config has a ``services``
-        # key naming a services definition (e.g. "deadline-gamma-us-west-2"), and the actual
-        # endpoint URLs live in ``full_config['services'][<name>][<service>]['endpoint_url']``.
-        try:
-            scoped_config = session._session.get_scoped_config()
-            services_name = scoped_config.get("services")
-            if services_name and isinstance(services_name, str):
-                full_config = session._session.full_config
-                if isinstance(full_config, dict):
-                    services_defs = full_config.get("services", {})
-                    if isinstance(services_defs, dict):
-                        service_config = services_defs.get(services_name, {}).get(service_name, {})
-                        if isinstance(service_config, dict):
-                            endpoint_url = service_config.get("endpoint_url")
-        except Exception:
-            # Session internals may not be accessible (e.g. profile doesn't exist,
-            # unexpected config structure, or test mocks). Fall through safely.
-            pass
-
-    if not endpoint_url:
-        return None
-
-    # Non-standard endpoint (gamma, beta, custom): replace the session region with the target.
-    if session_region in endpoint_url:
-        return endpoint_url.replace(session_region, target_region)
-
-    return None
-
-
 @lru_cache
 def get_session_client(session: boto3.Session, service_name: str, region: Optional[str] = None):
     """
@@ -204,6 +149,12 @@ def get_session_client(session: boto3.Session, service_name: str, region: Option
     with the same session, service name, and region return the cached client to
     avoid repeating initialization where possible. The ``region`` argument is part
     of the cache key so clients for different regions are never reused for each other.
+
+    When a profile has a non-standard endpoint override (e.g. via the ``[services ...]``
+    section or ``AWS_ENDPOINT_URL*`` env vars), boto3 applies it regardless of the
+    ``region_name`` passed to ``.client()``. This causes SigV4 credential-scope mismatches
+    for cross-region calls. We detect this by inspecting the resolved endpoint and
+    re-creating the client with the regionalized URL if needed.
 
     Args:
         session: The boto3 Session to use for creating the client
@@ -217,15 +168,18 @@ def get_session_client(session: boto3.Session, service_name: str, region: Option
     if region is None:
         return session.client(service_name, config=get_default_client_config())
 
-    endpoint_url = _resolve_cross_region_endpoint_url(session, service_name, region)
-    if endpoint_url:
+    client = session.client(service_name, config=get_default_client_config(), region_name=region)
+    resolved = client.meta.endpoint_url
+    session_region = session.region_name
+    # An override leaked the session's region into a cross-region endpoint.
+    if region not in resolved and session_region and session_region in resolved:
         return session.client(
             service_name,
             config=get_default_client_config(),
             region_name=region,
-            endpoint_url=endpoint_url,
+            endpoint_url=resolved.replace(session_region, region, 1),
         )
-    return session.client(service_name, config=get_default_client_config(), region_name=region)
+    return client
 
 
 def _resolve_region(
