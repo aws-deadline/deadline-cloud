@@ -148,7 +148,7 @@ from ._update_checker import (
     UpdateCheckResult,
     UpdateCheckStatus,
 )
-from ._submitter_api import (
+from ..submitter_api import (
     SubmitterAPI,
     SubmitterSettings,
     SubmissionContext,
