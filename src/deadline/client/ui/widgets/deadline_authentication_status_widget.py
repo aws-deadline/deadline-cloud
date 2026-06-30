@@ -146,6 +146,18 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
         self._status.auth_status_changed.connect(self._update_ui)
         self._status.api_availability_changed.connect(self._update_ui)
 
+        # While this widget is alive, ask the shared status object to poll for
+        # auth changes (expiry, an out-of-process `deadline auth logout`, etc.).
+        # Polling is ref-counted on the singleton and released when this widget
+        # is destroyed, so background AWS probes are scoped to having a GUI open
+        # rather than running for the lifetime of the process-wide singleton.
+        # Bind the (longer-lived) status object into the cleanup slot rather than
+        # referencing `self`, so we don't touch a half-torn-down widget during
+        # destruction.
+        self._status._start_polling()
+        _status = self._status
+        self.destroyed.connect(lambda: _status._stop_polling())
+
         # Initial update
         self._update_ui()
 
