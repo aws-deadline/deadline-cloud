@@ -62,20 +62,23 @@ SAMPLE_TEMPLATE = {
 # CLI helpers
 # ---------------------------------------------------------------------------
 
-_DEADLINE_CMD = os.environ.get("DEADLINE_BINARY", "deadline")
+
+def _deadline_cmd() -> str:
+    """Return the CLI command, respecting DEADLINE_BINARY if set."""
+    return os.environ.get("DEADLINE_BINARY", "deadline")
 
 
 def cli_get(env: dict, setting: str) -> str:
     """Read a deadline config setting via the CLI subprocess."""
     return subprocess.check_output(
-        [_DEADLINE_CMD, "config", "get", setting], env=env, text=True, stderr=subprocess.DEVNULL
+        [_deadline_cmd(), "config", "get", setting], env=env, text=True, stderr=subprocess.DEVNULL
     ).strip()
 
 
 def cli_set(env: dict, setting: str, value: str) -> None:
     """Write a deadline config setting via the CLI subprocess."""
     subprocess.check_call(
-        [_DEADLINE_CMD, "config", "set", setting, value],
+        [_deadline_cmd(), "config", "set", setting, value],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
