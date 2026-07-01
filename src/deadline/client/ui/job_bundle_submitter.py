@@ -123,7 +123,10 @@ def _run_pre_gui_hooks(
 
     merged: dict[str, Any] = {}
     for manager in sources:
-        metadata = _make_pre_gui_metadata(initial_settings, manager._original_bundle_dir)
+        # Every hook — bundle or environment — receives the job bundle being submitted as
+        # its job_bundle_dir, matching the pre/post-submission contract. (The manager still
+        # resolves relative hook script paths against its own directory.)
+        metadata = _make_pre_gui_metadata(initial_settings, input_job_bundle_dir)
         output = manager.execute_pre_gui_hooks(metadata)
         # Later sources (bundle) override earlier (env) for scalars; parameters merge.
         params = merged.pop("parameters", {})

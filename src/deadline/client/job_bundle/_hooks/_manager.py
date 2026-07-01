@@ -145,11 +145,14 @@ class HookManager:
         Runs before the submission dialog opens. Hooks may output JSON to pre-populate
         dialog fields: parameters, priority, farmId, queueId, name, description.
         Failures block the dialog from opening.
+
+        The caller sets ``metadata.job_bundle_dir`` to the job bundle being submitted; it is
+        respected as-is so environment hooks receive the real bundle dir (not the
+        environment hooks directory), matching the pre/post-submission contract. Relative
+        hook *script* paths are still resolved against this manager's own directory.
         """
         if not self.hooks or not self.hooks.pre_gui:
             return {}
-
-        metadata.job_bundle_dir = self._original_bundle_dir
 
         merged: _Dict[str, _Any] = {}
         for i, hook in enumerate(self.hooks.pre_gui):

@@ -460,3 +460,103 @@ def test_create_job_from_job_bundle_with_all_asset_ref_variants(
             maxFailedTasksCount=20,
             maxRetriesPerTask=5,
         )
+
+
+_PATH_REDIRECT_TEMPLATE = """specificationVersion: 'jobtemplate-2023-09'
+name: PathRedirect
+parameterDefinitions:
+- name: InDir
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: IN
+steps:
+- name: S
+  script:
+    actions:
+      onRun:
+        command: echo
+"""
+
+
+def test_pre_submission_hook_redirecting_path_param_drops_stale_path(
+    fresh_deadline_config, tmp_path
+):
+    """A pre-submission hook that redirects a PATH parameter (by rewriting
+    parameter_values.yaml on disk) must upload only the NEW directory. Regression test for
+    the parameter re-resolve carrying over the stale first-pass path — previously both the
+    old and new directories were hashed/uploaded.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.allow_bundle_hooks", "true")
+    config.set_setting("settings.auto_accept", "true")
+
+    old_dir = tmp_path / "old_inputs"
+    new_dir = tmp_path / "new_inputs"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    (old_dir / "a.txt").write_text("old")
+    (new_dir / "b.txt").write_text("new")
+
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "template.yaml").write_text(_PATH_REDIRECT_TEMPLATE)
+    (bundle / "parameter_values.yaml").write_text(
+        f"parameterValues:\n- name: InDir\n  value: {str(old_dir)}\n"
+    )
+    # Hook redirects InDir from old_dir to new_dir on disk.
+    (bundle / "redirect.py").write_text(
+        "import os\n"
+        "b = os.environ['DEADLINE_JOB_BUNDLE_DIR']\n"
+        "open(os.path.join(b, 'parameter_values.yaml'), 'w').write("
+        f"'parameterValues:\\n- name: InDir\\n  value: {str(new_dir)}\\n')\n"
+    )
+    (bundle / "hooks.yaml").write_text(
+        "version: '1.0'\npreSubmission:\n  - command: python3\n    args: [redirect.py]\n"
+    )
+
+    captured: dict = {}
+
+    def fake_hash(*args, **kwargs):
+        groups = kwargs.get("asset_groups", args[0] if args else [])
+        inputs: set = set()
+        for group in groups:
+            inputs |= {str(p) for p in getattr(group, "inputs", set())}
+        captured["inputs"] = inputs
+        return [SummaryStatistics(), AssetRootManifest()]
+
+    with (
+        patch.object(_submit_job_bundle.api, "get_boto3_session"),
+        patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock,
+        patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"),
+        patch.object(S3AssetManager, "hash_assets_and_create_manifest", side_effect=fake_hash),
+        patch.object(S3AssetManager, "upload_assets") as mock_upload_assets,
+        patch.object(_submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"),
+    ):
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        mock_upload_assets.return_value = [
+            SummaryStatistics(),
+            Attachments(
+                [
+                    ManifestProperties(
+                        rootPath=str(tmp_path),
+                        rootPathFormat=PathFormat.POSIX,
+                        inputManifestPath="m",
+                        inputManifestHash="h",
+                        outputRelativeDirectories=["."],
+                    )
+                ]
+            ),
+        ]
+
+        api.create_job_from_job_bundle(
+            job_bundle_dir=str(bundle),
+            queue_parameter_definitions=[],
+            known_asset_paths=[str(tmp_path)],
+            require_paths_exist=False,
+        )
+
+    inputs = captured.get("inputs", set())
+    assert any("new_inputs" in p for p in inputs), "redirected (new) path should be uploaded"
+    assert not any("old_inputs" in p for p in inputs), "stale (old) path must be dropped"

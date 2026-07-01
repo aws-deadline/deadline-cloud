@@ -1139,6 +1139,40 @@ class TestExecuteBeforeGUIHooks:
             assert result["name"] == "Prefilled Job"
             assert result["parameters"] == {"deadline:priority": 80, "Foo": "bar"}
 
+    def test_metadata_job_bundle_dir_is_respected(self):
+        """execute_pre_gui_hooks must NOT override metadata.job_bundle_dir with the
+        manager's own directory. The hook should receive the job_bundle_dir the caller set
+        (the real bundle), even when the hooks live in a different directory (e.g. an
+        environment DEADLINE_HOOKS_DIR). Relative script paths still resolve against the
+        manager's directory."""
+        with (
+            tempfile.TemporaryDirectory() as hooks_dir,
+            tempfile.TemporaryDirectory() as bundle_dir,
+        ):
+            hooks_file = os.path.join(hooks_dir, "hooks.yaml")
+            # The hook echoes the DEADLINE_JOB_BUNDLE_DIR it was given as the job name.
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preGUI": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import os, json; "
+                                    "print(json.dumps({'name': os.environ['DEADLINE_JOB_BUNDLE_DIR']}))",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+            manager = HookManager(hooks_dir, lambda x: None)
+            manager.load_hooks()
+            # Caller sets job_bundle_dir to the real bundle, distinct from hooks_dir.
+            result = manager.execute_pre_gui_hooks(self._make_metadata(bundle_dir))
+            assert result["name"] == bundle_dir  # not hooks_dir
+
     def test_later_hook_overrides_scalar(self):
         """Later hooks override earlier hooks for scalar fields like name."""
         with tempfile.TemporaryDirectory() as tmpdir:

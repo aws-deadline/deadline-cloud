@@ -644,10 +644,12 @@ def create_job_from_job_bundle(
     # Bind to a non-Optional local so the nested helper's closure keeps the narrowed type.
     resolved_queue_parameter_definitions = queue_parameter_definitions
 
-    def _resolve_parameters(bundle_parameters, extra_overrides=None):
+    def _resolve_parameters(bundle_parameters, target_asset_references, extra_overrides=None):
         """Merge queue + bundle parameters, apply CLI (and any hook) overrides, and format
         for CreateJob. ``extra_overrides`` are applied beneath the CLI ``job_parameters``.
-        Mutates ``asset_references`` with any PATH parameters, matching prior behavior."""
+        Mutates ``target_asset_references`` with any PATH parameters, matching prior
+        behavior. Callers that re-resolve pass a freshly-derived AssetReferences so stale
+        PATH values from an earlier pass are not carried over."""
         resolved = merge_queue_job_parameters(
             queue_id=queue_id,
             job_parameters=bundle_parameters,
@@ -657,12 +659,12 @@ def create_job_from_job_bundle(
             (extra_overrides or []) + job_parameters,
             job_bundle_dir,
             resolved,
-            asset_references,
+            target_asset_references,
         )
         return resolved, split_parameter_args(resolved, job_bundle_dir)
 
     parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
-        job_bundle_parameters
+        job_bundle_parameters, asset_references
     )
 
     # Extend known_asset_paths with all paths that are treated as known. These are
@@ -769,8 +771,14 @@ def create_job_from_job_bundle(
                 for name, value in hook_stdout_parameters.items()
                 if name not in {p.get("name") for p in job_parameters}
             ]
+            # Re-derive asset_references from the original bundle refs so PATH values from
+            # the first pass are not retained. Otherwise a hook that *changes* a PATH
+            # parameter would leave both the stale and the new path in asset_references and
+            # upload both. The initial-pass object is replaced here; hook-supplied
+            # attachments (merged below) are applied to this fresh object.
+            asset_references = AssetReferences.from_dict(asset_references_obj)
             parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
-                job_bundle_parameters, hook_parameter_overrides
+                job_bundle_parameters, asset_references, hook_parameter_overrides
             )
 
         # Merge any asset references from hooks into asset_references
