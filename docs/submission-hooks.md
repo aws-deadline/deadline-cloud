@@ -268,6 +268,17 @@ You can also modify other submission parameters:
 print(json.dumps({"priority": 100}))
 ```
 
+Pre-submission hooks can also change job template parameter values, either by rewriting
+`parameter_values.yaml`/`.json` on disk or by emitting a `parameters` map on stdout:
+
+```python
+print(json.dumps({"parameters": {"SceneFile": "/resolved/scene.ma", "Quality": "high"}}))
+```
+
+Parameter keys are job template parameter names. Values from a hook are applied on top of
+the bundle's parameter values, but CLI-supplied `--parameter` values still take precedence
+over hook-supplied ones.
+
 ### Post-Submission Hooks
 
 Output is logged but does not modify anything.

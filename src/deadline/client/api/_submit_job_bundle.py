@@ -641,21 +641,28 @@ def create_job_from_job_bundle(
         queue_parameter_definitions = api.get_queue_parameter_definitions(
             farmId=farm_id, queueId=queue_id
         )
+    # Bind to a non-Optional local so the nested helper's closure keeps the narrowed type.
+    resolved_queue_parameter_definitions = queue_parameter_definitions
 
-    parameters = merge_queue_job_parameters(
-        queue_id=queue_id,
-        job_parameters=job_bundle_parameters,
-        queue_parameters=queue_parameter_definitions,
-    )
+    def _resolve_parameters(bundle_parameters, extra_overrides=None):
+        """Merge queue + bundle parameters, apply CLI (and any hook) overrides, and format
+        for CreateJob. ``extra_overrides`` are applied beneath the CLI ``job_parameters``.
+        Mutates ``asset_references`` with any PATH parameters, matching prior behavior."""
+        resolved = merge_queue_job_parameters(
+            queue_id=queue_id,
+            job_parameters=bundle_parameters,
+            queue_parameters=resolved_queue_parameter_definitions,
+        )
+        apply_job_parameters(
+            (extra_overrides or []) + job_parameters,
+            job_bundle_dir,
+            resolved,
+            asset_references,
+        )
+        return resolved, split_parameter_args(resolved, job_bundle_dir)
 
-    apply_job_parameters(
-        job_parameters,
-        job_bundle_dir,
-        parameters,
-        asset_references,
-    )
-    app_parameters_formatted, job_parameters_formatted = split_parameter_args(
-        parameters, job_bundle_dir
+    parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
+        job_bundle_parameters
     )
 
     # Extend known_asset_paths with all paths that are treated as known. These are
@@ -740,6 +747,31 @@ def create_job_from_job_bundle(
         if "priority" in hook_result:
             priority = hook_result["priority"]
             create_job_args["priority"] = priority
+
+        # Apply parameter modifications from hooks. A hook may change parameter values
+        # two ways, both of which are honored here:
+        #   1. Rewriting parameter_values.yaml/.json on disk (re-read below).
+        #   2. Emitting a "parameters" map on stdout (applied on top of the disk values).
+        # CLI-supplied job_parameters still take precedence, matching pre-GUI behavior.
+        #
+        # The bundle parameters read earlier (before the hook block) reflect the state of
+        # parameter_values.yaml *before* the hook ran, so they cannot capture an on-disk
+        # rewrite. Re-read here — after the hook has executed — to pick up any change, then
+        # re-resolve. This is only extra work when a hook actually modified parameters.
+        hook_stdout_parameters = hook_result.get("parameters") or {}
+        updated_bundle_parameters = read_job_bundle_parameters(job_bundle_dir)
+        if updated_bundle_parameters != job_bundle_parameters or hook_stdout_parameters:
+            job_bundle_parameters = updated_bundle_parameters
+            # Layer hook stdout parameters beneath the CLI-supplied job_parameters so the
+            # CLI keeps the final say, then re-resolve with the same logic as the initial pass.
+            hook_parameter_overrides = [
+                {"name": name, "value": value}
+                for name, value in hook_stdout_parameters.items()
+                if name not in {p.get("name") for p in job_parameters}
+            ]
+            parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
+                job_bundle_parameters, hook_parameter_overrides
+            )
 
         # Merge any asset references from hooks into asset_references
         if "attachments" in hook_result and "assetReferences" in hook_result["attachments"]:

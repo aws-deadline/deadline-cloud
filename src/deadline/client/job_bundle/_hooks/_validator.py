@@ -70,6 +70,11 @@ def validate_modified_payload(payload: _Dict[str, _Any], hook_name: str) -> None
         if "assetReferences" in attachments:
             _validate_asset_references(attachments["assetReferences"], hook_name)
 
+    if "parameters" in payload and not isinstance(payload["parameters"], dict):
+        raise _DeadlineOperationError(
+            f"Hook '{hook_name}' 'parameters' must be an object mapping parameter names to values"
+        )
+
 
 _PRE_GUI_ALLOWED_KEYS = {"parameters", "name", "description"}
 

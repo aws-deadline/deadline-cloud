@@ -21,9 +21,9 @@ from ..config.config_file import get_setting as _get_setting
 from ..exceptions import DeadlineOperationCanceled as _DeadlineOperationCanceled
 from ..exceptions import DeadlineOperationError
 from ..job_bundle._hooks import (
-    HookManager as _HookManager,
     HookMetadata as _HookMetadata,
     _generate_hooks_confirmation_message,
+    collect_pre_gui_hook_sources as _collect_pre_gui_hook_sources,
 )
 from ..job_bundle.loader import (
     parse_yaml_or_json_content,
@@ -74,6 +74,64 @@ def _make_pre_gui_metadata(initial_settings: Any, job_bundle_dir: str) -> _HookM
         submission_payload={},
         storage_profile_id=storage_profile_id,
     )
+
+
+def _run_pre_gui_hooks(
+    input_job_bundle_dir: str, initial_settings: Any, parent: Any
+) -> dict[str, Any]:
+    """Load and execute pre-GUI hooks from all allowed sources.
+
+    Pre-GUI hooks may be defined in the job bundle (gated by ``allow_bundle_hooks``) and/or
+    in the directory named by ``DEADLINE_HOOKS_DIR`` (gated by ``allow_environment_hooks``).
+    Environment hooks run before bundle hooks. Returns the merged pre-GUI output, or an
+    empty dict if no pre-GUI hooks run.
+    """
+    # Source selection (which bundle/env HookManagers have runnable preGUI hooks) is
+    # Qt-free logic extracted into the hooks package so it can be unit-tested without a GUI.
+    sources = _collect_pre_gui_hook_sources(
+        bundle_dir=input_job_bundle_dir,
+        env_hooks_dir=os.environ.get("DEADLINE_HOOKS_DIR"),
+        allow_bundle_hooks=_config_file.str2bool(_get_setting("settings.allow_bundle_hooks")),
+        allow_environment_hooks=_config_file.str2bool(
+            _get_setting("settings.allow_environment_hooks")
+        ),
+        print_callback=logger.info,
+    )
+
+    if not sources:
+        return {}
+
+    # Confirmation prompt (once), unless auto_accept. Show every source's hooks.
+    if not _config_file.str2bool(_get_setting("settings.auto_accept")):
+        confirmation_msg = (
+            "".join(
+                _generate_hooks_confirmation_message(m.hooks, m._original_bundle_dir)
+                for m in sources
+                if m.hooks
+            )
+            + "Do you want to run these hooks?"
+        )
+        reply = QMessageBox.question(
+            parent,
+            tr("Job Submission Confirmation"),
+            confirmation_msg,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            raise _DeadlineOperationCanceled("Job submission canceled (user declined hooks).")
+
+    merged: dict[str, Any] = {}
+    for manager in sources:
+        metadata = _make_pre_gui_metadata(initial_settings, manager._original_bundle_dir)
+        output = manager.execute_pre_gui_hooks(metadata)
+        # Later sources (bundle) override earlier (env) for scalars; parameters merge.
+        params = merged.pop("parameters", {})
+        params.update(output.pop("parameters", {}))
+        merged.update(output)
+        if params:
+            merged["parameters"] = params
+    return merged
 
 
 def _resolve_template_host_requirements(template: dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -337,35 +395,11 @@ def show_job_bundle_submitter(
     initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
     initial_settings.browse_enabled = browse
 
-    # Run pre-GUI hooks to allow studios to pre-populate dialog fields.
-    pre_gui_output: dict[str, Any] = {}
-    allow_bundle_hooks = _config_file.str2bool(_get_setting("settings.allow_bundle_hooks"))
-    hook_manager = _HookManager(input_job_bundle_dir, logger.info)
-    hooks = hook_manager.load_hooks()
-
-    if hooks and hooks.pre_gui and not allow_bundle_hooks:
-        logger.warning(
-            "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
-            "Enable with: deadline config set settings.allow_bundle_hooks true"
-        )
-
-    if hooks and hooks.pre_gui and allow_bundle_hooks:
-        if not _config_file.str2bool(_get_setting("settings.auto_accept")):
-            confirmation_msg = (
-                _generate_hooks_confirmation_message(hooks, input_job_bundle_dir)
-                + "Do you want to run these hooks?"
-            )
-            reply = QMessageBox.question(
-                parent,
-                tr("Job Submission Confirmation"),
-                confirmation_msg,
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if reply != QMessageBox.Yes:
-                raise _DeadlineOperationCanceled("Job submission canceled (user declined hooks).")
-        hook_metadata = _make_pre_gui_metadata(initial_settings, input_job_bundle_dir)
-        pre_gui_output = hook_manager.execute_pre_gui_hooks(hook_metadata)
+    # Run pre-GUI hooks to allow studios to pre-populate dialog fields. Pre-GUI hooks may
+    # come from the job bundle (gated by allow_bundle_hooks) and/or the directory named by
+    # DEADLINE_HOOKS_DIR (gated by allow_environment_hooks). Environment hooks run first,
+    # then bundle hooks — matching the pre/post-submission ordering.
+    pre_gui_output = _run_pre_gui_hooks(input_job_bundle_dir, initial_settings, parent)
 
     initial_shared_parameter_values = {}
 

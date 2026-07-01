@@ -6,7 +6,14 @@ from __future__ import annotations
 
 import json as _json
 import logging as _logging
-from typing import Any as _Any, Callable as _Callable, Dict as _Dict, Optional as _Optional
+import os as _os
+from typing import (
+    Any as _Any,
+    Callable as _Callable,
+    Dict as _Dict,
+    List as _List,
+    Optional as _Optional,
+)
 
 from deadline.client.exceptions import DeadlineOperationError as _DeadlineOperationError
 from deadline.client.job_bundle.loader import read_yaml_or_json_object as _read_yaml_or_json_object
@@ -49,6 +56,59 @@ def _generate_hooks_confirmation_message(hooks: _HookConfiguration, bundle_dir: 
 
     lines.append(f"  Bundle: {bundle_dir}\n")
     return "\n".join(lines)
+
+
+def collect_pre_gui_hook_sources(
+    bundle_dir: str,
+    env_hooks_dir: _Optional[str],
+    allow_bundle_hooks: bool,
+    allow_environment_hooks: bool,
+    print_callback: _Callable[[str], None],
+) -> _List["HookManager"]:
+    """Return the HookManagers whose preGUI hooks should run, in execution order.
+
+    PreGUI hooks may come from the directory named by ``DEADLINE_HOOKS_DIR`` (gated by
+    ``allow_environment_hooks``) and/or the job bundle (gated by ``allow_bundle_hooks``).
+    Environment hooks run before bundle hooks. Sources without preGUI hooks are omitted,
+    and disabled-but-present sources emit a guidance message via ``print_callback``.
+
+    This is deliberately Qt-free so it can be unit-tested without a GUI binding; the caller
+    (the submitter) handles the confirmation prompt and execution.
+    """
+    sources: _List["HookManager"] = []
+
+    # Environment hooks first.
+    if env_hooks_dir:
+        if not _os.path.isdir(env_hooks_dir):
+            print_callback(
+                f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory"
+            )
+        else:
+            env_manager = HookManager(env_hooks_dir, print_callback)
+            env_hooks = env_manager.load_hooks()
+            if env_hooks and env_hooks.pre_gui:
+                if allow_environment_hooks:
+                    sources.append(env_manager)
+                else:
+                    print_callback(
+                        "Note: DEADLINE_HOOKS_DIR contains preGUI hooks but environment "
+                        "hooks are disabled.\n"
+                        "Enable with: deadline config set settings.allow_environment_hooks true"
+                    )
+
+    # Bundle hooks second.
+    bundle_manager = HookManager(bundle_dir, print_callback)
+    bundle_hooks = bundle_manager.load_hooks()
+    if bundle_hooks and bundle_hooks.pre_gui:
+        if allow_bundle_hooks:
+            sources.append(bundle_manager)
+        else:
+            print_callback(
+                "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
+                "Enable with: deadline config set settings.allow_bundle_hooks true"
+            )
+
+    return sources
 
 
 class HookManager:
