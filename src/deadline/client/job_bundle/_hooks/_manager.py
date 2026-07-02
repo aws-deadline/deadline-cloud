@@ -207,8 +207,10 @@ class HookManager:
                         f"Pre-GUI hook [{i + 1}] produced invalid JSON: {e}"
                     )
 
+            # stderr was already streamed to the user line-by-line during execution
+            # (see HookExecutor); keep a full-blob copy only in the debug log.
             if result.stderr:
-                _logger.warning(f"Pre-GUI hook [{i + 1}] stderr: {result.stderr}")
+                _logger.debug(f"Pre-GUI hook [{i + 1}] stderr: {result.stderr}")
 
             _logger.debug(f"Pre-GUI hook [{i + 1}] completed in {result.execution_time:.2f}s")
 
@@ -256,8 +258,10 @@ class HookManager:
                         f"Pre-submission hook [{i + 1}] produced invalid JSON: {e}"
                     )
 
+            # stderr was already streamed to the user line-by-line during execution
+            # (see HookExecutor); keep a full-blob copy only in the debug log.
             if result.stderr:
-                _logger.warning(f"Hook [{i + 1}] stderr: {result.stderr}")
+                _logger.debug(f"Hook [{i + 1}] stderr: {result.stderr}")
 
             _logger.debug(f"Hook [{i + 1}] completed in {result.execution_time:.2f}s")
 
@@ -285,8 +289,9 @@ class HookManager:
                     _logger.warning(
                         f"Post-submission hook [{i + 1}] failed with exit code {result.exit_code}: {hook_name}"
                     )
+                    # stderr was already streamed live during execution (see HookExecutor).
                     if result.stderr:
-                        _logger.warning(f"stderr: {result.stderr}")
+                        _logger.debug(f"stderr: {result.stderr}")
                     continue
 
                 if result.stdout:
@@ -298,7 +303,12 @@ class HookManager:
                 _logger.warning(f"Post-submission hook [{i + 1}] error: {e}")
 
     def _report_failure(self, hook, result, index: int, hook_type: str) -> None:
-        """Report hook failure details."""
+        """Report hook failure details.
+
+        The hook's stderr was already streamed to the user line-by-line while it ran (see
+        HookExecutor), so it is not repeated here. stdout is reserved for the hook's JSON
+        contract and is not streamed, so it is surfaced here to aid debugging a failure.
+        """
         hook_name = f"{hook.command} {' '.join(hook.args)}".strip()
         self.print_callback(f"\n{hook_type.title()} hook [{index}] failed: {hook_name}")
         self.print_callback(f"Exit code: {result.exit_code}")
@@ -306,5 +316,3 @@ class HookManager:
             self.print_callback(f"Timed out after {hook.timeout}s")
         if result.stdout:
             self.print_callback(f"stdout:\n{result.stdout}")
-        if result.stderr:
-            self.print_callback(f"stderr:\n{result.stderr}")

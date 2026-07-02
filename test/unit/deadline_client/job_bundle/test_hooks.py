@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 
 import pytest
 import yaml
@@ -1007,6 +1008,177 @@ class TestHookManager:
             with open(output_file) as f:
                 # Hook should receive the bundle_dir, not the hooks_dir
                 assert f.read() == bundle_dir
+
+
+class TestHookStdoutStreaming:
+    """Tests that a hook's stderr is surfaced to the user while the hook runs.
+
+    Bea-57642: submission hooks previously produced no feedback until they finished, so a
+    slow hook (e.g. generating auth tokens for several services) looked like a hang. Hooks
+    write human-readable progress to stderr (stdout is reserved for the JSON contract), and
+    the executor now forwards each stderr line to ``print_callback`` as it arrives.
+    """
+
+    def _make_metadata(self, tmpdir: str) -> HookMetadata:
+        return HookMetadata(
+            job_name="Test",
+            priority=50,
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_bundle_dir=tmpdir,
+            parameters={},
+            submitter_name="Test",
+            asset_references={},
+            submission_payload={},
+        )
+
+    @staticmethod
+    def _streamed_lines(messages: List[str]) -> List[str]:
+        """The subset of callback messages that are streamed hook output.
+
+        Streamed hook output carries the ``  [<hook_type> hook <index>] `` prefix added by
+        HookExecutor. This lets a test distinguish real streamed stderr from the
+        ``Running ... hook`` / failure-report lines, which echo the hook's command and can
+        incidentally contain the same text the hook printed.
+        """
+        return [m for m in messages if m.lstrip().startswith("[")]
+
+    def test_pre_submission_stderr_is_forwarded_to_callback(self):
+        """Each line a hook writes to stderr is streamed to print_callback."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import sys; print('step one', file=sys.stderr); "
+                                    "print('step two', file=sys.stderr)",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            streamed = "\n".join(self._streamed_lines(messages))
+            assert "step one" in streamed
+            assert "step two" in streamed
+
+    def test_stdout_json_is_not_streamed_as_progress(self):
+        """stdout is the JSON contract, so it is consumed for the payload and not echoed to
+        the user as progress output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import json; print(json.dumps({'priority': 100}))",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            result = manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            # The JSON reached the payload...
+            assert result["priority"] == 100
+            # ...but was not streamed back to the user as a progress line (stdout is the
+            # JSON contract, not progress output).
+            assert self._streamed_lines(messages) == []
+
+    def test_stderr_streamed_incrementally_before_hook_exits(self):
+        """A progress line reaches the callback before the hook finishes, not just after.
+
+        The hook writes one stderr line, then blocks on stdin until we feed it. Because the
+        executor writes stdin and reads stderr on separate threads, the first progress line
+        is delivered while the hook is still running.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    # Emit progress, then read stdin (the metadata) to prove
+                                    # the reader thread saw the line before we blocked here.
+                                    "import sys; print('started', file=sys.stderr, flush=True); "
+                                    "sys.stdin.read()",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            first_message = threading.Event()
+
+            def _callback(msg: str) -> None:
+                if "started" in msg:
+                    first_message.set()
+
+            manager = HookManager(tmpdir, _callback)
+            manager.load_hooks()
+            manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            assert first_message.is_set()
+
+    def test_failure_report_does_not_duplicate_streamed_stderr(self):
+        """On failure, stderr already streamed live is not re-dumped as a blob, but stdout
+        (which is not streamed) is surfaced for debugging."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import sys; print('progress line', file=sys.stderr); "
+                                    "print('not-json-stdout'); sys.exit(2)",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            with pytest.raises(DeadlineOperationError, match="exit code 2"):
+                manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            # The stderr progress line was streamed exactly once during execution...
+            assert sum("progress line" in m for m in self._streamed_lines(messages)) == 1
+            # ...and is not repeated as a "stderr:\n..." blob in the failure report.
+            assert not any(m.startswith("stderr:") for m in messages)
+            # stdout is not streamed, so the failure report surfaces it for debugging.
+            assert any(m.startswith("stdout:") and "not-json-stdout" in m for m in messages)
 
 
 class TestValidateBeforeGUIOutput:
