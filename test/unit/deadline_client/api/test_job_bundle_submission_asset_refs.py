@@ -562,3 +562,78 @@ def test_pre_submission_hook_redirecting_path_param_drops_stale_path(
     inputs = captured.get("inputs", set())
     assert any("new_inputs" in p for p in inputs), "redirected (new) path should be uploaded"
     assert not any("old_inputs" in p for p in inputs), "stale (old) path must be dropped"
+
+
+def test_pre_submission_hook_redirected_path_stays_known(fresh_deadline_config, tmp_path):
+    """A hook that redirects a PATH parameter (which was supplied as a known job parameter)
+    must keep the redirected location in known_asset_paths, so it is not flagged as an
+    unknown path — which, with no interactive confirmation callback, would raise
+    DeadlineOperationCanceled. known_asset_paths must be recomputed after the hook
+    re-resolve, including the hook's stdout ``parameters`` override name.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    config.set_setting("settings.allow_bundle_hooks", "true")
+    config.set_setting("settings.auto_accept", "true")
+
+    old_dir = tmp_path / "old_inputs"
+    new_dir = tmp_path / "redirected_inputs"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    (old_dir / "a.txt").write_text("old")
+    (new_dir / "b.txt").write_text("new")
+
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "template.yaml").write_text(_PATH_REDIRECT_TEMPLATE)
+    (bundle / "parameter_values.yaml").write_text(
+        f"parameterValues:\n- name: InDir\n  value: {old_dir.as_posix()}\n"
+    )
+    # Hook redirects InDir to new_dir via a stdout parameters override.
+    (bundle / "redirect.py").write_text(
+        f"import json\nprint(json.dumps({{'parameters': {{'InDir': {new_dir.as_posix()!r}}}}}))\n"
+    )
+    (bundle / "hooks.yaml").write_text(
+        "version: '1.0'\npreSubmission:\n  - command: python3\n    args: [redirect.py]\n"
+    )
+
+    with (
+        patch.object(_submit_job_bundle.api, "get_boto3_session"),
+        patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock,
+        patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"),
+        patch.object(S3AssetManager, "hash_assets_and_create_manifest") as mock_hash_assets,
+        patch.object(S3AssetManager, "upload_assets") as mock_upload_assets,
+        patch.object(_submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"),
+    ):
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        mock_hash_assets.return_value = [SummaryStatistics(), AssetRootManifest()]
+        mock_upload_assets.return_value = [
+            SummaryStatistics(),
+            Attachments(
+                [
+                    ManifestProperties(
+                        rootPath=str(tmp_path),
+                        rootPathFormat=PathFormat.POSIX,
+                        inputManifestPath="m",
+                        inputManifestHash="h",
+                        outputRelativeDirectories=["."],
+                    )
+                ]
+            ),
+        ]
+
+        # InDir is supplied as a known job parameter (old_dir is marked known). The hook
+        # then redirects it to new_dir, which is NOT pre-marked known and has no confirmation
+        # callback. If known_asset_paths were not recomputed after the hook, the redirected
+        # path would be treated as unknown and raise DeadlineOperationCanceled. It must
+        # submit successfully instead.
+        api.create_job_from_job_bundle(
+            job_bundle_dir=str(bundle),
+            job_parameters=[{"name": "InDir", "value": str(old_dir)}],
+            known_asset_paths=[str(old_dir)],
+            queue_parameter_definitions=[],
+            require_paths_exist=False,
+        )
+
+    client_mock().create_job.assert_called_once()

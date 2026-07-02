@@ -1159,8 +1159,8 @@ class TestExecuteBeforeGUIHooks:
                                 "command": sys.executable,
                                 "args": [
                                     "-c",
-                                    "import os, json; "
-                                    "print(json.dumps({'name': os.environ['DEADLINE_JOB_BUNDLE_DIR']}))",
+                                    "import os, json; print(json.dumps("
+                                    + "{'name': os.environ['DEADLINE_JOB_BUNDLE_DIR']}))",
                                 ],
                             }
                         ]
@@ -1534,3 +1534,37 @@ class TestPreGuiHooks:
         )
 
         assert sources == []
+
+    def test_env_dir_equal_to_bundle_dir_is_not_duplicated(self, tmp_path):
+        """If DEADLINE_HOOKS_DIR points at the job bundle, the shared hooks.yaml yields a
+        single source (not two) so preGUI hooks do not run twice."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_pre_gui_hooks(bundle)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=bundle,  # same directory
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [bundle]
+
+    def test_env_dir_equal_to_bundle_dir_runs_when_only_env_hooks_enabled(self, tmp_path):
+        """When env dir == bundle dir, enabling only environment hooks still permits the
+        shared source to run (the single source is gated by either grant)."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_pre_gui_hooks(bundle)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=bundle,
+            allow_bundle_hooks=False,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [bundle]

@@ -83,8 +83,17 @@ def collect_pre_gui_hook_sources(
     warn = warning_callback or print_callback
     sources: _List["HookManager"] = []
 
+    # If DEADLINE_HOOKS_DIR resolves to the job bundle directory, the two sources are the
+    # same hooks.yaml. Treat it as the bundle source only (skip the env source) so hooks are
+    # not loaded and run twice — matching the pre/post-submission path's dedup.
+    env_is_bundle = (
+        bool(env_hooks_dir)
+        and bool(bundle_dir)
+        and (_os.path.realpath(env_hooks_dir or "") == _os.path.realpath(bundle_dir or ""))
+    )
+
     # Environment hooks first.
-    if env_hooks_dir:
+    if env_hooks_dir and not env_is_bundle:
         if not _os.path.isdir(env_hooks_dir):
             warn(f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory")
         else:
@@ -100,11 +109,12 @@ def collect_pre_gui_hook_sources(
                         "Enable with: deadline config set settings.allow_environment_hooks true"
                     )
 
-    # Bundle hooks second.
+    # Bundle hooks second. When env_is_bundle, this single source covers both; it is gated
+    # by allow_bundle_hooks OR allow_environment_hooks (either grant permits the shared dir).
     bundle_manager = HookManager(bundle_dir, print_callback)
     bundle_hooks = bundle_manager.load_hooks()
     if bundle_hooks and bundle_hooks.pre_gui:
-        if allow_bundle_hooks:
+        if allow_bundle_hooks or (env_is_bundle and allow_environment_hooks):
             sources.append(bundle_manager)
         else:
             warn(

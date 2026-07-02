@@ -699,16 +699,29 @@ def create_job_from_job_bundle(
     # Use the parameter names from job_parameters, but the values from parameters. If a value was provided
     # in job_parameters, it has been applied into parameters and normalized as necessary.
     known_parameter_names = {job_param.get("name") for job_param in job_parameters}
-    for job_param in parameters:
-        if job_param.get("type") == "PATH" and job_param.get("name") in known_parameter_names:
-            job_param_value = job_param.get("value")
-            if job_param_value:
-                if job_param.get("objectType") == "FILE":
-                    # If the job parameter is a file, use its directory as the known path. When collecting
-                    # outputs for upload, only that directory is used, not the file path.
-                    known_asset_paths.append(os.path.dirname(job_param_value))
-                else:
-                    known_asset_paths.append(job_param_value)
+
+    def _path_parameter_known_paths(resolved_parameters):
+        """Return the known-asset-path contributions from PATH parameters in
+        ``resolved_parameters`` (values that were explicitly provided in job_parameters)."""
+        contributed: list[str] = []
+        for job_param in resolved_parameters:
+            if job_param.get("type") == "PATH" and job_param.get("name") in known_parameter_names:
+                job_param_value = job_param.get("value")
+                if job_param_value:
+                    if job_param.get("objectType") == "FILE":
+                        # If the job parameter is a file, use its directory as the known
+                        # path. When collecting outputs for upload, only that directory is
+                        # used, not the file path.
+                        contributed.append(os.path.dirname(job_param_value))
+                    else:
+                        contributed.append(job_param_value)
+        return contributed
+
+    # Base known paths (call args, bundle, storage profile, config) without PATH-parameter
+    # contributions — those are folded in per parameter resolution so they can be recomputed
+    # if a pre-submission hook changes a PATH parameter.
+    base_known_asset_paths = list(known_asset_paths)
+    known_asset_paths.extend(_path_parameter_known_paths(parameters))
 
     # Filter known_asset_paths to remove any paths that have another one as a prefix. This can
     # reduce the amount of processing needed later, and produces a shorter warning message when presenting
@@ -779,6 +792,16 @@ def create_job_from_job_bundle(
             asset_references = AssetReferences.from_dict(asset_references_obj)
             parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
                 job_bundle_parameters, asset_references, hook_parameter_overrides
+            )
+            # Recompute known_asset_paths from the re-resolved parameters so a hook that
+            # redirected a PATH parameter keeps its new location recognized as known (rather
+            # than triggering the unknown-path warning / cancellation). Hook-supplied
+            # parameter names count as known here, alongside the original job_parameters.
+            known_parameter_names = known_parameter_names | {
+                o["name"] for o in hook_parameter_overrides
+            }
+            known_asset_paths = _filter_redundant_known_paths(
+                base_known_asset_paths + _path_parameter_known_paths(parameters)
             )
 
         # Merge any asset references from hooks into asset_references
