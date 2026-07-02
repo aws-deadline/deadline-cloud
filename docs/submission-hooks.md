@@ -290,6 +290,13 @@ Parameter keys are job template parameter names. Values from a hook are applied 
 the bundle's parameter values, but CLI-supplied `--parameter` values still take precedence
 over hook-supplied ones.
 
+> **`PATH` parameter values differ by channel.** A relative `PATH` value written to
+> `parameter_values.yaml` on disk is resolved against the **job bundle directory**, while a
+> relative `PATH` value emitted on stdout is resolved against the **current working
+> directory** (the same rule as CLI `--parameter`). To avoid this ambiguity, **use absolute
+> paths for `PATH` parameters emitted on stdout** (or write them to `parameter_values.yaml`
+> instead).
+
 ### Post-Submission Hooks
 
 Output is logged but does not modify anything.

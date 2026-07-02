@@ -779,6 +779,10 @@ def create_job_from_job_bundle(
             job_bundle_parameters = updated_bundle_parameters
             # Layer hook stdout parameters beneath the CLI-supplied job_parameters so the
             # CLI keeps the final say, then re-resolve with the same logic as the initial pass.
+            # NOTE: as job_parameters overrides these follow CLI --parameter semantics, so a
+            # relative PATH value here is resolved against the current working directory (not
+            # the bundle dir, as an on-disk parameter_values.yaml rewrite would be). Hooks
+            # should emit absolute paths for PATH parameters on stdout; see docs.
             hook_parameter_overrides = [
                 {"name": name, "value": value}
                 for name, value in hook_stdout_parameters.items()
