@@ -21,6 +21,7 @@ from ..config.config_file import get_setting as _get_setting
 from ..exceptions import DeadlineOperationCanceled as _DeadlineOperationCanceled
 from ..exceptions import DeadlineOperationError
 from ..job_bundle._hooks import (
+    HookManager as _HookManager,
     HookMetadata as _HookMetadata,
     _generate_hooks_confirmation_message,
     collect_pre_gui_hook_sources as _collect_pre_gui_hook_sources,
@@ -99,6 +100,8 @@ def _run_pre_gui_hooks(
         # "hooks present but disabled" guidance logs at warning (its pre-refactor severity).
         print_callback=logger.info,
         warning_callback=logger.warning,
+        # Pass our reference so tests can patch `{MODULE}._HookManager` as a behavior seam.
+        hook_manager_cls=_HookManager,
     )
 
     if not sources:

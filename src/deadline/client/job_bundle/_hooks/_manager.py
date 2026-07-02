@@ -65,6 +65,7 @@ def collect_pre_gui_hook_sources(
     allow_environment_hooks: bool,
     print_callback: _Callable[[str], None],
     warning_callback: _Optional[_Callable[[str], None]] = None,
+    hook_manager_cls: _Optional[type] = None,
 ) -> _List["HookManager"]:
     """Return the HookManagers whose preGUI hooks should run, in execution order.
 
@@ -76,11 +77,14 @@ def collect_pre_gui_hook_sources(
     messages. ``warning_callback`` (defaults to ``print_callback``) receives guidance
     notes — a hooks source that is present but disabled, or an invalid DEADLINE_HOOKS_DIR —
     so callers can log those at a higher severity than routine execution output.
+    ``hook_manager_cls`` (defaults to ``HookManager``) is the class used to construct each
+    source; callers may pass their own reference so it remains a patchable seam.
 
     This is deliberately Qt-free so it can be unit-tested without a GUI binding; the caller
     (the submitter) handles the confirmation prompt and execution.
     """
     warn = warning_callback or print_callback
+    manager_cls = hook_manager_cls or HookManager
     sources: _List["HookManager"] = []
 
     # If DEADLINE_HOOKS_DIR resolves to the job bundle directory, the two sources are the
@@ -97,7 +101,7 @@ def collect_pre_gui_hook_sources(
         if not _os.path.isdir(env_hooks_dir):
             warn(f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory")
         else:
-            env_manager = HookManager(env_hooks_dir, print_callback)
+            env_manager = manager_cls(env_hooks_dir, print_callback)
             env_hooks = env_manager.load_hooks()
             if env_hooks and env_hooks.pre_gui:
                 if allow_environment_hooks:
@@ -111,7 +115,7 @@ def collect_pre_gui_hook_sources(
 
     # Bundle hooks second. When env_is_bundle, this single source covers both; it is gated
     # by allow_bundle_hooks OR allow_environment_hooks (either grant permits the shared dir).
-    bundle_manager = HookManager(bundle_dir, print_callback)
+    bundle_manager = manager_cls(bundle_dir, print_callback)
     bundle_hooks = bundle_manager.load_hooks()
     if bundle_hooks and bundle_hooks.pre_gui:
         if allow_bundle_hooks or (env_is_bundle and allow_environment_hooks):

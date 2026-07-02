@@ -3,32 +3,38 @@
 """Tests that preGUI bundle hooks are gated solely by allow_bundle_hooks."""
 
 import logging
-import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from deadline.client.job_bundle._hooks import HookConfiguration, HookDefinition
 from deadline.client.ui.job_bundle_submitter import show_job_bundle_submitter
 
 MODULE = "deadline.client.ui.job_bundle_submitter"
 
 
 @pytest.fixture
-def _patch_submitter_deps(tmp_path):
-    """Set up a bundle with a real preGUI hook and patch only the Qt-heavy dependencies of
-    show_job_bundle_submitter. The real pre-GUI source-selection and hook execution run, so
-    a hook that fires writes a sentinel file; the tests assert on its presence."""
-    bundle_dir = str(tmp_path / "bundle")
-    os.makedirs(bundle_dir)
-    with open(os.path.join(bundle_dir, "template.yaml"), "w") as f:
-        f.write("name: Test\nsteps: []\n")
+def hooks_with_pre_gui():
+    """A HookConfiguration that has a preGUI hook defined."""
+    return HookConfiguration(
+        version="1.0",
+        pre_gui=[HookDefinition(command="python", args=["prefill.py"])],
+        pre_submission=[],
+        post_submission=[],
+    )
 
-    # A real preGUI hook that writes a sentinel when it runs.
-    sentinel = str(tmp_path / "pre_gui_ran.txt")
-    with open(os.path.join(bundle_dir, "prefill.py"), "w") as f:
-        f.write(f"open({sentinel!r}, 'w').write('ran')\n")
-    with open(os.path.join(bundle_dir, "hooks.yaml"), "w") as f:
-        f.write("version: '1.0'\npreGUI:\n  - command: python3\n    args: [prefill.py]\n")
+
+@pytest.fixture
+def _patch_submitter_deps(tmp_path, hooks_with_pre_gui):
+    """Patch all heavy dependencies of show_job_bundle_submitter so we can
+    exercise the hooks permission logic without Qt or real file I/O."""
+    bundle_dir = str(tmp_path / "bundle")
+    (tmp_path / "bundle").mkdir()
+    (tmp_path / "bundle" / "template.yaml").write_text("name: Test\nsteps: []\n")
+
+    mock_hook_manager = MagicMock()
+    mock_hook_manager.load_hooks.return_value = hooks_with_pre_gui
+    mock_hook_manager.execute_pre_gui_hooks.return_value = {}
 
     patches = {
         "validate_directory_symlink_containment": patch(
@@ -43,6 +49,7 @@ def _patch_submitter_deps(tmp_path):
         "read_job_bundle_parameters": patch(
             f"{MODULE}.read_job_bundle_parameters", return_value=[]
         ),
+        "HookManager": patch(f"{MODULE}._HookManager", return_value=mock_hook_manager),
         "SubmitJobToDeadlineDialog": patch(f"{MODULE}.SubmitJobToDeadlineDialog"),
         "QApplication": patch(f"{MODULE}.QApplication"),
         "QMessageBox": patch(f"{MODULE}.QMessageBox"),
@@ -54,7 +61,7 @@ def _patch_submitter_deps(tmp_path):
 
     yield {
         "bundle_dir": bundle_dir,
-        "sentinel": sentinel,
+        "hook_manager": mock_hook_manager,
         **started,
     }
 
@@ -91,14 +98,14 @@ class TestPreGuiHooksPermissionGating:
                 },
             )
 
-        assert not os.path.exists(ctx["sentinel"]), "preGUI hook ran despite being disabled"
+        ctx["hook_manager"].execute_pre_gui_hooks.assert_not_called()
         assert "bundle hooks are disabled" in caplog.text
 
     def test_hooks_blocked_even_when_env_hooks_enabled(self, _patch_submitter_deps, caplog):
-        """preGUI bundle hooks must NOT run when only allow_environment_hooks is true.
+        """preGUI hooks must NOT run when only allow_environment_hooks is true.
 
         This is the core security fix: allow_environment_hooks must not bypass
-        the allow_bundle_hooks gate for preGUI bundle hooks.
+        the allow_bundle_hooks gate for preGUI hooks.
         """
         ctx = _patch_submitter_deps
         with caplog.at_level(logging.WARNING):
@@ -110,7 +117,7 @@ class TestPreGuiHooksPermissionGating:
                 },
             )
 
-        assert not os.path.exists(ctx["sentinel"]), "preGUI bundle hook ran despite being disabled"
+        ctx["hook_manager"].execute_pre_gui_hooks.assert_not_called()
         assert "bundle hooks are disabled" in caplog.text
 
     def test_hooks_execute_when_bundle_hooks_enabled(self, _patch_submitter_deps, caplog):
@@ -125,7 +132,7 @@ class TestPreGuiHooksPermissionGating:
                 },
             )
 
-        assert os.path.exists(ctx["sentinel"]), "preGUI hook did not run when enabled"
+        ctx["hook_manager"].execute_pre_gui_hooks.assert_called_once()
         assert "bundle hooks are disabled" not in caplog.text
 
     def test_hooks_execute_without_env_hooks(self, _patch_submitter_deps, caplog):
@@ -142,5 +149,5 @@ class TestPreGuiHooksPermissionGating:
                 },
             )
 
-        assert os.path.exists(ctx["sentinel"]), "preGUI hook did not run when enabled"
+        ctx["hook_manager"].execute_pre_gui_hooks.assert_called_once()
         assert "bundle hooks are disabled" not in caplog.text
