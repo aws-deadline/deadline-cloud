@@ -501,15 +501,17 @@ def test_pre_submission_hook_redirecting_path_param_drops_stale_path(
     bundle = tmp_path / "bundle"
     bundle.mkdir()
     (bundle / "template.yaml").write_text(_PATH_REDIRECT_TEMPLATE)
+    # Use POSIX-style paths so backslashes on Windows do not break YAML or the generated
+    # hook script's Python string literal.
     (bundle / "parameter_values.yaml").write_text(
-        f"parameterValues:\n- name: InDir\n  value: {str(old_dir)}\n"
+        f"parameterValues:\n- name: InDir\n  value: {old_dir.as_posix()}\n"
     )
     # Hook redirects InDir from old_dir to new_dir on disk.
     (bundle / "redirect.py").write_text(
         "import os\n"
         "b = os.environ['DEADLINE_JOB_BUNDLE_DIR']\n"
         "open(os.path.join(b, 'parameter_values.yaml'), 'w').write("
-        f"'parameterValues:\\n- name: InDir\\n  value: {str(new_dir)}\\n')\n"
+        f"'parameterValues:\\n- name: InDir\\n  value: {new_dir.as_posix()}\\n')\n"
     )
     (bundle / "hooks.yaml").write_text(
         "version: '1.0'\npreSubmission:\n  - command: python3\n    args: [redirect.py]\n"
