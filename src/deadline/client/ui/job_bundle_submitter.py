@@ -95,7 +95,10 @@ def _run_pre_gui_hooks(
         allow_environment_hooks=_config_file.str2bool(
             _get_setting("settings.allow_environment_hooks")
         ),
+        # Hook execution messages ("Running pre-GUI hook…") log at info; the
+        # "hooks present but disabled" guidance logs at warning (its pre-refactor severity).
         print_callback=logger.info,
+        warning_callback=logger.warning,
     )
 
     if not sources:

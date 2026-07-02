@@ -64,25 +64,29 @@ def collect_pre_gui_hook_sources(
     allow_bundle_hooks: bool,
     allow_environment_hooks: bool,
     print_callback: _Callable[[str], None],
+    warning_callback: _Optional[_Callable[[str], None]] = None,
 ) -> _List["HookManager"]:
     """Return the HookManagers whose preGUI hooks should run, in execution order.
 
     PreGUI hooks may come from the directory named by ``DEADLINE_HOOKS_DIR`` (gated by
     ``allow_environment_hooks``) and/or the job bundle (gated by ``allow_bundle_hooks``).
-    Environment hooks run before bundle hooks. Sources without preGUI hooks are omitted,
-    and disabled-but-present sources emit a guidance message via ``print_callback``.
+    Environment hooks run before bundle hooks. Sources without preGUI hooks are omitted.
+
+    ``print_callback`` is attached to each returned HookManager for its execution-time
+    messages. ``warning_callback`` (defaults to ``print_callback``) receives guidance
+    notes — a hooks source that is present but disabled, or an invalid DEADLINE_HOOKS_DIR —
+    so callers can log those at a higher severity than routine execution output.
 
     This is deliberately Qt-free so it can be unit-tested without a GUI binding; the caller
     (the submitter) handles the confirmation prompt and execution.
     """
+    warn = warning_callback or print_callback
     sources: _List["HookManager"] = []
 
     # Environment hooks first.
     if env_hooks_dir:
         if not _os.path.isdir(env_hooks_dir):
-            print_callback(
-                f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory"
-            )
+            warn(f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory")
         else:
             env_manager = HookManager(env_hooks_dir, print_callback)
             env_hooks = env_manager.load_hooks()
@@ -90,7 +94,7 @@ def collect_pre_gui_hook_sources(
                 if allow_environment_hooks:
                     sources.append(env_manager)
                 else:
-                    print_callback(
+                    warn(
                         "Note: DEADLINE_HOOKS_DIR contains preGUI hooks but environment "
                         "hooks are disabled.\n"
                         "Enable with: deadline config set settings.allow_environment_hooks true"
@@ -103,7 +107,7 @@ def collect_pre_gui_hook_sources(
         if allow_bundle_hooks:
             sources.append(bundle_manager)
         else:
-            print_callback(
+            warn(
                 "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
                 "Enable with: deadline config set settings.allow_bundle_hooks true"
             )
