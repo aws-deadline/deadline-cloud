@@ -1,12 +1,12 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""End-to-end tests for submission hooks through the ``deadline bundle submit`` CLI.
+"""CLI-level tests that a pre-submission hook's parameter changes reach CreateJob.
 
-These drive the real CLI entry point (via ``CliRunner``) against the moto-backed
-``deadline_mock`` fixture — so the full submission pipeline runs, real hook subprocesses
-execute, and we assert on the observable effects (a hook writes a file, rewrites a
-parameter that reaches CreateJob, or fires post-submission). This complements the
-lower-level unit tests in ``test/unit/deadline_client/job_bundle/test_hooks.py``.
+These drive the CLI entry point (via ``CliRunner``) against the moto-backed
+``deadline_mock`` fixture and assert on the exact ``parameters`` sent to CreateJob — which
+the subprocess-based ``test/cli_e2e`` mock backend does not record. The broader "hook runs
+end to end" behaviors (a hook writes a file, post-submission fires, disabled-by-default)
+are covered as true subprocess e2e tests in ``test/cli_e2e/test_bundle_hooks.py``.
 """
 
 import os
@@ -21,7 +21,7 @@ from ..api.test_job_bundle_submission import MOCK_FARM_ID, MOCK_QUEUE_ID
 from ..testing_utilities import MOCK_CREATE_JOB_RESPONSE, MOCK_GET_JOB_RESPONSE
 
 _TEMPLATE = """specificationVersion: 'jobtemplate-2023-09'
-name: HookE2E
+name: HookParamTest
 parameterDefinitions:
 - name: Message
   type: STRING
@@ -58,31 +58,7 @@ def _enable_hooks():
     config.set_setting("settings.auto_accept", "true")
 
 
-def test_e2e_pre_submission_hook_runs_and_writes_file(
-    fresh_deadline_config, deadline_mock, temp_job_bundle_dir, tmp_path
-):
-    """A pre-submission hook executes during ``deadline bundle submit`` and can write a
-    file — proving the hook actually ran in the full CLI pipeline."""
-    _enable_hooks()
-    deadline_mock.create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-    deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
-
-    sentinel = tmp_path / "hook_ran.txt"
-    _write_hook_bundle(
-        temp_job_bundle_dir,
-        "version: '1.0'\npreSubmission:\n  - command: python3\n    args: [touch.py]\n",
-        ("touch.py", f"open({str(sentinel)!r}, 'w').write('ran')\n"),
-    )
-
-    result = CliRunner().invoke(main, ["bundle", "submit", temp_job_bundle_dir])
-
-    assert result.exit_code == 0, result.output
-    assert sentinel.exists(), "pre-submission hook did not run"
-    assert sentinel.read_text() == "ran"
-    deadline_mock.create_job.assert_called_once()
-
-
-def test_e2e_pre_submission_hook_rewrites_parameter_reaches_create_job(
+def test_pre_submission_hook_rewrites_parameter_reaches_create_job(
     fresh_deadline_config, deadline_mock, temp_job_bundle_dir
 ):
     """A pre-submission hook that rewrites parameter_values.yaml on disk changes the
@@ -112,7 +88,7 @@ def test_e2e_pre_submission_hook_rewrites_parameter_reaches_create_job(
     assert kwargs["parameters"]["Message"] == {"string": "changed_by_hook"}
 
 
-def test_e2e_pre_submission_hook_stdout_parameter_reaches_create_job(
+def test_pre_submission_hook_stdout_parameter_reaches_create_job(
     fresh_deadline_config, deadline_mock, temp_job_bundle_dir
 ):
     """A pre-submission hook that emits a ``parameters`` map on stdout changes the
@@ -137,7 +113,7 @@ def test_e2e_pre_submission_hook_stdout_parameter_reaches_create_job(
     assert kwargs["parameters"]["Message"] == {"string": "changed_via_stdout"}
 
 
-def test_e2e_cli_parameter_takes_precedence_over_hook(
+def test_cli_parameter_takes_precedence_over_hook(
     fresh_deadline_config, deadline_mock, temp_job_bundle_dir
 ):
     """A CLI ``--parameter`` value wins over a hook-supplied value for the same parameter."""
@@ -162,49 +138,3 @@ def test_e2e_cli_parameter_takes_precedence_over_hook(
     assert result.exit_code == 0, result.output
     kwargs = deadline_mock.create_job.call_args.kwargs
     assert kwargs["parameters"]["Message"] == {"string": "from_cli"}
-
-
-def test_e2e_post_submission_hook_runs_after_create_job(
-    fresh_deadline_config, deadline_mock, temp_job_bundle_dir, tmp_path
-):
-    """A post-submission hook runs after the job is created."""
-    _enable_hooks()
-    deadline_mock.create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-    deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
-
-    sentinel = tmp_path / "post_ran.txt"
-    _write_hook_bundle(
-        temp_job_bundle_dir,
-        "version: '1.0'\npostSubmission:\n  - command: python3\n    args: [post.py]\n",
-        ("post.py", f"open({str(sentinel)!r}, 'w').write('post')\n"),
-    )
-
-    result = CliRunner().invoke(main, ["bundle", "submit", temp_job_bundle_dir])
-
-    assert result.exit_code == 0, result.output
-    deadline_mock.create_job.assert_called_once()
-    assert sentinel.exists(), "post-submission hook did not run"
-
-
-def test_e2e_bundle_hooks_disabled_by_default_does_not_run(
-    fresh_deadline_config, deadline_mock, temp_job_bundle_dir, tmp_path
-):
-    """With allow_bundle_hooks unset, a bundle hook does not run (security default)."""
-    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
-    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
-    config.set_setting("settings.auto_accept", "true")
-    # deliberately NOT enabling allow_bundle_hooks
-    deadline_mock.create_job.return_value = MOCK_CREATE_JOB_RESPONSE
-    deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
-
-    sentinel = tmp_path / "should_not_exist.txt"
-    _write_hook_bundle(
-        temp_job_bundle_dir,
-        "version: '1.0'\npreSubmission:\n  - command: python3\n    args: [touch.py]\n",
-        ("touch.py", f"open({str(sentinel)!r}, 'w').write('ran')\n"),
-    )
-
-    result = CliRunner().invoke(main, ["bundle", "submit", temp_job_bundle_dir])
-
-    assert result.exit_code == 0, result.output
-    assert not sentinel.exists(), "bundle hook ran despite allow_bundle_hooks not being set"
