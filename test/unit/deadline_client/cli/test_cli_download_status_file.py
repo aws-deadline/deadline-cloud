@@ -144,6 +144,8 @@ class TestDetermineJobDownloadStatus:
         assert "last_updated" in result
         assert "error_code" in result
         assert "error_message" in result
+        assert "skip_reason" in result
+        assert "tasks" in result
 
 
 class TestGetStatusFilePaths:
@@ -852,6 +854,238 @@ class TestFailedJobsTracker:
 
         tracker2 = _FailedJobsTracker(file_path)
         assert MOCK_JOB_ID in tracker2.get_tracked_job_ids()
+
+
+class TestSkipReason:
+    """Tests for skip_reason field in skipped job entries."""
+
+    def test_attachments_free_has_no_attachments_reason(self):
+        cjids = _make_categorized_job_ids(attachments_free={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, attachments=False)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
+        assert result["skip_reason"] == "no_attachments"
+
+    def test_missing_storage_profile_has_reason(self):
+        cjids = _make_categorized_job_ids(missing_storage_profile={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, storage_profile_id=None)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
+        assert result["skip_reason"] == "missing_storage_profile"
+
+    def test_downloaded_job_has_null_skip_reason(self):
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
+        assert result["skip_reason"] is None
+
+
+class TestExtractTaskId:
+    """Tests for _extract_task_id_from_s3_key."""
+
+    def test_extracts_task_id_from_s3_key(self):
+        from deadline.client.cli._incremental_download import _extract_task_id_from_s3_key
+
+        key = "DeadlineCloud/Manifests/farm-abc/queue-abc/job-abc/step-abc/task-abc-0/2026-01-01T00:00:00Z_sessionaction-abc-2/hash_output"
+        assert _extract_task_id_from_s3_key(key) == "task-abc-0"
+
+    def test_returns_none_for_key_without_task_id(self):
+        from deadline.client.cli._incremental_download import _extract_task_id_from_s3_key
+
+        assert (
+            _extract_task_id_from_s3_key(
+                "DeadlineCloud/Manifests/farm-abc/queue-abc/job-abc/hash_output"
+            )
+            is None
+        )
+
+    def test_extracts_task_id_with_different_suffix(self):
+        from deadline.client.cli._incremental_download import _extract_task_id_from_s3_key
+
+        key = "DeadlineCloud/Manifests/farm-abc/queue-abc/job-abc/step-abc/task-xyz123-3/ts_sessionaction/hash_output"
+        assert _extract_task_id_from_s3_key(key) == "task-xyz123-3"
+
+
+class TestPerTaskTracking:
+    """Tests for per-task download tracking in status file."""
+
+    def test_task_download_results_added_to_job_entry(self):
+        """Tasks from this run appear in the job's tasks dict."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=2, total=2, ended=True)
+        jobs = {MOCK_JOB_ID: job}
+        task_results = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 3,
+                    "downloaded_files": 3,
+                    "error_code": None,
+                    "error_message": None,
+                },
+                "task-abc-1": {
+                    "total_files": 3,
+                    "downloaded_files": 3,
+                    "error_code": None,
+                    "error_message": None,
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            task_download_results=task_results,
+        )
+        tasks = result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert "task-abc-0" in tasks
+        assert "task-abc-1" in tasks
+        assert tasks["task-abc-0"]["download_status"] == "downloaded"
+        assert tasks["task-abc-0"]["total_files"] == 3
+
+    def test_failed_task_download_results_in_failed_status(self):
+        """Tasks with error_code show download_status failed."""
+        cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=1, total=2, ended=False)
+        jobs = {MOCK_JOB_ID: job}
+        task_results = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 3,
+                    "downloaded_files": 0,
+                    "error_code": "PERMISSION_DENIED",
+                    "error_message": "denied",
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            task_download_results=task_results,
+        )
+        tasks = result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert tasks["task-abc-0"]["download_status"] == "failed"
+        assert tasks["task-abc-0"]["error_code"] == "PERMISSION_DENIED"
+
+    def test_existing_tasks_preserved_when_no_new_download(self):
+        """Tasks from previous runs are preserved when no new download this run."""
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "in_progress",
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "last_updated": "2026-01-01T00:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+                "skip_reason": None,
+                "tasks": {
+                    "task-abc-0": {
+                        "download_status": "downloaded",
+                        "total_files": 3,
+                        "downloaded_files": 3,
+                        "error_code": None,
+                        "error_message": None,
+                    },
+                },
+            }
+        }
+        cjids = _make_categorized_job_ids(unchanged={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=1, total=2, ended=False)
+        jobs = {MOCK_JOB_ID: job}
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            existing_jobs=existing_jobs,
+            task_download_results={},
+        )
+        # Existing task preserved
+        assert "task-abc-0" in result["jobs"][MOCK_JOB_ID]["tasks"]
+
+    def test_new_task_overwrites_existing_same_id(self):
+        """New task result overwrites existing entry with same task ID."""
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "downloaded",
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "last_updated": "2026-01-01T00:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+                "skip_reason": None,
+                "tasks": {
+                    "task-abc-0": {
+                        "download_status": "downloaded",
+                        "total_files": 3,
+                        "downloaded_files": 3,
+                        "error_code": None,
+                        "error_message": None,
+                    },
+                },
+            }
+        }
+        cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=1, total=1, ended=True)
+        jobs = {MOCK_JOB_ID: job}
+        task_results = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 3,
+                    "downloaded_files": 3,
+                    "error_code": None,
+                    "error_message": None,
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            existing_jobs=existing_jobs,
+            task_download_results=task_results,
+        )
+        assert result["jobs"][MOCK_JOB_ID]["tasks"]["task-abc-0"]["download_status"] == "downloaded"
+
+    def test_zero_file_tasks_excluded_from_dict(self):
+        """Tasks with zero output files are not added to the tasks dict."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID)
+        jobs = {MOCK_JOB_ID: job}
+        task_results = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 0,
+                    "downloaded_files": 0,
+                    "error_code": None,
+                    "error_message": None,
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            task_download_results=task_results,
+        )
+        assert "task-abc-0" not in result["jobs"][MOCK_JOB_ID]["tasks"]
+
+    def test_skipped_job_has_empty_tasks(self):
+        """Skipped jobs always have an empty tasks dict."""
+        cjids = _make_categorized_job_ids(attachments_free={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, attachments=False)
+        jobs = {MOCK_JOB_ID: job}
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+        )
+        assert result["jobs"][MOCK_JOB_ID]["tasks"] == {}
 
 
 class TestClassifyError:

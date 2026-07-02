@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import difflib
 import json
 import os
+import re
 import tempfile
 import threading
 from typing import Optional
@@ -155,6 +156,19 @@ class _FailedJobsTracker:
             self._counts.pop(job_id, None)
 
 
+_TASK_ID_RE = re.compile(r"(task-[^/]+)")
+
+
+def _extract_task_id_from_s3_key(manifest_s3_key: str) -> Optional[str]:
+    """Extracts the task ID from an S3 manifest key path.
+
+    S3 manifest keys follow the pattern:
+    .../step-<id>/task-<id>/<timestamp>_<sessionActionId>/<hash>_output
+    """
+    match = _TASK_ID_RE.search(manifest_s3_key)
+    return match.group(1) if match else None
+
+
 @dataclass
 class IncrementalOutputDownloadLatencies:
     """Dataclass for tracking latencies of operations in this command"""
@@ -227,15 +241,11 @@ def _get_download_candidate_jobs(
             region=region,
         )
     }
-    print(f"DEBUG: Got {len(download_candidate_jobs)} active jobs")
     download_candidate_jobs = {
         job_id: _datetimes_to_str(job)
         for job_id, job in download_candidate_jobs.items()
         if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     }
-    print(
-        f"DEBUG: Filtered down to {len(download_candidate_jobs)} active jobs based on SUCCEEDED task filter"
-    )
 
     # - Any recently ended job (job went from active to terminal with a taskRunStatus
     #   in SUSPENDED, CANCELED, FAILED, SUCCEEDED, NOT_COMPATIBLE), that has at least
@@ -258,14 +268,10 @@ def _get_download_candidate_jobs(
         },
         region=region,
     )
-    print(
-        f"DEBUG: Got {len(recently_ended_jobs)} jobs with job[endedAt] >= {starting_timestamp.astimezone().isoformat()}"
-    )
     # Filter to jobs where the count of SUCCEEDED tasks is positive.
     recently_ended_jobs = [
         job for job in recently_ended_jobs if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     ]
-    print(f"DEBUG: Filtered down to {len(recently_ended_jobs)} jobs based on SUCCEEDED task filter")
     download_candidate_jobs.update(
         {job["jobId"]: _datetimes_to_str(job) for job in recently_ended_jobs}
     )
@@ -1098,6 +1104,7 @@ def _incremental_output_download(
     CategorizedJobIds,
     dict[str, dict[str, Any]],
     dict[str, dict[str, Any]],
+    dict[str, dict[str, dict[str, Any]]],
 ]:
     """
     This function downloads all the task run outputs from the specified queue, that have become
@@ -1346,6 +1353,8 @@ def _incremental_output_download(
             f"populated for this run; files will still be downloaded."
         )
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
+    # job_id -> task_id -> [files]: used for per-task download tracking
+    job_task_manifest_paths: dict[str, dict[str, list[BaseManifestPath]]] = {}
     # global_seen_paths prevents concurrent writes to the same destination file across jobs.
     # Without cross-job dedup, parallel threads could write the same path simultaneously
     # (e.g. two jobs sharing a file-system location), corrupting the file under OVERWRITE.
@@ -1354,10 +1363,11 @@ def _incremental_output_download(
     global_seen_paths: set[str] = set()
     job_seen_paths: dict[str, set[str]] = {}
     if not skip_attribution:
-        for i, (_, job_id, _, _) in enumerate(manifests_to_download):
+        for i, (_, job_id, _, manifest_s3_key) in enumerate(manifests_to_download):
             manifest_tuple = downloaded_manifests[i]
             if manifest_tuple is not None:
                 _, manifest = manifest_tuple
+                task_id = _extract_task_id_from_s3_key(manifest_s3_key)
                 for manifest_path in manifest.paths:
                     normcased = os.path.normcase(manifest_path.path)
                     if normcased in global_seen_paths:
@@ -1367,11 +1377,16 @@ def _incremental_output_download(
                         seen.add(normcased)
                         global_seen_paths.add(normcased)
                         job_manifest_paths.setdefault(job_id, []).append(manifest_path)
+                        if task_id:
+                            job_task_manifest_paths.setdefault(job_id, {}).setdefault(
+                                task_id, []
+                            ).append(manifest_path)
     else:
         # Attribution skipped: download everything anyway, decoupled from per-job tracking.
         # Collect every downloaded path (deduped) under a synthetic bucket keyed by "" so it
-        # never collides with a real job id. Per-job counts aren't populated this run, but no
-        # files are lost; the "" bucket is dropped from results before the status file is built.
+        # never collides with a real job id. Per-job (and per-task) counts aren't populated this
+        # run, but no files are lost; the "" bucket feeds the run-level stats and never becomes a
+        # per-job status entry.
         fallback_seen: set[str] = set()
         fallback_paths: list[BaseManifestPath] = []
         for manifest_tuple in downloaded_manifests:
@@ -1400,6 +1415,8 @@ def _incremental_output_download(
 
     # Download per-job with error isolation, running jobs in parallel to restore throughput.
     job_download_results: dict[str, dict[str, Any]] = {}
+    # task_download_results: job_id -> task_id -> {total_files, downloaded_files, error_code, error_message}
+    task_download_results: dict[str, dict[str, dict[str, Any]]] = {}
     # Set when the synthetic "" fallback bucket (attribution skipped) failed to download —
     # gates the timestamp advance below so the lost window is re-attempted next run.
     fallback_download_failed = False
@@ -1462,6 +1479,19 @@ def _incremental_output_download(
                     "error_code": None,
                     "error_message": None,
                 }
+                # Record per-task results for succeeded job
+                # Zero-output tasks are included with total_files=0 so they count toward
+                # the progress bar numerator — a task with no outputs is still "done".
+                task_results: dict[str, dict[str, Any]] = {}
+                for task_id, task_files in job_task_manifest_paths.get(job_id, {}).items():
+                    task_results[task_id] = {
+                        "total_files": len(task_files),
+                        "downloaded_files": len(task_files),
+                        "error_code": None,
+                        "error_message": None,
+                    }
+                if task_results:
+                    task_download_results[job_id] = task_results
             except AssetSyncCancelledError:
                 raise
             except Exception as e:
@@ -1619,4 +1649,10 @@ def _incremental_output_download(
     print_function_callback(f"    unchanged: {stats['jobs_without_downloads']['unchanged']}")
     print_function_callback(f"    inactive: {stats['jobs_without_downloads']['inactive']}")
 
-    return checkpoint, categorized_job_ids, download_candidate_jobs, job_download_results
+    return (
+        checkpoint,
+        categorized_job_ids,
+        download_candidate_jobs,
+        job_download_results,
+        task_download_results,
+    )

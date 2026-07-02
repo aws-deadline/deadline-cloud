@@ -106,6 +106,8 @@ def _make_status_entry(
     failed_files: int = 0,
     error_code: Optional[str] = None,
     error_message: Optional[str] = None,
+    skip_reason: Optional[str] = None,
+    tasks: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Constructs a per-job status entry for the status file."""
     return {
@@ -116,6 +118,8 @@ def _make_status_entry(
         "last_updated": datetime.now(timezone.utc).isoformat(),
         "error_code": error_code,
         "error_message": error_message,
+        "skip_reason": skip_reason,
+        "tasks": tasks or {},
     }
 
 
@@ -164,10 +168,10 @@ def _determine_job_download_status(
     downloaded_files = results["downloaded_files"] if results else 0
 
     if job_id in categorized_job_ids.attachments_free:
-        return _make_status_entry("skipped")
+        return _make_status_entry("skipped", skip_reason="no_attachments")
 
     if job_id in categorized_job_ids.missing_storage_profile:
-        return _make_status_entry("skipped")
+        return _make_status_entry("skipped", skip_reason="missing_storage_profile")
 
     if job_id in categorized_job_ids.completed:
         return _make_status_entry("downloaded", total_files, downloaded_files)
@@ -197,6 +201,7 @@ def _build_status_file_content(
     download_candidate_jobs: dict[str, dict[str, Any]],
     existing_jobs: Optional[dict[str, Any]] = None,
     job_download_results: Optional[dict[str, dict[str, Any]]] = None,
+    task_download_results: Optional[dict[str, dict[str, dict[str, Any]]]] = None,
 ) -> dict[str, Any]:
     """
     Builds the full status file JSON structure by merging existing job entries
@@ -226,6 +231,26 @@ def _build_status_file_content(
             job_id, job, categorized_job_ids, job_download_results
         )
         existing_entry = jobs_status.get(job_id)
+
+        # Merge task entries: preserve existing tasks, overwrite only tasks seen this run
+        existing_tasks: dict[str, Any] = (existing_entry or {}).get("tasks", {})
+        new_tasks: dict[str, Any] = (task_download_results or {}).get(job_id, {})
+        merged_tasks = {
+            **existing_tasks,
+            **{
+                task_id: {
+                    "download_status": "downloaded" if r.get("error_code") is None else "failed",
+                    "total_files": r["total_files"],
+                    "downloaded_files": r["downloaded_files"],
+                    "error_code": r.get("error_code"),
+                    "error_message": r.get("error_message"),
+                }
+                for task_id, r in new_tasks.items()
+                if r["total_files"] > 0  # skip zero-output tasks
+            },
+        }
+        new_entry["tasks"] = merged_tasks
+
         if (
             existing_entry
             and existing_entry.get("total_files", 0) > 0
@@ -235,6 +260,7 @@ def _build_status_file_content(
             if new_entry["download_status"] != existing_entry["download_status"]:
                 existing_entry["download_status"] = new_entry["download_status"]
                 existing_entry["last_updated"] = new_entry["last_updated"]
+            existing_entry["tasks"] = merged_tasks
         else:
             jobs_status[job_id] = new_entry
 
@@ -343,6 +369,7 @@ def write_download_status_file(
     local_storage_profile: Optional[dict[str, Any]],
     checkpoint_dir: str,
     job_download_results: Optional[dict[str, dict[str, Any]]] = None,
+    task_download_results: Optional[dict[str, dict[str, dict[str, Any]]]] = None,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> None:
     """
@@ -380,6 +407,7 @@ def write_download_status_file(
                     download_candidate_jobs=download_candidate_jobs,
                     existing_jobs=existing_jobs,
                     job_download_results=job_download_results,
+                    task_download_results=task_download_results,
                 )
 
                 _atomic_write_json(status_file_path, status_content)
