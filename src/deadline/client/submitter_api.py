@@ -89,20 +89,42 @@ class SubmitterAPI(ABC):
         """Collect asset references (inputs/outputs) from the scene."""
 
     def get_submission_context(
-        self, settings: Optional[SubmitterSettings] = None
+        self,
+        settings: Optional[SubmitterSettings] = None,
+        *,
+        farm_id: Optional[str] = None,
+        queue_id: Optional[str] = None,
+        initial_values: Optional[dict[str, Any]] = None,
+        host_requirements: Optional[dict[str, Any]] = None,
+        queue_parameters: Optional[list[dict[str, Any]]] = None,
     ) -> SubmissionContext:
         """Collect full submission data in one call.
 
         Args:
             settings: Pre-built settings. If None, calls get_settings()
                 to initialize from the scene.
+            farm_id: Target farm ID. If None, uses the configured default.
+                Ignored when ``queue_parameters`` is provided.
+            queue_id: Target queue ID. If None, uses the configured default.
+                Ignored when ``queue_parameters`` is provided.
+            initial_values: Optional {parameter_name: value} overrides for the
+                queue parameters. Ignored when ``queue_parameters`` is provided.
+            host_requirements: Optional host requirements forwarded to
+                get_job_template().
+            queue_parameters: Pre-fetched queue parameters. When provided, it is
+                used as-is and farm_id/queue_id/initial_values are not consulted.
         """
         if settings is None:
             settings = self.get_settings()
-        queue_parameters = get_queue_parameters()
+        if queue_parameters is None:
+            queue_parameters = get_queue_parameters(
+                farm_id=farm_id,
+                queue_id=queue_id,
+                initial_values=initial_values,
+            )
         return SubmissionContext(
             settings=settings,
-            job_template=self.get_job_template(settings),
+            job_template=self.get_job_template(settings, host_requirements),
             parameter_values=self.get_parameter_values(settings, queue_parameters),
             asset_references=self.get_asset_references(settings),
         )
@@ -124,7 +146,16 @@ def get_queue_parameters(
             default parameter values.
 
     Returns:
-        A list of parameter definition dicts with "name" and "value" keys.
+        A list of full queue-parameter *definition* dicts (each carrying the
+        ``JobParameter`` fields ``name``/``type``/``default``/``userInterface``/
+        ``allowedValues``/``minValue``/… as returned by
+        ``get_queue_parameter_definitions``), with each augmented with a
+        ``value`` key resolved from ``default`` and any ``initial_values``
+        override. These are DCC-submitter inputs (passed to
+        ``get_parameter_values``), NOT the reduced name/value
+        ``parameterValues`` that ``deadline:CreateJob`` accepts — do not pass
+        them straight to the service, and note the ``set_*``/``append_*``
+        helpers below mutate this definition list in place.
 
     Raises:
         DeadlineOperationError: If farm_id or queue_id are not configured.
