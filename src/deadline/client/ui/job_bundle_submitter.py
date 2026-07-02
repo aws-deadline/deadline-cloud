@@ -413,6 +413,12 @@ def show_job_bundle_submitter(
     initial_shared_parameter_values = {}
 
     job_parameters_dict = {param["name"]: param for param in (job_parameters or [])}
+    # Capture the CLI-provided parameter names up front. The pop loop below removes template
+    # parameters from job_parameters_dict as it applies them, so the dict alone can no longer
+    # tell us which parameters the CLI supplied when the hook merge runs. Use this set to keep
+    # CLI --parameter values winning over hook-supplied values for both template and shared
+    # parameters.
+    cli_provided_param_names = set(job_parameters_dict)
     for parameter in initial_settings.parameters:
         # Overwrite the parameter values from the job bundle with values provided by job_parameters,
         # e.g. from the CLI when this is called by the 'deadline bundle gui-submit' command.
@@ -443,7 +449,10 @@ def show_job_bundle_submitter(
         hook_params = pre_gui_output.get("parameters", {})
         template_param_names = {p["name"] for p in initial_settings.parameters}
         for param_name, param_value in hook_params.items():
-            if param_name in (job_parameters_dict or {}):
+            # CLI --parameter values take precedence over hook values. Check the up-front
+            # set rather than job_parameters_dict, whose template entries were already popped
+            # above — otherwise a hook could silently override a CLI-supplied template param.
+            if param_name in cli_provided_param_names:
                 continue
             if param_name in template_param_names:
                 # Job template parameter — update initial_settings.parameters in-place

@@ -779,10 +779,30 @@ def create_job_from_job_bundle(
             job_bundle_parameters = updated_bundle_parameters
             # Layer hook stdout parameters beneath the CLI-supplied job_parameters so the
             # CLI keeps the final say, then re-resolve with the same logic as the initial pass.
-            # NOTE: as job_parameters overrides these follow CLI --parameter semantics, so a
-            # relative PATH value here is resolved against the current working directory (not
-            # the bundle dir, as an on-disk parameter_values.yaml rewrite would be). Hooks
-            # should emit absolute paths for PATH parameters on stdout; see docs.
+            #
+            # A hook's stdout parameters are layered as job_parameters overrides, which follow
+            # CLI --parameter semantics: a relative PATH would be resolved against the current
+            # working directory. But a hook does not run from — and does not control — the
+            # submitting shell's cwd, so a relative PATH from a hook is ambiguous (unlike an
+            # on-disk parameter_values.yaml rewrite, which resolves against the bundle dir).
+            # Reject relative PATH values here and require hooks to emit absolute paths.
+            bundle_parameter_types = {
+                p.get("name"): p.get("type") for p in job_bundle_parameters if "name" in p
+            }
+            for name, value in hook_stdout_parameters.items():
+                if (
+                    bundle_parameter_types.get(name) == "PATH"
+                    and isinstance(value, str)
+                    and value != ""
+                    and not os.path.isabs(value)
+                ):
+                    raise DeadlineOperationError(
+                        f"Pre-submission hook emitted a relative PATH value for parameter "
+                        f"'{name}': '{value}'. Hooks must emit absolute paths for PATH "
+                        f"parameters on stdout, since a hook does not run from the submitting "
+                        f"working directory. Use an absolute path (e.g. join with "
+                        f"DEADLINE_JOB_BUNDLE_DIR) or rewrite parameter_values.yaml on disk."
+                    )
             hook_parameter_overrides = [
                 {"name": name, "value": value}
                 for name, value in hook_stdout_parameters.items()

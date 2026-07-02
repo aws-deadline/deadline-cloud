@@ -237,3 +237,79 @@ class TestPreGuiEnvironmentHooksLoaded:
             show_job_bundle_submitter(input_job_bundle_dir=bundle_dir)
 
         assert executed == []  # env preGUI hook did not run (env hooks disabled)
+
+
+class TestPreGuiHookCliPrecedence:
+    """CLI --parameter values take precedence over preGUI hook parameters, for both template
+    and shared parameters. Regression for a bug where template CLI params were popped out of
+    the working dict before the hook merge ran, letting a hook silently override them."""
+
+    def _run(self, bundle_dir, hook_manager, bundle_parameters, job_parameters):
+        def fake_get_setting(name, config=None):
+            return {
+                "settings.allow_bundle_hooks": "true",
+                "settings.auto_accept": "true",
+            }.get(name, "false")
+
+        template = {"name": "Bundle Job", "steps": []}
+        with (
+            patch(f"{MODULE}.validate_directory_symlink_containment"),
+            patch(
+                f"{MODULE}.read_yaml_or_json_object",
+                side_effect=lambda _dir, name, *a, **k: template if name == "template" else None,
+            ),
+            patch(f"{MODULE}.read_job_bundle_parameters", return_value=bundle_parameters),
+            patch(f"{MODULE}._HookManager", return_value=hook_manager),
+            patch(f"{MODULE}.SubmitJobToDeadlineDialog") as dialog_cls,
+            patch(f"{MODULE}.QApplication"),
+            patch(f"{MODULE}.QMessageBox"),
+            patch(f"{MODULE}._get_setting", side_effect=fake_get_setting),
+            patch(f"{MODULE}._config_file") as mock_config_file,
+        ):
+            mock_config_file.str2bool.side_effect = lambda v: str(v).lower() == "true"
+            show_job_bundle_submitter(
+                input_job_bundle_dir=bundle_dir, job_parameters=job_parameters
+            )
+        return dialog_cls
+
+    def test_cli_template_parameter_wins_over_hook(self, tmp_path):
+        """A CLI --parameter value for a *template* parameter is not overridden by a preGUI
+        hook emitting the same parameter name."""
+        bundle_dir = _make_bundle(tmp_path)
+        hook_manager = MagicMock()
+        hook_manager.hooks = _pre_gui_config()
+        hook_manager.load_hooks.return_value = hook_manager.hooks
+        hook_manager._original_bundle_dir = bundle_dir
+        hook_manager.execute_pre_gui_hooks.return_value = {"parameters": {"Foo": "hook_value"}}
+
+        dialog_cls = self._run(
+            bundle_dir,
+            hook_manager,
+            bundle_parameters=[{"name": "Foo", "type": "STRING", "default": "bundle_value"}],
+            job_parameters=[{"name": "Foo", "value": "cli_value"}],
+        )
+
+        initial_settings = dialog_cls.call_args.kwargs["initial_job_settings"]
+        foo = next(p for p in initial_settings.parameters if p["name"] == "Foo")
+        assert foo["value"] == "cli_value"
+
+    def test_hook_template_parameter_applied_when_no_cli_value(self, tmp_path):
+        """Without a CLI value, the preGUI hook's template parameter is applied (the guard
+        does not block hook values for parameters the CLI did not supply)."""
+        bundle_dir = _make_bundle(tmp_path)
+        hook_manager = MagicMock()
+        hook_manager.hooks = _pre_gui_config()
+        hook_manager.load_hooks.return_value = hook_manager.hooks
+        hook_manager._original_bundle_dir = bundle_dir
+        hook_manager.execute_pre_gui_hooks.return_value = {"parameters": {"Foo": "hook_value"}}
+
+        dialog_cls = self._run(
+            bundle_dir,
+            hook_manager,
+            bundle_parameters=[{"name": "Foo", "type": "STRING", "default": "bundle_value"}],
+            job_parameters=[],
+        )
+
+        initial_settings = dialog_cls.call_args.kwargs["initial_job_settings"]
+        foo = next(p for p in initial_settings.parameters if p["name"] == "Foo")
+        assert foo["value"] == "hook_value"

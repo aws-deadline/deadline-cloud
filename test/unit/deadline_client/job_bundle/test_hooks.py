@@ -1451,6 +1451,89 @@ class TestPreSubmissionHooks:
 
         assert "StepAddedByHook" in template_sent
 
+    def test_stdout_relative_path_parameter_is_rejected(self, fresh_deadline_config, tmp_path):
+        """A hook emitting a relative PATH value on stdout is rejected — a hook does not run
+        from the submitting working directory, so a relative PATH would be ambiguous. Hooks
+        must emit absolute paths (or rewrite parameter_values.yaml on disk)."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._configure()
+        template = (
+            "specificationVersion: 'jobtemplate-2023-09'\n"
+            "name: PathHookTest\n"
+            "parameterDefinitions:\n"
+            "- name: ScenePath\n"
+            "  type: PATH\n"
+            "  dataFlow: NONE\n"
+            "  default: placeholder.ma\n"
+            "steps:\n"
+            "- name: StepOriginal\n"
+            "  script:\n"
+            "    actions:\n"
+            "      onRun:\n"
+            "        command: echo\n"
+        )
+        with open(os.path.join(bundle, "template.yaml"), "w", encoding="utf8") as f:
+            f.write(template)
+        with open(os.path.join(bundle, "emit.py"), "w", encoding="utf8") as f:
+            f.write(
+                "import json\n"
+                "print(json.dumps({'parameters': {'ScenePath': 'relative/scene.ma'}}))\n"
+            )
+        with open(os.path.join(bundle, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write("version: '1.0'\npreSubmission:\n  - command: python3\n    args: [emit.py]\n")
+
+        with patch_calls_for_create_job_from_job_bundle():
+            with pytest.raises(DeadlineOperationError, match="relative PATH"):
+                api.create_job_from_job_bundle(
+                    job_bundle_dir=bundle, queue_parameter_definitions=[]
+                )
+
+    def test_stdout_absolute_path_parameter_is_respected(self, fresh_deadline_config, tmp_path):
+        """An absolute PATH value emitted on stdout is accepted and reaches CreateJob."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._configure()
+        abs_scene = os.path.abspath(os.path.join(str(tmp_path), "scene.ma"))
+        template = (
+            "specificationVersion: 'jobtemplate-2023-09'\n"
+            "name: PathHookTest\n"
+            "parameterDefinitions:\n"
+            "- name: ScenePath\n"
+            "  type: PATH\n"
+            "  dataFlow: NONE\n"
+            "  default: placeholder.ma\n"
+            "steps:\n"
+            "- name: StepOriginal\n"
+            "  script:\n"
+            "    actions:\n"
+            "      onRun:\n"
+            "        command: echo\n"
+        )
+        with open(os.path.join(bundle, "template.yaml"), "w", encoding="utf8") as f:
+            f.write(template)
+        with open(os.path.join(bundle, "emit.py"), "w", encoding="utf8") as f:
+            f.write(
+                "import json\n"
+                f"print(json.dumps({{'parameters': {{'ScenePath': {abs_scene!r}}}}}))\n"
+            )
+        with open(os.path.join(bundle, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write("version: '1.0'\npreSubmission:\n  - command: python3\n    args: [emit.py]\n")
+
+        with patch_calls_for_create_job_from_job_bundle() as mock:
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+            kwargs = mock.get_boto3_client().create_job.call_args.kwargs
+            params = kwargs.get("parameters")
+
+        scene_value = None
+        if isinstance(params, list):
+            for p in params:
+                if p.get("name") == "ScenePath":
+                    scene_value = p.get("value")
+        elif isinstance(params, dict) and "ScenePath" in params:
+            scene_value = next(iter(params["ScenePath"].values()))
+        assert scene_value == abs_scene
+
 
 class TestPreGuiHooks:
     """Tests for pre-GUI hooks."""
