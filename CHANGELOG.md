@@ -1,3 +1,12 @@
+## 0.59.2 (2026-07-03)
+
+### Features
+* Farms encrypted with a customer-managed KMS key (CMK) that reside in a different region than the monitor are now filtered out of the all-farms list, preventing interactions that would fail due to cross-region CMK limitations. (#1244)
+
+### Bug Fixes
+* Pre-submission hooks can now modify job parameters. Previously, parameters were frozen before hooks ran, so changes made by hooks (e.g., rewriting parameter_values.yaml or emitting a "parameters" payload on stdout) were silently ignored. Parameters are now re-resolved after hooks run. (#1242)
+* Pre-GUI environment hooks are now properly loaded during submission. (#1242)
+* Fixed cross-region API calls failing with SigV4 credential-scope mismatches when a non-standard endpoint override was configured in the AWS profile. The endpoint URL is now correctly regionalized for the target region. (#1233)
 ## 0.59.1 (2026-06-24)
 
 ### DEPRECATIONS
