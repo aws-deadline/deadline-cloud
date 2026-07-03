@@ -37,7 +37,7 @@ dependencies = [
   "boto3 >= 1.42.89",
   "click >= 8.1.7",
   "pyyaml >= 6.0",
-  "deadline-job-attachments == 0.1.1",
+  "deadline-job-attachments == 0.1.2",
   "typing_extensions >= 4.8",
   "psutil >= 7.0.0",
   "QtPy == 2.4.*",
