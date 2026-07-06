@@ -92,7 +92,10 @@ def queue_list(**args):
     "--mode",
     type=click.Choice(["USER", "READ"], case_sensitive=False),
     default="USER",
-    help="The type of queue role to assume (default: USER)",
+    help="Which queue role to assume: USER (default) assumes the queue's user "
+    "role, giving the operator-level access used to submit jobs and monitor job "
+    "status; READ assumes the queue's read-only role for viewing job status and "
+    "queue information without the ability to submit or modify jobs.",
 )
 @click.option(
     "--output-format",
