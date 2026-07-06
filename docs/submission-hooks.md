@@ -40,6 +40,10 @@ export DEADLINE_HOOKS_DIR=/studio/pipeline/hooks/maya
 
 Requires `settings.allow_environment_hooks` to be enabled. Both sources can be active simultaneously — environment hooks run first, then bundle hooks.
 
+> **Note:** In DCC submitters, environment hooks apply to the **pre-submission** and
+> **post-submission** phases only. The pre-GUI phase is not run by in-application
+> submitters — see [Pre-GUI Hooks](#pre-gui-hooks).
+
 ## Hook Types
 
 ### Pre-GUI Hooks
@@ -50,6 +54,13 @@ Run **before** the submission dialog opens. Use these to:
 - Query a project management system for task metadata
 
 Pre-GUI hooks **block the dialog from opening** if they fail (non-zero exit code or timeout).
+
+> **Supported only by `deadline bundle gui-submit`.** Pre-GUI hooks run on the standalone
+> GUI submitter. They do **not** run in in-application (DCC) submitters such as Maya,
+> Nuke, or Blender — those build their submission dialog directly and do not invoke the
+> pre-GUI phase. Pre-submission and post-submission hooks are unaffected and work across
+> all submission methods. (CLI `deadline bundle submit` has no GUI phase, so pre-GUI hooks
+> do not apply there either.)
 
 Output JSON to stdout to modify the initial dialog state:
 
@@ -268,6 +279,24 @@ You can also modify other submission parameters:
 print(json.dumps({"priority": 100}))
 ```
 
+Pre-submission hooks can also change job template parameter values, either by rewriting
+`parameter_values.yaml`/`.json` on disk or by emitting a `parameters` map on stdout:
+
+```python
+print(json.dumps({"parameters": {"SceneFile": "/resolved/scene.ma", "Quality": "high"}}))
+```
+
+Parameter keys are job template parameter names. Values from a hook are applied on top of
+the bundle's parameter values, but CLI-supplied `--parameter` values still take precedence
+over hook-supplied ones.
+
+> **`PATH` parameters emitted on stdout must be absolute.** A hook does not run from — and
+> does not control — the submitting shell's working directory, so a relative `PATH` value on
+> stdout would be ambiguous. Emitting a relative `PATH` value on stdout is **rejected** with
+> an error. Emit an absolute path (for example, join with `DEADLINE_JOB_BUNDLE_DIR`), or
+> write the value to `parameter_values.yaml`/`.json` on disk instead, where a relative `PATH`
+> is resolved against the **job bundle directory**.
+
 ### Post-Submission Hooks
 
 Output is logged but does not modify anything.
@@ -461,13 +490,16 @@ Submission is blocked until the issue is resolved.
 
 Failures are logged as warnings but don't affect the submitted job.
 
-## CLI vs GUI
+## Submission methods
 
-Hooks work with both submission methods:
-- `deadline bundle submit` (CLI)
-- `deadline bundle gui-submit` (GUI)
+Hooks work with these submission methods:
+- `deadline bundle submit` (CLI) — pre-submission and post-submission hooks.
+- `deadline bundle gui-submit` (standalone GUI) — all phases, including pre-GUI.
+- In-application (DCC) submitters — pre-submission and post-submission hooks. The pre-GUI
+  phase is not run by DCC submitters (see [Pre-GUI Hooks](#pre-gui-hooks)).
 
-The GUI copies `hooks.yaml` to the job history bundle and resolves script paths back to your original bundle directory.
+The standalone GUI copies `hooks.yaml` to the job history bundle and resolves script paths
+back to your original bundle directory.
 
 ## Best Practices
 

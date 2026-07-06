@@ -38,6 +38,13 @@ def _make_farm(farm_id, display_name="Farm"):
     return {"farmId": farm_id, "displayName": display_name, "description": ""}
 
 
+def _make_cmk_farm(farm_id, display_name="Farm", kms_key_arn="arn:aws:kms:::key/abc"):
+    """A farm encrypted with a customer-managed KMS key (has a ``kmsKeyArn``)."""
+    farm = _make_farm(farm_id, display_name)
+    farm["kmsKeyArn"] = kms_key_arn
+    return farm
+
+
 def _client_returning(farms):
     """Builds a mock deadline client whose list_farms returns a single (unpaginated) page."""
     client = MagicMock()
@@ -946,3 +953,249 @@ def test_iter_farms_by_region_high_concurrency_stress(fresh_deadline_config):
     assert max_concurrent_builds == 1
     # ...while the network calls genuinely ran in parallel across the worker pool.
     assert len(call_threads) > 1
+
+
+# ---------------------------------------------------------------------------
+# Cross-region customer-managed-key (CMK) filtering
+#
+# Farms encrypted with a customer-managed KMS key (kmsKeyArn) are not yet supported
+# across regions -- the backend can't serve their detail/follow-up calls from a region
+# other than the one the farm lives in. So the fan-out hides a CMK farm when it lives
+# outside the monitor's own region (the boto3 session/profile region). A farm in the
+# monitor's own region is ALWAYS kept, CMK or not; the only farms ever removed are
+# cross-region CMK farms. Filtering happens in _iter_farms_by_region -- the shared
+# chokepoint -- so the CLI (list_farms) and the GUI streaming path stay in lockstep.
+# ---------------------------------------------------------------------------
+
+
+def _patch_monitor_creds(is_monitor=True):
+    """
+    Patches get_credentials_source so the fan-out believes it is (or isn't) running with
+    Deadline Cloud Monitor credentials. The CMK filter only applies to monitor creds.
+    """
+    from deadline.client.api._session import AwsCredentialsSource
+
+    source = (
+        AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
+        if is_monitor
+        else AwsCredentialsSource.HOST_PROVIDED
+    )
+    return patch.object(_list_apis, "get_credentials_source", return_value=source)
+
+
+class TestIsFarmVisibleAcrossRegions:
+    """Unit tests for the predicate itself, with emphasis on current-region safety."""
+
+    MONITOR_REGION = "us-west-2"
+    OTHER_REGION = "eu-west-1"
+
+    def test_keeps_current_region_farm_without_cmk(self):
+        farm = {"region": self.MONITOR_REGION}
+        assert _list_apis._is_farm_visible_across_regions(farm, self.MONITOR_REGION) is True
+
+    def test_keeps_current_region_farm_with_cmk(self):
+        # A CMK farm in the monitor's own region is fully supported; the CMK must not
+        # cause it to be filtered out.
+        farm = {"region": self.MONITOR_REGION, "kmsKeyArn": "arn:aws:kms:us-west-2:1234:key/x"}
+        assert _list_apis._is_farm_visible_across_regions(farm, self.MONITOR_REGION) is True
+
+    def test_keeps_cross_region_farm_without_cmk(self):
+        farm = {"region": self.OTHER_REGION}
+        assert _list_apis._is_farm_visible_across_regions(farm, self.MONITOR_REGION) is True
+
+    def test_hides_cross_region_farm_with_cmk(self):
+        # The only case the filter removes.
+        farm = {"region": self.OTHER_REGION, "kmsKeyArn": "arn:aws:kms:eu-west-1:1234:key/x"}
+        assert _list_apis._is_farm_visible_across_regions(farm, self.MONITOR_REGION) is False
+
+    def test_keeps_cross_region_farm_with_empty_kms_arn(self):
+        # An empty arn is not a real customer-managed key, so the farm stays.
+        farm = {"region": self.OTHER_REGION, "kmsKeyArn": ""}
+        assert _list_apis._is_farm_visible_across_regions(farm, self.MONITOR_REGION) is True
+
+    def test_keeps_farm_with_missing_kms_arn_key(self):
+        # kmsKeyArn absent entirely (service-managed key) -> kept anywhere.
+        farm = {"region": self.OTHER_REGION}
+        assert _list_apis._is_farm_visible_across_regions(farm, self.MONITOR_REGION) is True
+
+    def test_none_monitor_region_treated_as_its_own_region(self):
+        # The endpoint-override path tags farms with region=None; a None monitor region
+        # must match so those farms are never spuriously hidden.
+        farm = {"region": None, "kmsKeyArn": "arn:aws:kms:::key/x"}
+        assert _list_apis._is_farm_visible_across_regions(farm, None) is True
+
+
+def test_list_farms_hides_cross_region_cmk_farm_keeps_current_region(fresh_deadline_config):
+    """
+    The same CMK farm surfaced by every region survives only in the monitor's own region;
+    its cross-region copies are hidden. Proves the current region is never affected.
+    """
+    regions = ["us-west-2", "us-east-1", "eu-west-1"]
+    monitor_region = "us-west-2"
+    # Every region reports the identical CMK farm (tagged with that region downstream).
+    clients = {r: _client_returning([_make_cmk_farm("farm-cmk")]) for r in regions}
+
+    def fake_get_client(service_name, config=None, region=None):
+        return clients[region]
+
+    mock_session = MagicMock()
+    mock_session.region_name = monitor_region
+
+    with (
+        patch.object(_list_apis, "get_boto3_client", side_effect=fake_get_client),
+        patch.object(_list_apis, "get_boto3_session", return_value=mock_session),
+        _patch_monitor_creds(),
+        patch.object(_list_apis.config_file, "get_deadline_regions", return_value=regions),
+        patch.object(_list_apis, "_apply_principal_id_filter"),
+    ):
+        result = api.list_farms()
+
+    farms = result["farms"]
+    # Kept exactly once -- for the monitor's own region only.
+    assert [f["region"] for f in farms] == [monitor_region]
+    assert farms[0]["farmId"] == "farm-cmk"
+
+
+def test_list_farms_keeps_non_cmk_farm_in_every_region(fresh_deadline_config):
+    """A farm without a customer-managed key is surfaced from every region (nothing hidden)."""
+    regions = ["us-west-2", "us-east-1", "eu-west-1"]
+    clients = {r: _client_returning([_make_farm(f"farm-{r}")]) for r in regions}
+
+    def fake_get_client(service_name, config=None, region=None):
+        return clients[region]
+
+    mock_session = MagicMock()
+    mock_session.region_name = "us-west-2"
+
+    with (
+        patch.object(_list_apis, "get_boto3_client", side_effect=fake_get_client),
+        patch.object(_list_apis, "get_boto3_session", return_value=mock_session),
+        _patch_monitor_creds(),
+        patch.object(_list_apis.config_file, "get_deadline_regions", return_value=regions),
+        patch.object(_list_apis, "_apply_principal_id_filter"),
+    ):
+        result = api.list_farms()
+
+    assert {f["region"] for f in result["farms"]} == set(regions)
+
+
+def test_list_farms_mixed_cmk_and_non_cmk_in_cross_region(fresh_deadline_config):
+    """
+    In a non-monitor region, a CMK farm is hidden while a sibling non-CMK farm from the
+    same region is kept -- filtering is per-farm, not per-region.
+    """
+    regions = ["us-west-2", "eu-west-1"]
+    monitor_region = "us-west-2"
+    clients = {
+        "us-west-2": _client_returning([_make_farm("farm-home")]),
+        "eu-west-1": _client_returning([_make_cmk_farm("farm-eu-cmk"), _make_farm("farm-eu-open")]),
+    }
+
+    def fake_get_client(service_name, config=None, region=None):
+        return clients[region]
+
+    mock_session = MagicMock()
+    mock_session.region_name = monitor_region
+
+    with (
+        patch.object(_list_apis, "get_boto3_client", side_effect=fake_get_client),
+        patch.object(_list_apis, "get_boto3_session", return_value=mock_session),
+        _patch_monitor_creds(),
+        patch.object(_list_apis.config_file, "get_deadline_regions", return_value=regions),
+        patch.object(_list_apis, "_apply_principal_id_filter"),
+    ):
+        result = api.list_farms()
+
+    by_id = {f["farmId"] for f in result["farms"]}
+    assert by_id == {"farm-home", "farm-eu-open"}
+    assert "farm-eu-cmk" not in by_id
+
+
+def test_iter_farms_by_region_hides_cross_region_cmk_farm(fresh_deadline_config):
+    """
+    The shared generator (used directly by the GUI) applies the same CMK filter: the
+    cross-region CMK copy is dropped, the monitor-region copy is yielded.
+    """
+    regions = ["us-west-2", "eu-west-1"]
+    monitor_region = "us-west-2"
+    clients = {r: _client_returning([_make_cmk_farm("farm-cmk")]) for r in regions}
+
+    def fake_get_client(service_name, config=None, region=None):
+        return clients[region]
+
+    mock_session = MagicMock()
+    mock_session.region_name = monitor_region
+
+    with (
+        patch.object(_list_apis, "get_boto3_client", side_effect=fake_get_client),
+        patch.object(_list_apis, "get_boto3_session", return_value=mock_session),
+        _patch_monitor_creds(),
+        patch.object(_list_apis, "_apply_principal_id_filter"),
+    ):
+        results = list(_list_apis._iter_farms_by_region(regions=regions))
+
+    by_region = {region: farms for region, farms, exc in results}
+    # Monitor region keeps its CMK farm; the other region's copy is filtered to empty.
+    west_farms = by_region["us-west-2"]
+    assert west_farms is not None
+    assert [f["farmId"] for f in west_farms] == ["farm-cmk"]
+    assert by_region["eu-west-1"] == []
+
+
+def test_list_farms_does_not_filter_cmk_farms_for_non_monitor_creds(fresh_deadline_config):
+    """
+    The CMK filter is gated on Deadline Cloud Monitor credentials. With host-provided
+    (BYO) credentials, a cross-region CMK farm must NOT be hidden -- those callers are
+    responsible for their own region scoping and we must never silently drop their farms.
+    """
+    regions = ["us-west-2", "eu-west-1"]
+    # A CMK farm lives in a region other than the session region; under monitor creds this
+    # would be hidden, but here the creds are host-provided so it must survive.
+    clients = {r: _client_returning([_make_cmk_farm(f"farm-{r}")]) for r in regions}
+
+    def fake_get_client(service_name, config=None, region=None):
+        return clients[region]
+
+    mock_session = MagicMock()
+    mock_session.region_name = "us-west-2"
+
+    with (
+        patch.object(_list_apis, "get_boto3_client", side_effect=fake_get_client),
+        patch.object(_list_apis, "get_boto3_session", return_value=mock_session),
+        _patch_monitor_creds(is_monitor=False),
+        patch.object(_list_apis.config_file, "get_deadline_regions", return_value=regions),
+        patch.object(_list_apis, "_apply_principal_id_filter"),
+    ):
+        result = api.list_farms()
+
+    # Nothing filtered: every region's CMK farm is present.
+    assert {f["region"] for f in result["farms"]} == set(regions)
+
+
+def test_list_farms_monitor_creds_no_session_region_fails_open(fresh_deadline_config):
+    """
+    Fail-open guard: under monitor credentials but with no resolved session region, we
+    can't tell which farms are cross-region, so NOTHING is filtered. Without this, a
+    None monitor region would match no concrete region tag and hide EVERY CMK farm --
+    including the user's home region.
+    """
+    regions = ["us-west-2", "eu-west-1"]
+    clients = {r: _client_returning([_make_cmk_farm(f"farm-{r}")]) for r in regions}
+
+    def fake_get_client(service_name, config=None, region=None):
+        return clients[region]
+
+    mock_session = MagicMock()
+    mock_session.region_name = None  # no resolved default region
+
+    with (
+        patch.object(_list_apis, "get_boto3_client", side_effect=fake_get_client),
+        patch.object(_list_apis, "get_boto3_session", return_value=mock_session),
+        _patch_monitor_creds(),  # monitor creds, but region is unknown
+        patch.object(_list_apis.config_file, "get_deadline_regions", return_value=regions),
+        patch.object(_list_apis, "_apply_principal_id_filter"),
+    ):
+        result = api.list_farms()
+
+    # Every CMK farm survives despite being "cross-region" -- we failed open.
+    assert {f["region"] for f in result["farms"]} == set(regions)

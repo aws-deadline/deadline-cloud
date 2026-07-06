@@ -641,21 +641,30 @@ def create_job_from_job_bundle(
         queue_parameter_definitions = api.get_queue_parameter_definitions(
             farmId=farm_id, queueId=queue_id
         )
+    # Bind to a non-Optional local so the nested helper's closure keeps the narrowed type.
+    resolved_queue_parameter_definitions = queue_parameter_definitions
 
-    parameters = merge_queue_job_parameters(
-        queue_id=queue_id,
-        job_parameters=job_bundle_parameters,
-        queue_parameters=queue_parameter_definitions,
-    )
+    def _resolve_parameters(bundle_parameters, target_asset_references, extra_overrides=None):
+        """Merge queue + bundle parameters, apply CLI (and any hook) overrides, and format
+        for CreateJob. ``extra_overrides`` are applied beneath the CLI ``job_parameters``.
+        Mutates ``target_asset_references`` with any PATH parameters, matching prior
+        behavior. Callers that re-resolve pass a freshly-derived AssetReferences so stale
+        PATH values from an earlier pass are not carried over."""
+        resolved = merge_queue_job_parameters(
+            queue_id=queue_id,
+            job_parameters=bundle_parameters,
+            queue_parameters=resolved_queue_parameter_definitions,
+        )
+        apply_job_parameters(
+            (extra_overrides or []) + job_parameters,
+            job_bundle_dir,
+            resolved,
+            target_asset_references,
+        )
+        return resolved, split_parameter_args(resolved, job_bundle_dir)
 
-    apply_job_parameters(
-        job_parameters,
-        job_bundle_dir,
-        parameters,
-        asset_references,
-    )
-    app_parameters_formatted, job_parameters_formatted = split_parameter_args(
-        parameters, job_bundle_dir
+    parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
+        job_bundle_parameters, asset_references
     )
 
     # Extend known_asset_paths with all paths that are treated as known. These are
@@ -690,16 +699,29 @@ def create_job_from_job_bundle(
     # Use the parameter names from job_parameters, but the values from parameters. If a value was provided
     # in job_parameters, it has been applied into parameters and normalized as necessary.
     known_parameter_names = {job_param.get("name") for job_param in job_parameters}
-    for job_param in parameters:
-        if job_param.get("type") == "PATH" and job_param.get("name") in known_parameter_names:
-            job_param_value = job_param.get("value")
-            if job_param_value:
-                if job_param.get("objectType") == "FILE":
-                    # If the job parameter is a file, use its directory as the known path. When collecting
-                    # outputs for upload, only that directory is used, not the file path.
-                    known_asset_paths.append(os.path.dirname(job_param_value))
-                else:
-                    known_asset_paths.append(job_param_value)
+
+    def _path_parameter_known_paths(resolved_parameters):
+        """Return the known-asset-path contributions from PATH parameters in
+        ``resolved_parameters`` (values that were explicitly provided in job_parameters)."""
+        contributed: list[str] = []
+        for job_param in resolved_parameters:
+            if job_param.get("type") == "PATH" and job_param.get("name") in known_parameter_names:
+                job_param_value = job_param.get("value")
+                if job_param_value:
+                    if job_param.get("objectType") == "FILE":
+                        # If the job parameter is a file, use its directory as the known
+                        # path. When collecting outputs for upload, only that directory is
+                        # used, not the file path.
+                        contributed.append(os.path.dirname(job_param_value))
+                    else:
+                        contributed.append(job_param_value)
+        return contributed
+
+    # Base known paths (call args, bundle, storage profile, config) without PATH-parameter
+    # contributions — those are folded in per parameter resolution so they can be recomputed
+    # if a pre-submission hook changes a PATH parameter.
+    base_known_asset_paths = list(known_asset_paths)
+    known_asset_paths.extend(_path_parameter_known_paths(parameters))
 
     # Filter known_asset_paths to remove any paths that have another one as a prefix. This can
     # reduce the amount of processing needed later, and produces a shorter warning message when presenting
@@ -740,6 +762,71 @@ def create_job_from_job_bundle(
         if "priority" in hook_result:
             priority = hook_result["priority"]
             create_job_args["priority"] = priority
+
+        # Apply parameter modifications from hooks. A hook may change parameter values
+        # two ways, both of which are honored here:
+        #   1. Rewriting parameter_values.yaml/.json on disk (re-read below).
+        #   2. Emitting a "parameters" map on stdout (applied on top of the disk values).
+        # CLI-supplied job_parameters still take precedence, matching pre-GUI behavior.
+        #
+        # The bundle parameters read earlier (before the hook block) reflect the state of
+        # parameter_values.yaml *before* the hook ran, so they cannot capture an on-disk
+        # rewrite. Re-read here — after the hook has executed — to pick up any change, then
+        # re-resolve. This is only extra work when a hook actually modified parameters.
+        hook_stdout_parameters = hook_result.get("parameters") or {}
+        updated_bundle_parameters = read_job_bundle_parameters(job_bundle_dir)
+        if updated_bundle_parameters != job_bundle_parameters or hook_stdout_parameters:
+            job_bundle_parameters = updated_bundle_parameters
+            # Layer hook stdout parameters beneath the CLI-supplied job_parameters so the
+            # CLI keeps the final say, then re-resolve with the same logic as the initial pass.
+            #
+            # A hook's stdout parameters are layered as job_parameters overrides, which follow
+            # CLI --parameter semantics: a relative PATH would be resolved against the current
+            # working directory. But a hook does not run from — and does not control — the
+            # submitting shell's cwd, so a relative PATH from a hook is ambiguous (unlike an
+            # on-disk parameter_values.yaml rewrite, which resolves against the bundle dir).
+            # Reject relative PATH values here and require hooks to emit absolute paths.
+            bundle_parameter_types = {
+                p.get("name"): p.get("type") for p in job_bundle_parameters if "name" in p
+            }
+            for name, value in hook_stdout_parameters.items():
+                if (
+                    bundle_parameter_types.get(name) == "PATH"
+                    and isinstance(value, str)
+                    and value != ""
+                    and not os.path.isabs(value)
+                ):
+                    raise DeadlineOperationError(
+                        f"Pre-submission hook emitted a relative PATH value for parameter "
+                        f"'{name}': '{value}'. Hooks must emit absolute paths for PATH "
+                        f"parameters on stdout, since a hook does not run from the submitting "
+                        f"working directory. Use an absolute path (e.g. join with "
+                        f"DEADLINE_JOB_BUNDLE_DIR) or rewrite parameter_values.yaml on disk."
+                    )
+            hook_parameter_overrides = [
+                {"name": name, "value": value}
+                for name, value in hook_stdout_parameters.items()
+                if name not in {p.get("name") for p in job_parameters}
+            ]
+            # Re-derive asset_references from the original bundle refs so PATH values from
+            # the first pass are not retained. Otherwise a hook that *changes* a PATH
+            # parameter would leave both the stale and the new path in asset_references and
+            # upload both. The initial-pass object is replaced here; hook-supplied
+            # attachments (merged below) are applied to this fresh object.
+            asset_references = AssetReferences.from_dict(asset_references_obj)
+            parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
+                job_bundle_parameters, asset_references, hook_parameter_overrides
+            )
+            # Recompute known_asset_paths from the re-resolved parameters so a hook that
+            # redirected a PATH parameter keeps its new location recognized as known (rather
+            # than triggering the unknown-path warning / cancellation). Hook-supplied
+            # parameter names count as known here, alongside the original job_parameters.
+            known_parameter_names = known_parameter_names | {
+                o["name"] for o in hook_parameter_overrides
+            }
+            known_asset_paths = _filter_redundant_known_paths(
+                base_known_asset_paths + _path_parameter_known_paths(parameters)
+            )
 
         # Merge any asset references from hooks into asset_references
         if "attachments" in hook_result and "assetReferences" in hook_result["attachments"]:

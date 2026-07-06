@@ -12,6 +12,7 @@ import yaml
 
 from typing import List
 
+from deadline.client import api, config
 from deadline.client.exceptions import DeadlineOperationError
 from deadline.client.job_bundle._hooks import (
     HookConfiguration,
@@ -19,6 +20,7 @@ from deadline.client.job_bundle._hooks import (
     HookManager,
     HookMetadata,
     HookResult,
+    collect_pre_gui_hook_sources,
 )
 from deadline.client.job_bundle._hooks._merger import merge_asset_references, merge_payload
 from deadline.client.job_bundle._hooks._validator import (
@@ -26,6 +28,8 @@ from deadline.client.job_bundle._hooks._validator import (
     validate_configuration,
     validate_modified_payload,
 )
+
+from ..testing_utilities import patch_calls_for_create_job_from_job_bundle
 
 
 class TestHookDefinition:
@@ -277,6 +281,15 @@ class TestValidateModifiedPayload:
                 {"attachments": {"assetReferences": {"inputFilenames": "not list"}}}, "test_hook"
             )
 
+    def test_valid_parameters_object(self):
+        """A 'parameters' object is accepted."""
+        validate_modified_payload({"parameters": {"Foo": "bar"}}, "test_hook")
+
+    def test_invalid_parameters_not_dict(self):
+        """A 'parameters' value that is not an object is rejected with a clear error."""
+        with pytest.raises(DeadlineOperationError, match="'parameters' must be an object"):
+            validate_modified_payload({"parameters": "not a dict"}, "test_hook")
+
 
 class TestMergeAssetReferences:
     """Tests for asset reference merging."""
@@ -357,6 +370,20 @@ class TestMergePayload:
         result = merge_payload(original, modified)
         assert result["attachments"]["assetReferences"]["inputFilenames"] == ["/b.txt"]
         assert result["attachments"]["fileSystem"] == "COPIED"
+
+    def test_merge_parameters_per_key(self):
+        """Parameters merge per-key across sequential merges (multiple pre-submission
+        hooks) so a later hook does not discard parameters set by an earlier one."""
+        # Simulates hook #1 then hook #2 each emitting a parameters map.
+        after_hook_1 = merge_payload({}, {"parameters": {"A": "1"}})
+        after_hook_2 = merge_payload(after_hook_1, {"parameters": {"B": "2"}})
+        assert after_hook_2["parameters"] == {"A": "1", "B": "2"}
+
+    def test_merge_parameters_later_overrides_same_key(self):
+        """On a key conflict, the later hook wins."""
+        after_hook_1 = merge_payload({}, {"parameters": {"A": "1"}})
+        after_hook_2 = merge_payload(after_hook_1, {"parameters": {"A": "2"}})
+        assert after_hook_2["parameters"] == {"A": "2"}
 
 
 class TestHookManager:
@@ -1112,6 +1139,40 @@ class TestExecuteBeforeGUIHooks:
             assert result["name"] == "Prefilled Job"
             assert result["parameters"] == {"deadline:priority": 80, "Foo": "bar"}
 
+    def test_metadata_job_bundle_dir_is_respected(self):
+        """execute_pre_gui_hooks must NOT override metadata.job_bundle_dir with the
+        manager's own directory. The hook should receive the job_bundle_dir the caller set
+        (the real bundle), even when the hooks live in a different directory (e.g. an
+        environment DEADLINE_HOOKS_DIR). Relative script paths still resolve against the
+        manager's directory."""
+        with (
+            tempfile.TemporaryDirectory() as hooks_dir,
+            tempfile.TemporaryDirectory() as bundle_dir,
+        ):
+            hooks_file = os.path.join(hooks_dir, "hooks.yaml")
+            # The hook echoes the DEADLINE_JOB_BUNDLE_DIR it was given as the job name.
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preGUI": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import os, json; print(json.dumps("
+                                    + "{'name': os.environ['DEADLINE_JOB_BUNDLE_DIR']}))",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+            manager = HookManager(hooks_dir, lambda x: None)
+            manager.load_hooks()
+            # Caller sets job_bundle_dir to the real bundle, distinct from hooks_dir.
+            result = manager.execute_pre_gui_hooks(self._make_metadata(bundle_dir))
+            assert result["name"] == bundle_dir  # not hooks_dir
+
     def test_later_hook_overrides_scalar(self):
         """Later hooks override earlier hooks for scalar fields like name."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1261,3 +1322,332 @@ class TestExecuteBeforeGUIHooks:
         message = _generate_hooks_confirmation_message(hooks, "/bundle")
         assert "Pre-GUI hooks:" in message
         assert "python prefill.py" in message
+
+
+_PARAM_MOCK_FARM_ID = "farm-0123456789abcdef0123456789abcdef"
+_PARAM_MOCK_QUEUE_ID = "queue-0123456789abcdef0123456789abcdef"
+
+_PARAM_TEMPLATE = """specificationVersion: 'jobtemplate-2023-09'
+name: ParamHookTest
+parameterDefinitions:
+- name: Foo
+  type: STRING
+  default: original_value
+steps:
+- name: StepOriginal
+  script:
+    actions:
+      onRun:
+        command: echo
+"""
+
+
+def _write_param_bundle(bundle_dir):
+    with open(os.path.join(bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
+        f.write(_PARAM_TEMPLATE)
+    with open(os.path.join(bundle_dir, "parameter_values.yaml"), "w", encoding="utf8") as f:
+        f.write("parameterValues:\n- name: Foo\n  value: original_value\n")
+
+
+def _foo_value_sent_to_create_job(mock):
+    kwargs = mock.get_boto3_client().create_job.call_args.kwargs
+    params = kwargs.get("parameters")
+    if isinstance(params, list):
+        for p in params:
+            if p.get("name") == "Foo":
+                return p.get("value")
+    elif isinstance(params, dict) and "Foo" in params:
+        return next(iter(params["Foo"].values()))
+    return None
+
+
+class TestPreSubmissionHooks:
+    """Tests for pre-submission hooks.
+
+    A pre-submission hook changing a parameter value should reach CreateJob via both
+    channels: rewriting parameter_values.yaml on disk, and emitting a ``parameters`` map on
+    stdout. A template edit on disk is also honored (template test).
+    """
+
+    def _configure(self):
+        config.set_setting("defaults.farm_id", _PARAM_MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", _PARAM_MOCK_QUEUE_ID)
+        config.set_setting("settings.allow_bundle_hooks", "true")
+        config.set_setting("settings.auto_accept", "true")
+
+    def test_ondisk_param_change_is_respected(self, fresh_deadline_config, tmp_path):
+        """A hook that rewrites parameter_values.yaml on disk should change the value
+        sent to CreateJob."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._configure()
+        _write_param_bundle(bundle)
+        with open(os.path.join(bundle, "rewrite.py"), "w", encoding="utf8") as f:
+            f.write(
+                "import os\n"
+                "b = os.environ['DEADLINE_JOB_BUNDLE_DIR']\n"
+                "open(os.path.join(b, 'parameter_values.yaml'), 'w').write("
+                "'parameterValues:\\n- name: Foo\\n  value: CHANGED_ON_DISK\\n')\n"
+            )
+        with open(os.path.join(bundle, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write(
+                "version: '1.0'\npreSubmission:\n  - command: python3\n    args: [rewrite.py]\n"
+            )
+
+        with patch_calls_for_create_job_from_job_bundle() as mock:
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+            foo = _foo_value_sent_to_create_job(mock)
+
+        assert foo == "CHANGED_ON_DISK"
+
+    def test_stdout_parameters_are_respected(self, fresh_deadline_config, tmp_path):
+        """A hook emitting {"parameters": {"Foo": "..."}} on stdout should change the value
+        sent to CreateJob."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._configure()
+        _write_param_bundle(bundle)
+        with open(os.path.join(bundle, "emit.py"), "w", encoding="utf8") as f:
+            f.write(
+                "import json\nprint(json.dumps({'parameters': {'Foo': 'CHANGED_VIA_STDOUT'}}))\n"
+            )
+        with open(os.path.join(bundle, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write("version: '1.0'\npreSubmission:\n  - command: python3\n    args: [emit.py]\n")
+
+        with patch_calls_for_create_job_from_job_bundle() as mock:
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+            foo = _foo_value_sent_to_create_job(mock)
+
+        assert foo == "CHANGED_VIA_STDOUT"
+
+    def test_ondisk_template_change_is_respected(self, fresh_deadline_config, tmp_path):
+        """An on-disk TEMPLATE edit IS honored (template re-read from disk after hooks).
+        Confirms the template-vs-parameter difference and that the hook ran."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._configure()
+        _write_param_bundle(bundle)
+        new_template = _PARAM_TEMPLATE + (
+            "- name: StepAddedByHook\n"
+            "  script:\n"
+            "    actions:\n"
+            "      onRun:\n"
+            "        command: echo\n"
+        )
+        with open(os.path.join(bundle, "addstep.py"), "w", encoding="utf8") as f:
+            f.write(
+                "import os\n"
+                "b = os.environ['DEADLINE_JOB_BUNDLE_DIR']\n"
+                f"open(os.path.join(b, 'template.yaml'), 'w').write({new_template!r})\n"
+            )
+        with open(os.path.join(bundle, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write(
+                "version: '1.0'\npreSubmission:\n  - command: python3\n    args: [addstep.py]\n"
+            )
+
+        with patch_calls_for_create_job_from_job_bundle() as mock:
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+            template_sent = mock.get_boto3_client().create_job.call_args.kwargs.get("template", "")
+
+        assert "StepAddedByHook" in template_sent
+
+    def test_stdout_relative_path_parameter_is_rejected(self, fresh_deadline_config, tmp_path):
+        """A hook emitting a relative PATH value on stdout is rejected — a hook does not run
+        from the submitting working directory, so a relative PATH would be ambiguous. Hooks
+        must emit absolute paths (or rewrite parameter_values.yaml on disk)."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._configure()
+        template = (
+            "specificationVersion: 'jobtemplate-2023-09'\n"
+            "name: PathHookTest\n"
+            "parameterDefinitions:\n"
+            "- name: ScenePath\n"
+            "  type: PATH\n"
+            "  dataFlow: NONE\n"
+            "  default: placeholder.ma\n"
+            "steps:\n"
+            "- name: StepOriginal\n"
+            "  script:\n"
+            "    actions:\n"
+            "      onRun:\n"
+            "        command: echo\n"
+        )
+        with open(os.path.join(bundle, "template.yaml"), "w", encoding="utf8") as f:
+            f.write(template)
+        with open(os.path.join(bundle, "emit.py"), "w", encoding="utf8") as f:
+            f.write(
+                "import json\n"
+                "print(json.dumps({'parameters': {'ScenePath': 'relative/scene.ma'}}))\n"
+            )
+        with open(os.path.join(bundle, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write("version: '1.0'\npreSubmission:\n  - command: python3\n    args: [emit.py]\n")
+
+        with patch_calls_for_create_job_from_job_bundle():
+            with pytest.raises(DeadlineOperationError, match="relative PATH"):
+                api.create_job_from_job_bundle(
+                    job_bundle_dir=bundle, queue_parameter_definitions=[]
+                )
+
+    def test_stdout_absolute_path_parameter_is_respected(self, fresh_deadline_config, tmp_path):
+        """An absolute PATH value emitted on stdout is accepted and reaches CreateJob."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._configure()
+        abs_scene = os.path.abspath(os.path.join(str(tmp_path), "scene.ma"))
+        template = (
+            "specificationVersion: 'jobtemplate-2023-09'\n"
+            "name: PathHookTest\n"
+            "parameterDefinitions:\n"
+            "- name: ScenePath\n"
+            "  type: PATH\n"
+            "  dataFlow: NONE\n"
+            "  default: placeholder.ma\n"
+            "steps:\n"
+            "- name: StepOriginal\n"
+            "  script:\n"
+            "    actions:\n"
+            "      onRun:\n"
+            "        command: echo\n"
+        )
+        with open(os.path.join(bundle, "template.yaml"), "w", encoding="utf8") as f:
+            f.write(template)
+        with open(os.path.join(bundle, "emit.py"), "w", encoding="utf8") as f:
+            f.write(
+                "import json\n"
+                f"print(json.dumps({{'parameters': {{'ScenePath': {abs_scene!r}}}}}))\n"
+            )
+        with open(os.path.join(bundle, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write("version: '1.0'\npreSubmission:\n  - command: python3\n    args: [emit.py]\n")
+
+        with patch_calls_for_create_job_from_job_bundle() as mock:
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+            kwargs = mock.get_boto3_client().create_job.call_args.kwargs
+            params = kwargs.get("parameters")
+
+        scene_value = None
+        if isinstance(params, list):
+            for p in params:
+                if p.get("name") == "ScenePath":
+                    scene_value = p.get("value")
+        elif isinstance(params, dict) and "ScenePath" in params:
+            scene_value = next(iter(params["ScenePath"].values()))
+        assert scene_value == abs_scene
+
+
+class TestPreGuiHooks:
+    """Tests for pre-GUI hooks."""
+
+    @staticmethod
+    def _write_pre_gui_hooks(directory):
+        """Write a hooks.yaml with a single preGUI hook into ``directory``."""
+        with open(os.path.join(directory, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write("version: '1.0'\npreGUI:\n  - command: python3\n    args: [x.py]\n")
+
+    def test_env_dir_pregui_hooks_are_collected(self, tmp_path):
+        """A DEADLINE_HOOKS_DIR with preGUI hooks (and no bundle hooks) is collected as a
+        source when environment hooks are allowed. This is the #2 fix — the loader must
+        consult DEADLINE_HOOKS_DIR, not just the bundle dir."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._write_pre_gui_hooks(studio)  # bundle has no hooks.yaml
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [studio]
+
+    def test_env_dir_ignored_when_env_hooks_disabled(self, tmp_path):
+        """With environment hooks disabled, a DEADLINE_HOOKS_DIR preGUI hook is not run."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._write_pre_gui_hooks(studio)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=False,
+            print_callback=lambda _msg: None,
+        )
+
+        assert sources == []
+
+    def test_env_and_bundle_ordering(self, tmp_path):
+        """When both sources have preGUI hooks and are enabled, environment hooks come
+        first, then bundle hooks."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._write_pre_gui_hooks(bundle)
+        self._write_pre_gui_hooks(studio)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [studio, bundle]
+
+    def test_bundle_hooks_ignored_when_bundle_hooks_disabled(self, tmp_path):
+        """With bundle hooks disabled, a bundle preGUI hook is not run."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_pre_gui_hooks(bundle)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=None,
+            allow_bundle_hooks=False,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert sources == []
+
+    def test_env_dir_equal_to_bundle_dir_is_not_duplicated(self, tmp_path):
+        """If DEADLINE_HOOKS_DIR points at the job bundle, the shared hooks.yaml yields a
+        single source (not two) so preGUI hooks do not run twice."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_pre_gui_hooks(bundle)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=bundle,  # same directory
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [bundle]
+
+    def test_env_dir_equal_to_bundle_dir_runs_when_only_env_hooks_enabled(self, tmp_path):
+        """When env dir == bundle dir, enabling only environment hooks still permits the
+        shared source to run (the single source is gated by either grant)."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_pre_gui_hooks(bundle)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=bundle,
+            allow_bundle_hooks=False,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [bundle]

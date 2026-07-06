@@ -150,6 +150,12 @@ def get_session_client(session: boto3.Session, service_name: str, region: Option
     avoid repeating initialization where possible. The ``region`` argument is part
     of the cache key so clients for different regions are never reused for each other.
 
+    When a profile has a non-standard endpoint override (e.g. via the ``[services ...]``
+    section or ``AWS_ENDPOINT_URL*`` env vars), boto3 applies it regardless of the
+    ``region_name`` passed to ``.client()``. This causes SigV4 credential-scope mismatches
+    for cross-region calls. We detect this by inspecting the resolved endpoint and
+    re-creating the client with the regionalized URL if needed.
+
     Args:
         session: The boto3 Session to use for creating the client
         service_name: The name of the AWS service (e.g., 'deadline', 's3')
@@ -161,7 +167,19 @@ def get_session_client(session: boto3.Session, service_name: str, region: Option
     """
     if region is None:
         return session.client(service_name, config=get_default_client_config())
-    return session.client(service_name, config=get_default_client_config(), region_name=region)
+
+    client = session.client(service_name, config=get_default_client_config(), region_name=region)
+    resolved = client.meta.endpoint_url
+    session_region = session.region_name
+    # An override leaked the session's region into a cross-region endpoint.
+    if region not in resolved and session_region and session_region in resolved:
+        return session.client(
+            service_name,
+            config=get_default_client_config(),
+            region_name=region,
+            endpoint_url=resolved.replace(session_region, region, 1),
+        )
+    return client
 
 
 def _resolve_region(

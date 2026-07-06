@@ -345,6 +345,93 @@ def test_get_session_client_same_region_cached():
     assert client1 is client2
 
 
+class TestGetSessionClientCrossRegion:
+    """Tests for cross-region endpoint override handling in get_session_client."""
+
+    def _make_session(self, region, endpoint_url):
+        """
+        Build a mock session whose .client() returns a mock with the given endpoint_url
+        on meta.endpoint_url, simulating boto3's endpoint resolution behavior.
+        """
+        session = MagicMock()
+        session.region_name = region
+
+        client_mock = MagicMock()
+        client_mock.meta.endpoint_url = endpoint_url
+        session.client.return_value = client_mock
+        return session
+
+    def test_cross_region_regionalizes_override(self):
+        """
+        When the resolved endpoint contains the session region but not the target
+        region, get_session_client recreates the client with a regionalized URL.
+        """
+        get_session_client.cache_clear()
+        session = self._make_session("us-west-2", "https://custom.deadline.us-west-2.example.com")
+
+        cross_region_client = MagicMock()
+        # First call returns the client with the wrong region; second returns the fixed one.
+        session.client.side_effect = [
+            session.client.return_value,
+            cross_region_client,
+        ]
+
+        result = get_session_client(session, "deadline", "us-east-1")
+        assert result is cross_region_client
+        assert session.client.call_count == 2
+        second_call = session.client.call_args_list[1]
+        assert second_call == call(
+            "deadline",
+            config=ANY,
+            region_name="us-east-1",
+            endpoint_url="https://custom.deadline.us-east-1.example.com",
+        )
+
+    def test_cross_region_no_override_needed(self):
+        """
+        When the resolved endpoint already contains the target region, no
+        recreation is needed.
+        """
+        get_session_client.cache_clear()
+        session = self._make_session("us-west-2", "https://deadline.us-east-1.amazonaws.com")
+
+        result = get_session_client(session, "deadline", "us-east-1")
+        assert result is session.client.return_value
+        session.client.assert_called_once()
+
+    def test_cross_region_no_session_region(self):
+        """
+        When the session has no region_name, the initial client is returned as-is.
+        """
+        get_session_client.cache_clear()
+        session = self._make_session(None, "https://deadline.us-east-1.amazonaws.com")
+
+        result = get_session_client(session, "deadline", "us-east-1")
+        assert result is session.client.return_value
+        session.client.assert_called_once()
+
+    def test_cross_region_session_region_not_in_endpoint(self):
+        """
+        When the resolved endpoint doesn't contain the session region at all,
+        no regionalization is attempted.
+        """
+        get_session_client.cache_clear()
+        session = self._make_session("us-west-2", "https://custom-endpoint.example.com")
+
+        result = get_session_client(session, "deadline", "us-east-1")
+        assert result is session.client.return_value
+        session.client.assert_called_once()
+
+    def test_no_region_uses_session_default(self):
+        """When region is None, a simple client with session defaults is returned."""
+        get_session_client.cache_clear()
+        session = self._make_session("us-west-2", "https://deadline.us-west-2.amazonaws.com")
+
+        result = get_session_client(session, "deadline", None)
+        assert result is session.client.return_value
+        session.client.assert_called_once_with("deadline", config=ANY)
+
+
 def test_get_queue_user_boto3_session_uses_resolved_farm_region(fresh_deadline_config):
     """
     get_queue_user_boto3_session scopes the queue-user session to the resolved

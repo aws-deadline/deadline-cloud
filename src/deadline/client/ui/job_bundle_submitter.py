@@ -24,6 +24,7 @@ from ..job_bundle._hooks import (
     HookManager as _HookManager,
     HookMetadata as _HookMetadata,
     _generate_hooks_confirmation_message,
+    collect_pre_gui_hook_sources as _collect_pre_gui_hook_sources,
 )
 from ..job_bundle.loader import (
     parse_yaml_or_json_content,
@@ -74,6 +75,72 @@ def _make_pre_gui_metadata(initial_settings: Any, job_bundle_dir: str) -> _HookM
         submission_payload={},
         storage_profile_id=storage_profile_id,
     )
+
+
+def _run_pre_gui_hooks(
+    input_job_bundle_dir: str, initial_settings: Any, parent: Any
+) -> dict[str, Any]:
+    """Load and execute pre-GUI hooks from all allowed sources.
+
+    Pre-GUI hooks may be defined in the job bundle (gated by ``allow_bundle_hooks``) and/or
+    in the directory named by ``DEADLINE_HOOKS_DIR`` (gated by ``allow_environment_hooks``).
+    Environment hooks run before bundle hooks. Returns the merged pre-GUI output, or an
+    empty dict if no pre-GUI hooks run.
+    """
+    # Source selection (which bundle/env HookManagers have runnable preGUI hooks) is
+    # Qt-free logic extracted into the hooks package so it can be unit-tested without a GUI.
+    sources = _collect_pre_gui_hook_sources(
+        bundle_dir=input_job_bundle_dir,
+        env_hooks_dir=os.environ.get("DEADLINE_HOOKS_DIR"),
+        allow_bundle_hooks=_config_file.str2bool(_get_setting("settings.allow_bundle_hooks")),
+        allow_environment_hooks=_config_file.str2bool(
+            _get_setting("settings.allow_environment_hooks")
+        ),
+        # Hook execution messages ("Running pre-GUI hook…") log at info; the
+        # "hooks present but disabled" guidance logs at warning (its pre-refactor severity).
+        print_callback=logger.info,
+        warning_callback=logger.warning,
+        # Pass our reference so tests can patch `{MODULE}._HookManager` as a behavior seam.
+        hook_manager_cls=_HookManager,
+    )
+
+    if not sources:
+        return {}
+
+    # Confirmation prompt (once), unless auto_accept. Show every source's hooks.
+    if not _config_file.str2bool(_get_setting("settings.auto_accept")):
+        confirmation_msg = (
+            "".join(
+                _generate_hooks_confirmation_message(m.hooks, m._original_bundle_dir)
+                for m in sources
+                if m.hooks
+            )
+            + "Do you want to run these hooks?"
+        )
+        reply = QMessageBox.question(
+            parent,
+            tr("Job Submission Confirmation"),
+            confirmation_msg,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            raise _DeadlineOperationCanceled("Job submission canceled (user declined hooks).")
+
+    merged: dict[str, Any] = {}
+    for manager in sources:
+        # Every hook — bundle or environment — receives the job bundle being submitted as
+        # its job_bundle_dir, matching the pre/post-submission contract. (The manager still
+        # resolves relative hook script paths against its own directory.)
+        metadata = _make_pre_gui_metadata(initial_settings, input_job_bundle_dir)
+        output = manager.execute_pre_gui_hooks(metadata)
+        # Later sources (bundle) override earlier (env) for scalars; parameters merge.
+        params = merged.pop("parameters", {})
+        params.update(output.pop("parameters", {}))
+        merged.update(output)
+        if params:
+            merged["parameters"] = params
+    return merged
 
 
 def _resolve_template_host_requirements(template: dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -337,39 +404,21 @@ def show_job_bundle_submitter(
     initial_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
     initial_settings.browse_enabled = browse
 
-    # Run pre-GUI hooks to allow studios to pre-populate dialog fields.
-    pre_gui_output: dict[str, Any] = {}
-    allow_bundle_hooks = _config_file.str2bool(_get_setting("settings.allow_bundle_hooks"))
-    hook_manager = _HookManager(input_job_bundle_dir, logger.info)
-    hooks = hook_manager.load_hooks()
-
-    if hooks and hooks.pre_gui and not allow_bundle_hooks:
-        logger.warning(
-            "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
-            "Enable with: deadline config set settings.allow_bundle_hooks true"
-        )
-
-    if hooks and hooks.pre_gui and allow_bundle_hooks:
-        if not _config_file.str2bool(_get_setting("settings.auto_accept")):
-            confirmation_msg = (
-                _generate_hooks_confirmation_message(hooks, input_job_bundle_dir)
-                + "Do you want to run these hooks?"
-            )
-            reply = QMessageBox.question(
-                parent,
-                tr("Job Submission Confirmation"),
-                confirmation_msg,
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if reply != QMessageBox.Yes:
-                raise _DeadlineOperationCanceled("Job submission canceled (user declined hooks).")
-        hook_metadata = _make_pre_gui_metadata(initial_settings, input_job_bundle_dir)
-        pre_gui_output = hook_manager.execute_pre_gui_hooks(hook_metadata)
+    # Run pre-GUI hooks to allow studios to pre-populate dialog fields. Pre-GUI hooks may
+    # come from the job bundle (gated by allow_bundle_hooks) and/or the directory named by
+    # DEADLINE_HOOKS_DIR (gated by allow_environment_hooks). Environment hooks run first,
+    # then bundle hooks — matching the pre/post-submission ordering.
+    pre_gui_output = _run_pre_gui_hooks(input_job_bundle_dir, initial_settings, parent)
 
     initial_shared_parameter_values = {}
 
     job_parameters_dict = {param["name"]: param for param in (job_parameters or [])}
+    # Capture the CLI-provided parameter names up front. The pop loop below removes template
+    # parameters from job_parameters_dict as it applies them, so the dict alone can no longer
+    # tell us which parameters the CLI supplied when the hook merge runs. Use this set to keep
+    # CLI --parameter values winning over hook-supplied values for both template and shared
+    # parameters.
+    cli_provided_param_names = set(job_parameters_dict)
     for parameter in initial_settings.parameters:
         # Overwrite the parameter values from the job bundle with values provided by job_parameters,
         # e.g. from the CLI when this is called by the 'deadline bundle gui-submit' command.
@@ -400,7 +449,10 @@ def show_job_bundle_submitter(
         hook_params = pre_gui_output.get("parameters", {})
         template_param_names = {p["name"] for p in initial_settings.parameters}
         for param_name, param_value in hook_params.items():
-            if param_name in (job_parameters_dict or {}):
+            # CLI --parameter values take precedence over hook values. Check the up-front
+            # set rather than job_parameters_dict, whose template entries were already popped
+            # above — otherwise a hook could silently override a CLI-supplied template param.
+            if param_name in cli_provided_param_names:
                 continue
             if param_name in template_param_names:
                 # Job template parameter — update initial_settings.parameters in-place

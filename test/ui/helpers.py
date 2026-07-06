@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import atexit
 import json
+import os
 import subprocess
 import sys
 import time
@@ -62,17 +63,22 @@ SAMPLE_TEMPLATE = {
 # ---------------------------------------------------------------------------
 
 
+def _deadline_cmd() -> str:
+    """Return the CLI command, respecting DEADLINE_BINARY if set."""
+    return os.environ.get("DEADLINE_BINARY", "deadline")
+
+
 def cli_get(env: dict, setting: str) -> str:
     """Read a deadline config setting via the CLI subprocess."""
     return subprocess.check_output(
-        ["deadline", "config", "get", setting], env=env, text=True, stderr=subprocess.DEVNULL
+        [_deadline_cmd(), "config", "get", setting], env=env, text=True, stderr=subprocess.DEVNULL
     ).strip()
 
 
 def cli_set(env: dict, setting: str, value: str) -> None:
     """Write a deadline config setting via the CLI subprocess."""
     subprocess.check_call(
-        ["deadline", "config", "set", setting, value],
+        [_deadline_cmd(), "config", "set", setting, value],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -306,8 +312,17 @@ class DeadlineApp:
         capture_stdio: bool,
         dialog_name: Optional[str],
     ) -> _T:
-        """Spawn the GUI subprocess once and wait for its dialog to appear."""
-        cmd = [sys.executable, "-m", "deadline", *args]
+        """Spawn the GUI subprocess once and wait for its dialog to appear.
+
+        Set the ``DEADLINE_BINARY`` environment variable to test an alternative
+        CLI implementation (e.g. the Rust binary) instead of the default
+        ``python -m deadline`` invocation.
+        """
+        deadline_bin = os.environ.get("DEADLINE_BINARY")
+        if deadline_bin:
+            cmd = [deadline_bin, *args]
+        else:
+            cmd = [sys.executable, "-m", "deadline", *args]
         baseline = {a.name for a in xa11y.App.list()}
         popen_kwargs: dict = dict(
             env=env,
