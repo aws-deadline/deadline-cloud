@@ -1,3 +1,7 @@
+## 0.60.0 (2026-07-06)
+
+### Features
+* The `--output` format for CLI commands now auto-detects based on whether stdout is a TTY. Interactive terminals default to `verbose` (human-readable) output, while pipes, redirection, and CI environments default to `json`. An explicit `--output` flag always takes precedence. This removes the need to pass `--output json` in scripts and automation. (#1237)
 ## 0.59.2 (2026-07-03)
 
 ### Features
