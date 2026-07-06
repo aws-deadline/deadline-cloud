@@ -9,7 +9,7 @@ import json
 import textwrap
 
 from ...config import config_file
-from .._common import _handle_error
+from .._common import _OUTPUT_FORMAT_HELP, _handle_error, _resolve_output_format
 from .._main import deadline as main
 
 
@@ -29,14 +29,15 @@ def cli_config():
 @click.option(
     "--output",
     type=click.Choice(["verbose", "json"], case_sensitive=False),
-    default="verbose",
-    help="Output format of the command",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @_handle_error
 def config_show(output):
     """
     Show all workstation configuration settings and current values.
     """
+    output = _resolve_output_format(output)
     settings_json = {}
     if output == "verbose":
         click.echo(

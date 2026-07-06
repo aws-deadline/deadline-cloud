@@ -87,6 +87,10 @@ api.list_farms()
 # {'farms': [{'farmId': 'farm-1234567890abcdefg', 'displayName': 'my-first-farm', ...},]}
 ```
 
+### Output format
+
+The commands that accept an `--output` option (`auth status`, `config show`, `bundle gui-submit`, `job download-output`, `job download-input`, `job wait`, and `job logs`) choose their default format based on whether stdout is an interactive terminal. When you run them in a terminal you get the human-readable (`verbose`) output; when the output is piped, redirected, or has no TTY (for example in CI or when invoked by an agent) the default switches to `json`. Pass `--output` explicitly to override the detection — for example `--output verbose` to force human-readable output in a script, or `--output json` to force JSON in a terminal.
+
 The `deadlinew` command can be used from GUIs to avoid displaying a terminal window in the background when on Windows.
 You can use the `--redirect-output` option to write the terminal output to a file.
 ```sh

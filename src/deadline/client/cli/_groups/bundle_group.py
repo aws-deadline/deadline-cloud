@@ -31,10 +31,12 @@ from ....job_attachments.models import JobAttachmentsFileSystem
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
 from .._common import (
+    _OUTPUT_FORMAT_HELP,
     _apply_cli_options_to_config,
     _handle_error,
     _ProgressBarCallbackManager,
     _parse_multi_format_parameters,
+    _resolve_output_format,
     _suggest_resources_on_client_error,
 )
 from .._main import deadline as main
@@ -405,11 +407,8 @@ def bundle_submit(
         ["verbose", "json"],
         case_sensitive=False,
     ),
-    default="verbose",
-    help="Specifies the output format of the messages printed to stdout.\n"
-    "VERBOSE: Displays messages in a human-readable text format.\n"
-    "JSON: Displays messages in JSON line format, so that the info can be easily "
-    "parsed/consumed by custom scripts.",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @click.option(
     "--known-asset-path",
@@ -476,7 +475,7 @@ def bundle_gui_submit(
                     "Specify a job bundle directory or run the bundle command with the --browse flag"
                 )
             )
-        output = output.lower()
+        output = _resolve_output_format(output)
 
         submitter = show_job_bundle_submitter(
             input_job_bundle_dir=job_bundle_dir,

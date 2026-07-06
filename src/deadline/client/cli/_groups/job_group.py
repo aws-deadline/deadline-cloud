@@ -43,9 +43,11 @@ from ... import api
 from ...config import config_file
 from ...exceptions import DeadlineOperationError, DeadlineOperationTimedOut
 from .._common import (
+    _OUTPUT_FORMAT_HELP,
     _apply_cli_options_to_config,
     _cli_object_repr,
     _handle_error,
+    _resolve_output_format,
     _suggest_resources_on_client_error,
 )
 from .._main import deadline as main
@@ -1076,10 +1078,8 @@ def _assert_valid_path(path: str) -> None:
         ["verbose", "json"],
         case_sensitive=False,
     ),
-    help="Specifies the output format of the messages printed to stdout.\n"
-    "VERBOSE: Displays messages in a human-readable text format.\n"
-    "JSON: Displays messages in JSON line format, so that the info can be easily "
-    "parsed/consumed by custom scripts.",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @_handle_error
 def job_download_output(
@@ -1101,6 +1101,7 @@ def job_download_output(
     if task_id and not step_id:
         raise click.UsageError("Missing option '--step-id' required with '--task-id'")
 
+    is_json_output = _resolve_output_format(output) == "json"
     include_patterns = _normalize_filters(list(include)) or None
 
     # Get a temporary config object with the standard options handled
@@ -1119,13 +1120,13 @@ def job_download_output(
             job_id=job_id,
             step_id=step_id,
             task_id=task_id,
-            is_json_format=output == "json",
+            is_json_format=is_json_output,
             ignore_storage_profiles=ignore_storage_profiles,
             include_patterns=include_patterns,
             match_paths_by=MatchPathsBy(match_paths_by),
         )
     except Exception as e:
-        if output == "json":
+        if is_json_output:
             error_one_liner = str(e).replace("\n", ". ")
             click.echo(_get_json_line(JSON_MSG_TYPE_ERROR, error_one_liner))
             sys.exit(1)
@@ -1350,10 +1351,8 @@ def _download_job_input(
         ["verbose", "json"],
         case_sensitive=False,
     ),
-    help="Specifies the output format of the messages printed to stdout.\n"
-    "VERBOSE: Displays messages in a human-readable text format.\n"
-    "JSON: Displays messages in JSON line format, so that the info can be easily "
-    "parsed/consumed by custom scripts.",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @_handle_error
 def job_download_input(include, match_paths_by, output, ignore_storage_profiles, **args):
@@ -1375,6 +1374,7 @@ def job_download_input(include, match_paths_by, output, ignore_storage_profiles,
     farm_id = config_file.get_setting("defaults.farm_id", config=config)
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
     job_id = config_file.get_setting("defaults.job_id", config=config)
+    is_json_output = _resolve_output_format(output) == "json"
     include_patterns = _normalize_filters(list(include)) or None
 
     try:
@@ -1383,13 +1383,13 @@ def job_download_input(include, match_paths_by, output, ignore_storage_profiles,
             farm_id=farm_id,
             queue_id=queue_id,
             job_id=job_id,
-            is_json_format=output == "json",
+            is_json_format=is_json_output,
             ignore_storage_profiles=ignore_storage_profiles,
             include_patterns=include_patterns,
             match_paths_by=MatchPathsBy(match_paths_by),
         )
     except Exception as e:
-        if output == "json":
+        if is_json_output:
             error_one_liner = str(e).replace("\n", ". ")
             click.echo(_get_json_line(JSON_MSG_TYPE_ERROR, error_one_liner))
             sys.exit(1)
@@ -1410,8 +1410,8 @@ def job_download_input(include, match_paths_by, output, ignore_storage_profiles,
 @click.option(
     "--output",
     type=click.Choice(["verbose", "json"], case_sensitive=False),
-    default="verbose",
-    help="Output format (verbose or json).",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @_handle_error
 def job_wait_for_completion(max_poll_interval, timeout, output, **args):
@@ -1448,7 +1448,7 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
     job_id = config_file.get_setting("defaults.job_id", config=config)
 
-    is_json_output = output.lower() == "json"
+    is_json_output = _resolve_output_format(output) == "json"
 
     # Get job name for output
     deadline = api.get_boto3_client("deadline", config=config)
@@ -1605,8 +1605,8 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
 @click.option(
     "--output",
     type=click.Choice(["verbose", "json"], case_sensitive=False),
-    default="verbose",
-    help="Output format (verbose or json).",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @click.option(
     "--timestamp-format",
@@ -1659,7 +1659,7 @@ def job_logs(
     queue_id = config_file.get_setting("defaults.queue_id", config=config)
     job_id = config_file.get_setting("defaults.job_id", config=config)
 
-    is_json_output = output.lower() == "json"
+    is_json_output = _resolve_output_format(output) == "json"
 
     # Check if --timestamp-format was explicitly provided by the user
     timestamp_format_provided = (
