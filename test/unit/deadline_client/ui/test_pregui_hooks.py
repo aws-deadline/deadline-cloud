@@ -522,7 +522,7 @@ class TestApplyPreGuiOutput:
         """With no template-parameter list, every hook parameter lands in the shared values —
         the generic behavior DCC submitters (Maya, Nuke) rely on."""
         settings = _DccSettings()
-        shared = {"RezPackages": "mayaIO-2024 deadline_cloud_for_maya"}
+        shared: dict = {"RezPackages": "mayaIO-2024 deadline_cloud_for_maya"}
         apply_pre_gui_output(
             {"parameters": {"deadline:priority": 90, "RezPackages": "mayaIO-2024 custom_pkg"}},
             settings,
