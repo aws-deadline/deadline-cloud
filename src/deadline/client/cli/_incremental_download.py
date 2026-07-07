@@ -31,6 +31,7 @@ from ...job_attachments._incremental_downloads._manifest_s3_downloads import (
     _get_manifests_to_download,
     _download_manifest_paths,
 )
+from ...job_attachments.exceptions import AssetSyncCancelledError
 from ...job_attachments._path_mapping import (
     _generate_path_mapping_rules,
     _PathMappingRuleApplier,
@@ -1297,6 +1298,8 @@ def _incremental_output_download(
                     "error_code": None,
                     "error_message": None,
                 }
+            except AssetSyncCancelledError:
+                raise
             except Exception as e:
                 downloaded_count = sum(1 for f in job_files if os.path.exists(f.path))
                 job_download_results[job_id] = {
