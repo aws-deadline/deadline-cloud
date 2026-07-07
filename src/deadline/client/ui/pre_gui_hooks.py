@@ -194,3 +194,56 @@ def qt_hook_confirmation(parent: Any) -> Callable[[List["_HookManager"]], bool]:
         return reply == QMessageBox.Yes
 
     return _confirm
+
+
+def apply_pre_gui_output(
+    pre_gui_output: dict[str, Any],
+    initial_settings: Any,
+    initial_shared_parameter_values: dict[str, Any],
+    cli_provided_param_names: Optional[set[str]] = None,
+) -> None:
+    """Apply merged pre-GUI hook output onto a submitter's settings and its shared values.
+
+    ``name`` / ``description`` overwrite the corresponding fields on ``initial_settings``.
+    For ``parameters``: any name that matches a job-template parameter (an entry in
+    ``initial_settings.parameters``) updates that entry in place; every other name lands in
+    ``initial_shared_parameter_values`` (queue parameters, ``deadline:`` job properties, etc.).
+    CLI-supplied parameter names (``cli_provided_param_names``) always win over hook values.
+
+    This is generic across submitters:
+
+    * The standalone job-bundle submitter passes a ``JobBundleSettings`` whose ``parameters``
+      is a list of template-parameter dicts, so template params are routed onto it in place.
+    * DCC submitters (Maya, Nuke, etc.) pass their own settings dataclass, which has no
+      ``parameters`` list. With no template-parameter list, every hook parameter is treated
+      as a shared value — matching how a DCC seeds ``initial_shared_parameter_values``.
+
+    ``initial_settings`` only needs assignable ``name`` / ``description`` attributes and,
+    optionally, a ``parameters`` list of ``{"name": ..., "value": ...}`` dicts.
+    """
+    if not pre_gui_output:
+        return
+
+    cli_provided_param_names = cli_provided_param_names or set()
+    hook_params = pre_gui_output.get("parameters", {})
+    # DCC settings have no template-parameter list; treat their absence as "no template
+    # params", so every hook parameter flows to the shared values dict below.
+    template_parameters = getattr(initial_settings, "parameters", None) or []
+    template_param_names = {p["name"] for p in template_parameters}
+    for param_name, param_value in hook_params.items():
+        # CLI --parameter values take precedence over hook values.
+        if param_name in cli_provided_param_names:
+            continue
+        if param_name in template_param_names:
+            # Job template parameter — update initial_settings.parameters in-place
+            for p in template_parameters:
+                if p["name"] == param_name:
+                    p["value"] = param_value
+                    break
+        else:
+            # Shared job property (deadline: keys, queue parameters, etc.)
+            initial_shared_parameter_values[param_name] = param_value
+    if "name" in pre_gui_output:
+        initial_settings.name = pre_gui_output["name"]
+    if "description" in pre_gui_output:
+        initial_settings.description = pre_gui_output["description"]

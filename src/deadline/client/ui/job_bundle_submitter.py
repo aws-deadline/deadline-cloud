@@ -21,6 +21,7 @@ from ..config.config_file import get_setting as _get_setting
 from ..exceptions import DeadlineOperationError
 from .pre_gui_hooks import (
     PreGuiHookContext,
+    apply_pre_gui_output,
     qt_hook_confirmation,
     run_pre_gui_hooks,
 )
@@ -49,51 +50,6 @@ from ..job_bundle.submission import AssetReferences
 from ..api._session import session_context
 
 logger = getLogger(__name__)
-
-
-def apply_pre_gui_output(
-    pre_gui_output: dict[str, Any],
-    initial_settings: JobBundleSettings,
-    initial_shared_parameter_values: dict[str, Any],
-    cli_provided_param_names: Optional[set[str]] = None,
-) -> None:
-    """Apply merged pre-GUI hook output onto a ``JobBundleSettings`` and the shared values.
-
-    ``name`` / ``description`` overwrite the corresponding settings fields; ``parameters``
-    that match a job-template parameter update ``initial_settings.parameters`` in place,
-    and any others land in ``initial_shared_parameter_values`` (queue params, ``deadline:``
-    keys, etc.). CLI-supplied parameter names (``cli_provided_param_names``) always win over
-    hook values.
-
-    This helper is specific to the standalone job-bundle submitter, which holds a
-    ``JobBundleSettings`` with a ``.parameters`` template-parameter list. It lives here rather
-    than in ``pre_gui_hooks`` because it is *not* generic across submitters: DCC submitters use
-    their own settings dataclass (e.g. Maya's ``RenderSubmitterUISettings``, which has no
-    ``.parameters`` list) and map :func:`run_pre_gui_hooks`' output onto it themselves.
-    """
-    if not pre_gui_output:
-        return
-
-    cli_provided_param_names = cli_provided_param_names or set()
-    hook_params = pre_gui_output.get("parameters", {})
-    template_param_names = {p["name"] for p in initial_settings.parameters}
-    for param_name, param_value in hook_params.items():
-        # CLI --parameter values take precedence over hook values.
-        if param_name in cli_provided_param_names:
-            continue
-        if param_name in template_param_names:
-            # Job template parameter — update initial_settings.parameters in-place
-            for p in initial_settings.parameters:
-                if p["name"] == param_name:
-                    p["value"] = param_value
-                    break
-        else:
-            # Shared job property (deadline: keys, queue parameters, etc.)
-            initial_shared_parameter_values[param_name] = param_value
-    if "name" in pre_gui_output:
-        initial_settings.name = pre_gui_output["name"]
-    if "description" in pre_gui_output:
-        initial_settings.description = pre_gui_output["description"]
 
 
 def _resolve_template_host_requirements(template: dict[str, Any]) -> Optional[Dict[str, Any]]:

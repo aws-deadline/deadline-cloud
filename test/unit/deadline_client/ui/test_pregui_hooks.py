@@ -25,8 +25,12 @@ import pytest
 from deadline.client.exceptions import DeadlineOperationCanceled
 from deadline.client.job_bundle._hooks import HookConfiguration, HookDefinition
 from deadline.client.ui.dataclasses import JobBundleSettings
-from deadline.client.ui.job_bundle_submitter import apply_pre_gui_output, show_job_bundle_submitter
-from deadline.client.ui.pre_gui_hooks import PreGuiHookContext, run_pre_gui_hooks
+from deadline.client.ui.job_bundle_submitter import show_job_bundle_submitter
+from deadline.client.ui.pre_gui_hooks import (
+    PreGuiHookContext,
+    apply_pre_gui_output,
+    run_pre_gui_hooks,
+)
 
 # Seams in the submitter module (dialog construction, bundle loading, auto_accept check).
 MODULE = "deadline.client.ui.job_bundle_submitter"
@@ -440,8 +444,24 @@ class TestRunPreGuiHooksHeadless:
         hook_manager.execute_pre_gui_hooks.assert_called_once()
 
 
+class _DccSettings:
+    """A minimal DCC-style settings object: assignable name/description, NO parameters list.
+
+    Stands in for Maya's RenderSubmitterUISettings / Nuke's SubmitterUISettings, which have no
+    template-parameter list — so apply_pre_gui_output must route every hook parameter to the
+    shared values dict rather than onto the settings object."""
+
+    def __init__(self):
+        self.name = "Original"
+        self.description = ""
+
+
 class TestApplyPreGuiOutput:
-    """apply_pre_gui_output routes merged hook output onto a JobBundleSettings + shared dict."""
+    """apply_pre_gui_output routes merged hook output onto a settings object + shared dict.
+
+    It is generic: JobBundleSettings (with a .parameters template list) gets template params
+    routed in place, while DCC settings (no .parameters) send every param to the shared dict.
+    """
 
     def _settings(self, parameters=None):
         s = JobBundleSettings(input_job_bundle_dir="/bundle", name="Original")
@@ -489,6 +509,27 @@ class TestApplyPreGuiOutput:
         apply_pre_gui_output({}, settings, shared)
         assert settings.name == "Original"
         assert shared == {}
+
+    def test_dcc_settings_name_and_description_applied(self):
+        """A DCC settings object (no .parameters) still gets name/description applied."""
+        settings = _DccSettings()
+        shared: dict = {}
+        apply_pre_gui_output({"name": "NEW", "description": "desc"}, settings, shared)
+        assert settings.name == "NEW"
+        assert settings.description == "desc"
+
+    def test_dcc_settings_all_parameters_go_to_shared(self):
+        """With no template-parameter list, every hook parameter lands in the shared values —
+        the generic behavior DCC submitters (Maya, Nuke) rely on."""
+        settings = _DccSettings()
+        shared = {"RezPackages": "mayaIO-2024 deadline_cloud_for_maya"}
+        apply_pre_gui_output(
+            {"parameters": {"deadline:priority": 90, "RezPackages": "mayaIO-2024 custom_pkg"}},
+            settings,
+            shared,
+        )
+        assert shared["deadline:priority"] == 90
+        assert shared["RezPackages"] == "mayaIO-2024 custom_pkg"  # overrides default
 
 
 class TestPreGuiHookContext:
