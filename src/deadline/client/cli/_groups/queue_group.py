@@ -436,26 +436,22 @@ def sync_output(
             logger.echo(f"    {location['name']}: {location['path']}")
         logger.echo()
 
-    # Pre-flight validation: verify all storage profile file system locations are accessible
+    # Pre-flight validation: warn about inaccessible storage profile locations.
+    # Downloads proceed regardless — jobs only map to the locations their outputs fall under,
+    # and the status file writer already tolerates per-location write failures gracefully.
     if local_storage_profile_id and local_storage_profile:
-        inaccessible_locations = []
         for location in local_storage_profile["fileSystemLocations"]:
             location_path = location["path"]
             if not os.path.isdir(location_path):
-                inaccessible_locations.append(
-                    f"  {location['name']}: {location_path} (does not exist)"
+                logger.echo(
+                    f"WARNING: File system location '{location['name']}' does not exist: {location_path}"
+                    " — status file will not be written to this location."
                 )
             elif not os.access(location_path, os.W_OK):
-                inaccessible_locations.append(
-                    f"  {location['name']}: {location_path} (not writable)"
+                logger.echo(
+                    f"WARNING: File system location '{location['name']}' is not writable: {location_path}"
+                    " — status file will not be written to this location."
                 )
-        if inaccessible_locations:
-            raise DeadlineOperationError(
-                "The following file system locations in the storage profile are not accessible:\n"
-                + "\n".join(inaccessible_locations)
-                + "\n\nLocations marked 'does not exist' need to be mounted."
-                + "\nLocations marked 'not writable' need write permissions granted."
-            )
 
     # Perform incremental download while holding a process id lock
 

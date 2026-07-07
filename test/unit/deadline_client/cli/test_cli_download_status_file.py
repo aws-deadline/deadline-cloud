@@ -13,6 +13,7 @@ from deadline.client.cli._download_status_file import (
     _build_status_file_content,
     _determine_job_download_status,
     _get_status_file_paths,
+    _status_file_lock,
     write_download_status_file,
 )
 from deadline.client.cli._incremental_download import CategorizedJobIds
@@ -77,14 +78,14 @@ class TestDetermineJobDownloadStatus:
     def test_completed_job_returns_downloaded(self):
         cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "downloaded"
 
     def test_added_job_all_tasks_succeeded_no_active_returns_downloaded(self):
         """Added job with all tasks succeeded and no active tasks is truly done."""
         cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, succeeded=5, total=5, ended=True)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "downloaded"
 
     def test_added_job_requeued_with_active_tasks_returns_in_progress(self):
@@ -93,49 +94,49 @@ class TestDetermineJobDownloadStatus:
         job = _make_job(MOCK_JOB_ID, succeeded=5, total=5, ended=True)
         job["taskRunStatusCounts"]["READY"] = 3
         job["taskRunStatusCounts"]["RUNNING"] = 0
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "in_progress"
 
     def test_added_job_partial_tasks_returns_in_progress(self):
         cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, succeeded=3, total=10, ended=False)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "in_progress"
 
     def test_updated_job_partial_tasks_returns_in_progress(self):
         cjids = _make_categorized_job_ids(updated={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, succeeded=7, total=10, ended=False)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "in_progress"
 
     def test_unchanged_job_all_succeeded_returns_downloaded(self):
         cjids = _make_categorized_job_ids(unchanged={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, succeeded=10, total=10, ended=True)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "downloaded"
 
     def test_unchanged_job_partial_returns_in_progress(self):
         cjids = _make_categorized_job_ids(unchanged={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, succeeded=5, total=10, ended=False)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "in_progress"
 
     def test_attachments_free_returns_skipped(self):
         cjids = _make_categorized_job_ids(attachments_free={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, attachments=False)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "skipped"
 
     def test_missing_storage_profile_returns_skipped(self):
         cjids = _make_categorized_job_ids(missing_storage_profile={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID, storage_profile_id=None)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert result["download_status"] == "skipped"
 
     def test_result_has_all_required_fields(self):
         cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID)
-        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, MOCK_STORAGE_PROFILE_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
         assert "download_status" in result
         assert "total_files" in result
         assert "downloaded_files" in result
@@ -160,10 +161,12 @@ class TestGetStatusFilePaths:
         assert MOCK_QUEUE_ID in paths[0]
         assert paths[0].endswith("_download_status.json")
 
-    def test_storage_profile_single_location(self):
+    def test_storage_profile_single_location(self, tmp_path):
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
         profile = {
             "fileSystemLocations": [
-                {"name": "renders", "path": "/mnt/nas/renders"},
+                {"name": "renders", "path": str(renders_dir)},
             ]
         }
         paths = _get_status_file_paths(
@@ -174,16 +177,21 @@ class TestGetStatusFilePaths:
         )
         assert len(paths) == 1
         expected = os.path.join(
-            "/mnt/nas/renders", ".deadline", f"{MOCK_QUEUE_ID}_download_status.json"
+            str(renders_dir), ".deadline", f"{MOCK_QUEUE_ID}_download_status.json"
         )
         assert paths[0] == expected
 
-    def test_storage_profile_multiple_locations(self):
+    def test_storage_profile_multiple_locations(self, tmp_path):
+        renders_dir = tmp_path / "renders"
+        projects_dir = tmp_path / "projects"
+        tools_dir = tmp_path / "tools"
+        for d in [renders_dir, projects_dir, tools_dir]:
+            d.mkdir()
         profile = {
             "fileSystemLocations": [
-                {"name": "renders", "path": "/mnt/nas/renders"},
-                {"name": "projects", "path": "/mnt/nas/projects"},
-                {"name": "tools", "path": "/mnt/nas/tools"},
+                {"name": "renders", "path": str(renders_dir)},
+                {"name": "projects", "path": str(projects_dir)},
+                {"name": "tools", "path": str(tools_dir)},
             ]
         }
         paths = _get_status_file_paths(
@@ -194,17 +202,36 @@ class TestGetStatusFilePaths:
         )
         assert len(paths) == 3
         assert (
-            os.path.join("/mnt/nas/renders", ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
+            os.path.join(str(renders_dir), ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
             in paths
         )
         assert (
-            os.path.join("/mnt/nas/projects", ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
+            os.path.join(str(projects_dir), ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
             in paths
         )
         assert (
-            os.path.join("/mnt/nas/tools", ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
+            os.path.join(str(tools_dir), ".deadline", f"{MOCK_QUEUE_ID}_download_status.json")
             in paths
         )
+
+    def test_unmounted_location_excluded(self, tmp_path):
+        """Locations whose root does not exist are excluded to avoid phantom writes."""
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {
+            "fileSystemLocations": [
+                {"name": "renders", "path": str(renders_dir)},
+                {"name": "unmounted", "path": "/nonexistent/mount/point"},
+            ]
+        }
+        paths = _get_status_file_paths(
+            queue_id=MOCK_QUEUE_ID,
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir="/home/user/.deadline/incremental_download",
+        )
+        assert len(paths) == 1
+        assert str(renders_dir) in paths[0]
 
 
 class TestBuildStatusFileContent:
@@ -218,7 +245,6 @@ class TestBuildStatusFileContent:
             storage_profile_id=MOCK_STORAGE_PROFILE_ID,
             categorized_job_ids=cjids,
             download_candidate_jobs=jobs,
-            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
         )
         assert result["schema_version"] == 1
         assert result["sync_metadata"]["queue_id"] == MOCK_QUEUE_ID
@@ -244,7 +270,6 @@ class TestBuildStatusFileContent:
             storage_profile_id=MOCK_STORAGE_PROFILE_ID,
             categorized_job_ids=cjids,
             download_candidate_jobs=jobs,
-            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
         )
         assert len(result["jobs"]) == 3
         assert result["jobs"][MOCK_JOB_ID]["download_status"] == "downloaded"
@@ -259,7 +284,6 @@ class TestBuildStatusFileContent:
             storage_profile_id=None,
             categorized_job_ids=cjids,
             download_candidate_jobs=jobs,
-            local_storage_profile_id=None,
         )
         assert result["sync_metadata"]["storage_profile_id"] is None
 
@@ -283,7 +307,6 @@ class TestBuildStatusFileContent:
             storage_profile_id=MOCK_STORAGE_PROFILE_ID,
             categorized_job_ids=cjids,
             download_candidate_jobs=jobs,
-            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
             existing_jobs=existing_jobs,
         )
         assert len(result["jobs"]) == 2
@@ -311,7 +334,6 @@ class TestBuildStatusFileContent:
             storage_profile_id=MOCK_STORAGE_PROFILE_ID,
             categorized_job_ids=cjids,
             download_candidate_jobs=jobs,
-            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
             existing_jobs=existing_jobs,
         )
         assert result["jobs"][MOCK_JOB_ID]["download_status"] == "in_progress"
@@ -431,12 +453,15 @@ class TestWriteDownloadStatusFile:
         assert (projects_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json").exists()
 
     def test_warns_on_write_failure_does_not_raise(self, tmp_path):
-        # Use a path nested under a file (not a directory) to guarantee failure on all platforms
-        blocker_file = tmp_path / "blocker"
-        blocker_file.write_text("not a directory")
+        # Location root exists (passes the mount check) but .deadline subdir creation fails
+        # because a file with that name already exists.
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        deadline_blocker = renders_dir / ".deadline"
+        deadline_blocker.write_text("not a directory")  # blocks os.makedirs inside the lock
         profile = {
             "fileSystemLocations": [
-                {"name": "renders", "path": str(blocker_file / "nested" / "path")},
+                {"name": "renders", "path": str(renders_dir)},
             ]
         }
         cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
@@ -489,3 +514,63 @@ class TestWriteDownloadStatusFile:
         assert data["jobs"][MOCK_JOB_ID]["download_status"] == "downloaded"
         assert data["jobs"][MOCK_JOB_ID_2]["download_status"] == "in_progress"
         assert data["jobs"][MOCK_JOB_ID_3]["download_status"] == "skipped"
+
+
+class TestStatusFileLock:
+    """Tests for _status_file_lock cooperative NAS lock."""
+
+    def test_lock_file_created_and_removed(self, tmp_path):
+        """Lock file exists during context and is removed after."""
+        status_file = str(tmp_path / "status.json")
+        lock_file = status_file + ".lock"
+
+        with _status_file_lock(status_file):
+            assert os.path.exists(lock_file)
+
+        assert not os.path.exists(lock_file)
+
+    def test_lock_file_removed_on_exception(self, tmp_path):
+        """Lock file is cleaned up even if an exception occurs inside the context."""
+        status_file = str(tmp_path / "status.json")
+        lock_file = status_file + ".lock"
+
+        try:
+            with _status_file_lock(status_file):
+                raise RuntimeError("simulated error")
+        except RuntimeError:
+            pass
+
+        assert not os.path.exists(lock_file)
+
+    def test_stale_lock_is_overwritten(self, tmp_path):
+        """A lock file older than TTL is treated as stale and overwritten."""
+        status_file = str(tmp_path / "status.json")
+        lock_file = status_file + ".lock"
+
+        # Write a stale lock file (mtime in the past)
+        os.makedirs(os.path.dirname(lock_file), exist_ok=True)
+        with open(lock_file, "w") as f:
+            f.write('{"hostname": "old-machine", "time": 0}')
+        os.utime(lock_file, (0, 0))  # set mtime to epoch (definitely stale)
+
+        # Should acquire successfully despite stale lock
+        with _status_file_lock(status_file):
+            assert os.path.exists(lock_file)
+            # Verify it's our lock, not the old one
+            with open(lock_file) as f:
+                content = json.load(f)
+            assert content["time"] > 0
+
+        assert not os.path.exists(lock_file)
+
+    def test_lock_contains_hostname(self, tmp_path):
+        """Lock file contains hostname for debugging."""
+        import socket
+
+        status_file = str(tmp_path / "status.json")
+        lock_file = status_file + ".lock"
+
+        with _status_file_lock(status_file):
+            with open(lock_file) as f:
+                content = json.load(f)
+            assert content["hostname"] == socket.gethostname()

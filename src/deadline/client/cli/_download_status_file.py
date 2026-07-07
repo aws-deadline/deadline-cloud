@@ -8,14 +8,95 @@ import logging
 import os
 import socket
 import tempfile
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Generator, Optional
 
 from ._incremental_download import CategorizedJobIds
 
 logger = logging.getLogger(__name__)
 
 DOWNLOAD_STATUS_FILE_SCHEMA_VERSION = 1
+_STATUS_FILE_LOCK_TTL_SECONDS = 60
+_STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS = 1
+# MAX_WAIT must be >= TTL so a waiter is willing to wait at least as long as a lock
+# can legitimately be held before considering it stale.
+_STATUS_FILE_LOCK_MAX_WAIT_SECONDS = 90
+
+
+@contextmanager
+def _status_file_lock(status_file_path: str) -> Generator[None, None, None]:
+    """Cooperative cross-machine lock for the shared NAS status file.
+
+    Creates a sentinel lock file next to the status file. Both machines agree
+    to check for it before reading/writing, preventing last-writer-wins races
+    when two machines sync the same queue to the same NAS simultaneously.
+    Locks older than _STATUS_FILE_LOCK_TTL_SECONDS are considered stale
+    (e.g. from a crashed process) and overwritten.
+    """
+    lock_path = status_file_path + ".lock"
+    dir_path = os.path.dirname(status_file_path)
+    os.makedirs(dir_path, exist_ok=True)
+
+    acquired = False
+    deadline_time = time.monotonic() + _STATUS_FILE_LOCK_MAX_WAIT_SECONDS
+    while time.monotonic() < deadline_time:
+        # Check if a lock exists and whether it is stale.
+        # Read the timestamp from the lock file content rather than the NAS mtime to avoid
+        # NAS-server-vs-client clock skew. Note: client-to-client clock skew (between the
+        # two sync machines) is still a factor but is bounded by NTP drift (typically <1s),
+        # well within the 60s TTL. Worst case is a stale badge on the next poll, not data loss.
+        try:
+            with open(lock_path, "r") as _lf:
+                _lock_data = json.load(_lf)
+            lock_written_at = float(_lock_data.get("time", 0))
+            if time.time() - lock_written_at < _STATUS_FILE_LOCK_TTL_SECONDS:
+                # Lock is fresh — wait for the holder to release it
+                time.sleep(_STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS)
+                continue
+            else:
+                # Lock is stale — remove it so we can acquire with O_EXCL
+                try:
+                    os.unlink(lock_path)
+                except OSError:
+                    pass  # Another process may have already removed it
+        except (OSError, json.JSONDecodeError, KeyError, ValueError):
+            pass  # Lock file doesn't exist or is unreadable — proceed to acquire
+
+        # Acquire the lock using O_CREAT|O_EXCL for atomic exclusive create.
+        # Note: O_EXCL over NFS/SMB is best-effort — not guaranteed on all network filesystems,
+        # but substantially better than os.replace which gives no exclusion at all.
+        try:
+            lock_time = time.time()
+            lock_content = json.dumps({"hostname": socket.gethostname(), "time": lock_time})
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(fd, "w") as f:
+                f.write(lock_content)
+            acquired = True
+            break
+        except FileExistsError:
+            time.sleep(_STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS)
+        except OSError:
+            time.sleep(_STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS)
+    else:
+        logger.warning(
+            f"Could not acquire status file lock at {lock_path} after {_STATUS_FILE_LOCK_MAX_WAIT_SECONDS}s — proceeding without lock."
+        )
+
+    try:
+        yield
+    finally:
+        if acquired:
+            # Verify we still own the lock before deleting — if our hold exceeded the TTL,
+            # another process may have taken it over. Only unlink if the stored time matches.
+            try:
+                with open(lock_path, "r") as _lf:
+                    _on_disk = json.load(_lf)
+                if _on_disk.get("time") == lock_time:
+                    os.unlink(lock_path)
+            except (OSError, json.JSONDecodeError, KeyError, ValueError):
+                pass  # Lock already gone or unreadable — nothing to clean up
 
 
 def _make_status_entry(
@@ -56,7 +137,6 @@ def _determine_job_download_status(
     job_id: str,
     job: dict[str, Any],
     categorized_job_ids: CategorizedJobIds,
-    local_storage_profile_id: Optional[str],
 ) -> dict[str, Any]:
     """
     Determines the download status entry for a single job based on its category.
@@ -95,7 +175,6 @@ def _build_status_file_content(
     storage_profile_id: Optional[str],
     categorized_job_ids: CategorizedJobIds,
     download_candidate_jobs: dict[str, dict[str, Any]],
-    local_storage_profile_id: Optional[str],
     existing_jobs: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
@@ -122,9 +201,7 @@ def _build_status_file_content(
 
     for job_id in all_job_ids:
         job = download_candidate_jobs.get(job_id, {})
-        jobs_status[job_id] = _determine_job_download_status(
-            job_id, job, categorized_job_ids, local_storage_profile_id
-        )
+        jobs_status[job_id] = _determine_job_download_status(job_id, job, categorized_job_ids)
 
     return {
         "schema_version": DOWNLOAD_STATUS_FILE_SCHEMA_VERSION,
@@ -190,6 +267,10 @@ def _get_status_file_paths(
         paths = []
         for location in local_storage_profile.get("fileSystemLocations", []):
             location_path = location["path"]
+            # Only include paths whose root location already exists — avoids writing
+            # phantom files under an empty mount point when the NAS is unmounted.
+            if not os.path.isdir(location_path):
+                continue
             status_file_path = os.path.join(
                 location_path, ".deadline", f"{queue_id}_download_status.json"
             )
@@ -235,18 +316,18 @@ def write_download_status_file(
 
     for status_file_path in status_file_paths:
         try:
-            existing_jobs = _read_existing_status_file(status_file_path)
+            with _status_file_lock(status_file_path):
+                existing_jobs = _read_existing_status_file(status_file_path)
 
-            status_content = _build_status_file_content(
-                queue_id=queue_id,
-                storage_profile_id=local_storage_profile_id,
-                categorized_job_ids=categorized_job_ids,
-                download_candidate_jobs=download_candidate_jobs,
-                local_storage_profile_id=local_storage_profile_id,
-                existing_jobs=existing_jobs,
-            )
+                status_content = _build_status_file_content(
+                    queue_id=queue_id,
+                    storage_profile_id=local_storage_profile_id,
+                    categorized_job_ids=categorized_job_ids,
+                    download_candidate_jobs=download_candidate_jobs,
+                    existing_jobs=existing_jobs,
+                )
 
-            _atomic_write_json(status_file_path, status_content)
+                _atomic_write_json(status_file_path, status_content)
             print_function_callback(f"Download status file saved: {status_file_path}")
         except Exception as e:
             logger.warning(f"Failed to write download status file to {status_file_path}: {e}")
