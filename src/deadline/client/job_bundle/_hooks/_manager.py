@@ -115,16 +115,24 @@ def collect_pre_gui_hook_sources(
 
     # Bundle hooks second. When env_is_bundle, this single source covers both; it is gated
     # by allow_bundle_hooks OR allow_environment_hooks (either grant permits the shared dir).
-    bundle_manager = manager_cls(bundle_dir, print_callback)
-    bundle_hooks = bundle_manager.load_hooks()
-    if bundle_hooks and bundle_hooks.pre_gui:
-        if allow_bundle_hooks or (env_is_bundle and allow_environment_hooks):
-            sources.append(bundle_manager)
-        else:
-            warn(
-                "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
-                "Enable with: deadline config set settings.allow_bundle_hooks true"
-            )
+    #
+    # Only consult the bundle source when there IS a bundle. DCC submitters have no on-disk
+    # bundle at pre-GUI time and pass bundle_dir="" — an empty dir would make HookManager
+    # resolve hooks.yaml/.json relative to the process CWD (os.path.join("", "hooks") →
+    # "hooks"), so a stray hooks file in the launch directory could be loaded and, with
+    # bundle hooks enabled studio-wide, executed for a submission that has no bundle. Skip
+    # the bundle source entirely when bundle_dir is falsy to avoid that CWD footgun.
+    if bundle_dir:
+        bundle_manager = manager_cls(bundle_dir, print_callback)
+        bundle_hooks = bundle_manager.load_hooks()
+        if bundle_hooks and bundle_hooks.pre_gui:
+            if allow_bundle_hooks or (env_is_bundle and allow_environment_hooks):
+                sources.append(bundle_manager)
+            else:
+                warn(
+                    "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
+                    "Enable with: deadline config set settings.allow_bundle_hooks true"
+                )
 
     return sources
 

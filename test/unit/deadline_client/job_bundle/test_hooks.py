@@ -1618,6 +1618,41 @@ class TestPreGuiHooks:
 
         assert sources == []
 
+    def test_empty_bundle_dir_uses_env_source_only(self, tmp_path):
+        """A DCC caller passes bundle_dir="" (no on-disk bundle). Only the env source is
+        collected; the empty bundle dir must not become a hook source."""
+        studio = str(tmp_path / "studio")
+        os.makedirs(studio)
+        self._write_pre_gui_hooks(studio)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir="",
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [studio]
+
+    def test_empty_bundle_dir_does_not_load_hooks_from_cwd(self, tmp_path, monkeypatch):
+        """Regression: bundle_dir="" must NOT resolve hooks.yaml relative to the process
+        CWD. Otherwise a stray hooks file in a DCC's launch directory would be loaded (and,
+        with bundle hooks enabled, executed) for a submission that has no bundle."""
+        # Put a bundle hooks.yaml in the current working directory.
+        self._write_pre_gui_hooks(str(tmp_path))
+        monkeypatch.chdir(tmp_path)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir="",  # DCC: no bundle
+            env_hooks_dir=None,
+            allow_bundle_hooks=True,  # even with bundle hooks enabled...
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert sources == []  # ...the CWD hooks.yaml is not picked up
+
     def test_env_dir_equal_to_bundle_dir_is_not_duplicated(self, tmp_path):
         """If DEADLINE_HOOKS_DIR points at the job bundle, the shared hooks.yaml yields a
         single source (not two) so preGUI hooks do not run twice."""
