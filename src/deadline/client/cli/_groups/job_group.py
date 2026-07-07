@@ -1656,8 +1656,14 @@ def job_logs(
     **args,
 ):
     """
-    Print session logs from CloudWatch for a job. Defaults to the most
+    Print session logs from CloudWatch for a job -- this is where the task's
+    stdout/stderr (and the actual failure cause) appear. Use this when a job's
+    taskRunStatus is FAILED to find out WHY it failed. Defaults to the most
     recent or ongoing session if no session ID is provided.
+
+    \b
+    Example:
+      deadline job logs --job-id job-xxxx --limit 200
 
     Returns the most recent 100 log lines by default (adjust with --limit).
 
