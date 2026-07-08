@@ -1266,10 +1266,13 @@ def test_incremental_output_download_unmapped_paths_without_storage_profile(
         return []
 
     runner = CliRunner()
-    with patch(
-        "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
-        side_effect=fake_download_all_manifests,
-    ), freeze_time(ISO_FREEZE_TIME):
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
         result = runner.invoke(
             main,
             [
