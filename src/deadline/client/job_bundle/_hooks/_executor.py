@@ -24,6 +24,12 @@ _logger = _logging.getLogger(__name__)
 class HookExecutor:
     """Executes individual hook scripts as subprocesses."""
 
+    # How long to wait for the stdout/stderr reader threads to drain after the hook process
+    # exits (or is killed). A lingering child that inherited the pipe fds can hold the write
+    # end open past the process's own exit, so this bounds that wait rather than joining the
+    # readers forever.
+    _READER_JOIN_GRACE_SECONDS = 5.0
+
     def __init__(
         self,
         job_bundle_dir: str,
@@ -156,9 +162,20 @@ class HookExecutor:
             process.kill()
             process.wait()
 
-        # Killing the process closes the pipes, so the reader threads reach EOF and finish.
+        # Killing the process closes its ends of the pipes, so the reader threads normally
+        # reach EOF and finish promptly. Join with a bound rather than unconditionally,
+        # though: if the hook left a child that inherited the pipe fds and still holds the
+        # write end open, the reads would never see EOF and an unbounded join() would hang
+        # submission forever — defeating the timeout the old communicate(timeout=...)
+        # enforced. Treat readers still blocked after the grace period as a timeout; they are
+        # daemon threads, so any leaked output is abandoned rather than blocking exit.
+        deadline = _time.monotonic() + self._READER_JOIN_GRACE_SECONDS
         for thread in threads:
-            thread.join()
+            thread.join(timeout=max(0.0, deadline - _time.monotonic()))
+        if any(thread.is_alive() for thread in threads):
+            timed_out = True
+            if process.poll() is None:
+                process.kill()
 
         return "".join(stdout_chunks), "".join(stderr_chunks), timed_out
 

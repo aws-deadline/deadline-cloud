@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 
 import pytest
 import yaml
@@ -1056,7 +1057,7 @@ class TestHookStdoutStreaming:
                                 "args": [
                                     "-c",
                                     "import sys; print('step one', file=sys.stderr); "
-                                    "print('step two', file=sys.stderr)",
+                                    + "print('step two', file=sys.stderr)",
                                 ],
                             }
                         ]
@@ -1125,7 +1126,7 @@ class TestHookStdoutStreaming:
                                     # Emit progress, then read stdin (the metadata) to prove
                                     # the reader thread saw the line before we blocked here.
                                     "import sys; print('started', file=sys.stderr, flush=True); "
-                                    "sys.stdin.read()",
+                                    + "sys.stdin.read()",
                                 ],
                             }
                         ]
@@ -1159,7 +1160,7 @@ class TestHookStdoutStreaming:
                                 "args": [
                                     "-c",
                                     "import sys; print('progress line', file=sys.stderr); "
-                                    "print('not-json-stdout'); sys.exit(2)",
+                                    + "print('not-json-stdout'); sys.exit(2)",
                                 ],
                             }
                         ]
@@ -1179,6 +1180,49 @@ class TestHookStdoutStreaming:
             assert not any(m.startswith("stderr:") for m in messages)
             # stdout is not streamed, so the failure report surfaces it for debugging.
             assert any(m.startswith("stdout:") and "not-json-stdout" in m for m in messages)
+
+    def test_lingering_child_holding_pipe_does_not_hang(self, monkeypatch):
+        """A hook that exits but leaves a child holding the stderr pipe open must not hang
+        submission. process.wait() returns (the hook itself exited), but the reader threads
+        never see EOF; the bounded join must give up after the grace period and report a
+        timeout instead of blocking forever.
+        """
+        from deadline.client.job_bundle._hooks._executor import HookExecutor
+
+        # Keep the test fast: shrink the reader-join grace window.
+        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 1.0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # The hook spawns a detached child that inherits stderr and sleeps, then the hook
+            # process itself exits. The child keeps the stderr write end open past the
+            # parent's exit, so the drainer never reaches EOF on its own.
+            child = (
+                "import subprocess, sys; "
+                "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], "
+                "stderr=sys.stderr); "
+                "sys.exit(0)"
+            )
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {"command": sys.executable, "args": ["-c", child], "timeout": 30}
+                        ]
+                    },
+                    f,
+                )
+
+            manager = HookManager(tmpdir, lambda _msg: None)
+            manager.load_hooks()
+
+            start = time.monotonic()
+            # Blocks-forever regression would exceed the timeout here; the bounded join
+            # instead surfaces a timeout error well within the 30s hook timeout.
+            with pytest.raises(DeadlineOperationError, match="timed out"):
+                manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+            elapsed = time.monotonic() - start
+            assert elapsed < 15, f"submission hung on a lingering pipe holder ({elapsed:.1f}s)"
 
 
 class TestValidateBeforeGUIOutput:

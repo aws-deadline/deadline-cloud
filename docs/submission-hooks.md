@@ -205,8 +205,8 @@ Hooks receive job metadata via JSON on stdin and through convenience environment
 ### Progress Output
 
 Hooks can be slow — for example, generating auth tokens for several services before
-submission. To keep the user informed, **anything a hook writes to stderr is surfaced to
-the user line-by-line as the hook runs**, prefixed with the hook's phase and index (e.g.
+submission. To keep the user informed, anything a hook writes to stderr is surfaced to the
+user line-by-line as the hook runs, prefixed with the hook's phase and index (e.g.
 `  [pre-submission hook 1] Fetching token for renderfarm...`). Write progress messages to
 stderr so they appear immediately:
 
@@ -218,10 +218,9 @@ print("Fetching token for renderfarm...", file=sys.stderr, flush=True)
 print("Done.", file=sys.stderr, flush=True)
 ```
 
-stdout is **not** streamed as progress — it is reserved for the JSON contract (see
-[Hook Output](#hook-output)). Reserve stdout for JSON and use stderr for human-readable
-progress. In the CLI the streamed lines print to the console; in the standalone GUI they go
-to the submission log.
+stdout is not streamed as progress — it is reserved for the JSON contract (see
+[Hook Output](#hook-output)). Use stderr for human-readable progress. In the CLI the
+streamed lines print to the console; in the standalone GUI they go to the submission log.
 
 ### Environment Variables
 
