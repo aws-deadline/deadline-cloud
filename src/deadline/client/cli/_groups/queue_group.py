@@ -476,6 +476,16 @@ def sync_output(
             # Print the bootstrap time in local time
             if force_bootstrap:
                 logger.echo(f"Bootstrap forced, lookback is {bootstrap_lookback_minutes} minutes")
+                # Also clear the failed jobs tracker so abandoned jobs get a fresh start
+                storage_profile_key = local_storage_profile_id or "ignore-storage-profiles"
+                failed_jobs_file = os.path.join(
+                    checkpoint_dir,
+                    f"{queue_id}_{storage_profile_key}_failed_jobs.json",
+                )
+                try:
+                    os.unlink(failed_jobs_file)
+                except OSError:
+                    pass  # File doesn't exist — nothing to clear
             else:
                 logger.echo(
                     f"Checkpoint not found, lookback is {bootstrap_lookback_minutes} minutes"
@@ -519,6 +529,7 @@ def sync_output(
             queue=queue,
             checkpoint=checkpoint,
             file_conflict_resolution=FileConflictResolution[conflict_resolution],
+            checkpoint_dir=checkpoint_dir,
             config=config,
             print_function_callback=logger.echo,
             dry_run=dry_run,

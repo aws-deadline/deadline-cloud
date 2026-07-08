@@ -799,6 +799,61 @@ class TestFileCountPreservation:
         assert result["jobs"][MOCK_JOB_ID]["downloaded_files"] == 5
 
 
+class TestFailedJobsTracker:
+    """Tests for _FailedJobsTracker."""
+
+    def test_empty_on_missing_file(self, tmp_path):
+        from deadline.client.cli._incremental_download import _FailedJobsTracker
+
+        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+        assert tracker.get_tracked_job_ids() == set()
+
+    def test_record_and_retrieve_failure(self, tmp_path):
+        from deadline.client.cli._incremental_download import _FailedJobsTracker
+
+        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+        messages: list[str] = []
+        tracker.record_failures({MOCK_JOB_ID}, messages.append)
+        assert MOCK_JOB_ID in tracker.get_tracked_job_ids()
+
+    def test_record_success_removes_job(self, tmp_path):
+        from deadline.client.cli._incremental_download import _FailedJobsTracker
+
+        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+        messages: list[str] = []
+        tracker.record_failures({MOCK_JOB_ID}, messages.append)
+        tracker.record_successes({MOCK_JOB_ID})
+        assert MOCK_JOB_ID not in tracker.get_tracked_job_ids()
+
+    def test_retry_cap_removes_job_and_warns(self, tmp_path):
+        from deadline.client.cli._incremental_download import (
+            _FailedJobsTracker,
+            _MAX_FAILED_JOB_RETRIES,
+        )
+
+        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+        messages: list[str] = []
+        for _ in range(_MAX_FAILED_JOB_RETRIES):
+            tracker.record_failures({MOCK_JOB_ID}, messages.append)
+        # Abandoned job is excluded from get_tracked_job_ids (not retried)
+        assert MOCK_JOB_ID not in tracker.get_tracked_job_ids()
+        # But is_abandoned returns True so it can be filtered from timestamp window too
+        assert tracker.is_abandoned(MOCK_JOB_ID)
+        assert any("WARNING" in m for m in messages)
+
+    def test_persists_and_reloads(self, tmp_path):
+        from deadline.client.cli._incremental_download import _FailedJobsTracker
+
+        file_path = str(tmp_path / "failed_jobs.json")
+        tracker = _FailedJobsTracker(file_path)
+        messages: list[str] = []
+        tracker.record_failures({MOCK_JOB_ID}, messages.append)
+        tracker.save()
+
+        tracker2 = _FailedJobsTracker(file_path)
+        assert MOCK_JOB_ID in tracker2.get_tracked_job_ids()
+
+
 class TestClassifyError:
     """Tests for _classify_error."""
 
