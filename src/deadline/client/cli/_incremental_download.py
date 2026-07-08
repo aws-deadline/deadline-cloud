@@ -1110,6 +1110,7 @@ def _incremental_output_download(
     durations._get_job_sessions = time.perf_counter_ns() - start_t
 
     # If storage profiles are being used, get them and construct all the path mapping rules
+    storage_profiles: dict[str, dict[str, Any]] = {}
     path_mapping_rule_appliers: dict[str, Optional[_PathMappingRuleApplier]] = {}
     if checkpoint.local_storage_profile_id:
         start_t = time.perf_counter_ns()
@@ -1154,14 +1155,18 @@ def _incremental_output_download(
             print_function_callback(
                 f"    Job {download_candidate_jobs[job_id]['name']} ({job_id}) has outputs with unmapped paths that will not be downloaded"
             )
-            storage_profile = storage_profiles[download_candidate_jobs[job_id]["storageProfileId"]]
-            print_function_callback(
-                f"      Job storage profile is {storage_profile['displayName']} ({storage_profile['storageProfileId']})"
+            storage_profile = storage_profiles.get(
+                download_candidate_jobs[job_id].get("storageProfileId", "")
             )
+            if storage_profile is not None:
+                print_function_callback(
+                    f"      Job storage profile is {storage_profile['displayName']} ({storage_profile['storageProfileId']})"
+                )
             print_function_callback("      Summary of unmapped paths:")
             path_format = (
                 PathFormat.WINDOWS
-                if storage_profile["osFamily"] == StorageProfileOperatingSystemFamily.WINDOWS.value
+                if storage_profile is not None
+                and storage_profile["osFamily"] == StorageProfileOperatingSystemFamily.WINDOWS.value
                 else PathFormat.POSIX
             )
             paths_summary = summarize_path_list(
