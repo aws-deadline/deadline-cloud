@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 from ..config import config_file as _config_file
 from ..config.config_file import get_setting as _get_setting
@@ -30,6 +30,13 @@ from ..job_bundle._hooks import (
 from ._utils import tr
 
 logger = getLogger(__name__)
+
+__all__ = [
+    "PreGuiHookContext",
+    "apply_pre_gui_output",
+    "qt_hook_confirmation",
+    "run_pre_gui_hooks",
+]
 
 
 @dataclass
@@ -66,7 +73,7 @@ class PreGuiHookContext:
 def run_pre_gui_hooks(
     context: PreGuiHookContext,
     *,
-    confirm_callback: Optional[Callable[[List["_HookManager"]], bool]] = None,
+    confirm_callback: Optional[Callable[[list], bool]] = None,
 ) -> dict[str, Any]:
     """Run all allowed pre-GUI hooks and return their merged output.
 
@@ -164,7 +171,7 @@ def run_pre_gui_hooks(
     return merged
 
 
-def qt_hook_confirmation(parent: Any) -> Callable[[List["_HookManager"]], bool]:
+def qt_hook_confirmation(parent: Any) -> Callable[[list], bool]:
     """Return a ``confirm_callback`` for :func:`run_pre_gui_hooks` that shows the standard
     Qt confirmation dialog listing every hook that will run.
 
@@ -175,7 +182,7 @@ def qt_hook_confirmation(parent: Any) -> Callable[[List["_HookManager"]], bool]:
     """
     from qtpy.QtWidgets import QMessageBox  # pylint: disable=import-error
 
-    def _confirm(sources: List["_HookManager"]) -> bool:
+    def _confirm(sources: list) -> bool:
         confirmation_msg = (
             "".join(
                 _generate_hooks_confirmation_message(m.hooks, m._original_bundle_dir)

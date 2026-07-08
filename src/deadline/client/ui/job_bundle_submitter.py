@@ -51,6 +51,11 @@ from ..api._session import session_context
 
 logger = getLogger(__name__)
 
+# The pre-GUI helpers are imported here for use by show_job_bundle_submitter; their public
+# home is deadline.client.ui.pre_gui_hooks. Declaring __all__ keeps them (and internal
+# imports like logger) from being re-exported as this module's public API.
+__all__ = ["show_job_bundle_submitter"]
+
 
 def _resolve_template_host_requirements(template: dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
