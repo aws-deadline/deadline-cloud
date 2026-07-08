@@ -13,7 +13,7 @@ from deadline.client.ui.job_bundle_submitter import show_job_bundle_submitter
 # show_job_bundle_submitter lives here (dialog construction, auto_accept check)...
 MODULE = "deadline.client.ui.job_bundle_submitter"
 # ...but the pre-GUI hook sourcing + gating it delegates to lives in this module, so the
-# _HookManager seam and the allow_*_hooks config reads must be patched here.
+# HookManager seam and the allow_*_hooks config reads must be patched here.
 HOOKS_MODULE = "deadline.client.ui.pre_gui_hooks"
 
 
@@ -53,7 +53,7 @@ def _patch_submitter_deps(tmp_path, hooks_with_pre_gui):
         "read_job_bundle_parameters": patch(
             f"{MODULE}.read_job_bundle_parameters", return_value=[]
         ),
-        "HookManager": patch(f"{HOOKS_MODULE}._HookManager", return_value=mock_hook_manager),
+        "HookManager": patch(f"{HOOKS_MODULE}.HookManager", return_value=mock_hook_manager),
         "SubmitJobToDeadlineDialog": patch(f"{MODULE}.SubmitJobToDeadlineDialog"),
         "QApplication": patch(f"{MODULE}.QApplication"),
         "QMessageBox": patch(f"{MODULE}.QMessageBox"),

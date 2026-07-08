@@ -35,7 +35,7 @@ from deadline.client.ui.pre_gui_hooks import (
 # Seams in the submitter module (dialog construction, bundle loading, auto_accept check).
 MODULE = "deadline.client.ui.job_bundle_submitter"
 # Seams in the pre-GUI hooks module (source selection + config gates that run_pre_gui_hooks
-# resolves). _HookManager lives here now; _get_setting / _config_file are imported by BOTH
+# resolves). HookManager lives here now; _get_setting / _config_file are imported by BOTH
 # modules, so integration tests patch them in both places.
 HOOKS_MODULE = "deadline.client.ui.pre_gui_hooks"
 
@@ -65,7 +65,7 @@ def _run_submitter(bundle_dir, settings_map, hook_manager, *, env=None, job_para
 def _run_submitter_with_factory(
     bundle_dir, settings_map, hook_factory, *, bundle_parameters=None, env=None, job_parameters=None
 ):
-    """Like _run_submitter but constructs a fresh _HookManager per source via hook_factory,
+    """Like _run_submitter but constructs a fresh HookManager per source via hook_factory,
     so tests can distinguish the env-dir manager from the bundle-dir manager."""
 
     def fake_get_setting(name, config=None):
@@ -79,7 +79,7 @@ def _run_submitter_with_factory(
             side_effect=lambda _dir, name, *a, **k: template if name == "template" else None,
         ),
         patch(f"{MODULE}.read_job_bundle_parameters", return_value=bundle_parameters or []),
-        patch(f"{HOOKS_MODULE}._HookManager", side_effect=hook_factory),
+        patch(f"{HOOKS_MODULE}.HookManager", side_effect=hook_factory),
         patch(f"{MODULE}.SubmitJobToDeadlineDialog") as dialog_cls,
         patch(f"{MODULE}.QApplication"),
         patch(f"{MODULE}.QMessageBox"),
@@ -183,7 +183,7 @@ class TestPreGuiEnvironmentHooksLoaded:
     """PreGUI hooks are loaded from DEADLINE_HOOKS_DIR, not just the job bundle."""
 
     def test_env_hooks_dir_is_used_as_a_source(self, tmp_path):
-        """With DEADLINE_HOOKS_DIR set and environment hooks enabled, a _HookManager is
+        """With DEADLINE_HOOKS_DIR set and environment hooks enabled, a HookManager is
         constructed for the env dir (the #2 fix — the loader must consult it)."""
         bundle_dir = _make_bundle(tmp_path)
         studio = str(tmp_path / "studio")
@@ -302,7 +302,7 @@ class TestPreGuiHookCliPrecedence:
 
 
 def _make_env_hook_manager(hooks_dir):
-    """A _HookManager stand-in whose preGUI hook echoes the metadata it received back to the
+    """A HookManager stand-in whose preGUI hook echoes the metadata it received back to the
     caller, so tests can assert on what run_pre_gui_hooks passed in."""
     m = MagicMock()
     m.hooks = _pre_gui_config()
@@ -320,7 +320,7 @@ def _headless_run(settings_map, hook_manager, env=None):
         return settings_map.get(name, "false")
 
     with (
-        patch(f"{HOOKS_MODULE}._HookManager", return_value=hook_manager),
+        patch(f"{HOOKS_MODULE}.HookManager", return_value=hook_manager),
         patch(f"{HOOKS_MODULE}._get_setting", side_effect=fake_get_setting),
         patch(f"{HOOKS_MODULE}._config_file") as cfg,
         patch.dict(os.environ, env or {}, clear=False),

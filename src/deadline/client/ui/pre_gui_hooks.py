@@ -16,17 +16,17 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..config import config_file as _config_file
 from ..config.config_file import get_setting as _get_setting
 from ..exceptions import DeadlineOperationCanceled as _DeadlineOperationCanceled
 from ..job_bundle._hooks import (
-    HookManager as _HookManager,
     HookMetadata as _HookMetadata,
     _generate_hooks_confirmation_message,
     collect_pre_gui_hook_sources as _collect_pre_gui_hook_sources,
 )
+from ..job_bundle.hooks import HookManager
 from ._utils import tr
 
 logger = getLogger(__name__)
@@ -73,7 +73,7 @@ class PreGuiHookContext:
 def run_pre_gui_hooks(
     context: PreGuiHookContext,
     *,
-    confirm_callback: Optional[Callable[[list], bool]] = None,
+    confirm_callback: Optional[Callable[[List[HookManager]], bool]] = None,
 ) -> dict[str, Any]:
     """Run all allowed pre-GUI hooks and return their merged output.
 
@@ -113,8 +113,8 @@ def run_pre_gui_hooks(
         # disabled" guidance logs at warning (its pre-refactor severity).
         print_callback=logger.info,
         warning_callback=logger.warning,
-        # Pass our reference so tests can patch `{MODULE}._HookManager` as a behavior seam.
-        hook_manager_cls=_HookManager,
+        # Pass our reference so tests can patch `{MODULE}.HookManager` as a behavior seam.
+        hook_manager_cls=HookManager,
     )
 
     if not sources:
@@ -171,7 +171,7 @@ def run_pre_gui_hooks(
     return merged
 
 
-def qt_hook_confirmation(parent: Any) -> Callable[[list], bool]:
+def qt_hook_confirmation(parent: Any) -> Callable[[List[HookManager]], bool]:
     """Return a ``confirm_callback`` for :func:`run_pre_gui_hooks` that shows the standard
     Qt confirmation dialog listing every hook that will run.
 
@@ -182,7 +182,7 @@ def qt_hook_confirmation(parent: Any) -> Callable[[list], bool]:
     """
     from qtpy.QtWidgets import QMessageBox  # pylint: disable=import-error
 
-    def _confirm(sources: list) -> bool:
+    def _confirm(sources: List[HookManager]) -> bool:
         confirmation_msg = (
             "".join(
                 _generate_hooks_confirmation_message(m.hooks, m._original_bundle_dir)
