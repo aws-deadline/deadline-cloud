@@ -1191,9 +1191,6 @@ def test_incremental_output_download_stats_telemetry(
     )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_unmapped_paths_without_storage_profile(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
