@@ -217,10 +217,19 @@ def job_list(page_size, item_offset, **args):
 @cli_job.command(name="get")
 @click.argument("search_term", required=False)
 @click.option("--profile", help="The AWS profile to use.")
-@click.option("--farm-id", help="The farm to use.")
+@click.option(
+    "--farm-id",
+    help="The farm to use. Defaults to the configured defaults.farm_id when omitted (see `deadline config`).",
+)
 @click.option("--region", help="The AWS region of the farm.")
-@click.option("--queue-id", help="The queue to use.")
-@click.option("--job-id", help="The job to get.")
+@click.option(
+    "--queue-id",
+    help="The queue to use. Defaults to the configured defaults.queue_id when omitted.",
+)
+@click.option(
+    "--job-id",
+    help="The job to get (job-xxxx). Defaults to the configured defaults.job_id when omitted.",
+)
 @_handle_error
 def job_get(search_term: Optional[str], **args):
     """
@@ -1025,8 +1034,11 @@ def _assert_valid_path(path: str) -> None:
 @click.option("--region", help="The AWS region of the farm.")
 @click.option("--queue-id", help="The queue to use.")
 @click.option("--job-id", help="The job to use.")
-@click.option("--step-id", help="The step to use.")
-@click.option("--task-id", help="The task to use.")
+@click.option(
+    "--step-id",
+    help="The step to use. Omit --step-id and --task-id to download the whole job.",
+)
+@click.option("--task-id", help="The task to use. Requires --step-id.")
 @click.option(
     "-i",
     "--include",
@@ -1094,6 +1106,15 @@ def job_download_output(
     """
     Download the output of a Deadline Cloud job that was saved as job
     attachments.
+
+    Scope is controlled by which ids you pass:
+
+    \b
+      --job-id only                -> downloads the WHOLE job's output
+      --job-id --step-id           -> downloads one step's output
+      --job-id --step-id --task-id -> downloads one task's output
+
+    `--task-id` requires `--step-id` (a task is identified within a step).
 
     \b
     Learn more about [job attachments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/storage-job-attachments.html)
@@ -1635,8 +1656,14 @@ def job_logs(
     **args,
 ):
     """
-    Print session logs from CloudWatch for a job. Defaults to the most
+    Print session logs from CloudWatch for a job -- this is where the task's
+    stdout/stderr (and the actual failure cause) appear. Use this when a job's
+    taskRunStatus is FAILED to find out WHY it failed. Defaults to the most
     recent or ongoing session if no session ID is provided.
+
+    \b
+    Example:
+      deadline job logs --job-id job-xxxx --limit 200
 
     Returns the most recent 100 log lines by default (adjust with --limit).
 

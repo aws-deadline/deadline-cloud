@@ -97,6 +97,9 @@ def config_set(setting_name, value):
     \b
     Example:
         `deadline config set defaults.farm_id <farm-id>`
+
+    Run `deadline config show` to see all known SETTING_NAME values and their
+    current settings.
     """
     config_file.set_setting(setting_name, value)
 
@@ -111,6 +114,10 @@ def config_clear(setting_name):
     \b
     Example:
         `deadline config clear defaults.farm_id`
+
+    SETTING_NAME is one of the known settings (e.g. defaults.farm_id,
+    defaults.queue_id, settings.storage_profile_id). Run `deadline config show`
+    to enumerate them all.
     """
     config_file.clear_setting(setting_name)
 
@@ -129,5 +136,9 @@ def config_get(setting_name):
           --profile $(deadline config get defaults.aws_profile_name) \\
           --farm-id $(deadline config get defaults.farm_id) \\
           --queue-id $(deadline config get defaults.queue_id)
+
+    SETTING_NAME is one of the known settings (e.g. defaults.farm_id,
+    defaults.queue_id, defaults.aws_profile_name, settings.log_level). Run
+    `deadline config show` to enumerate them all.
     """
     click.echo(config_file.get_setting(setting_name))
