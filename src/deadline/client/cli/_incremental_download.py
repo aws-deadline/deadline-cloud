@@ -241,11 +241,15 @@ def _get_download_candidate_jobs(
             region=region,
         )
     }
+    print(f"DEBUG: Got {len(download_candidate_jobs)} active jobs")
     download_candidate_jobs = {
         job_id: _datetimes_to_str(job)
         for job_id, job in download_candidate_jobs.items()
         if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     }
+    print(
+        f"DEBUG: Filtered down to {len(download_candidate_jobs)} active jobs based on SUCCEEDED task filter"
+    )
 
     # - Any recently ended job (job went from active to terminal with a taskRunStatus
     #   in SUSPENDED, CANCELED, FAILED, SUCCEEDED, NOT_COMPATIBLE), that has at least
@@ -268,10 +272,14 @@ def _get_download_candidate_jobs(
         },
         region=region,
     )
+    print(
+        f"DEBUG: Got {len(recently_ended_jobs)} jobs with job[endedAt] >= {starting_timestamp.astimezone().isoformat()}"
+    )
     # Filter to jobs where the count of SUCCEEDED tasks is positive.
     recently_ended_jobs = [
         job for job in recently_ended_jobs if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     ]
+    print(f"DEBUG: Filtered down to {len(recently_ended_jobs)} jobs based on SUCCEEDED task filter")
     download_candidate_jobs.update(
         {job["jobId"]: _datetimes_to_str(job) for job in recently_ended_jobs}
     )
@@ -1339,29 +1347,34 @@ def _incremental_output_download(
         path_mapping_rule_appliers,
     )
     # Correlate manifests_to_download with downloaded_manifests by position to attribute each
-    # downloaded manifest to its job. Both lists come from _get_manifests_to_download with
-    # identical inputs, so their lengths match in practice. If they ever diverge we skip only
-    # the per-job attribution — the downloads still proceed via the fallback bucket below, so a
-    # mismatch degrades reporting but never causes a silent zero-download run. (Downloads are
-    # decoupled from attribution: what gets downloaded comes from downloaded_manifests either
-    # way; attribution is best-effort layered on top.)
+    # downloaded manifest to its job (and task). Both lists come from _get_manifests_to_download
+    # with identical inputs, so their lengths match in practice. If they ever diverge we skip only
+    # the per-job/per-task attribution — the downloads still proceed via the fallback bucket below,
+    # so a mismatch degrades reporting but never causes a silent zero-download run. (Downloads are
+    # decoupled from attribution: what gets downloaded comes from downloaded_manifests either way;
+    # attribution is best-effort layered on top.)
     skip_attribution = len(manifests_to_download) != len(downloaded_manifests)
     if skip_attribution:
         print_function_callback(
             f"WARNING: Manifest list length mismatch ({len(manifests_to_download)} vs "
-            f"{len(downloaded_manifests)}) — per-job download tracking will not be "
-            f"populated for this run; files will still be downloaded."
+            f"{len(downloaded_manifests)}) — per-job and per-task download tracking will not "
+            f"be populated for this run; files will still be downloaded."
         )
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
     # job_id -> task_id -> [files]: used for per-task download tracking
     job_task_manifest_paths: dict[str, dict[str, list[BaseManifestPath]]] = {}
-    # global_seen_paths prevents concurrent writes to the same destination file across jobs.
-    # Without cross-job dedup, parallel threads could write the same path simultaneously
-    # (e.g. two jobs sharing a file-system location), corrupting the file under OVERWRITE.
-    # The first job to claim a path wins; subsequent jobs skip it (same outcome as before
-    # since file_conflict_resolution would have picked one winner anyway).
-    global_seen_paths: set[str] = set()
-    job_seen_paths: dict[str, set[str]] = {}
+    # global_seen_paths maps normcased_path -> job_id that claimed it first.
+    # Prevents concurrent writes to the same destination file across jobs — parallel threads
+    # could write the same path simultaneously, corrupting the file under OVERWRITE.
+    # The first job to claim a path wins; other jobs skip it.
+    global_seen_paths: dict[str, str] = {}
+    # job_path_index tracks the list index for each (job_id, normcased_path) pair so we can
+    # overwrite older entries with newer ones — downloaded_manifests is sorted oldest-to-newest
+    # so iterating in order and overwriting gives newest-wins, matching the old behavior of
+    # _merge_absolute_path_manifest_list.
+    job_path_index: dict[str, dict[str, int]] = {}
+    # job_id -> task_id -> normcased_path -> list_index, mirrors job_path_index at the task level
+    task_path_index: dict[str, dict[str, dict[str, int]]] = {}
     if not skip_attribution:
         for i, (_, job_id, _, manifest_s3_key) in enumerate(manifests_to_download):
             manifest_tuple = downloaded_manifests[i]
@@ -1370,17 +1383,44 @@ def _incremental_output_download(
                 task_id = _extract_task_id_from_s3_key(manifest_s3_key)
                 for manifest_path in manifest.paths:
                     normcased = os.path.normcase(manifest_path.path)
-                    if normcased in global_seen_paths:
-                        continue  # Another job already claims this path — skip to prevent concurrent writes
-                    seen = job_seen_paths.setdefault(job_id, set())
-                    if normcased not in seen:
-                        seen.add(normcased)
-                        global_seen_paths.add(normcased)
-                        job_manifest_paths.setdefault(job_id, []).append(manifest_path)
-                        if task_id:
-                            job_task_manifest_paths.setdefault(job_id, {}).setdefault(
-                                task_id, []
-                            ).append(manifest_path)
+                    prior_job_id = global_seen_paths.get(normcased)
+                    if prior_job_id is not None and prior_job_id != job_id:
+                        # A different job previously claimed this path with an older manifest.
+                        # Since downloaded_manifests is sorted oldest-to-newest, the current
+                        # manifest is newer — transfer ownership to preserve newest-wins semantics.
+                        prior_paths = job_manifest_paths.get(prior_job_id, [])
+                        prior_idx_map = job_path_index.get(prior_job_id, {})
+                        if normcased in prior_idx_map:
+                            # Remove from old job's manifest list — mark as None so indices stay stable
+                            prior_paths[prior_idx_map[normcased]] = None  # type: ignore[call-overload]
+                            del prior_idx_map[normcased]
+                        # Remove from all of the old job's per-task paths using the index for O(1) lookup.
+                        # Scan all tasks since the same path could appear in multiple tasks.
+                        for t_id, t_idx_map in task_path_index.get(prior_job_id, {}).items():
+                            if normcased in t_idx_map:
+                                job_task_manifest_paths[prior_job_id][t_id][
+                                    t_idx_map[normcased]
+                                ] = None  # type: ignore[call-overload]
+                                del t_idx_map[normcased]
+                    job_paths = job_manifest_paths.setdefault(job_id, [])
+                    idx_map = job_path_index.setdefault(job_id, {})
+                    if normcased in idx_map:
+                        # Overwrite with newer version within same job
+                        job_paths[idx_map[normcased]] = manifest_path
+                    else:
+                        idx_map[normcased] = len(job_paths)
+                        job_paths.append(manifest_path)
+                    global_seen_paths[normcased] = job_id
+                    if task_id:
+                        job_task_manifest_paths.setdefault(job_id, {}).setdefault(task_id, [])
+                        task_paths = job_task_manifest_paths[job_id][task_id]
+                        t_idx_map = task_path_index.setdefault(job_id, {}).setdefault(task_id, {})
+                        if normcased in t_idx_map:
+                            # Overwrite with newer version (O(1) lookup)
+                            task_paths[t_idx_map[normcased]] = manifest_path
+                        else:
+                            t_idx_map[normcased] = len(task_paths)
+                            task_paths.append(manifest_path)
     else:
         # Attribution skipped: download everything anyway, decoupled from per-job tracking.
         # Collect every downloaded path (deduped) under a synthetic bucket keyed by "" so it
@@ -1399,6 +1439,17 @@ def _incremental_output_download(
                         fallback_paths.append(manifest_path)
         if fallback_paths:
             job_manifest_paths[""] = fallback_paths
+
+    # Filter out None entries left by cross-job path transfers (newer job took over the path)
+    for job_id in list(job_manifest_paths.keys()):
+        job_manifest_paths[job_id] = [p for p in job_manifest_paths[job_id] if p is not None]
+        if not job_manifest_paths[job_id]:
+            del job_manifest_paths[job_id]
+    for job_id, task_map in job_task_manifest_paths.items():
+        for task_id in list(task_map.keys()):
+            task_map[task_id] = [p for p in task_map[task_id] if p is not None]
+            if not task_map[task_id]:
+                del task_map[task_id]
 
     # Print a summary of all the paths before starting the download
     all_manifest_paths = [path for paths in job_manifest_paths.values() for path in paths]
@@ -1472,38 +1523,53 @@ def _incremental_output_download(
                     on_downloading_files=_update_download_progress,
                     print_function_callback=print_function_callback,
                 )
+                # Raise if the user cancelled mid-transfer — _download_manifest_paths returns
+                # normally on cooperative cancellation so we must check explicitly.
+                if not sigint_handler.continue_operation:
+                    raise AssetSyncCancelledError("File download cancelled.")
+                # Record per-task results for succeeded job
+                # Zero-output tasks are included with total_files=0 so they count toward
+                # the progress bar numerator — a task with no outputs is still "done".
+                job_task_results: dict[str, dict[str, Any]] = {
+                    task_id: {
+                        "total_files": len(task_files),
+                        "downloaded_files": len(task_files),
+                        "error_code": None,
+                        "error_message": None,
+                    }
+                    for task_id, task_files in job_task_manifest_paths.get(job_id, {}).items()
+                }
                 return {
                     "total_files": len(job_files),
                     "downloaded_files": len(job_files),
                     "failed_files": 0,
                     "error_code": None,
                     "error_message": None,
+                    "task_results": job_task_results,
                 }
-                # Record per-task results for succeeded job
-                # Zero-output tasks are included with total_files=0 so they count toward
-                # the progress bar numerator — a task with no outputs is still "done".
-                task_results: dict[str, dict[str, Any]] = {}
-                for task_id, task_files in job_task_manifest_paths.get(job_id, {}).items():
-                    task_results[task_id] = {
-                        "total_files": len(task_files),
-                        "downloaded_files": len(task_files),
-                        "error_code": None,
-                        "error_message": None,
-                    }
-                if task_results:
-                    task_download_results[job_id] = task_results
             except AssetSyncCancelledError:
                 raise
             except Exception as e:
                 downloaded_count = sum(1 for f in job_files if os.path.exists(f.path))
                 with print_lock:
                     print_function_callback(f"  ERROR downloading job {job_name} ({job_id}): {e}")
+                error_code = _classify_error(e)
+                failed_task_results: dict[str, dict[str, Any]] = {
+                    task_id: {
+                        "total_files": len(task_files),
+                        "downloaded_files": sum(1 for f in task_files if os.path.exists(f.path)),
+                        "error_code": error_code,
+                        "error_message": str(e),
+                    }
+                    for task_id, task_files in job_task_manifest_paths.get(job_id, {}).items()
+                }
                 return {
                     "total_files": len(job_files),
                     "downloaded_files": downloaded_count,
                     "failed_files": len(job_files) - downloaded_count,
-                    "error_code": _classify_error(e),
+                    "error_code": error_code,
                     "error_message": str(e),
+                    "task_results": failed_task_results,
                 }
 
         cancelled = False
@@ -1520,7 +1586,11 @@ def _incremental_output_download(
             for future in concurrent.futures.as_completed(future_to_job):
                 job_id = future_to_job[future]
                 try:
-                    job_download_results[job_id] = future.result()
+                    result = future.result()
+                    task_results = result.pop("task_results", {})
+                    job_download_results[job_id] = result
+                    if task_results:
+                        task_download_results[job_id] = task_results
                 except AssetSyncCancelledError:
                     cancelled = True
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -1600,7 +1670,9 @@ def _incremental_output_download(
             for path in paths
             if job_id in job_download_results
             and job_download_results[job_id].get("error_code") is None
-        ),
+        )
+        if not dry_run
+        else sum(path.size for paths in job_manifest_paths.values() for path in paths),
         "jobs_with_downloads": {
             "completed": len(categorized_job_ids.completed),
             "added": len(categorized_job_ids.added),

@@ -1050,8 +1050,8 @@ class TestPerTaskTracking:
         )
         assert result["jobs"][MOCK_JOB_ID]["tasks"]["task-abc-0"]["download_status"] == "downloaded"
 
-    def test_zero_file_tasks_excluded_from_dict(self):
-        """Tasks with zero output files are not added to the tasks dict."""
+    def test_zero_file_tasks_included_as_downloaded(self):
+        """Tasks with zero output files are included with downloaded status so they count toward the progress bar."""
         cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
         job = _make_job(MOCK_JOB_ID)
         jobs = {MOCK_JOB_ID: job}
@@ -1072,7 +1072,8 @@ class TestPerTaskTracking:
             download_candidate_jobs=jobs,
             task_download_results=task_results,
         )
-        assert "task-abc-0" not in result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert "task-abc-0" in result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert result["jobs"][MOCK_JOB_ID]["tasks"]["task-abc-0"]["download_status"] == "downloaded"
 
     def test_skipped_job_has_empty_tasks(self):
         """Skipped jobs always have an empty tasks dict."""

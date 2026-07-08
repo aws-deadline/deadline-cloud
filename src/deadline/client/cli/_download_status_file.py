@@ -246,7 +246,6 @@ def _build_status_file_content(
                     "error_message": r.get("error_message"),
                 }
                 for task_id, r in new_tasks.items()
-                if r["total_files"] > 0  # skip zero-output tasks
             },
         }
         new_entry["tasks"] = merged_tasks
@@ -256,10 +255,16 @@ def _build_status_file_content(
             and existing_entry.get("total_files", 0) > 0
             and new_entry.get("total_files", 0) == 0
         ):
-            # No download this run — preserve existing counts, update status if changed
+            # No download this run — preserve existing counts, update status if changed.
+            # Also clear stale error fields when transitioning away from a failed state to
+            # avoid an inconsistent entry with download_status="downloaded" + error_code set.
             if new_entry["download_status"] != existing_entry["download_status"]:
                 existing_entry["download_status"] = new_entry["download_status"]
                 existing_entry["last_updated"] = new_entry["last_updated"]
+                if new_entry["download_status"] != "failed":
+                    existing_entry["error_code"] = None
+                    existing_entry["error_message"] = None
+                    existing_entry["failed_files"] = 0
             existing_entry["tasks"] = merged_tasks
         else:
             jobs_status[job_id] = new_entry
