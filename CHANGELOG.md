@@ -1,3 +1,14 @@
+## 0.60.1 (2026-07-09)
+
+### Features
+* Added a new `run_pre_gui_hooks` function in `deadline.client.ui.pre_gui_hooks` that can be used by DCC submitters (e.g., Maya, Nuke) to run pre-GUI hooks without requiring Qt bindings. (#1255)
+* Added `settings.https_proxy` and `settings.ca_bundle` config settings, allowing you to configure an HTTPS proxy and CA certificate bundle for Deadline Cloud API calls via `deadline config set` without relying on process-wide environment variables. (#1217)
+* The job submission window now allows selecting farm, queue, and storage profile directly on the "Shared job settings" tab, eliminating the need to open the Settings dialog before submitting a job. (#1199)
+
+### Bug Fixes
+* Fixed an issue where environment hooks (from DEADLINE_HOOKS_DIR) and bundle submission hooks were not both executed during CLI/non-GUI job submission. Previously, only one set of hooks would run even when both were configured. (#1261)
+* Submission hooks now stream stderr output to the console in real-time as they run, instead of buffering all output until completion. This prevents slow hooks (e.g., generating auth tokens) from appearing to hang with no feedback. (#1254)
+* Fixed an `UnboundLocalError` crash when running `sync-output` with `--ignore-storage-profiles` and unmapped paths were present in the warning output. (#1260)
 ## 0.60.0 (2026-07-06)
 
 ### Features
