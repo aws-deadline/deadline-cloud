@@ -21,6 +21,7 @@ from deadline.client.job_bundle._hooks import (
     HookMetadata,
     HookResult,
     collect_pre_gui_hook_sources,
+    collect_submission_hook_sources,
 )
 from deadline.client.job_bundle._hooks._merger import merge_asset_references, merge_payload
 from deadline.client.job_bundle._hooks._validator import (
@@ -1535,6 +1536,121 @@ class TestPreSubmissionHooks:
         assert scene_value == abs_scene
 
 
+class TestEnvAndBundleSubmissionHooks:
+    """Environment (DEADLINE_HOOKS_DIR) and bundle submission hooks must run together.
+
+    Regression test for the bug where the pre/post-submission submit path collapsed both hook
+    sources into a single HookManager and could only ever execute one of them — so environment
+    and bundle hooks never ran together (and the merge branch was unreachable dead code). This
+    mirrors the preGUI coverage in ``TestPreGuiHooks`` for the pre/post-submission phases.
+    """
+
+    def _configure(self):
+        config.set_setting("defaults.farm_id", _PARAM_MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", _PARAM_MOCK_QUEUE_ID)
+        config.set_setting("settings.allow_bundle_hooks", "true")
+        config.set_setting("settings.allow_environment_hooks", "true")
+        config.set_setting("settings.auto_accept", "true")
+
+    @staticmethod
+    def _write_appending_hook(directory, marker, results_file, phase):
+        """Write a hooks.yaml into ``directory`` whose single ``phase`` hook appends
+        ``marker`` (and a newline) to ``results_file``, so the caller can assert which
+        sources ran and in what order."""
+        script_name = f"{marker}_hook.py"
+        escaped = results_file.replace("\\", "\\\\")
+        with open(os.path.join(directory, script_name), "w", encoding="utf8") as f:
+            f.write(f"open(r'{escaped}', 'a').write('{marker}\\n')\n")
+        with open(os.path.join(directory, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write(f"version: '1.0'\n{phase}:\n  - command: python3\n    args: [{script_name}]\n")
+
+    @staticmethod
+    def _markers(results_file):
+        if not os.path.exists(results_file):
+            return []
+        with open(results_file, encoding="utf8") as f:
+            return [line.strip() for line in f if line.strip()]
+
+    def test_env_and_bundle_pre_submission_hooks_both_run(
+        self, fresh_deadline_config, tmp_path, monkeypatch
+    ):
+        """Both an environment and a bundle preSubmission hook run, environment first."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._configure()
+        _write_param_bundle(bundle)
+        results = str(tmp_path / "results.txt")
+        self._write_appending_hook(studio, "env", results, "preSubmission")
+        self._write_appending_hook(bundle, "bundle", results, "preSubmission")
+        monkeypatch.setenv("DEADLINE_HOOKS_DIR", studio)
+
+        with patch_calls_for_create_job_from_job_bundle():
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+
+        assert self._markers(results) == ["env", "bundle"]
+
+    def test_env_and_bundle_post_submission_hooks_both_run(
+        self, fresh_deadline_config, tmp_path, monkeypatch
+    ):
+        """Both an environment and a bundle postSubmission hook run, environment first."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._configure()
+        _write_param_bundle(bundle)
+        results = str(tmp_path / "results.txt")
+        self._write_appending_hook(studio, "env", results, "postSubmission")
+        self._write_appending_hook(bundle, "bundle", results, "postSubmission")
+        monkeypatch.setenv("DEADLINE_HOOKS_DIR", studio)
+
+        with patch_calls_for_create_job_from_job_bundle():
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+
+        assert self._markers(results) == ["env", "bundle"]
+
+    def test_bundle_hooks_still_run_without_env_dir(
+        self, fresh_deadline_config, tmp_path, monkeypatch
+    ):
+        """With no DEADLINE_HOOKS_DIR set, a bundle preSubmission hook still runs on its own."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._configure()
+        _write_param_bundle(bundle)
+        results = str(tmp_path / "results.txt")
+        self._write_appending_hook(bundle, "bundle", results, "preSubmission")
+        monkeypatch.delenv("DEADLINE_HOOKS_DIR", raising=False)
+
+        with patch_calls_for_create_job_from_job_bundle():
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+
+        assert self._markers(results) == ["bundle"]
+
+    def test_env_pre_submission_hook_skipped_when_env_hooks_disabled(
+        self, fresh_deadline_config, tmp_path, monkeypatch
+    ):
+        """An environment preSubmission hook does not run when environment hooks are disabled,
+        while the bundle hook still runs."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._configure()
+        config.set_setting("settings.allow_environment_hooks", "false")
+        _write_param_bundle(bundle)
+        results = str(tmp_path / "results.txt")
+        self._write_appending_hook(studio, "env", results, "preSubmission")
+        self._write_appending_hook(bundle, "bundle", results, "preSubmission")
+        monkeypatch.setenv("DEADLINE_HOOKS_DIR", studio)
+
+        with patch_calls_for_create_job_from_job_bundle():
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+
+        assert self._markers(results) == ["bundle"]
+
+
 class TestPreGuiHooks:
     """Tests for pre-GUI hooks."""
 
@@ -1686,3 +1802,147 @@ class TestPreGuiHooks:
         )
 
         assert [m.job_bundle_dir for m in sources] == [bundle]
+
+
+class TestCollectSubmissionHookSources:
+    """Source-selection tests for pre/post-submission hooks.
+
+    The pre/post-submission analog of ``TestPreGuiHooks``. Both sources (environment and
+    bundle) must be returnable together so submission hooks from both can run — the earlier
+    single-manager merge could only ever run one.
+    """
+
+    @staticmethod
+    def _write_submission_hooks(directory, phase="preSubmission"):
+        """Write a hooks.yaml with a single ``phase`` hook into ``directory``."""
+        with open(os.path.join(directory, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write(f"version: '1.0'\n{phase}:\n  - command: python3\n    args: [x.py]\n")
+
+    def test_env_and_bundle_ordering(self, tmp_path):
+        """When both sources have submission hooks and are enabled, environment comes first,
+        then bundle."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._write_submission_hooks(bundle)
+        self._write_submission_hooks(studio)
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [studio, bundle]
+
+    def test_post_submission_hooks_make_a_source_runnable(self, tmp_path):
+        """A source with only postSubmission hooks (no preSubmission) is still collected."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_submission_hooks(bundle, phase="postSubmission")
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=None,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [bundle]
+
+    def test_pre_gui_only_hooks_are_not_collected(self, tmp_path):
+        """A source with only preGUI hooks is not a submission source."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_submission_hooks(bundle, phase="preGUI")
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=None,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert sources == []
+
+    def test_env_dir_ignored_when_env_hooks_disabled_warns(self, tmp_path):
+        """A disabled environment submission hook is skipped and warns about environment
+        hooks (not preGUI)."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._write_submission_hooks(studio)
+        warnings: List[str] = []
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=False,
+            print_callback=lambda _msg: None,
+            warning_callback=warnings.append,
+        )
+
+        assert sources == []
+        assert any("DEADLINE_HOOKS_DIR contains submission hooks" in w for w in warnings)
+
+    def test_bundle_hooks_ignored_when_bundle_hooks_disabled_warns(self, tmp_path):
+        """A disabled bundle submission hook is skipped and warns about bundle hooks."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_submission_hooks(bundle)
+        warnings: List[str] = []
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=None,
+            allow_bundle_hooks=False,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+            warning_callback=warnings.append,
+        )
+
+        assert sources == []
+        assert any("Job bundle contains submission hooks" in w for w in warnings)
+
+    def test_env_dir_equal_to_bundle_dir_is_not_duplicated(self, tmp_path):
+        """If DEADLINE_HOOKS_DIR points at the job bundle, the shared hooks.yaml yields a
+        single source so submission hooks do not run twice."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_submission_hooks(bundle)
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=bundle,  # same directory
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [bundle]
+
+    def test_invalid_env_dir_warns(self, tmp_path):
+        """A DEADLINE_HOOKS_DIR that is not a directory warns and yields no env source."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        missing = str(tmp_path / "does_not_exist")
+        warnings: List[str] = []
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=missing,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+            warning_callback=warnings.append,
+        )
+
+        assert sources == []
+        assert any("is not a valid directory" in w for w in warnings)

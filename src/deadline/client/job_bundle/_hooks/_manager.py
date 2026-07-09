@@ -58,6 +58,79 @@ def _generate_hooks_confirmation_message(hooks: _HookConfiguration, bundle_dir: 
     return "\n".join(lines)
 
 
+def _collect_hook_sources(
+    bundle_dir: str,
+    env_hooks_dir: _Optional[str],
+    allow_bundle_hooks: bool,
+    allow_environment_hooks: bool,
+    print_callback: _Callable[[str], None],
+    warning_callback: _Optional[_Callable[[str], None]],
+    hook_manager_cls: _Optional[type],
+    has_runnable_hooks: _Callable[[_HookConfiguration], bool],
+    hook_kind: str,
+) -> _List["HookManager"]:
+    """Return the HookManagers with runnable hooks, in execution order (env then bundle).
+
+    Shared by :func:`collect_pre_gui_hook_sources` and
+    :func:`collect_submission_hook_sources`. ``has_runnable_hooks`` selects which phase's
+    hooks make a source runnable (preGUI vs. pre/post-submission); ``hook_kind`` names that
+    phase in the "present but disabled" guidance so both callers stay in sync while phrasing
+    their messages for their own phase.
+    """
+    warn = warning_callback or print_callback
+    manager_cls = hook_manager_cls or HookManager
+    sources: _List["HookManager"] = []
+
+    # If DEADLINE_HOOKS_DIR resolves to the job bundle directory, the two sources are the
+    # same hooks.yaml. Treat it as the bundle source only (skip the env source) so hooks are
+    # not loaded and run twice.
+    env_is_bundle = (
+        bool(env_hooks_dir)
+        and bool(bundle_dir)
+        and (_os.path.realpath(env_hooks_dir or "") == _os.path.realpath(bundle_dir or ""))
+    )
+
+    # Environment hooks first.
+    if env_hooks_dir and not env_is_bundle:
+        if not _os.path.isdir(env_hooks_dir):
+            warn(f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory")
+        else:
+            env_manager = manager_cls(env_hooks_dir, print_callback)
+            env_hooks = env_manager.load_hooks()
+            if env_hooks and has_runnable_hooks(env_hooks):
+                if allow_environment_hooks:
+                    sources.append(env_manager)
+                else:
+                    warn(
+                        f"Note: DEADLINE_HOOKS_DIR contains {hook_kind} hooks but environment "
+                        "hooks are disabled.\n"
+                        "Enable with: deadline config set settings.allow_environment_hooks true"
+                    )
+
+    # Bundle hooks second. When env_is_bundle, this single source covers both; it is gated
+    # by allow_bundle_hooks OR allow_environment_hooks (either grant permits the shared dir).
+    #
+    # Only consult the bundle source when there IS a bundle. DCC submitters have no on-disk
+    # bundle at pre-GUI time and pass bundle_dir="" — an empty dir would make HookManager
+    # resolve hooks.yaml/.json relative to the process CWD (os.path.join("", "hooks") →
+    # "hooks"), so a stray hooks file in the launch directory could be loaded and, with
+    # bundle hooks enabled studio-wide, executed for a submission that has no bundle. Skip
+    # the bundle source entirely when bundle_dir is falsy to avoid that CWD footgun.
+    if bundle_dir:
+        bundle_manager = manager_cls(bundle_dir, print_callback)
+        bundle_hooks = bundle_manager.load_hooks()
+        if bundle_hooks and has_runnable_hooks(bundle_hooks):
+            if allow_bundle_hooks or (env_is_bundle and allow_environment_hooks):
+                sources.append(bundle_manager)
+            else:
+                warn(
+                    f"Note: Job bundle contains {hook_kind} hooks but bundle hooks are disabled.\n"
+                    "Enable with: deadline config set settings.allow_bundle_hooks true"
+                )
+
+    return sources
+
+
 def collect_pre_gui_hook_sources(
     bundle_dir: str,
     env_hooks_dir: _Optional[str],
@@ -83,58 +156,51 @@ def collect_pre_gui_hook_sources(
     This is deliberately Qt-free so it can be unit-tested without a GUI binding; the caller
     (the submitter) handles the confirmation prompt and execution.
     """
-    warn = warning_callback or print_callback
-    manager_cls = hook_manager_cls or HookManager
-    sources: _List["HookManager"] = []
-
-    # If DEADLINE_HOOKS_DIR resolves to the job bundle directory, the two sources are the
-    # same hooks.yaml. Treat it as the bundle source only (skip the env source) so hooks are
-    # not loaded and run twice — matching the pre/post-submission path's dedup.
-    env_is_bundle = (
-        bool(env_hooks_dir)
-        and bool(bundle_dir)
-        and (_os.path.realpath(env_hooks_dir or "") == _os.path.realpath(bundle_dir or ""))
+    return _collect_hook_sources(
+        bundle_dir=bundle_dir,
+        env_hooks_dir=env_hooks_dir,
+        allow_bundle_hooks=allow_bundle_hooks,
+        allow_environment_hooks=allow_environment_hooks,
+        print_callback=print_callback,
+        warning_callback=warning_callback,
+        hook_manager_cls=hook_manager_cls,
+        has_runnable_hooks=lambda hooks: bool(hooks.pre_gui),
+        hook_kind="preGUI",
     )
 
-    # Environment hooks first.
-    if env_hooks_dir and not env_is_bundle:
-        if not _os.path.isdir(env_hooks_dir):
-            warn(f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory")
-        else:
-            env_manager = manager_cls(env_hooks_dir, print_callback)
-            env_hooks = env_manager.load_hooks()
-            if env_hooks and env_hooks.pre_gui:
-                if allow_environment_hooks:
-                    sources.append(env_manager)
-                else:
-                    warn(
-                        "Note: DEADLINE_HOOKS_DIR contains preGUI hooks but environment "
-                        "hooks are disabled.\n"
-                        "Enable with: deadline config set settings.allow_environment_hooks true"
-                    )
 
-    # Bundle hooks second. When env_is_bundle, this single source covers both; it is gated
-    # by allow_bundle_hooks OR allow_environment_hooks (either grant permits the shared dir).
-    #
-    # Only consult the bundle source when there IS a bundle. DCC submitters have no on-disk
-    # bundle at pre-GUI time and pass bundle_dir="" — an empty dir would make HookManager
-    # resolve hooks.yaml/.json relative to the process CWD (os.path.join("", "hooks") →
-    # "hooks"), so a stray hooks file in the launch directory could be loaded and, with
-    # bundle hooks enabled studio-wide, executed for a submission that has no bundle. Skip
-    # the bundle source entirely when bundle_dir is falsy to avoid that CWD footgun.
-    if bundle_dir:
-        bundle_manager = manager_cls(bundle_dir, print_callback)
-        bundle_hooks = bundle_manager.load_hooks()
-        if bundle_hooks and bundle_hooks.pre_gui:
-            if allow_bundle_hooks or (env_is_bundle and allow_environment_hooks):
-                sources.append(bundle_manager)
-            else:
-                warn(
-                    "Note: Job bundle contains preGUI hooks but bundle hooks are disabled.\n"
-                    "Enable with: deadline config set settings.allow_bundle_hooks true"
-                )
+def collect_submission_hook_sources(
+    bundle_dir: str,
+    env_hooks_dir: _Optional[str],
+    allow_bundle_hooks: bool,
+    allow_environment_hooks: bool,
+    print_callback: _Callable[[str], None],
+    warning_callback: _Optional[_Callable[[str], None]] = None,
+    hook_manager_cls: _Optional[type] = None,
+) -> _List["HookManager"]:
+    """Return the HookManagers whose pre/post-submission hooks should run, in execution order.
 
-    return sources
+    Submission (pre- and post-submission) hooks may come from the directory named by
+    ``DEADLINE_HOOKS_DIR`` (gated by ``allow_environment_hooks``) and/or the job bundle
+    (gated by ``allow_bundle_hooks``). Environment hooks run before bundle hooks. Sources
+    with neither pre- nor post-submission hooks are omitted.
+
+    This is the pre/post-submission analog of :func:`collect_pre_gui_hook_sources`. Both must
+    return a *list* of sources — the earlier single-``hook_manager`` merge could only ever run
+    one source, so environment and bundle submission hooks could not run together. See the
+    arguments' documentation on :func:`collect_pre_gui_hook_sources`.
+    """
+    return _collect_hook_sources(
+        bundle_dir=bundle_dir,
+        env_hooks_dir=env_hooks_dir,
+        allow_bundle_hooks=allow_bundle_hooks,
+        allow_environment_hooks=allow_environment_hooks,
+        print_callback=print_callback,
+        warning_callback=warning_callback,
+        hook_manager_cls=hook_manager_cls,
+        has_runnable_hooks=lambda hooks: bool(hooks.pre_submission or hooks.post_submission),
+        hook_kind="submission",
+    )
 
 
 class HookManager:
