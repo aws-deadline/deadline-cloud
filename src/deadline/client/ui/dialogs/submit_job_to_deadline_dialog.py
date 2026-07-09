@@ -12,7 +12,7 @@ import json
 from typing import Any, Dict, Optional, Protocol
 import yaml
 
-from qtpy.QtCore import QSize, Qt, Signal as _Signal  # pylint: disable=import-error
+from qtpy.QtCore import QSize, Qt  # pylint: disable=import-error
 from qtpy.QtGui import QKeyEvent  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
@@ -33,7 +33,6 @@ from ..dataclasses import HostRequirements
 from ...dataclasses import SubmitterInfo
 from ... import api
 from ...api._session import session_context as _session_context
-from ..controllers import AsyncTaskRunner as _AsyncTaskRunner
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from .._utils import block_signals, tr
 from ...config import get_setting, set_setting, config_file
@@ -110,8 +109,6 @@ class SubmitJobToDeadlineDialog(QDialog):
             fallback and other channels are left untouched. Defaults to False (no change).
     """
 
-    _auto_select_complete = _Signal()
-
     def __init__(
         self,
         *,
@@ -160,11 +157,6 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.known_asset_paths = known_asset_paths or []
         self.use_deadline_cloud_v2_channel = use_deadline_cloud_v2_channel
         self.should_close = False
-
-        # Runs the auto-select farm/queue API calls off the Qt event loop. Using a
-        # single operation_key means a newer auto-select supersedes (and cancels) an
-        # in-flight older one, so a stale result can never clobber newer settings.
-        self._auto_select_runner = _AsyncTaskRunner(self)
 
         self._build_ui(
             job_setup_widget_type,
@@ -244,7 +236,6 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.deadline_authentication_status.api_availability_changed.connect(
             self.refresh_deadline_settings
         )
-        self._auto_select_complete.connect(self.refresh_deadline_settings)
 
         # Refresh the submit button enable state once queue parameter status changes
         self.shared_job_settings.valid_parameters.connect(self._set_submit_button_state)
@@ -311,108 +302,28 @@ class SubmitJobToDeadlineDialog(QDialog):
             self.submit_button.setToolTip("")
 
     def refresh_deadline_settings(self):
-        self._auto_select_defaults()
         self._set_submit_button_state()
 
+        # The tab's selectors refresh their lists; when a list resolves to a single
+        # resource the combo auto-selects it, which the controller persists and
+        # cascades (farm -> queue -> storage). That is the only auto-select path -
+        # there is no separate background auto-select competing to write the same
+        # settings.
         self.shared_job_settings.deadline_cloud_settings_box.refresh_setting_controls(
             self.deadline_authentication_status.api_availability is True
         )
         # If necessary, this reloads the queue parameters
         self.shared_job_settings.refresh_queue_parameters()
 
-    # Identifies the auto-select task in the AsyncTaskRunner. Reusing one key means a
-    # newer auto-select supersedes any in-flight older one (latest-wins).
-    _AUTO_SELECT_OPERATION_KEY = "submit_dialog_auto_select_defaults"
+    def _on_deadline_cloud_selection_changed(self):
+        """React to a farm/queue selection made on the Shared job settings tab.
 
-    def _auto_select_defaults(self):
-        """Kick off an auto-select of the default farm/queue if only one is available.
-
-        The AWS API calls run in a background thread via ``AsyncTaskRunner``; the
-        result is applied back on the Qt main thread (see ``_on_auto_select_resolved``)
-        so we never touch settings or widgets from the worker thread.
+        Only updates the Submit button state and reloads queue parameters; it does
+        not re-list the resource combos (the controller has already cascaded their
+        lists) so a queue change doesn't trigger a farm-list refresh.
         """
-        if self.deadline_authentication_status.api_availability is not True:
-            return
-        farm_id = get_setting(_SETTING_FARM_ID)
-        queue_id = get_setting(_SETTING_QUEUE_ID)
-        if farm_id and queue_id:
-            # Nothing to select.
-            return
-        if self._auto_select_runner.is_running(self._AUTO_SELECT_OPERATION_KEY):
-            # An auto-select is already in flight; let it finish. When it applies a
-            # change it emits ``_auto_select_complete`` which re-enters here to pick
-            # up the next step (e.g. select the queue after the farm).
-            return
-
-        self._auto_select_runner.run(
-            operation_key=self._AUTO_SELECT_OPERATION_KEY,
-            fn=self._resolve_auto_select,
-            on_success=self._on_auto_select_resolved,
-            on_error=self._on_auto_select_error,
-            current_farm_id=farm_id,
-            current_queue_id=queue_id,
-        )
-
-    @staticmethod
-    def _resolve_auto_select(
-        *, current_farm_id: str, current_queue_id: str
-    ) -> dict[str, Optional[str]]:
-        """Background worker: resolve the farm/queue to auto-select.
-
-        Runs in a worker thread, so it only calls AWS APIs and returns plain data -
-        it does not read or write settings or touch any widgets.
-        """
-        farm_id_to_set: Optional[str] = None
-        queue_id_to_set: Optional[str] = None
-
-        farm_id = current_farm_id
-        if not farm_id:
-            farms = api.list_farms().get("farms", [])
-            if len(farms) == 1:
-                farm_id = farms[0]["farmId"]
-                farm_id_to_set = farm_id
-
-        if farm_id and not current_queue_id:
-            queues = api.list_queues(farmId=farm_id).get("queues", [])
-            if len(queues) == 1:
-                queue_id_to_set = queues[0]["queueId"]
-
-        return {
-            "farm_id": farm_id_to_set,
-            "queue_id": queue_id_to_set,
-            # The farm the queue was resolved under, so the main thread can confirm
-            # it still matches the configured farm before applying the queue.
-            "queue_farm_id": farm_id if queue_id_to_set else None,
-        }
-
-    def _on_auto_select_resolved(self, result: dict[str, Optional[str]]):
-        """Main-thread slot: apply the resolved farm/queue if still applicable.
-
-        Re-checks the current settings before writing so that a result computed
-        against now-stale state (e.g. the user changed the farm while the request
-        was in flight) is discarded rather than clobbering newer values.
-        """
-        applied = False
-
-        farm_id = result.get("farm_id")
-        if farm_id and not get_setting(_SETTING_FARM_ID):
-            set_setting(_SETTING_FARM_ID, farm_id)
-            applied = True
-
-        queue_id = result.get("queue_id")
-        if queue_id and not get_setting(_SETTING_QUEUE_ID):
-            # Only apply the queue if it was resolved for the farm that is still
-            # configured; otherwise it would be a queue from a different farm.
-            if get_setting(_SETTING_FARM_ID) == result.get("queue_farm_id"):
-                set_setting(_SETTING_QUEUE_ID, queue_id)
-                applied = True
-
-        if applied:
-            self._auto_select_complete.emit()
-
-    def _on_auto_select_error(self, error: BaseException):
-        """Main-thread slot: auto-select is best-effort, so just log failures."""
-        logger.debug("Auto-select defaults failed", exc_info=error)
+        self._set_submit_button_state()
+        self.shared_job_settings.refresh_queue_parameters()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """
@@ -436,6 +347,14 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.shared_job_settings_tab.setWidget(self.shared_job_settings)
         self.shared_job_settings_tab.setWidgetResizable(True)
         self.shared_job_settings.parameter_changed.connect(self.on_shared_job_parameter_changed)
+        # When the user edits the farm/queue selectors on the tab, reload queue
+        # parameters and refresh the Submit button enable state. This does NOT go
+        # through refresh_deadline_settings on purpose: the combos have already
+        # updated their own lists, so re-listing them (and re-running auto-select)
+        # would needlessly refresh the farm list when only the queue changed.
+        self.shared_job_settings.deadline_cloud_settings_box.selection_changed.connect(
+            self._on_deadline_cloud_selection_changed
+        )
 
     def _build_job_settings_tab(self, job_setup_widget_type, initial_job_settings):
         self.job_settings_tab = QScrollArea()

@@ -1,6 +1,9 @@
 name: On Opened PR
 
-on:
+on: # zizmor: ignore[dangerous-triggers]
+  # workflow_run is intentional: it runs from the default branch with this
+  # repo's context (never a fork's copy), and only consumes the PR artifact via
+  # the reusable extract-PR-details workflow. A fork PR cannot alter behavior.
   workflow_run:
     workflows: ["Record PR"]
     types:

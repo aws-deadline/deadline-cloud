@@ -5,6 +5,7 @@ Tests for the controller-based Deadline resource list combo boxes.
 """
 
 import pytest
+from typing import List
 from unittest.mock import patch
 from configparser import ConfigParser
 
@@ -169,8 +170,10 @@ class TestDeadlineFarmListComboBoxController:
         """When no farm is configured and exactly one loads, it is auto-selected.
 
         This is independent of *why* the list refreshed (open, profile switch,
-        sign-in, manual refresh) - the combo selects the lone farm and fires
-        currentIndexChanged so the dialog can react.
+        sign-in, manual refresh) - the combo selects the lone farm and emits
+        ``user_selected`` so the controller persists + cascades. (The display index
+        is set under block_signals, so ``currentIndexChanged`` intentionally does
+        NOT fire; ``user_selected`` is the explicit "treat as a selection" signal.)
         """
         widget = DeadlineFarmListComboBoxController()
         qtbot.addWidget(widget)
@@ -179,16 +182,42 @@ class TestDeadlineFarmListComboBoxController:
         config["defaults"] = {"farm_id": ""}  # nothing configured yet
         widget.set_config(config)
 
-        selected = []
-        widget.box.currentIndexChanged.connect(lambda i: selected.append(widget.box.itemData(i)))
+        user_selected: List[str] = []
+        widget.user_selected.connect(user_selected.append)
 
         with patch("deadline.client.ui.widgets._deadline_list_combo_boxes.config_file") as mock_cf:
             mock_cf.get_setting.return_value = ""  # no configured farm
             widget._handle_list_update([["Only Farm", "farm-only"]])
 
         assert widget.box.currentData() == "farm-only"
-        # currentIndexChanged must fire so the dialog's cascade is driven naturally.
-        assert "farm-only" in selected
+        # user_selected must fire so the controller's cascade is driven naturally.
+        assert user_selected == ["farm-only"]
+
+    def test_refresh_selected_id_does_not_emit_user_selected(self, qtbot):
+        """Display-sync must never look like a user selection.
+
+        ``refresh_selected_id`` only points the combo at the already-persisted
+        value; it must not emit ``user_selected`` (which would re-persist + cascade,
+        the root cause of the prior clobbering races).
+        """
+        widget = DeadlineFarmListComboBoxController()
+        qtbot.addWidget(widget)
+
+        config = ConfigParser()
+        config["defaults"] = {"farm_id": "farm-a"}
+        widget.set_config(config)
+        widget.box.addItem("Farm A", userData="farm-a")
+        widget.box.addItem("Farm B", userData="farm-b")
+
+        user_selected: List[str] = []
+        widget.user_selected.connect(user_selected.append)
+
+        with patch("deadline.client.ui.widgets._deadline_list_combo_boxes.config_file") as mock_cf:
+            mock_cf.get_setting.return_value = "farm-a"
+            widget.refresh_selected_id()
+
+        assert widget.box.currentData() == "farm-a"
+        assert user_selected == []
 
     def test_handle_list_update_no_auto_select_when_multiple(self, qtbot):
         """With more than one farm and nothing configured, no auto-select happens."""

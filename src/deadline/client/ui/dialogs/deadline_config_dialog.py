@@ -54,11 +54,6 @@ from ..widgets import DirectoryPickerWidget
 from ..widgets.deadline_authentication_status_widget import (
     DeadlineAuthenticationStatusWidget,
 )
-from ..widgets import (
-    DeadlineFarmListComboBoxController,
-    DeadlineQueueListComboBoxController,
-    DeadlineStorageProfileListComboBoxController,
-)
 from .deadline_login_dialog import DeadlineLoginDialog
 
 logger = getLogger(__name__)
@@ -142,9 +137,6 @@ class DeadlineConfigDialog(QDialog):
         )
         self.layout.addWidget(self.auth_status_box)
         self.deadline_authentication_status.deadline_config_changed.connect(self.config_box.refresh)
-        self.deadline_authentication_status.api_availability_changed.connect(
-            self.on_auth_status_update
-        )
 
         # We only use a Close button, not OK/Cancel, because we live update the settings.
         self.button_box = QDialogButtonBox(
@@ -160,9 +152,6 @@ class DeadlineConfigDialog(QDialog):
         self.auth_status_box.logout_clicked.connect(self.on_logout)
         self.auth_status_box.login_clicked.connect(self.on_login)
         self.layout.addWidget(self.button_box)
-
-        # Refresh the lists so queue/farm show the description instead of the ID
-        self.config_box.refresh_lists()
 
     @property
     def changes_were_applied(self) -> bool:
@@ -196,14 +185,6 @@ class DeadlineConfigDialog(QDialog):
         # Update the auth status with the refreshed config
         self.deadline_authentication_status.set_config(self.config_box.config)
 
-    def on_auth_status_update(self):
-        # If the AWS Deadline Cloud API is authorized successfully for the AWS profile
-        # in the config dialog, refresh the farm/queue lists
-        if self.deadline_authentication_status.api_availability and config_file.get_setting(
-            "defaults.aws_profile_name", self.deadline_authentication_status.config
-        ) == config_file.get_setting("defaults.aws_profile_name", self.config_box.config):
-            self.config_box.refresh_lists()
-
 
 class DeadlineScrollArea(QScrollArea):
     def __init__(self, parent: Optional[QWidget] = None):
@@ -221,12 +202,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
     # Signal for when the GUI is refreshed
     refreshed = Signal()
 
-    # Emitted when an async refresh_queues_list thread completes,
-    # provides (aws_profile_name, farm_id, [(queue_id, queue_name), ...])
-    _queue_list_update = Signal(str, str, list)
-    # Emitted when an async refresh_storage_profiles_name_list thread completes,
-    # provides (aws_profile_name, farm_id, queue_id, [storage_profile_id, ...])
-    _storage_profile_list_update = Signal(str, str, list)
     # This signal is sent when any background refresh thread catches an exception,
     # provides (operation_name, BaseException)
     _background_exception = Signal(str, BaseException)
@@ -237,11 +212,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.changes: dict = {}
         self.config: Optional[ConfigParser] = None
         self.changes_were_applied = False
-
-        # Flags to track when we're waiting for cascading list refreshes
-        # These prevent the list_updated handlers from interfering with manual user selections
-        self._awaiting_farms_for_cascade = False
-        self._awaiting_queues_for_cascade = False
 
         self._build_ui()
         self._fill_aws_profiles_box()
@@ -336,42 +306,8 @@ class DeadlineWorkstationConfigWidget(QWidget):
         layout.addRow(job_history_dir_label, self.job_history_dir_edit)
         self.job_history_dir_edit.path_changed.connect(self.job_history_dir_changed)
 
-        self.default_farm_box = DeadlineFarmListComboBoxController(parent=group)
-        default_farm_box_label = self.labels["defaults.farm_id"] = QLabel(tr("Default farm"))
-        self.default_farm_box.box.currentIndexChanged.connect(self.default_farm_changed)
-        self.default_farm_box.background_exception.connect(self.handle_background_exception)
-        layout.addRow(default_farm_box_label, self.default_farm_box)
-
     def _build_farm_settings_ui(self, group, layout):
         layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
-
-        self.default_queue_box = DeadlineQueueListComboBoxController(parent=group)
-        default_queue_box_label = self.labels["defaults.queue_id"] = QLabel(tr("Default queue"))
-        self.default_queue_box.box.currentIndexChanged.connect(self.default_queue_changed)
-        self.default_queue_box.background_exception.connect(self.handle_background_exception)
-        layout.addRow(default_queue_box_label, self.default_queue_box)
-
-        # Connect to controller signals to handle cascading updates when lists are populated
-        # (e.g., after profile or farm change)
-        from ..controllers import DeadlineUIController
-
-        self._controller = DeadlineUIController.getInstance()
-        self._controller.farms_updated.connect(self._on_farms_list_updated, Qt.QueuedConnection)
-        self._controller.queues_updated.connect(self._on_queues_list_updated, Qt.QueuedConnection)
-
-        self.default_storage_profile_box = DeadlineStorageProfileListComboBoxController(
-            parent=group
-        )
-        default_storage_profile_box_label = self.labels["settings.storage_profile_id"] = QLabel(
-            tr("Default storage profile")
-        )
-        self.default_storage_profile_box.box.currentIndexChanged.connect(
-            self.default_storage_profile_name_changed
-        )
-        self.default_storage_profile_box.background_exception.connect(
-            self.handle_background_exception
-        )
-        layout.addRow(default_storage_profile_box_label, self.default_storage_profile_box)
 
         item_name_copied = JobAttachmentsFileSystem.COPIED.value
         item_name_virtual = JobAttachmentsFileSystem.VIRTUAL.value
@@ -803,17 +739,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
         with block_signals(self.aws_profiles_box):
             self.aws_profiles_box.addItems(list(self.aws_profile_names))
 
-    def refresh_lists(self):
-        # Use the cached api_availability from DeadlineAuthenticationStatus
-        # instead of making a blocking API call on the main thread.
-        # The status is refreshed asynchronously and on_auth_status_update
-        # will call this method again when api_availability_changed is emitted.
-        auth_status = DeadlineAuthenticationStatus.getInstance()
-        if auth_status.api_availability:
-            self.default_farm_box.refresh_list()
-            self.default_queue_box.refresh_list()
-            self.default_storage_profile_box.refresh_list()
-
     def refresh(self):
         """
         Refreshes all the configuration UI elements from the current config.
@@ -823,9 +748,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.config.read_dict(config_file.read_config())
         for setting_name, value in self.changes.items():
             config_file.set_setting(setting_name, value, self.config)
-        self.default_farm_box.set_config(self.config)
-        self.default_queue_box.set_config(self.config)
-        self.default_storage_profile_box.set_config(self.config)
 
         with block_signals(self.aws_profiles_box):
             aws_profile_name = config_file.get_setting(
@@ -849,13 +771,8 @@ class DeadlineWorkstationConfigWidget(QWidget):
             )
             self.job_history_dir_edit.setText(job_history_dir)
 
-        self.default_farm_box.refresh_selected_id()
-
         for refresh_callback in self._refresh_callbacks:
             refresh_callback()
-
-        self.default_queue_box.refresh_selected_id()
-        self.default_storage_profile_box.refresh_selected_id()
 
         # Put an orange box around the labels for any settings that are changed
         for setting_name, label in self.labels.items():
@@ -872,11 +789,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
         Returns True if the settings were applied, False otherwise.
         """
-
-        # We need to retrieve here as changing Queue's won't update.
-        self.changes["settings.storage_profile_id"] = (
-            self.default_storage_profile_box.box.currentData()
-        )
 
         for setting_name, value in self.changes.items():
             if value.startswith(NOT_VALID_MARKER):
@@ -910,17 +822,15 @@ class DeadlineWorkstationConfigWidget(QWidget):
 
     def aws_profile_changed(self, value):
         self.changes["defaults.aws_profile_name"] = value
-        # Clear the farm_id/region and queue_id since they don't exist in the new profile
-        self.changes["defaults.farm_id"] = ""
-        self.changes["defaults.farm_region"] = ""
-        self.changes["defaults.queue_id"] = ""
-        self.default_farm_box.clear_list()
-        self.default_queue_box.clear_list()
-        self.default_storage_profile_box.clear_list()
+        # Do NOT clear farm/queue/storage here. These settings are profile-scoped
+        # (each profile has its own config section), so switching profiles already
+        # surfaces the new profile's own stored values. Clearing them would instead
+        # write empty values into the *new* profile's section - destroying the very
+        # defaults we're switching to (and orphaning the queue under a malformed
+        # section). The farm/queue/storage selectors live on the submit dialog's
+        # Shared job settings tab and re-derive their selection from the switched-to
+        # profile on the next refresh.
         self.refresh()
-        # Trigger cascading refresh - farms will load, then queues, then storage profiles
-        self._awaiting_farms_for_cascade = True
-        self.default_farm_box.refresh_list()
 
     def job_history_dir_changed(self):
         job_history_dir = self.job_history_dir_edit.text()
@@ -930,90 +840,6 @@ class DeadlineWorkstationConfigWidget(QWidget):
         ):
             self.changes["settings.job_history_dir"] = job_history_dir
         self.refresh()
-
-    def default_farm_changed(self, index):
-        if index < 0:
-            return
-        farm_id = self.default_farm_box.box.itemData(index)
-        if farm_id is None:
-            return
-        self.changes["defaults.farm_id"] = farm_id
-        # Persist the selected farm's region too, per the (region, farm_id) convention.
-        # Empty string means "use the session/profile region" (backwards compatible).
-        self.changes["defaults.farm_region"] = self.default_farm_box.region_for_id(farm_id)
-        # Clear the queue_id since the old queue doesn't exist in the new farm
-        self.changes["defaults.queue_id"] = ""
-        # Clear storage profile lists - they depend on queue which we're about to refresh
-        self.default_storage_profile_box.clear_list()
-        self.refresh()
-        # Trigger cascading refresh - queues will load, then storage profiles
-        self._awaiting_queues_for_cascade = True
-        self.default_queue_box.refresh_list()
-
-    def default_queue_changed(self, index):
-        if index < 0:
-            return
-        queue_id = self.default_queue_box.box.currentData()
-        if queue_id is None:
-            return
-        self.changes["defaults.queue_id"] = queue_id
-        self.refresh()
-        self.default_storage_profile_box.refresh_list()
-
-    def default_storage_profile_name_changed(self, index):
-        if index < 0:
-            return
-        storage_profile_id = self.default_storage_profile_box.box.itemData(index)
-        if storage_profile_id is None:
-            return
-        self.changes["settings.storage_profile_id"] = storage_profile_id
-        self.refresh()
-
-    def _on_farms_list_updated(self, farms_list):
-        """
-        Handle when the farm list is updated from the controller.
-
-        When farms are loaded as part of a cascade (e.g., after a profile change),
-        we need to continue the cascade by refreshing queues.
-        """
-        if not self._awaiting_farms_for_cascade:
-            return
-
-        self._awaiting_farms_for_cascade = False
-
-        # Get the currently selected farm from the combo box
-        current_farm_id = self.default_farm_box.box.currentData()
-        if current_farm_id:
-            # Update the changes dict with the selected farm and its region.
-            self.changes["defaults.farm_id"] = current_farm_id
-            self.changes["defaults.farm_region"] = self.default_farm_box.region_for_id(
-                current_farm_id
-            )
-            self.refresh()
-            # Continue cascade - refresh queues with the valid farm_id
-            self._awaiting_queues_for_cascade = True
-            self.default_queue_box.refresh_list()
-
-    def _on_queues_list_updated(self, queues_list):
-        """
-        Handle when the queue list is updated from the controller.
-
-        When queues are loaded as part of a cascade (e.g., after a farm change),
-        we need to continue the cascade by refreshing storage profiles.
-        """
-        if not self._awaiting_queues_for_cascade:
-            return
-
-        self._awaiting_queues_for_cascade = False
-
-        # Get the currently selected queue from the combo box
-        current_queue_id = self.default_queue_box.box.currentData()
-        if current_queue_id:
-            # Update the changes dict with the selected queue
-            self.changes["defaults.queue_id"] = current_queue_id
-            self.refresh()
-            # Continue cascade - refresh storage profiles with the valid queue_id
-            self.default_storage_profile_box.refresh_list()
 
     def _on_add_known_path(self):
         """Handle adding a new known path"""

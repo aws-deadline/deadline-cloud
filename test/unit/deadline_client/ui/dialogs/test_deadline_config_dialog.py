@@ -9,9 +9,6 @@ try:
     from deadline.client.ui.widgets._deadline_list_combo_boxes import (
         DeadlineFarmListComboBoxController,
     )
-    from deadline.client.ui.dialogs.deadline_config_dialog import (
-        DeadlineWorkstationConfigWidget,
-    )
 except ImportError:
     pytest.importorskip("deadline.client.ui.widgets._deadline_list_combo_boxes")
 
@@ -59,35 +56,3 @@ class TestDeadlineResourceListComboBoxController:
         widget.refresh_selected_id()
 
         assert widget.box.currentText() == "<none selected>"
-
-
-class TestFarmRegionPersistence:
-    """Tests that selecting a farm persists defaults.farm_region with defaults.farm_id."""
-
-    def test_default_farm_changed_persists_region(self):
-        """default_farm_changed records both farm_id and the farm's region in changes."""
-        # Use a lightweight stand-in (plain MagicMock auto-creates the instance
-        # attributes the method touches) so we don't construct the whole
-        # (boto3-backed) dialog; we only exercise the selection-persistence logic.
-        stub = MagicMock()
-        stub.changes = {}
-        stub.default_farm_box.box.itemData.return_value = "farm-a"
-        stub.default_farm_box.region_for_id.return_value = "us-west-2"
-
-        DeadlineWorkstationConfigWidget.default_farm_changed(stub, 0)
-
-        assert stub.changes["defaults.farm_id"] == "farm-a"
-        assert stub.changes["defaults.farm_region"] == "us-west-2"
-        # The queue id is cleared on farm change.
-        assert stub.changes["defaults.queue_id"] == ""
-        stub.default_farm_box.region_for_id.assert_called_once_with("farm-a")
-
-    def test_aws_profile_changed_clears_region(self):
-        """Switching AWS profile clears the persisted farm region."""
-        stub = MagicMock()
-        stub.changes = {}
-
-        DeadlineWorkstationConfigWidget.aws_profile_changed(stub, "other-profile")
-
-        assert stub.changes["defaults.farm_id"] == ""
-        assert stub.changes["defaults.farm_region"] == ""

@@ -36,7 +36,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 25
+    assert len(settings.keys()) == 27
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -113,6 +113,8 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("settings.max_failed_tasks_count", "50")
     config.set_setting("settings.deadline_regions", "us-west-2,us-east-1")
     config.set_setting("defaults.farm_region", "us-east-1")
+    config.set_setting("settings.https_proxy", "http://proxy.example.com:8080")
+    config.set_setting("settings.ca_bundle", "/etc/ssl/certs/ca-bundle.pem")
 
     runner = CliRunner()
     result = runner.invoke(main, ["config", "show"])

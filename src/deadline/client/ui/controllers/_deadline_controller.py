@@ -17,6 +17,7 @@ from qtpy.QtCore import QObject, Qt, Signal
 from ... import api
 from ...api._list_apis import _iter_farms_by_region
 from ...api._session import _resolve_region
+from ...config import config_file, set_setting
 from ...exceptions import DeadlineOperationError
 from ...job_bundle.parameters import JobParameter
 from ._async_runner import AsyncTaskRunner
@@ -100,6 +101,10 @@ class DeadlineUIController(QObject):
     queues_updated = Signal(list)
     storage_profiles_updated = Signal(list)
     queue_parameters_updated = Signal(list)
+
+    # Emitted after a farm or queue selection has been persisted, so a host dialog
+    # can reload queue parameters and refresh its Submit button state.
+    selection_changed = Signal()
 
     # ─────────────────────────────────────────────────────────────
     # Loading State Signals
@@ -504,49 +509,85 @@ class DeadlineUIController(QObject):
         self.queue_parameters_updated.emit([])
 
     # ─────────────────────────────────────────────────────────────
-    # Cascading Selection Handlers
+    # Selection Handlers (single source of truth)
     # ─────────────────────────────────────────────────────────────
+    #
+    # These are the ONLY place farm/queue/storage selections are persisted and
+    # cascaded. A user picking a resource in a combo, or the combo auto-selecting
+    # a lone resource, routes here. The controller:
+    #   1. persists the selection (and clears now-invalid dependents) on the main
+    #      thread via the module-level set_setting (global config + disk), and
+    #   2. updates its own _current_* ids, which refresh_queues/refresh_storage_
+    #      profiles read, so dependent list fetches always use the just-selected
+    #      ids rather than a stale per-widget config snapshot.
+    # Having a single writer on a single thread is what removes the family of
+    # races the previous dual-cascade design had to patch piecemeal.
 
-    def on_farm_selected(self, farm_id: str) -> None:
-        """
-        Handle farm selection change.
+    def select_farm(self, farm_id: str) -> None:
+        """Persist a farm selection and cascade to queues.
 
-        Triggers cascading refresh of dependent resources:
-        farm -> queues -> storage profiles, queue parameters
+        Clears the previously selected queue/storage profile, since they belong to
+        the old farm, then refreshes the queue list for the new farm. ``selection_
+        changed`` is emitted so the submit dialog can reload queue parameters and
+        refresh the Submit button state.
 
         Args:
-            farm_id: The newly selected farm ID
+            farm_id: The newly selected farm ID (may be "" to clear).
         """
-        if farm_id == self._current_farm_id:
-            return
+        set_setting("defaults.farm_id", farm_id)
+        # The previous queue/storage profile belong to the old farm.
+        set_setting("defaults.queue_id", "")
+        set_setting("settings.storage_profile_id", "")
 
         self._current_farm_id = farm_id
         self._current_queue_id = ""
 
-        # Clear dependent data
+        # Drop dependent data so nothing stale lingers while the queue list reloads.
         self.storage_profiles_updated.emit([])
         self.queue_parameters_updated.emit([])
 
-        # Refresh queues for new farm
         self.refresh_queues(farm_id)
+        self.selection_changed.emit()
 
-    def on_queue_selected(self, queue_id: str) -> None:
-        """
-        Handle queue selection change.
+    def select_queue(self, queue_id: str) -> None:
+        """Persist a queue selection and cascade to storage profiles + queue params.
 
-        Triggers refresh of queue-dependent resources.
+        Clears the previously selected storage profile (it is queue-scoped), then
+        refreshes the storage-profile list and queue parameters for the new queue.
 
         Args:
-            queue_id: The newly selected queue ID
+            queue_id: The newly selected queue ID (may be "" to clear).
         """
-        if queue_id == self._current_queue_id:
-            return
+        set_setting("defaults.queue_id", queue_id)
+        # The previous storage profile belongs to the old queue.
+        set_setting("settings.storage_profile_id", "")
 
         self._current_queue_id = queue_id
 
-        # Refresh dependent data
         self.refresh_storage_profiles()
         self.refresh_queue_parameters()
+        self.selection_changed.emit()
+
+    def select_storage_profile(self, storage_profile_id: str) -> None:
+        """Persist a storage-profile selection.
+
+        A storage profile has no dependents and does not gate the Submit button or
+        queue parameters, so this only persists; no cascade or notification.
+
+        Args:
+            storage_profile_id: The newly selected storage profile ID (may be "").
+        """
+        set_setting("settings.storage_profile_id", storage_profile_id or "")
+
+    def sync_selection_state(self, config: Optional[ConfigParser] = None) -> None:
+        """Align the controller's cascade ids with the persisted config.
+
+        Called on a plain refresh (dialog open, profile switch, sign-in) where the
+        selection wasn't made through select_*; keeps refresh_queues/refresh_storage_
+        profiles reading the correct ids without a redundant per-widget snapshot.
+        """
+        self._current_farm_id = config_file.get_setting("defaults.farm_id", config=config)
+        self._current_queue_id = config_file.get_setting("defaults.queue_id", config=config)
 
     # ─────────────────────────────────────────────────────────────
     # Lifecycle

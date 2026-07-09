@@ -4,10 +4,12 @@
 tests the deadline.client.api functions relating to boto3.Client
 """
 
+import os
 from typing import Optional
 from unittest.mock import call, patch, MagicMock, ANY
 
 import boto3  # type: ignore[import]
+import botocore.config  # type: ignore[import]
 import pytest
 from deadline.client import api, config
 from deadline.client.api._session import (
@@ -261,6 +263,198 @@ def test_get_boto3_client_without_region_backcompat(fresh_deadline_config):
 
     # region_name must NOT be passed to preserve existing single-region behavior.
     mock_session.client.assert_called_once_with("deadline", config=ANY)
+
+
+# ---- settings.https_proxy / settings.ca_bundle wiring (issue #1046) --------
+#
+# Proxy and CA bundle are applied once at the SESSION level (apply_proxy_settings),
+# not per-client: botocore merges the session's default client config into every
+# per-client Config (so proxies is inherited) and reads the session's ca_bundle
+# config variable for verify. So every client built from the session -- including
+# the S3/Deadline clients job_attachments builds -- picks up both settings.
+
+
+def test_apply_proxy_settings_no_settings_is_noop(fresh_deadline_config):
+    """With neither setting configured, the session is left untouched."""
+    session = boto3.Session(region_name="us-west-2")
+    api._session.apply_proxy_settings(session)
+
+    assert session._session.get_default_client_config() is None
+    client = get_session_client(session, "deadline")
+    assert not client.meta.config.proxies
+
+
+def test_apply_proxy_settings_applies_https_proxy(fresh_deadline_config):
+    """settings.https_proxy is applied to the session for both schemes and inherited."""
+    config.set_setting("settings.https_proxy", "http://proxy.example.com:8080")
+    session = boto3.Session(region_name="us-west-2")
+    api._session.apply_proxy_settings(session)
+
+    client = get_session_client(session, "deadline")
+    assert client.meta.config.proxies == {
+        "http": "http://proxy.example.com:8080",
+        "https": "http://proxy.example.com:8080",
+    }
+
+
+def test_apply_proxy_settings_applies_ca_bundle(fresh_deadline_config):
+    """settings.ca_bundle becomes the session's verify, inherited by clients."""
+    config.set_setting("settings.ca_bundle", "/etc/ssl/my-ca.pem")
+    expected_ca = config.get_setting("settings.ca_bundle")
+    session = boto3.Session(region_name="us-west-2")
+    api._session.apply_proxy_settings(session)
+
+    client = get_session_client(session, "deadline")
+    assert client._endpoint.http_session._verify == expected_ca
+
+
+def test_apply_proxy_settings_ca_bundle_expands_user(fresh_deadline_config):
+    """A ``~``-relative settings.ca_bundle is expanded before reaching verify.
+
+    The config layer only normalizes slashes -- it does not expand ``~`` (and
+    botocore doesn't either), so it must be expanded to an absolute path or the
+    bundle won't be found at TLS-verification time.
+    """
+    config.set_setting("settings.ca_bundle", "~/certs/ca.pem")
+    expected_ca = os.path.expanduser(config.get_setting("settings.ca_bundle"))
+    # The leading ``~`` must have been expanded. (Don't assert ``~`` is absent from
+    # the whole path: on Windows the home dir can be an 8.3 short path like
+    # ``C:\Users\RUNNER~1\...`` that legitimately contains a tilde.)
+    assert not expected_ca.startswith("~")
+    session = boto3.Session(region_name="us-west-2")
+    api._session.apply_proxy_settings(session)
+
+    client = get_session_client(session, "deadline")
+    assert client._endpoint.http_session._verify == expected_ca
+
+
+def test_apply_proxy_settings_proxy_and_ca_bundle_together(fresh_deadline_config):
+    """Both settings apply on the same client: proxy via Config, CA via verify."""
+    config.set_setting("settings.https_proxy", "http://proxy.example.com:8080")
+    config.set_setting("settings.ca_bundle", "/etc/ssl/my-ca.pem")
+    expected_ca = config.get_setting("settings.ca_bundle")
+    session = boto3.Session(region_name="us-west-2")
+    api._session.apply_proxy_settings(session)
+
+    client = get_session_client(session, "deadline")
+    assert client.meta.config.proxies == {
+        "http": "http://proxy.example.com:8080",
+        "https": "http://proxy.example.com:8080",
+    }
+    assert client._endpoint.http_session._verify == expected_ca
+
+
+def test_apply_proxy_settings_does_not_clobber_existing_default_config(fresh_deadline_config):
+    """Applying a proxy merges into, rather than replaces, an existing default config."""
+    config.set_setting("settings.https_proxy", "http://proxy.example.com:8080")
+    session = boto3.Session(region_name="us-west-2")
+    session._session.set_default_client_config(botocore.config.Config(read_timeout=123))
+    api._session.apply_proxy_settings(session)
+
+    merged = session._session.get_default_client_config()
+    assert merged.read_timeout == 123
+    assert merged.proxies == {
+        "http": "http://proxy.example.com:8080",
+        "https": "http://proxy.example.com:8080",
+    }
+
+
+def test_apply_proxy_settings_honors_explicit_config_parser(fresh_deadline_config):
+    """The settings are resolved from an explicitly-supplied ConfigParser when given."""
+    from configparser import ConfigParser
+
+    cfg = ConfigParser()
+    config.set_setting("settings.https_proxy", "http://in-memory:7070", config=cfg)
+    config.set_setting("settings.ca_bundle", "/etc/ssl/in-memory.pem", config=cfg)
+    expected_ca = config.get_setting("settings.ca_bundle", config=cfg)
+
+    # Sanity: the on-disk default config has neither set.
+    assert config.get_setting("settings.https_proxy") == ""
+    assert config.get_setting("settings.ca_bundle") == ""
+
+    session = boto3.Session(region_name="us-west-2")
+    api._session.apply_proxy_settings(session, config=cfg)
+
+    client = get_session_client(session, "deadline")
+    assert client.meta.config.proxies == {
+        "http": "http://in-memory:7070",
+        "https": "http://in-memory:7070",
+    }
+    assert client._endpoint.http_session._verify == expected_ca
+
+
+def test_apply_proxy_settings_first_config_wins_and_warns(fresh_deadline_config, caplog):
+    """
+    Proxy/CA are machine-level, not per-config: once applied to a (cached) session,
+    a later call with a DIFFERENT config does NOT override them, and warns.
+    """
+    from configparser import ConfigParser
+
+    cfg_a = ConfigParser()
+    config.set_setting("settings.https_proxy", "http://user:s3cret@proxy-a:8080", config=cfg_a)
+    cfg_b = ConfigParser()
+    config.set_setting("settings.https_proxy", "http://user:hunter2@proxy-b:9090", config=cfg_b)
+
+    session = boto3.Session(region_name="us-west-2")
+    api._session.apply_proxy_settings(session, config=cfg_a)
+    # Second application with a conflicting config is ignored (session already configured).
+    with caplog.at_level("WARNING", logger="deadline.client.api._session"):
+        api._session.apply_proxy_settings(session, config=cfg_b)
+
+    warnings = [
+        r.message for r in caplog.records if "already-configured boto3 session" in r.message
+    ]
+    assert warnings
+    # The warning names which setting changed but must NOT leak the proxy URL, which
+    # can embed basic-auth credentials.
+    assert any("https_proxy" in m for m in warnings)
+    for m in warnings:
+        assert "s3cret" not in m and "hunter2" not in m
+        assert "proxy-a" not in m and "proxy-b" not in m
+    client = get_session_client(session, "deadline")
+    assert client.meta.config.proxies == {
+        "http": "http://user:s3cret@proxy-a:8080",
+        "https": "http://user:s3cret@proxy-a:8080",
+    }
+
+
+def test_apply_proxy_settings_reapply_same_config_no_warning(fresh_deadline_config, caplog):
+    """Re-applying the SAME settings to a session is a silent no-op (no warning)."""
+    config.set_setting("settings.https_proxy", "http://proxy.example.com:8080")
+    session = boto3.Session(region_name="us-west-2")
+
+    api._session.apply_proxy_settings(session)
+    with caplog.at_level("WARNING", logger="deadline.client.api._session"):
+        api._session.apply_proxy_settings(session)
+
+    assert not any("already-configured boto3 session" in r.message for r in caplog.records)
+
+
+def test_apply_proxy_settings_returns_same_session(fresh_deadline_config):
+    """The helper returns the same session object for chaining."""
+    session = boto3.Session(region_name="us-west-2")
+    assert api._session.apply_proxy_settings(session) is session
+
+
+def test_get_boto3_client_applies_proxy_via_session(fresh_deadline_config):
+    """
+    End-to-end: get_boto3_client -> get_boto3_session applies the proxy/CA to the
+    session, and the returned client inherits both.
+    """
+    config.set_setting("settings.https_proxy", "http://proxy.example.com:8080")
+    config.set_setting("settings.ca_bundle", "/etc/ssl/my-ca.pem")
+    expected_ca = config.get_setting("settings.ca_bundle")
+
+    real_session = boto3.Session(region_name="us-west-2")
+    get_session_client.cache_clear()
+    with patch.object(api._session, "_get_boto3_session_for_profile", return_value=real_session):
+        client = get_boto3_client("deadline")
+
+    assert client.meta.config.proxies == {
+        "http": "http://proxy.example.com:8080",
+        "https": "http://proxy.example.com:8080",
+    }
+    assert client._endpoint.http_session._verify == expected_ca
 
 
 def test_get_boto3_session_with_region_builds_region_scoped_session(fresh_deadline_config):

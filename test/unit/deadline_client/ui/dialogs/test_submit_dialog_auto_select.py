@@ -1,13 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""
-pytest-qt tests for auto-selection of the default farm/queue in
-``SubmitJobToDeadlineDialog``.
+"""pytest-qt tests for the ``SubmitJobToDeadlineDialog`` farm/queue selection flow.
 
-Auto-select is a small stateful workflow: a background ``AsyncTaskRunner`` task
-lists farms (and then queues), and a main-thread slot applies the result. These
-tests cover both the happy paths and the awkward event sequences (stale results,
-concurrent triggers, errors) that a threaded workflow can hit.
+Selection of the default farm/queue is owned by the ``DeadlineUIController`` and
+driven by the tab's combo boxes: when a resource list resolves to a single entry
+the combo auto-selects it and emits ``user_selected``, which the controller
+persists and cascades (farm -> queue -> storage). There is no separate
+dialog-level background auto-select; these tests verify the dialog integrates
+with that single controller-driven path.
 """
 
 from configparser import ConfigParser
@@ -16,11 +16,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 try:
-    from qtpy.QtWidgets import QWidget
+    from qtpy.QtWidgets import QApplication, QWidget
+    from deadline.client.ui.controllers._deadline_controller import DeadlineUIController
     from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
     from deadline.client.ui.dataclasses import JobBundleSettings
     from deadline.client.job_bundle.submission import AssetReferences
-    from deadline.client.config import get_setting, set_setting
+    from deadline.client.config import get_setting
     from deadline.client.config.config_file import (
         _SETTING_FARM_ID as SETTING_FARM_ID,
         _SETTING_QUEUE_ID as SETTING_QUEUE_ID,
@@ -33,9 +34,11 @@ DIALOG_MODULE = "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
 
 @pytest.fixture(autouse=True)
 def _reset_thread_pool():
-    """Reset the shared thread pool around each test for isolation."""
+    """Reset the shared thread pool and UI controller around each test."""
+    DeadlineUIController.resetInstance()
     DeadlineThreadPool.reset()
     yield
+    DeadlineUIController.resetInstance()
     DeadlineThreadPool.shutdown(wait_for_done=True, timeout_ms=2000)
     DeadlineThreadPool.reset()
 
@@ -72,8 +75,8 @@ class _AuthStatusStub:
     """Mutable stand-in for DeadlineAuthenticationStatus.
 
     ``api_availability`` is a writable attribute so a test can build the dialog
-    with the API "unavailable" (so construction does not kick off a real
-    auto-select against live credentials) and then flip it to ``True``.
+    with the API "unavailable" (so construction does not kick off a real refresh
+    against live credentials) and then flip it to ``True``.
     """
 
     def __init__(self, api_availability):
@@ -95,12 +98,8 @@ def _build_dialog(qtbot, auth_status):
     """Construct a SubmitJobToDeadlineDialog wired to the mock auth status.
 
     The dialog is always built with the API unavailable so construction does not
-    start an auto-select task; tests opt in by setting
+    kick off list refreshes; tests opt in by setting
     ``auth_status.api_availability = True`` afterwards.
-
-    The ``_auto_select_complete`` signal is disconnected from the heavy
-    ``refresh_deadline_settings`` slot and rewired to a spy, so each test
-    exercises auto-select in isolation without cascading API calls.
     """
     import deadline.client.ui.deadline_authentication_status as auth_module
 
@@ -132,268 +131,141 @@ def _build_dialog(qtbot, auth_status):
         )
     qtbot.addWidget(dialog)
 
-    # Isolate auto-select: drop the refresh wiring and observe the signal directly.
-    try:
-        dialog._auto_select_complete.disconnect()
-    except (TypeError, RuntimeError):
-        pass
-    complete_spy = MagicMock()
-    dialog._auto_select_complete.connect(complete_spy)
-
     # Restore the availability the test asked for, now that construction is done.
     auth_status.api_availability = build_availability
-    return dialog, complete_spy
+    return dialog
 
 
-def _wait_for_auto_select(qtbot, dialog):
-    """Wait until the in-flight auto-select task has run and its slots delivered.
+# ---------------------------------------------------------------------------
+# Auto-select now flows combo -> controller. Verify it through the full dialog.
+# ---------------------------------------------------------------------------
 
-    We wait on the thread pool's own active-thread accounting (reliable) rather
-    than ``AsyncTaskRunner.is_running`` (whose cleanup is itself a queued slot),
-    then flush the Qt event loop so the queued result/error slot runs.
+
+def test_lone_farm_and_queue_auto_selected_through_dialog(qtbot, fresh_deadline_config):
+    """A single farm + single queue are auto-selected and persisted end-to-end.
+
+    refresh_deadline_settings refreshes the combos; the farm combo auto-selects
+    the lone farm, the controller persists + cascades to queues, and the lone
+    queue is auto-selected and persisted in turn.
     """
-    qtbot.waitUntil(lambda: DeadlineThreadPool.active_thread_count() == 0, timeout=3000)
-    qtbot.wait(100)
-
-
-# ---------------------------------------------------------------------------
-# Happy paths
-# ---------------------------------------------------------------------------
-
-
-def test_auto_selects_single_farm_and_queue(qtbot, fresh_deadline_config):
-    """One farm + one queue: both are auto-selected end-to-end via the runner."""
     auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
+    dialog = _build_dialog(qtbot, auth)
+
+    def _one_farm_one_region(config=None):
+        # Farms load through the multi-region streaming path (_iter_farms_by_region),
+        # not a single api.list_farms call, so mock that generator with one region.
+        yield (
+            "us-west-2",
+            [{"displayName": "Only Farm", "farmId": "farm-1", "region": "us-west-2"}],
+            None,
+        )
 
     with (
-        patch(f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": [{"farmId": "farm-1"}]}),
         patch(
-            f"{DIALOG_MODULE}.api.list_queues", return_value={"queues": [{"queueId": "queue-1"}]}
+            "deadline.client.ui.controllers._deadline_controller._iter_farms_by_region",
+            side_effect=_one_farm_one_region,
+        ),
+        patch(
+            "deadline.client.api.list_queues",
+            return_value={"queues": [{"displayName": "Only Queue", "queueId": "queue-1"}]},
+        ),
+        patch(
+            "deadline.client.api.list_storage_profiles_for_queue",
+            return_value={"storageProfiles": []},
         ),
     ):
-        dialog._auto_select_defaults()
-        _wait_for_auto_select(qtbot, dialog)
+        dialog.refresh_deadline_settings()
+        # The cascade is multi-hop and async (farm list -> auto-select farm ->
+        # queue list -> auto-select queue), so wait until both are persisted rather
+        # than for a single signal.
+        qtbot.waitUntil(
+            lambda: (
+                get_setting(SETTING_FARM_ID) == "farm-1"
+                and get_setting(SETTING_QUEUE_ID) == "queue-1"
+            ),
+            timeout=5000,
+        )
 
     assert get_setting(SETTING_FARM_ID) == "farm-1"
     assert get_setting(SETTING_QUEUE_ID) == "queue-1"
-    complete_spy.assert_called_once()
 
 
-def test_auto_selects_queue_when_farm_already_configured(qtbot, fresh_deadline_config):
-    """Farm already set: only the queue is selected, and list_farms is not called."""
-    set_setting(SETTING_FARM_ID, "farm-preset")
+def test_multiple_farms_not_auto_selected_through_dialog(qtbot, fresh_deadline_config):
+    """With more than one farm, nothing is auto-selected or persisted."""
     auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
+    dialog = _build_dialog(qtbot, auth)
+    controller = DeadlineUIController.getInstance()
 
-    with (
-        patch(f"{DIALOG_MODULE}.api.list_farms") as mock_farms,
-        patch(
-            f"{DIALOG_MODULE}.api.list_queues", return_value={"queues": [{"queueId": "queue-9"}]}
-        ) as mock_queues,
-    ):
-        dialog._auto_select_defaults()
-        _wait_for_auto_select(qtbot, dialog)
-
-    mock_farms.assert_not_called()
-    mock_queues.assert_called_once_with(farmId="farm-preset")
-    assert get_setting(SETTING_FARM_ID) == "farm-preset"
-    assert get_setting(SETTING_QUEUE_ID) == "queue-9"
-    complete_spy.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# No-op paths
-# ---------------------------------------------------------------------------
-
-
-def test_multiple_farms_does_not_select(qtbot, fresh_deadline_config):
-    """More than one farm: nothing is selected and no queue lookup happens."""
-    auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
+    def _two_farms_one_region(config=None):
+        # Farms load through the multi-region streaming path; two farms in one region
+        # means no unambiguous lone resource, so nothing auto-selects.
+        yield (
+            "us-west-2",
+            [
+                {"displayName": "Farm A", "farmId": "farm-a", "region": "us-west-2"},
+                {"displayName": "Farm B", "farmId": "farm-b", "region": "us-west-2"},
+            ],
+            None,
+        )
 
     with (
         patch(
-            f"{DIALOG_MODULE}.api.list_farms",
-            return_value={"farms": [{"farmId": "farm-1"}, {"farmId": "farm-2"}]},
+            "deadline.client.ui.controllers._deadline_controller._iter_farms_by_region",
+            side_effect=_two_farms_one_region,
         ),
-        patch(f"{DIALOG_MODULE}.api.list_queues") as mock_queues,
+        patch("deadline.client.api.list_queues", return_value={"queues": []}),
     ):
-        dialog._auto_select_defaults()
-        _wait_for_auto_select(qtbot, dialog)
+        # Wait for the streamed farm load to fully settle (farms_loading -> False), not
+        # the initial farms_updated([]) clear, before asserting nothing was selected.
+        with qtbot.waitSignal(
+            controller.farms_loading,
+            timeout=5000,
+            check_params_cb=lambda loading: loading is False,
+        ):
+            dialog.refresh_deadline_settings()
+        QApplication.processEvents()
 
-    mock_queues.assert_not_called()
     assert get_setting(SETTING_FARM_ID) == ""
     assert get_setting(SETTING_QUEUE_ID) == ""
-    complete_spy.assert_not_called()
 
 
-def test_multiple_queues_selects_farm_only(qtbot, fresh_deadline_config):
-    """One farm but multiple queues: farm is selected, queue is left unset."""
-    auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
-
-    with (
-        patch(f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": [{"farmId": "farm-1"}]}),
-        patch(
-            f"{DIALOG_MODULE}.api.list_queues",
-            return_value={"queues": [{"queueId": "queue-1"}, {"queueId": "queue-2"}]},
-        ),
-    ):
-        dialog._auto_select_defaults()
-        _wait_for_auto_select(qtbot, dialog)
-
-    assert get_setting(SETTING_FARM_ID) == "farm-1"
-    assert get_setting(SETTING_QUEUE_ID) == ""
-    complete_spy.assert_called_once()
-
-
-def test_no_farms_does_not_select(qtbot, fresh_deadline_config):
-    """Zero farms: nothing selected."""
-    auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
-
-    with (
-        patch(f"{DIALOG_MODULE}.api.list_farms", return_value={"farms": []}),
-        patch(f"{DIALOG_MODULE}.api.list_queues") as mock_queues,
-    ):
-        dialog._auto_select_defaults()
-        _wait_for_auto_select(qtbot, dialog)
-
-    mock_queues.assert_not_called()
-    assert get_setting(SETTING_FARM_ID) == ""
-    complete_spy.assert_not_called()
-
-
-def test_no_api_calls_when_api_unavailable(qtbot, fresh_deadline_config):
-    """When the API is not available, auto-select does nothing."""
+def test_no_list_refresh_when_api_unavailable(qtbot, fresh_deadline_config):
+    """When the API is not available, no list API calls are made."""
     auth = _AuthStatusStub(None)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
+    dialog = _build_dialog(qtbot, auth)
 
-    with patch(f"{DIALOG_MODULE}.api.list_farms") as mock_farms:
-        dialog._auto_select_defaults()
+    with patch("deadline.client.api.list_farms") as mock_farms:
+        dialog.refresh_deadline_settings()
         qtbot.wait(50)
 
     mock_farms.assert_not_called()
-    assert not dialog._auto_select_runner.is_running(dialog._AUTO_SELECT_OPERATION_KEY)
-    complete_spy.assert_not_called()
-
-
-def test_no_api_calls_when_already_configured(qtbot, fresh_deadline_config):
-    """When farm and queue are both already set, auto-select does nothing."""
-    set_setting(SETTING_FARM_ID, "farm-x")
-    set_setting(SETTING_QUEUE_ID, "queue-y")
-    auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
-
-    with (
-        patch(f"{DIALOG_MODULE}.api.list_farms") as mock_farms,
-        patch(f"{DIALOG_MODULE}.api.list_queues") as mock_queues,
-    ):
-        dialog._auto_select_defaults()
-        qtbot.wait(50)
-
-    mock_farms.assert_not_called()
-    mock_queues.assert_not_called()
-    complete_spy.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# Error handling
-# ---------------------------------------------------------------------------
-
-
-def test_api_error_is_handled_gracefully(qtbot, fresh_deadline_config):
-    """An API error must not crash the dialog or change any setting."""
-    auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
-
-    with patch(f"{DIALOG_MODULE}.api.list_farms", side_effect=Exception("boom")):
-        dialog._auto_select_defaults()
-        _wait_for_auto_select(qtbot, dialog)
-
     assert get_setting(SETTING_FARM_ID) == ""
-    assert get_setting(SETTING_QUEUE_ID) == ""
-    complete_spy.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
-# Race / unexpected event sequences
+# A selection on the tab must not re-list the combos.
 # ---------------------------------------------------------------------------
 
 
-def test_does_not_start_second_run_while_in_flight(qtbot, fresh_deadline_config):
-    """A second trigger while a task is in flight must not start another task."""
-    auth = _AuthStatusStub(True)
-    dialog, _ = _build_dialog(qtbot, auth)
+def test_tab_selection_change_does_not_refresh_farm_list(qtbot, fresh_deadline_config):
+    """Selecting a queue (or farm) on the tab must not re-list the farm combo.
 
-    with (
-        patch.object(dialog._auto_select_runner, "is_running", return_value=True),
-        patch.object(dialog._auto_select_runner, "run") as mock_run,
-    ):
-        dialog._auto_select_defaults()
-
-    mock_run.assert_not_called()
-
-
-def test_stale_farm_result_discarded_when_farm_already_set(qtbot, fresh_deadline_config):
-    """A farm resolved while none was set must not overwrite a farm set in the meantime."""
-    set_setting(SETTING_FARM_ID, "farm-current")
-    auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
-
-    # Result computed when no farm was configured yet.
-    dialog._on_auto_select_resolved(
-        {"farm_id": "farm-stale", "queue_id": None, "queue_farm_id": None}
-    )
-
-    assert get_setting(SETTING_FARM_ID) == "farm-current"
-    complete_spy.assert_not_called()
-
-
-def test_stale_queue_result_discarded_when_farm_changed(qtbot, fresh_deadline_config):
-    """A queue resolved for an old farm must not be applied after the farm changed.
-
-    This is the event sequence behind the reported ResourceNotFoundException: a
-    queue belonging to farm A must never be written while farm B is configured.
+    A selection on the Shared job settings tab only needs to update the Submit
+    button and reload queue parameters; re-listing the combos would cause the
+    farm list to refresh whenever the user merely changes the queue.
     """
-    set_setting(SETTING_FARM_ID, "farm-B")
     auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
+    dialog = _build_dialog(qtbot, auth)
 
-    # Queue was resolved under farm-A, but farm-B is now configured.
-    dialog._on_auto_select_resolved(
-        {"farm_id": None, "queue_id": "queue-from-A", "queue_farm_id": "farm-A"}
-    )
+    settings_box = dialog.shared_job_settings.deadline_cloud_settings_box
+    with (
+        patch.object(settings_box.farm_box, "refresh_list") as farm_refresh,
+        patch.object(settings_box.queue_box, "refresh_list") as queue_refresh,
+        patch.object(dialog.shared_job_settings, "refresh_queue_parameters") as refresh_qp,
+    ):
+        dialog._on_deadline_cloud_selection_changed()
 
-    assert get_setting(SETTING_QUEUE_ID) == ""
-    complete_spy.assert_not_called()
-
-
-def test_queue_result_applied_when_farm_still_matches(qtbot, fresh_deadline_config):
-    """A queue resolved for the still-current farm is applied normally."""
-    set_setting(SETTING_FARM_ID, "farm-A")
-    auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
-
-    dialog._on_auto_select_resolved(
-        {"farm_id": None, "queue_id": "queue-A", "queue_farm_id": "farm-A"}
-    )
-
-    assert get_setting(SETTING_QUEUE_ID) == "queue-A"
-    complete_spy.assert_called_once()
-
-
-def test_queue_not_overwritten_when_already_set(qtbot, fresh_deadline_config):
-    """An already-configured queue must not be overwritten by a resolved result."""
-    set_setting(SETTING_FARM_ID, "farm-A")
-    set_setting(SETTING_QUEUE_ID, "queue-existing")
-    auth = _AuthStatusStub(True)
-    dialog, complete_spy = _build_dialog(qtbot, auth)
-
-    dialog._on_auto_select_resolved(
-        {"farm_id": None, "queue_id": "queue-new", "queue_farm_id": "farm-A"}
-    )
-
-    assert get_setting(SETTING_QUEUE_ID) == "queue-existing"
-    complete_spy.assert_not_called()
+    farm_refresh.assert_not_called()
+    queue_refresh.assert_not_called()
+    # The selection change should still reload queue parameters.
+    refresh_qp.assert_called_once()

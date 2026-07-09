@@ -384,50 +384,60 @@ class TestDeadlineUIController:
 
         assert controller.region_for_farm("farm-nope") is None
 
-    @patch("deadline.client.ui.controllers._deadline_controller.api")
-    def test_on_farm_selected_updates_current_farm(self, mock_api, qtbot):
-        """Test that on_farm_selected updates current_farm_id."""
-        controller = DeadlineUIController.getInstance()
+    # ── Selection handlers (single source of truth) ───────────────────────────
+    # select_farm/select_queue/select_storage_profile persist to config and cascade.
+    # They use fresh_deadline_config so persistence hits a temp file, not real config.
 
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_select_farm_persists_and_updates_current_farm(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """select_farm persists defaults.farm_id and updates current_farm_id."""
+        from deadline.client.config import get_setting
+
+        controller = DeadlineUIController.getInstance()
         mock_api.list_queues.return_value = {"queues": []}
 
-        controller.on_farm_selected("farm-123")
+        controller.select_farm("farm-123")
 
         assert controller.current_farm_id == "farm-123"
+        assert get_setting("defaults.farm_id") == "farm-123"
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
-    def test_on_farm_selected_clears_queue(self, mock_api, qtbot):
-        """Test that on_farm_selected clears current_queue_id."""
-        controller = DeadlineUIController.getInstance()
+    def test_select_farm_clears_queue_and_storage(self, mock_api, qtbot, fresh_deadline_config):
+        """select_farm clears the previous queue/storage (they belong to the old farm)."""
+        from deadline.client.config import get_setting, set_setting
 
+        set_setting("defaults.queue_id", "old-queue")
+        set_setting("settings.storage_profile_id", "old-sp")
+        controller = DeadlineUIController.getInstance()
+        controller._current_queue_id = "old-queue"
         mock_api.list_queues.return_value = {"queues": []}
 
-        controller._current_queue_id = "old-queue"
-        controller.on_farm_selected("farm-123")
+        controller.select_farm("farm-123")
 
         assert controller.current_queue_id == ""
+        assert get_setting("defaults.queue_id") == ""
+        assert get_setting("settings.storage_profile_id") == ""
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
-    def test_on_farm_selected_triggers_queue_refresh(self, mock_api, qtbot):
-        """Test that on_farm_selected triggers queue refresh."""
+    def test_select_farm_triggers_queue_refresh(self, mock_api, qtbot, fresh_deadline_config):
+        """select_farm triggers a queue-list refresh for the new farm."""
         controller = DeadlineUIController.getInstance()
-
         mock_api.list_queues.return_value = {"queues": []}
 
         queues_received = []
         controller.queues_updated.connect(lambda x: queues_received.append(x), _QueuedConnection)
 
-        controller.on_farm_selected("farm-123")
+        controller.select_farm("farm-123")
 
         qtbot.waitUntil(lambda: len(queues_received) > 0, timeout=2000)
-
         mock_api.list_queues.assert_called_once()
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
-    def test_on_farm_selected_clears_dependent_data(self, mock_api, qtbot):
-        """Test that on_farm_selected clears storage profiles and queue params."""
+    def test_select_farm_clears_dependent_data(self, mock_api, qtbot, fresh_deadline_config):
+        """select_farm clears storage profiles and queue params immediately."""
         controller = DeadlineUIController.getInstance()
-
         mock_api.list_queues.return_value = {"queues": []}
 
         storage_profiles_received = []
@@ -439,43 +449,71 @@ class TestDeadlineUIController:
             lambda x: queue_params_received.append(x), _QueuedConnection
         )
 
-        controller.on_farm_selected("farm-123")
+        controller.select_farm("farm-123")
 
         qtbot.waitUntil(lambda: len(storage_profiles_received) > 0, timeout=1000)
         qtbot.waitUntil(lambda: len(queue_params_received) > 0, timeout=1000)
-
         assert storage_profiles_received[0] == []
         assert queue_params_received[0] == []
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
-    def test_on_farm_selected_ignores_same_farm(self, mock_api, qtbot):
-        """Test that on_farm_selected does nothing if farm unchanged."""
+    def test_select_farm_emits_selection_changed(self, mock_api, qtbot, fresh_deadline_config):
+        """select_farm emits selection_changed so the host can reload queue params."""
         controller = DeadlineUIController.getInstance()
+        mock_api.list_queues.return_value = {"queues": []}
 
-        controller._current_farm_id = "farm-123"
+        changed = []
+        controller.selection_changed.connect(lambda: changed.append(True), _QueuedConnection)
 
-        controller.on_farm_selected("farm-123")
+        controller.select_farm("farm-123")
 
-        mock_api.list_queues.assert_not_called()
+        qtbot.waitUntil(lambda: len(changed) > 0, timeout=2000)
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
-    def test_on_queue_selected_updates_current_queue(self, mock_api, qtbot):
-        """Test that on_queue_selected updates current_queue_id."""
-        controller = DeadlineUIController.getInstance()
+    def test_select_queue_persists_and_updates_current_queue(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """select_queue persists defaults.queue_id and updates current_queue_id."""
+        from deadline.client.config import get_setting, set_setting
 
+        set_setting("defaults.farm_id", "farm-123")
+        controller = DeadlineUIController.getInstance()
         controller._current_farm_id = "farm-123"
         mock_api.list_storage_profiles_for_queue.return_value = {"storageProfiles": []}
         mock_api.get_queue_parameter_definitions.return_value = []
 
-        controller.on_queue_selected("queue-456")
+        controller.select_queue("queue-456")
 
         assert controller.current_queue_id == "queue-456"
+        assert get_setting("defaults.queue_id") == "queue-456"
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
-    def test_on_queue_selected_triggers_storage_profile_refresh(self, mock_api, qtbot):
-        """Test that on_queue_selected triggers storage profile refresh."""
-        controller = DeadlineUIController.getInstance()
+    def test_select_queue_clears_stale_storage_profile(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """select_queue clears the previous queue's storage profile."""
+        from deadline.client.config import get_setting, set_setting
 
+        set_setting("defaults.farm_id", "farm-123")
+        set_setting("settings.storage_profile_id", "old-sp")
+        controller = DeadlineUIController.getInstance()
+        controller._current_farm_id = "farm-123"
+        mock_api.list_storage_profiles_for_queue.return_value = {"storageProfiles": []}
+        mock_api.get_queue_parameter_definitions.return_value = []
+
+        controller.select_queue("queue-456")
+
+        assert get_setting("settings.storage_profile_id") == ""
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_select_queue_triggers_storage_profile_refresh(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """select_queue triggers a storage profile refresh."""
+        from deadline.client.config import set_setting
+
+        set_setting("defaults.farm_id", "farm-123")
+        controller = DeadlineUIController.getInstance()
         controller._current_farm_id = "farm-123"
         mock_api.list_storage_profiles_for_queue.return_value = {"storageProfiles": []}
         mock_api.get_queue_parameter_definitions.return_value = []
@@ -485,17 +523,20 @@ class TestDeadlineUIController:
             lambda x: storage_received.append(x), _QueuedConnection
         )
 
-        controller.on_queue_selected("queue-456")
+        controller.select_queue("queue-456")
 
         qtbot.waitUntil(lambda: len(storage_received) > 0, timeout=2000)
-
         mock_api.list_storage_profiles_for_queue.assert_called_once()
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
-    def test_on_queue_selected_triggers_queue_params_refresh(self, mock_api, qtbot):
-        """Test that on_queue_selected triggers queue parameters refresh."""
-        controller = DeadlineUIController.getInstance()
+    def test_select_queue_triggers_queue_params_refresh(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """select_queue triggers a queue parameters refresh."""
+        from deadline.client.config import set_setting
 
+        set_setting("defaults.farm_id", "farm-123")
+        controller = DeadlineUIController.getInstance()
         controller._current_farm_id = "farm-123"
         mock_api.list_storage_profiles_for_queue.return_value = {"storageProfiles": []}
         mock_api.get_queue_parameter_definitions.return_value = [{"name": "param1"}]
@@ -505,12 +546,26 @@ class TestDeadlineUIController:
             lambda x: params_received.append(x), _QueuedConnection
         )
 
-        controller.on_queue_selected("queue-456")
+        controller.select_queue("queue-456")
 
         qtbot.waitUntil(lambda: len(params_received) > 0, timeout=2000)
-
         mock_api.get_queue_parameter_definitions.assert_called_once()
         assert params_received[0] == [{"name": "param1"}]
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_select_storage_profile_persists_without_cascade(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """select_storage_profile persists only; it has no dependents to cascade."""
+        from deadline.client.config import get_setting
+
+        controller = DeadlineUIController.getInstance()
+
+        controller.select_storage_profile("sp-789")
+
+        assert get_setting("settings.storage_profile_id") == "sp-789"
+        mock_api.list_storage_profiles_for_queue.assert_not_called()
+        mock_api.get_queue_parameter_definitions.assert_not_called()
 
     def test_shutdown_cancels_operations(self, qtbot):
         """Test that shutdown cancels pending operations."""

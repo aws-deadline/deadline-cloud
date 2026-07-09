@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Iterator
 
@@ -26,6 +27,15 @@ from moto.server import ThreadedMotoServer
 from _common.mock_deadline_backend import MockDeadlineBackend, start_server
 
 from _constants import ACCESS_KEY, BUCKET, REGION, ROOT_PREFIX, SECRET_KEY
+
+# test_proxy_config.py drives the CLI through a threaded TLS mock + CONNECT
+# proxy as a subprocess. That socket/TLS/subprocess plumbing is only validated
+# on the POSIX CI runners; it isn't exercised on Windows, where loopback TLS and
+# process teardown behave differently. Don't collect it there. The proxy /
+# ca_bundle wiring itself is platform-agnostic and is covered on every OS by the
+# unit tests in test/unit/.../test_api_session.py and the config round-trip
+# tests, so Windows coverage of the feature is not lost.
+collect_ignore_glob = ["test_proxy_config.py"] if sys.platform == "win32" else []
 
 # `sitecustomize` shim: botocore appends a `management.` host prefix to
 # Deadline API calls. Strip it so the CLI talks directly to 127.0.0.1.

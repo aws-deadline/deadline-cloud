@@ -9,12 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.13'
 
@@ -23,28 +23,37 @@ jobs:
           pip install --upgrade hatch
 
       - name: Check for API breaking changes (griffe)
+        env:
+          # Pass context via env, not inline ${{ }}, to avoid template injection.
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # Use griffe to check for breaking changes against the target branch (mainline)
-          echo "🔍 Running griffe check command: hatch run docs:check-api-breaks --against origin/${{ github.base_ref }}"
-          hatch run docs:check-api-breaks --against origin/${{ github.base_ref }}
+          echo "🔍 Running griffe check command: hatch run docs:check-api-breaks --against origin/$BASE_REF"
+          hatch run docs:check-api-breaks --against "origin/$BASE_REF"
         continue-on-error: true
         id: breaking-changes-check
 
       - name: Show breaking changes details
         if: steps.breaking-changes-check.outcome == 'failure'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           echo "🚨 Breaking changes to existing interfaces were detected! If these changes are intentional, please mark your commit as a breaking change and provide details in the commit message. Here are the details:"
-          echo "🔍 Running verbose griffe check command: hatch run docs:check-api-breaks --against origin/${{ github.base_ref }} --verbose"
-          hatch run docs:check-api-breaks --against origin/${{ github.base_ref }} --verbose
+          echo "🔍 Running verbose griffe check command: hatch run docs:check-api-breaks --against origin/$BASE_REF --verbose"
+          hatch run docs:check-api-breaks --against "origin/$BASE_REF" --verbose
 
       - name: Generate baseline API snapshot from base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          echo "📊 Generating baseline API snapshot from base branch: ${{ github.base_ref }}"
-          hatch run docs:generate-api-snapshot /tmp/baseline_api_snapshot.json ${{ github.base_ref }}
+          echo "📊 Generating baseline API snapshot from base branch: $BASE_REF"
+          hatch run docs:generate-api-snapshot /tmp/baseline_api_snapshot.json "$BASE_REF"
 
       - name: Validate API snapshot against baseline
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          echo "📊 Validating current API against baseline snapshot from ${{ github.base_ref }}..."
+          echo "📊 Validating current API against baseline snapshot from $BASE_REF..."
           hatch run docs:validate-api-snapshot /tmp/baseline_api_snapshot.json
         continue-on-error: true
         id: snapshot-comparison
@@ -58,8 +67,10 @@ jobs:
 
       - name: Fail if API changes found
         if: steps.snapshot-comparison.outcome == 'failure'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          echo "❌ API changes detected compared to baseline from ${{ github.base_ref }}."
+          echo "❌ API changes detected compared to baseline from $BASE_REF."
           echo "If these changes are intentional:"
           echo "  1. Review the changes above"
           echo "  2. Ensure your commit message follows conventional commit format"

@@ -11,7 +11,7 @@
 # workflow_run identifiers and the role-ARN secret.
 name: Claude PR Review
 
-on:
+on: # zizmor: ignore[dangerous-triggers] -- workflow_run is intentional and safe here; see the header comment above (runs from default branch, fork PRs cannot alter behavior/secrets)
   workflow_run:
     workflows: ["Claude PR Review (collect)"]
     types:
