@@ -884,6 +884,27 @@ class TestHookManager:
         assert "Post-submission hooks:" in message
         assert "bash notify.sh" in message
         assert "/path/to/bundle" in message
+        # Defaults to the job-bundle wording so existing callers are unchanged.
+        assert "This job bundle contains submission hooks" in message
+
+    def test_confirmation_message_labels_environment_source(self):
+        """An environment (DEADLINE_HOOKS_DIR) source is identified as such — not shown as if
+        it came from the job bundle — so the consent prompt reflects the true hook origin."""
+        from deadline.client.job_bundle._hooks import _generate_hooks_confirmation_message
+
+        hooks = HookConfiguration(
+            version="1.0",
+            pre_gui=[],
+            pre_submission=[HookDefinition(command="python", args=["validate.py"])],
+            post_submission=[],
+        )
+        message = _generate_hooks_confirmation_message(
+            hooks, "/studio/hooks", "environment (DEADLINE_HOOKS_DIR)"
+        )
+        assert "This environment (DEADLINE_HOOKS_DIR) contains submission hooks" in message
+        assert "Location: /studio/hooks" in message
+        # Must not masquerade as a job-bundle source.
+        assert "This job bundle contains" not in message
 
     def test_post_hooks_not_called_on_create_job_failure(self):
         """Test that post-submission hooks are not executed when CreateJob fails.
@@ -1793,6 +1814,11 @@ class TestCollectSubmissionHookSources:
         )
 
         assert [m.job_bundle_dir for m in sources] == [studio, bundle]
+        # Each source is labeled with its true origin for the consent prompt.
+        assert [m.source_label for m in sources] == [
+            "environment (DEADLINE_HOOKS_DIR)",
+            "job bundle",
+        ]
 
     def test_post_submission_hooks_make_a_source_runnable(self, tmp_path):
         """A source with only postSubmission hooks (no preSubmission) is still collected."""

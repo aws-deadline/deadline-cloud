@@ -526,7 +526,9 @@ def create_job_from_job_bundle(
         get_setting("settings.auto_accept", config=config)
     ):
         hooks_message = "".join(
-            _generate_hooks_confirmation_message(manager.hooks, manager._original_bundle_dir)
+            _generate_hooks_confirmation_message(
+                manager.hooks, manager._original_bundle_dir, manager.source_label
+            )
             for manager in hook_sources
             if manager.hooks
         )

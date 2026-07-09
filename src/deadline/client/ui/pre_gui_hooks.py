@@ -185,7 +185,9 @@ def qt_hook_confirmation(parent: Any) -> Callable[[List[HookManager]], bool]:
     def _confirm(sources: List[HookManager]) -> bool:
         confirmation_msg = (
             "".join(
-                _generate_hooks_confirmation_message(m.hooks, m._original_bundle_dir)
+                _generate_hooks_confirmation_message(
+                    m.hooks, m._original_bundle_dir, m.source_label
+                )
                 for m in sources
                 if m.hooks
             )

@@ -29,9 +29,19 @@ from ._validator import validate_modified_payload as _validate_modified_payload
 _logger = _logging.getLogger(__name__)
 
 
-def _generate_hooks_confirmation_message(hooks: _HookConfiguration, bundle_dir: str) -> str:
-    """Generate a confirmation message listing hooks that will execute."""
-    lines = ["This job bundle contains submission hooks that will execute on your machine:\n"]
+def _generate_hooks_confirmation_message(
+    hooks: _HookConfiguration, source_dir: str, source_label: str = "job bundle"
+) -> str:
+    """Generate a confirmation message listing hooks that will execute.
+
+    ``source_label`` names where the hooks came from — the job bundle or the
+    ``DEADLINE_HOOKS_DIR`` environment source — and defaults to the job bundle so existing
+    callers keep their wording. Because hooks execute arbitrary code on the user's machine,
+    this prompt is the user's informed-consent point: an environment-configured source must
+    not be shown as if it came from the job bundle, so both the header and the directory line
+    identify the true origin.
+    """
+    lines = [f"This {source_label} contains submission hooks that will execute on your machine:\n"]
 
     if hooks.pre_gui:
         lines.append("  Pre-GUI hooks:")
@@ -54,7 +64,7 @@ def _generate_hooks_confirmation_message(hooks: _HookConfiguration, bundle_dir: 
             lines.append(f"    [{i + 1}] {cmd}")
         lines.append("")
 
-    lines.append(f"  Bundle: {bundle_dir}\n")
+    lines.append(f"  Location: {source_dir}\n")
     return "\n".join(lines)
 
 
@@ -96,6 +106,10 @@ def _collect_hook_sources(
             warn(f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory")
         else:
             env_manager = manager_cls(env_hooks_dir, print_callback)
+            # Label this source as environment-configured so the confirmation prompt does not
+            # present a DEADLINE_HOOKS_DIR source as if it came from the job bundle. Set on the
+            # instance (not via constructor) so a patched hook_manager_cls seam still works.
+            env_manager.source_label = "environment (DEADLINE_HOOKS_DIR)"
             env_hooks = env_manager.load_hooks()
             if env_hooks and has_runnable_hooks(env_hooks):
                 if allow_environment_hooks:
@@ -210,9 +224,13 @@ class HookManager:
         self,
         job_bundle_dir: str,
         print_callback: _Callable[[str], None],
+        source_label: str = "job bundle",
     ):
         self.job_bundle_dir = job_bundle_dir
         self.print_callback = print_callback
+        # Names this source's origin for the confirmation prompt ("job bundle" vs.
+        # "environment (DEADLINE_HOOKS_DIR)"); the collector sets it per source.
+        self.source_label = source_label
         self.hooks: _Optional[_HookConfiguration] = None
         self._executor = _HookExecutor(job_bundle_dir, print_callback)
         # Use original bundle path for metadata if available (GUI submit case)
