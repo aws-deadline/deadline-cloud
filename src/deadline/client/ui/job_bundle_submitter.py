@@ -18,13 +18,12 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
 
 from ..config import config_file as _config_file
 from ..config.config_file import get_setting as _get_setting
-from ..exceptions import DeadlineOperationCanceled as _DeadlineOperationCanceled
 from ..exceptions import DeadlineOperationError
-from ..job_bundle._hooks import (
-    HookManager as _HookManager,
-    HookMetadata as _HookMetadata,
-    _generate_hooks_confirmation_message,
-    collect_pre_gui_hook_sources as _collect_pre_gui_hook_sources,
+from .pre_gui_hooks import (
+    PreGuiHookContext,
+    apply_pre_gui_output,
+    qt_hook_confirmation,
+    run_pre_gui_hooks,
 )
 from ..job_bundle.loader import (
     parse_yaml_or_json_content,
@@ -52,95 +51,10 @@ from ..api._session import session_context
 
 logger = getLogger(__name__)
 
-
-def _make_pre_gui_metadata(initial_settings: Any, job_bundle_dir: str) -> _HookMetadata:
-    """Build minimal HookMetadata for the pre-GUI phase."""
-    farm_id = _get_setting("defaults.farm_id") or ""
-    queue_id = _get_setting("defaults.queue_id") or ""
-    storage_profile_id = _get_setting("settings.storage_profile_id") or None
-    parameters = {
-        p["name"]: p.get("value", p.get("default"))
-        for p in getattr(initial_settings, "parameters", [])
-        if "value" in p or "default" in p
-    }
-    return _HookMetadata(
-        job_name=getattr(initial_settings, "name", ""),
-        priority=50,
-        farm_id=farm_id,
-        queue_id=queue_id,
-        job_bundle_dir=job_bundle_dir,
-        parameters=parameters,
-        submitter_name=getattr(initial_settings, "submitter_name", "JobBundle"),
-        asset_references={},
-        submission_payload={},
-        storage_profile_id=storage_profile_id,
-    )
-
-
-def _run_pre_gui_hooks(
-    input_job_bundle_dir: str, initial_settings: Any, parent: Any
-) -> dict[str, Any]:
-    """Load and execute pre-GUI hooks from all allowed sources.
-
-    Pre-GUI hooks may be defined in the job bundle (gated by ``allow_bundle_hooks``) and/or
-    in the directory named by ``DEADLINE_HOOKS_DIR`` (gated by ``allow_environment_hooks``).
-    Environment hooks run before bundle hooks. Returns the merged pre-GUI output, or an
-    empty dict if no pre-GUI hooks run.
-    """
-    # Source selection (which bundle/env HookManagers have runnable preGUI hooks) is
-    # Qt-free logic extracted into the hooks package so it can be unit-tested without a GUI.
-    sources = _collect_pre_gui_hook_sources(
-        bundle_dir=input_job_bundle_dir,
-        env_hooks_dir=os.environ.get("DEADLINE_HOOKS_DIR"),
-        allow_bundle_hooks=_config_file.str2bool(_get_setting("settings.allow_bundle_hooks")),
-        allow_environment_hooks=_config_file.str2bool(
-            _get_setting("settings.allow_environment_hooks")
-        ),
-        # Hook execution messages ("Running pre-GUI hook…") log at info; the
-        # "hooks present but disabled" guidance logs at warning (its pre-refactor severity).
-        print_callback=logger.info,
-        warning_callback=logger.warning,
-        # Pass our reference so tests can patch `{MODULE}._HookManager` as a behavior seam.
-        hook_manager_cls=_HookManager,
-    )
-
-    if not sources:
-        return {}
-
-    # Confirmation prompt (once), unless auto_accept. Show every source's hooks.
-    if not _config_file.str2bool(_get_setting("settings.auto_accept")):
-        confirmation_msg = (
-            "".join(
-                _generate_hooks_confirmation_message(m.hooks, m._original_bundle_dir)
-                for m in sources
-                if m.hooks
-            )
-            + "Do you want to run these hooks?"
-        )
-        reply = QMessageBox.question(
-            parent,
-            tr("Job Submission Confirmation"),
-            confirmation_msg,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
-            raise _DeadlineOperationCanceled("Job submission canceled (user declined hooks).")
-
-    merged: dict[str, Any] = {}
-    for manager in sources:
-        # Every hook — bundle or environment — receives the job bundle being submitted as
-        # its job_bundle_dir, matching the pre/post-submission contract. (The manager still
-        # resolves relative hook script paths against its own directory.)
-        metadata = _make_pre_gui_metadata(initial_settings, input_job_bundle_dir)
-        output = manager.execute_pre_gui_hooks(metadata)
-        # Later sources (bundle) override earlier (env) for scalars; parameters merge.
-        params = merged.pop("parameters", {})
-        params.update(output.pop("parameters", {}))
-        merged.update(output)
-        if params:
-            merged["parameters"] = params
-    return merged
+# The pre-GUI helpers are imported here for use by show_job_bundle_submitter; their public
+# home is deadline.client.ui.pre_gui_hooks. Declaring __all__ keeps them (and internal
+# imports like logger) from being re-exported as this module's public API.
+__all__ = ["show_job_bundle_submitter"]
 
 
 def _resolve_template_host_requirements(template: dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -407,8 +321,26 @@ def show_job_bundle_submitter(
     # Run pre-GUI hooks to allow studios to pre-populate dialog fields. Pre-GUI hooks may
     # come from the job bundle (gated by allow_bundle_hooks) and/or the directory named by
     # DEADLINE_HOOKS_DIR (gated by allow_environment_hooks). Environment hooks run first,
-    # then bundle hooks — matching the pre/post-submission ordering.
-    pre_gui_output = _run_pre_gui_hooks(input_job_bundle_dir, initial_settings, parent)
+    # then bundle hooks. The confirmation prompt is skipped when auto_accept is set;
+    # otherwise the standard Qt dialog is shown.
+    confirm_callback = (
+        None
+        if _config_file.str2bool(_get_setting("settings.auto_accept"))
+        else qt_hook_confirmation(parent)
+    )
+    pre_gui_output = run_pre_gui_hooks(
+        PreGuiHookContext(
+            bundle_dir=input_job_bundle_dir,
+            job_name=getattr(initial_settings, "name", ""),
+            parameters={
+                p["name"]: p.get("value", p.get("default"))
+                for p in initial_settings.parameters
+                if "value" in p or "default" in p
+            },
+            submitter_name=getattr(initial_settings, "submitter_name", "JobBundle"),
+        ),
+        confirm_callback=confirm_callback,
+    )
 
     initial_shared_parameter_values = {}
 
@@ -444,29 +376,15 @@ def show_job_bundle_submitter(
     for parameter in job_parameters_dict.values():
         initial_shared_parameter_values[parameter["name"]] = parameter["value"]
 
-    # Merge pre-GUI hook output. CLI-supplied parameters take precedence over hook values.
-    if pre_gui_output:
-        hook_params = pre_gui_output.get("parameters", {})
-        template_param_names = {p["name"] for p in initial_settings.parameters}
-        for param_name, param_value in hook_params.items():
-            # CLI --parameter values take precedence over hook values. Check the up-front
-            # set rather than job_parameters_dict, whose template entries were already popped
-            # above — otherwise a hook could silently override a CLI-supplied template param.
-            if param_name in cli_provided_param_names:
-                continue
-            if param_name in template_param_names:
-                # Job template parameter — update initial_settings.parameters in-place
-                for p in initial_settings.parameters:
-                    if p["name"] == param_name:
-                        p["value"] = param_value
-                        break
-            else:
-                # Shared job property (deadline: keys, queue parameters, etc.)
-                initial_shared_parameter_values[param_name] = param_value
-        if "name" in pre_gui_output:
-            initial_settings.name = pre_gui_output["name"]
-        if "description" in pre_gui_output:
-            initial_settings.description = pre_gui_output["description"]
+    # Merge pre-GUI hook output onto the initial settings. CLI-supplied parameters take
+    # precedence over hook values — pass the up-front CLI name set (job_parameters_dict has
+    # had its template entries popped above, so it can no longer report the CLI names).
+    apply_pre_gui_output(
+        pre_gui_output,
+        initial_settings,
+        initial_shared_parameter_values,
+        cli_provided_param_names=cli_provided_param_names,
+    )
 
     # Pre-fill the host requirements tab from the job template's steps so the GUI
     # reflects the requirements already declared in the bundle.

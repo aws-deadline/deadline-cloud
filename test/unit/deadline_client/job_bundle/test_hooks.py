@@ -4,8 +4,12 @@
 
 import json
 import os
+import signal
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 import pytest
 import yaml
@@ -21,7 +25,9 @@ from deadline.client.job_bundle._hooks import (
     HookMetadata,
     HookResult,
     collect_pre_gui_hook_sources,
+    collect_submission_hook_sources,
 )
+from deadline.client.job_bundle._hooks._executor import HookExecutor
 from deadline.client.job_bundle._hooks._merger import merge_asset_references, merge_payload
 from deadline.client.job_bundle._hooks._validator import (
     validate_pre_gui_output,
@@ -883,6 +889,27 @@ class TestHookManager:
         assert "Post-submission hooks:" in message
         assert "bash notify.sh" in message
         assert "/path/to/bundle" in message
+        # Defaults to the job-bundle wording so existing callers are unchanged.
+        assert "This job bundle contains submission hooks" in message
+
+    def test_confirmation_message_labels_environment_source(self):
+        """An environment (DEADLINE_HOOKS_DIR) source is identified as such — not shown as if
+        it came from the job bundle — so the consent prompt reflects the true hook origin."""
+        from deadline.client.job_bundle._hooks import _generate_hooks_confirmation_message
+
+        hooks = HookConfiguration(
+            version="1.0",
+            pre_gui=[],
+            pre_submission=[HookDefinition(command="python", args=["validate.py"])],
+            post_submission=[],
+        )
+        message = _generate_hooks_confirmation_message(
+            hooks, "/studio/hooks", "environment (DEADLINE_HOOKS_DIR)"
+        )
+        assert "This environment (DEADLINE_HOOKS_DIR) contains submission hooks" in message
+        assert "Location: /studio/hooks" in message
+        # Must not masquerade as a job-bundle source.
+        assert "This job bundle contains" not in message
 
     def test_post_hooks_not_called_on_create_job_failure(self):
         """Test that post-submission hooks are not executed when CreateJob fails.
@@ -1007,6 +1034,304 @@ class TestHookManager:
             with open(output_file) as f:
                 # Hook should receive the bundle_dir, not the hooks_dir
                 assert f.read() == bundle_dir
+
+
+class TestHookStdoutStreaming:
+    """Tests that a hook's stderr is surfaced to the user while the hook runs.
+
+    Bea-57642: submission hooks previously produced no feedback until they finished, so a
+    slow hook (e.g. generating auth tokens for several services) looked like a hang. Hooks
+    write human-readable progress to stderr (stdout is reserved for the JSON contract), and
+    the executor now forwards each stderr line to ``print_callback`` as it arrives.
+    """
+
+    def _make_metadata(self, tmpdir: str) -> HookMetadata:
+        return HookMetadata(
+            job_name="Test",
+            priority=50,
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_bundle_dir=tmpdir,
+            parameters={},
+            submitter_name="Test",
+            asset_references={},
+            submission_payload={},
+        )
+
+    @staticmethod
+    def _streamed_lines(messages: List[str]) -> List[str]:
+        """The subset of callback messages that are streamed hook output.
+
+        Streamed hook output carries the ``  [<hook_type> hook <index>] `` prefix added by
+        HookExecutor. This lets a test distinguish real streamed stderr from the
+        ``Running ... hook`` / failure-report lines, which echo the hook's command and can
+        incidentally contain the same text the hook printed.
+        """
+        return [m for m in messages if m.lstrip().startswith("[")]
+
+    def test_pre_submission_stderr_is_forwarded_to_callback(self):
+        """Each line a hook writes to stderr is streamed to print_callback."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import sys; print('step one', file=sys.stderr); "
+                                    + "print('step two', file=sys.stderr)",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            streamed = "\n".join(self._streamed_lines(messages))
+            assert "step one" in streamed
+            assert "step two" in streamed
+
+    def test_stdout_json_is_not_streamed_as_progress(self):
+        """stdout is the JSON contract, so it is consumed for the payload and not echoed to
+        the user as progress output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import json; print(json.dumps({'priority': 100}))",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            result = manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            # The JSON reached the payload...
+            assert result["priority"] == 100
+            # ...but was not streamed back to the user as a progress line (stdout is the
+            # JSON contract, not progress output).
+            assert self._streamed_lines(messages) == []
+
+    def test_stderr_streamed_incrementally_before_hook_exits(self):
+        """A progress line reaches the callback before the hook finishes, not just after.
+
+        The hook writes one stderr line, then blocks on stdin until we feed it. Because the
+        executor writes stdin and reads stderr on separate threads, the first progress line
+        is delivered while the hook is still running.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    # Emit progress, then read stdin (the metadata) to prove
+                                    # the reader thread saw the line before we blocked here.
+                                    "import sys; print('started', file=sys.stderr, flush=True); "
+                                    + "sys.stdin.read()",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            first_message = threading.Event()
+
+            def _callback(msg: str) -> None:
+                if "started" in msg:
+                    first_message.set()
+
+            manager = HookManager(tmpdir, _callback)
+            manager.load_hooks()
+            manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            assert first_message.is_set()
+
+    def test_failure_report_does_not_duplicate_streamed_stderr(self):
+        """On failure, stderr already streamed live is not re-dumped as a blob, but stdout
+        (which is not streamed) is surfaced for debugging."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import sys; print('progress line', file=sys.stderr); "
+                                    + "print('not-json-stdout'); sys.exit(2)",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            with pytest.raises(DeadlineOperationError, match="exit code 2"):
+                manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            # The stderr progress line was streamed exactly once during execution...
+            assert sum("progress line" in m for m in self._streamed_lines(messages)) == 1
+            # ...and is not repeated as a "stderr:\n..." blob in the failure report.
+            assert not any(m.startswith("stderr:") for m in messages)
+            # stdout is not streamed, so the failure report surfaces it for debugging.
+            assert any(m.startswith("stdout:") and "not-json-stdout" in m for m in messages)
+
+    @staticmethod
+    def _reap(pidfile: str) -> None:
+        """Kill the grandchild whose PID a lingering-pipe hook wrote to ``pidfile``.
+
+        The grandchild is detached from the hook process, so the test owns cleanup: without
+        this it would keep the stderr pipe open (and the reader thread blocked) until its own
+        backstop timeout, leaking a process and thread into the rest of the CI run.
+        """
+        try:
+            with open(pidfile) as f:
+                pid = int(f.read().strip())
+        except (OSError, ValueError):
+            return
+        try:
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["taskkill", "/F", "/PID", str(pid)],
+                    capture_output=True,
+                    check=False,
+                )
+            else:
+                os.kill(pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            # Best-effort cleanup: the grandchild may already have exited (its own backstop
+            # sleep elapsed) or never started, so a failure to signal it is fine to ignore.
+            pass
+
+    def test_lingering_child_holding_pipe_does_not_hang(self, monkeypatch):
+        """A hook that exits but leaves a child holding the stderr pipe open must not hang
+        submission. process.wait() returns (the hook itself exited), but the reader threads
+        never see EOF; the bounded join must give up after the grace period and report a
+        timeout instead of blocking forever.
+        """
+        # Keep the test fast: shrink the reader-join grace window.
+        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 0.5)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # The hook spawns a detached child that inherits stderr, records its PID so the
+            # test can reap it, then the hook process itself exits. The child keeps the
+            # stderr write end open past the parent's exit, so the drainer never reaches EOF
+            # on its own. The child's own short sleep is only a backstop in case cleanup is
+            # skipped — the test kills it explicitly so nothing lingers into later tests.
+            pidfile = os.path.join(tmpdir, "grandchild.pid")
+            child = (
+                "import subprocess, sys; "
+                "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)'], "
+                "stderr=sys.stderr); "
+                f"open({pidfile!r}, 'w').write(str(p.pid)); "
+                "sys.exit(0)"
+            )
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {"command": sys.executable, "args": ["-c", child], "timeout": 30}
+                        ]
+                    },
+                    f,
+                )
+
+            manager = HookManager(tmpdir, lambda _msg: None)
+            manager.load_hooks()
+
+            start = time.monotonic()
+            try:
+                # A blocks-forever regression would hang here; the bounded join instead
+                # surfaces a timeout well within the 30s hook timeout.
+                with pytest.raises(DeadlineOperationError, match="timed out"):
+                    manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+                elapsed = time.monotonic() - start
+                assert elapsed < 10, f"submission hung on a lingering pipe holder ({elapsed:.1f}s)"
+            finally:
+                self._reap(pidfile)
+
+    def test_abandoned_reader_does_not_call_callback_after_return(self, monkeypatch):
+        """A leaked reader thread (lingering-child timeout path) must not keep calling
+        print_callback or mutating the output buffers after execute() returns — that would
+        race the next hook's output and the main thread's "".join of the buffers. The
+        ``abandoned`` flag makes the leaked reader bow out; assert no callback fires once we
+        record the method as returned.
+        """
+        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 0.5)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Child inherits stderr, records its PID for cleanup, and keeps emitting lines
+            # past the grace period so the drainer is still active when execute() returns.
+            pidfile = os.path.join(tmpdir, "grandchild.pid")
+            grandchild_body = (
+                "import sys, time\n"
+                "for i in range(100):\n"
+                "    print('leaked', i, file=sys.stderr, flush=True)\n"
+                "    time.sleep(0.02)\n"
+            )
+            child = (
+                "import subprocess, sys; "
+                f"p = subprocess.Popen([sys.executable, '-c', {grandchild_body!r}], "
+                "stderr=sys.stderr); "
+                f"open({pidfile!r}, 'w').write(str(p.pid)); "
+                "sys.exit(0)"
+            )
+
+            returned = threading.Event()
+            calls_after_return = []
+
+            def _callback(msg):
+                if returned.is_set():
+                    calls_after_return.append(msg)
+
+            executor = HookExecutor(tmpdir, _callback)
+            hook = HookDefinition(command=sys.executable, args=["-c", child], timeout=30)
+
+            try:
+                result = executor.execute(hook, self._make_metadata(tmpdir), "pre-submission", 1)
+                returned.set()
+                assert result.timed_out is True
+
+                # Give the leaked child time to emit more lines; the abandoned reader must
+                # have stopped forwarding them to the callback.
+                time.sleep(0.5)
+                assert calls_after_return == [], (
+                    "leaked reader kept calling print_callback after execute() returned: "
+                    f"{calls_after_return[:3]}"
+                )
+            finally:
+                self._reap(pidfile)
 
 
 class TestValidateBeforeGUIOutput:
@@ -1535,6 +1860,77 @@ class TestPreSubmissionHooks:
         assert scene_value == abs_scene
 
 
+class TestEnvAndBundleSubmissionHooks:
+    """Environment (DEADLINE_HOOKS_DIR) and bundle submission hooks must run together.
+
+    Regression test for the bug where the pre/post-submission submit path collapsed both hook
+    sources into a single HookManager and could only ever execute one of them — so environment
+    and bundle hooks never ran together (and the merge branch was unreachable dead code).
+
+    Source *selection* (single source, disabled sources, ordering, dedup) is covered without
+    spawning subprocesses by ``TestCollectSubmissionHookSources``. This one end-to-end test
+    covers what selection cannot: that both a DEADLINE_HOOKS_DIR source and a bundle source
+    actually *execute* — for pre- and post-submission — in a single real submission, in order.
+    """
+
+    @staticmethod
+    def _write_appending_hook(directory, marker, results_file):
+        """Write a hooks.yaml into ``directory`` whose pre- and post-submission hooks each
+        append a ``<marker>-pre`` / ``<marker>-post`` line to ``results_file``, so the caller
+        can assert which sources ran, for which phase, and in what order.
+
+        Uses ``sys.executable`` (not the ``python3`` literal): on Windows the ``python3`` name
+        can resolve to the Microsoft Store app-execution-alias stub, which hangs when run
+        non-interactively — leaving the hook subprocess (and the test worker) unable to exit.
+        """
+        script_name = f"{marker}_hook.py"
+        escaped = results_file.replace("\\", "\\\\")
+        with open(os.path.join(directory, script_name), "w", encoding="utf8") as f:
+            f.write(
+                f"import sys\nopen(r'{escaped}', 'a').write('{marker}-' + sys.argv[1] + '\\n')\n"
+            )
+        with open(os.path.join(directory, "hooks.yaml"), "w", encoding="utf8") as f:
+            yaml.dump(
+                {
+                    "version": "1.0",
+                    "preSubmission": [{"command": sys.executable, "args": [script_name, "pre"]}],
+                    "postSubmission": [{"command": sys.executable, "args": [script_name, "post"]}],
+                },
+                f,
+            )
+
+    @staticmethod
+    def _markers(results_file):
+        if not os.path.exists(results_file):
+            return []
+        with open(results_file, encoding="utf8") as f:
+            return [line.strip() for line in f if line.strip()]
+
+    def test_env_and_bundle_hooks_both_run(self, fresh_deadline_config, tmp_path, monkeypatch):
+        """Both a DEADLINE_HOOKS_DIR source and a bundle source execute their pre- and
+        post-submission hooks, environment before bundle for each phase."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        config.set_setting("defaults.farm_id", _PARAM_MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", _PARAM_MOCK_QUEUE_ID)
+        config.set_setting("settings.allow_bundle_hooks", "true")
+        config.set_setting("settings.allow_environment_hooks", "true")
+        config.set_setting("settings.auto_accept", "true")
+        _write_param_bundle(bundle)
+        results = str(tmp_path / "results.txt")
+        self._write_appending_hook(studio, "env", results)
+        self._write_appending_hook(bundle, "bundle", results)
+        monkeypatch.setenv("DEADLINE_HOOKS_DIR", studio)
+
+        with patch_calls_for_create_job_from_job_bundle():
+            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
+
+        # Pre-submission: env then bundle; post-submission: env then bundle.
+        assert self._markers(results) == ["env-pre", "bundle-pre", "env-post", "bundle-post"]
+
+
 class TestPreGuiHooks:
     """Tests for pre-GUI hooks."""
 
@@ -1618,6 +2014,41 @@ class TestPreGuiHooks:
 
         assert sources == []
 
+    def test_empty_bundle_dir_uses_env_source_only(self, tmp_path):
+        """A DCC caller passes bundle_dir="" (no on-disk bundle). Only the env source is
+        collected; the empty bundle dir must not become a hook source."""
+        studio = str(tmp_path / "studio")
+        os.makedirs(studio)
+        self._write_pre_gui_hooks(studio)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir="",
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [studio]
+
+    def test_empty_bundle_dir_does_not_load_hooks_from_cwd(self, tmp_path, monkeypatch):
+        """Regression: bundle_dir="" must NOT resolve hooks.yaml relative to the process
+        CWD. Otherwise a stray hooks file in a DCC's launch directory would be loaded (and,
+        with bundle hooks enabled, executed) for a submission that has no bundle."""
+        # Put a bundle hooks.yaml in the current working directory.
+        self._write_pre_gui_hooks(str(tmp_path))
+        monkeypatch.chdir(tmp_path)
+
+        sources = collect_pre_gui_hook_sources(
+            bundle_dir="",  # DCC: no bundle
+            env_hooks_dir=None,
+            allow_bundle_hooks=True,  # even with bundle hooks enabled...
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert sources == []  # ...the CWD hooks.yaml is not picked up
+
     def test_env_dir_equal_to_bundle_dir_is_not_duplicated(self, tmp_path):
         """If DEADLINE_HOOKS_DIR points at the job bundle, the shared hooks.yaml yields a
         single source (not two) so preGUI hooks do not run twice."""
@@ -1651,3 +2082,152 @@ class TestPreGuiHooks:
         )
 
         assert [m.job_bundle_dir for m in sources] == [bundle]
+
+
+class TestCollectSubmissionHookSources:
+    """Source-selection tests for pre/post-submission hooks.
+
+    The pre/post-submission analog of ``TestPreGuiHooks``. Both sources (environment and
+    bundle) must be returnable together so submission hooks from both can run — the earlier
+    single-manager merge could only ever run one.
+    """
+
+    @staticmethod
+    def _write_submission_hooks(directory, phase="preSubmission"):
+        """Write a hooks.yaml with a single ``phase`` hook into ``directory``."""
+        with open(os.path.join(directory, "hooks.yaml"), "w", encoding="utf8") as f:
+            f.write(f"version: '1.0'\n{phase}:\n  - command: python3\n    args: [x.py]\n")
+
+    def test_env_and_bundle_ordering(self, tmp_path):
+        """When both sources have submission hooks and are enabled, environment comes first,
+        then bundle."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._write_submission_hooks(bundle)
+        self._write_submission_hooks(studio)
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [studio, bundle]
+        # Each source is labeled with its true origin for the consent prompt.
+        assert [m.source_label for m in sources] == [
+            "environment (DEADLINE_HOOKS_DIR)",
+            "job bundle",
+        ]
+
+    def test_post_submission_hooks_make_a_source_runnable(self, tmp_path):
+        """A source with only postSubmission hooks (no preSubmission) is still collected."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_submission_hooks(bundle, phase="postSubmission")
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=None,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [bundle]
+
+    def test_pre_gui_only_hooks_are_not_collected(self, tmp_path):
+        """A source with only preGUI hooks is not a submission source."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_submission_hooks(bundle, phase="preGUI")
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=None,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert sources == []
+
+    def test_env_dir_ignored_when_env_hooks_disabled_warns(self, tmp_path):
+        """A disabled environment submission hook is skipped and warns about environment
+        hooks (not preGUI)."""
+        bundle = str(tmp_path / "bundle")
+        studio = str(tmp_path / "studio")
+        os.makedirs(bundle)
+        os.makedirs(studio)
+        self._write_submission_hooks(studio)
+        warnings: List[str] = []
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=studio,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=False,
+            print_callback=lambda _msg: None,
+            warning_callback=warnings.append,
+        )
+
+        assert sources == []
+        assert any("DEADLINE_HOOKS_DIR contains submission hooks" in w for w in warnings)
+
+    def test_bundle_hooks_ignored_when_bundle_hooks_disabled_warns(self, tmp_path):
+        """A disabled bundle submission hook is skipped and warns about bundle hooks."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_submission_hooks(bundle)
+        warnings: List[str] = []
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=None,
+            allow_bundle_hooks=False,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+            warning_callback=warnings.append,
+        )
+
+        assert sources == []
+        assert any("Job bundle contains submission hooks" in w for w in warnings)
+
+    def test_env_dir_equal_to_bundle_dir_is_not_duplicated(self, tmp_path):
+        """If DEADLINE_HOOKS_DIR points at the job bundle, the shared hooks.yaml yields a
+        single source so submission hooks do not run twice."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        self._write_submission_hooks(bundle)
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=bundle,  # same directory
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+        )
+
+        assert [m.job_bundle_dir for m in sources] == [bundle]
+
+    def test_invalid_env_dir_warns(self, tmp_path):
+        """A DEADLINE_HOOKS_DIR that is not a directory warns and yields no env source."""
+        bundle = str(tmp_path / "bundle")
+        os.makedirs(bundle)
+        missing = str(tmp_path / "does_not_exist")
+        warnings: List[str] = []
+
+        sources = collect_submission_hook_sources(
+            bundle_dir=bundle,
+            env_hooks_dir=missing,
+            allow_bundle_hooks=True,
+            allow_environment_hooks=True,
+            print_callback=lambda _msg: None,
+            warning_callback=warnings.append,
+        )
+
+        assert sources == []
+        assert any("is not a valid directory" in w for w in warnings)

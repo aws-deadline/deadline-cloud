@@ -10,7 +10,11 @@ import pytest
 from deadline.client.job_bundle._hooks import HookConfiguration, HookDefinition
 from deadline.client.ui.job_bundle_submitter import show_job_bundle_submitter
 
+# show_job_bundle_submitter lives here (dialog construction, auto_accept check)...
 MODULE = "deadline.client.ui.job_bundle_submitter"
+# ...but the pre-GUI hook sourcing + gating it delegates to lives in this module, so the
+# HookManager seam and the allow_*_hooks config reads must be patched here.
+HOOKS_MODULE = "deadline.client.ui.pre_gui_hooks"
 
 
 @pytest.fixture
@@ -49,7 +53,7 @@ def _patch_submitter_deps(tmp_path, hooks_with_pre_gui):
         "read_job_bundle_parameters": patch(
             f"{MODULE}.read_job_bundle_parameters", return_value=[]
         ),
-        "HookManager": patch(f"{MODULE}._HookManager", return_value=mock_hook_manager),
+        "HookManager": patch(f"{HOOKS_MODULE}.HookManager", return_value=mock_hook_manager),
         "SubmitJobToDeadlineDialog": patch(f"{MODULE}.SubmitJobToDeadlineDialog"),
         "QApplication": patch(f"{MODULE}.QApplication"),
         "QMessageBox": patch(f"{MODULE}.QMessageBox"),
@@ -75,11 +79,16 @@ def _call_submitter(bundle_dir, settings_map):
     def fake_get_setting(name, config=None):
         return settings_map.get(name, "false")
 
+    # _get_setting / _config_file are read by both the submitter (auto_accept) and the
+    # pre_gui_hooks module (allow_bundle_hooks / allow_environment_hooks gates) — patch both.
     with (
         patch(f"{MODULE}._get_setting", side_effect=fake_get_setting),
         patch(f"{MODULE}._config_file") as mock_config_file,
+        patch(f"{HOOKS_MODULE}._get_setting", side_effect=fake_get_setting),
+        patch(f"{HOOKS_MODULE}._config_file") as hooks_config_file,
     ):
         mock_config_file.str2bool.side_effect = lambda v: v.lower() == "true"
+        hooks_config_file.str2bool.side_effect = lambda v: v.lower() == "true"
         show_job_bundle_submitter(input_job_bundle_dir=bundle_dir)
 
 
