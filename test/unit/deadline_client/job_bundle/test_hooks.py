@@ -1541,28 +1541,39 @@ class TestEnvAndBundleSubmissionHooks:
 
     Regression test for the bug where the pre/post-submission submit path collapsed both hook
     sources into a single HookManager and could only ever execute one of them — so environment
-    and bundle hooks never ran together (and the merge branch was unreachable dead code). This
-    mirrors the preGUI coverage in ``TestPreGuiHooks`` for the pre/post-submission phases.
+    and bundle hooks never ran together (and the merge branch was unreachable dead code).
+
+    Source *selection* (single source, disabled sources, ordering, dedup) is covered without
+    spawning subprocesses by ``TestCollectSubmissionHookSources``. This one end-to-end test
+    covers what selection cannot: that both a DEADLINE_HOOKS_DIR source and a bundle source
+    actually *execute* — for pre- and post-submission — in a single real submission, in order.
     """
 
-    def _configure(self):
-        config.set_setting("defaults.farm_id", _PARAM_MOCK_FARM_ID)
-        config.set_setting("defaults.queue_id", _PARAM_MOCK_QUEUE_ID)
-        config.set_setting("settings.allow_bundle_hooks", "true")
-        config.set_setting("settings.allow_environment_hooks", "true")
-        config.set_setting("settings.auto_accept", "true")
-
     @staticmethod
-    def _write_appending_hook(directory, marker, results_file, phase):
-        """Write a hooks.yaml into ``directory`` whose single ``phase`` hook appends
-        ``marker`` (and a newline) to ``results_file``, so the caller can assert which
-        sources ran and in what order."""
+    def _write_appending_hook(directory, marker, results_file):
+        """Write a hooks.yaml into ``directory`` whose pre- and post-submission hooks each
+        append a ``<marker>-pre`` / ``<marker>-post`` line to ``results_file``, so the caller
+        can assert which sources ran, for which phase, and in what order.
+
+        Uses ``sys.executable`` (not the ``python3`` literal): on Windows the ``python3`` name
+        can resolve to the Microsoft Store app-execution-alias stub, which hangs when run
+        non-interactively — leaving the hook subprocess (and the test worker) unable to exit.
+        """
         script_name = f"{marker}_hook.py"
         escaped = results_file.replace("\\", "\\\\")
         with open(os.path.join(directory, script_name), "w", encoding="utf8") as f:
-            f.write(f"open(r'{escaped}', 'a').write('{marker}\\n')\n")
+            f.write(
+                f"import sys\nopen(r'{escaped}', 'a').write('{marker}-' + sys.argv[1] + '\\n')\n"
+            )
         with open(os.path.join(directory, "hooks.yaml"), "w", encoding="utf8") as f:
-            f.write(f"version: '1.0'\n{phase}:\n  - command: python3\n    args: [{script_name}]\n")
+            yaml.dump(
+                {
+                    "version": "1.0",
+                    "preSubmission": [{"command": sys.executable, "args": [script_name, "pre"]}],
+                    "postSubmission": [{"command": sys.executable, "args": [script_name, "post"]}],
+                },
+                f,
+            )
 
     @staticmethod
     def _markers(results_file):
@@ -1571,84 +1582,29 @@ class TestEnvAndBundleSubmissionHooks:
         with open(results_file, encoding="utf8") as f:
             return [line.strip() for line in f if line.strip()]
 
-    def test_env_and_bundle_pre_submission_hooks_both_run(
-        self, fresh_deadline_config, tmp_path, monkeypatch
-    ):
-        """Both an environment and a bundle preSubmission hook run, environment first."""
+    def test_env_and_bundle_hooks_both_run(self, fresh_deadline_config, tmp_path, monkeypatch):
+        """Both a DEADLINE_HOOKS_DIR source and a bundle source execute their pre- and
+        post-submission hooks, environment before bundle for each phase."""
         bundle = str(tmp_path / "bundle")
         studio = str(tmp_path / "studio")
         os.makedirs(bundle)
         os.makedirs(studio)
-        self._configure()
+        config.set_setting("defaults.farm_id", _PARAM_MOCK_FARM_ID)
+        config.set_setting("defaults.queue_id", _PARAM_MOCK_QUEUE_ID)
+        config.set_setting("settings.allow_bundle_hooks", "true")
+        config.set_setting("settings.allow_environment_hooks", "true")
+        config.set_setting("settings.auto_accept", "true")
         _write_param_bundle(bundle)
         results = str(tmp_path / "results.txt")
-        self._write_appending_hook(studio, "env", results, "preSubmission")
-        self._write_appending_hook(bundle, "bundle", results, "preSubmission")
+        self._write_appending_hook(studio, "env", results)
+        self._write_appending_hook(bundle, "bundle", results)
         monkeypatch.setenv("DEADLINE_HOOKS_DIR", studio)
 
         with patch_calls_for_create_job_from_job_bundle():
             api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
 
-        assert self._markers(results) == ["env", "bundle"]
-
-    def test_env_and_bundle_post_submission_hooks_both_run(
-        self, fresh_deadline_config, tmp_path, monkeypatch
-    ):
-        """Both an environment and a bundle postSubmission hook run, environment first."""
-        bundle = str(tmp_path / "bundle")
-        studio = str(tmp_path / "studio")
-        os.makedirs(bundle)
-        os.makedirs(studio)
-        self._configure()
-        _write_param_bundle(bundle)
-        results = str(tmp_path / "results.txt")
-        self._write_appending_hook(studio, "env", results, "postSubmission")
-        self._write_appending_hook(bundle, "bundle", results, "postSubmission")
-        monkeypatch.setenv("DEADLINE_HOOKS_DIR", studio)
-
-        with patch_calls_for_create_job_from_job_bundle():
-            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
-
-        assert self._markers(results) == ["env", "bundle"]
-
-    def test_bundle_hooks_still_run_without_env_dir(
-        self, fresh_deadline_config, tmp_path, monkeypatch
-    ):
-        """With no DEADLINE_HOOKS_DIR set, a bundle preSubmission hook still runs on its own."""
-        bundle = str(tmp_path / "bundle")
-        os.makedirs(bundle)
-        self._configure()
-        _write_param_bundle(bundle)
-        results = str(tmp_path / "results.txt")
-        self._write_appending_hook(bundle, "bundle", results, "preSubmission")
-        monkeypatch.delenv("DEADLINE_HOOKS_DIR", raising=False)
-
-        with patch_calls_for_create_job_from_job_bundle():
-            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
-
-        assert self._markers(results) == ["bundle"]
-
-    def test_env_pre_submission_hook_skipped_when_env_hooks_disabled(
-        self, fresh_deadline_config, tmp_path, monkeypatch
-    ):
-        """An environment preSubmission hook does not run when environment hooks are disabled,
-        while the bundle hook still runs."""
-        bundle = str(tmp_path / "bundle")
-        studio = str(tmp_path / "studio")
-        os.makedirs(bundle)
-        os.makedirs(studio)
-        self._configure()
-        config.set_setting("settings.allow_environment_hooks", "false")
-        _write_param_bundle(bundle)
-        results = str(tmp_path / "results.txt")
-        self._write_appending_hook(studio, "env", results, "preSubmission")
-        self._write_appending_hook(bundle, "bundle", results, "preSubmission")
-        monkeypatch.setenv("DEADLINE_HOOKS_DIR", studio)
-
-        with patch_calls_for_create_job_from_job_bundle():
-            api.create_job_from_job_bundle(job_bundle_dir=bundle, queue_parameter_definitions=[])
-
-        assert self._markers(results) == ["bundle"]
+        # Pre-submission: env then bundle; post-submission: env then bundle.
+        assert self._markers(results) == ["env-pre", "bundle-pre", "env-post", "bundle-post"]
 
 
 class TestPreGuiHooks:
