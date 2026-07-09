@@ -4,6 +4,8 @@
 
 import json
 import os
+import signal
+import subprocess
 import sys
 import tempfile
 import threading
@@ -1181,6 +1183,31 @@ class TestHookStdoutStreaming:
             # stdout is not streamed, so the failure report surfaces it for debugging.
             assert any(m.startswith("stdout:") and "not-json-stdout" in m for m in messages)
 
+    @staticmethod
+    def _reap(pidfile: str) -> None:
+        """Kill the grandchild whose PID a lingering-pipe hook wrote to ``pidfile``.
+
+        The grandchild is detached from the hook process, so the test owns cleanup: without
+        this it would keep the stderr pipe open (and the reader thread blocked) until its own
+        backstop timeout, leaking a process and thread into the rest of the CI run.
+        """
+        try:
+            with open(pidfile) as f:
+                pid = int(f.read().strip())
+        except (OSError, ValueError):
+            return
+        try:
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["taskkill", "/F", "/PID", str(pid)],
+                    capture_output=True,
+                    check=False,
+                )
+            else:
+                os.kill(pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            pass
+
     def test_lingering_child_holding_pipe_does_not_hang(self, monkeypatch):
         """A hook that exits but leaves a child holding the stderr pipe open must not hang
         submission. process.wait() returns (the hook itself exited), but the reader threads
@@ -1190,16 +1217,20 @@ class TestHookStdoutStreaming:
         from deadline.client.job_bundle._hooks._executor import HookExecutor
 
         # Keep the test fast: shrink the reader-join grace window.
-        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 1.0)
+        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 0.5)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            # The hook spawns a detached child that inherits stderr and sleeps, then the hook
-            # process itself exits. The child keeps the stderr write end open past the
-            # parent's exit, so the drainer never reaches EOF on its own.
+            # The hook spawns a detached child that inherits stderr, records its PID so the
+            # test can reap it, then the hook process itself exits. The child keeps the
+            # stderr write end open past the parent's exit, so the drainer never reaches EOF
+            # on its own. The child's own short sleep is only a backstop in case cleanup is
+            # skipped — the test kills it explicitly so nothing lingers into later tests.
+            pidfile = os.path.join(tmpdir, "grandchild.pid")
             child = (
                 "import subprocess, sys; "
-                "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], "
+                "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)'], "
                 "stderr=sys.stderr); "
+                f"open({pidfile!r}, 'w').write(str(p.pid)); "
                 "sys.exit(0)"
             )
             hooks_file = os.path.join(tmpdir, "hooks.yaml")
@@ -1217,12 +1248,15 @@ class TestHookStdoutStreaming:
             manager.load_hooks()
 
             start = time.monotonic()
-            # Blocks-forever regression would exceed the timeout here; the bounded join
-            # instead surfaces a timeout error well within the 30s hook timeout.
-            with pytest.raises(DeadlineOperationError, match="timed out"):
-                manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
-            elapsed = time.monotonic() - start
-            assert elapsed < 15, f"submission hung on a lingering pipe holder ({elapsed:.1f}s)"
+            try:
+                # A blocks-forever regression would hang here; the bounded join instead
+                # surfaces a timeout well within the 30s hook timeout.
+                with pytest.raises(DeadlineOperationError, match="timed out"):
+                    manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+                elapsed = time.monotonic() - start
+                assert elapsed < 10, f"submission hung on a lingering pipe holder ({elapsed:.1f}s)"
+            finally:
+                self._reap(pidfile)
 
     def test_abandoned_reader_does_not_call_callback_after_return(self, monkeypatch):
         """A leaked reader thread (lingering-child timeout path) must not keep calling
@@ -1234,18 +1268,23 @@ class TestHookStdoutStreaming:
         from deadline.client.job_bundle._hooks._executor import HookExecutor
         from deadline.client.job_bundle._hooks import HookDefinition
 
-        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 1.0)
+        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 0.5)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Child inherits stderr and keeps emitting lines for a while after the hook
-            # process itself exits, so the drainer is still active past the grace period.
+            # Child inherits stderr, records its PID for cleanup, and keeps emitting lines
+            # past the grace period so the drainer is still active when execute() returns.
+            pidfile = os.path.join(tmpdir, "grandchild.pid")
+            grandchild_body = (
+                "import sys, time\n"
+                "for i in range(100):\n"
+                "    print('leaked', i, file=sys.stderr, flush=True)\n"
+                "    time.sleep(0.02)\n"
+            )
             child = (
                 "import subprocess, sys; "
-                "subprocess.Popen([sys.executable, '-c', "
-                "'import sys, time\\n'"
-                "'for i in range(100):\\n'"
-                "'    print(\"leaked\", i, file=sys.stderr, flush=True)\\n'"
-                "'    time.sleep(0.05)'], stderr=sys.stderr); "
+                f"p = subprocess.Popen([sys.executable, '-c', {grandchild_body!r}], "
+                "stderr=sys.stderr); "
+                f"open({pidfile!r}, 'w').write(str(p.pid)); "
                 "sys.exit(0)"
             )
 
@@ -1259,17 +1298,20 @@ class TestHookStdoutStreaming:
             executor = HookExecutor(tmpdir, _callback)
             hook = HookDefinition(command=sys.executable, args=["-c", child], timeout=30)
 
-            result = executor.execute(hook, self._make_metadata(tmpdir), "pre-submission", 1)
-            returned.set()
-            assert result.timed_out is True
+            try:
+                result = executor.execute(hook, self._make_metadata(tmpdir), "pre-submission", 1)
+                returned.set()
+                assert result.timed_out is True
 
-            # Give the leaked child time to emit more lines; the abandoned reader must have
-            # stopped forwarding them to the callback.
-            time.sleep(1.0)
-            assert calls_after_return == [], (
-                "leaked reader kept calling print_callback after execute() returned: "
-                f"{calls_after_return[:3]}"
-            )
+                # Give the leaked child time to emit more lines; the abandoned reader must
+                # have stopped forwarding them to the callback.
+                time.sleep(0.5)
+                assert calls_after_return == [], (
+                    "leaked reader kept calling print_callback after execute() returned: "
+                    f"{calls_after_return[:3]}"
+                )
+            finally:
+                self._reap(pidfile)
 
 
 class TestValidateBeforeGUIOutput:
