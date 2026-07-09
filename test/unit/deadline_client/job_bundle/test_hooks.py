@@ -4,8 +4,12 @@
 
 import json
 import os
+import signal
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 import pytest
 import yaml
@@ -23,6 +27,7 @@ from deadline.client.job_bundle._hooks import (
     collect_pre_gui_hook_sources,
     collect_submission_hook_sources,
 )
+from deadline.client.job_bundle._hooks._executor import HookExecutor
 from deadline.client.job_bundle._hooks._merger import merge_asset_references, merge_payload
 from deadline.client.job_bundle._hooks._validator import (
     validate_pre_gui_output,
@@ -1029,6 +1034,304 @@ class TestHookManager:
             with open(output_file) as f:
                 # Hook should receive the bundle_dir, not the hooks_dir
                 assert f.read() == bundle_dir
+
+
+class TestHookStdoutStreaming:
+    """Tests that a hook's stderr is surfaced to the user while the hook runs.
+
+    Bea-57642: submission hooks previously produced no feedback until they finished, so a
+    slow hook (e.g. generating auth tokens for several services) looked like a hang. Hooks
+    write human-readable progress to stderr (stdout is reserved for the JSON contract), and
+    the executor now forwards each stderr line to ``print_callback`` as it arrives.
+    """
+
+    def _make_metadata(self, tmpdir: str) -> HookMetadata:
+        return HookMetadata(
+            job_name="Test",
+            priority=50,
+            farm_id="farm-123",
+            queue_id="queue-456",
+            job_bundle_dir=tmpdir,
+            parameters={},
+            submitter_name="Test",
+            asset_references={},
+            submission_payload={},
+        )
+
+    @staticmethod
+    def _streamed_lines(messages: List[str]) -> List[str]:
+        """The subset of callback messages that are streamed hook output.
+
+        Streamed hook output carries the ``  [<hook_type> hook <index>] `` prefix added by
+        HookExecutor. This lets a test distinguish real streamed stderr from the
+        ``Running ... hook`` / failure-report lines, which echo the hook's command and can
+        incidentally contain the same text the hook printed.
+        """
+        return [m for m in messages if m.lstrip().startswith("[")]
+
+    def test_pre_submission_stderr_is_forwarded_to_callback(self):
+        """Each line a hook writes to stderr is streamed to print_callback."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import sys; print('step one', file=sys.stderr); "
+                                    + "print('step two', file=sys.stderr)",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            streamed = "\n".join(self._streamed_lines(messages))
+            assert "step one" in streamed
+            assert "step two" in streamed
+
+    def test_stdout_json_is_not_streamed_as_progress(self):
+        """stdout is the JSON contract, so it is consumed for the payload and not echoed to
+        the user as progress output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import json; print(json.dumps({'priority': 100}))",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            result = manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            # The JSON reached the payload...
+            assert result["priority"] == 100
+            # ...but was not streamed back to the user as a progress line (stdout is the
+            # JSON contract, not progress output).
+            assert self._streamed_lines(messages) == []
+
+    def test_stderr_streamed_incrementally_before_hook_exits(self):
+        """A progress line reaches the callback before the hook finishes, not just after.
+
+        The hook writes one stderr line, then blocks on stdin until we feed it. Because the
+        executor writes stdin and reads stderr on separate threads, the first progress line
+        is delivered while the hook is still running.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    # Emit progress, then read stdin (the metadata) to prove
+                                    # the reader thread saw the line before we blocked here.
+                                    "import sys; print('started', file=sys.stderr, flush=True); "
+                                    + "sys.stdin.read()",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            first_message = threading.Event()
+
+            def _callback(msg: str) -> None:
+                if "started" in msg:
+                    first_message.set()
+
+            manager = HookManager(tmpdir, _callback)
+            manager.load_hooks()
+            manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            assert first_message.is_set()
+
+    def test_failure_report_does_not_duplicate_streamed_stderr(self):
+        """On failure, stderr already streamed live is not re-dumped as a blob, but stdout
+        (which is not streamed) is surfaced for debugging."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {
+                                "command": sys.executable,
+                                "args": [
+                                    "-c",
+                                    "import sys; print('progress line', file=sys.stderr); "
+                                    + "print('not-json-stdout'); sys.exit(2)",
+                                ],
+                            }
+                        ]
+                    },
+                    f,
+                )
+
+            messages: List[str] = []
+            manager = HookManager(tmpdir, messages.append)
+            manager.load_hooks()
+            with pytest.raises(DeadlineOperationError, match="exit code 2"):
+                manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+
+            # The stderr progress line was streamed exactly once during execution...
+            assert sum("progress line" in m for m in self._streamed_lines(messages)) == 1
+            # ...and is not repeated as a "stderr:\n..." blob in the failure report.
+            assert not any(m.startswith("stderr:") for m in messages)
+            # stdout is not streamed, so the failure report surfaces it for debugging.
+            assert any(m.startswith("stdout:") and "not-json-stdout" in m for m in messages)
+
+    @staticmethod
+    def _reap(pidfile: str) -> None:
+        """Kill the grandchild whose PID a lingering-pipe hook wrote to ``pidfile``.
+
+        The grandchild is detached from the hook process, so the test owns cleanup: without
+        this it would keep the stderr pipe open (and the reader thread blocked) until its own
+        backstop timeout, leaking a process and thread into the rest of the CI run.
+        """
+        try:
+            with open(pidfile) as f:
+                pid = int(f.read().strip())
+        except (OSError, ValueError):
+            return
+        try:
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["taskkill", "/F", "/PID", str(pid)],
+                    capture_output=True,
+                    check=False,
+                )
+            else:
+                os.kill(pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            # Best-effort cleanup: the grandchild may already have exited (its own backstop
+            # sleep elapsed) or never started, so a failure to signal it is fine to ignore.
+            pass
+
+    def test_lingering_child_holding_pipe_does_not_hang(self, monkeypatch):
+        """A hook that exits but leaves a child holding the stderr pipe open must not hang
+        submission. process.wait() returns (the hook itself exited), but the reader threads
+        never see EOF; the bounded join must give up after the grace period and report a
+        timeout instead of blocking forever.
+        """
+        # Keep the test fast: shrink the reader-join grace window.
+        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 0.5)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # The hook spawns a detached child that inherits stderr, records its PID so the
+            # test can reap it, then the hook process itself exits. The child keeps the
+            # stderr write end open past the parent's exit, so the drainer never reaches EOF
+            # on its own. The child's own short sleep is only a backstop in case cleanup is
+            # skipped — the test kills it explicitly so nothing lingers into later tests.
+            pidfile = os.path.join(tmpdir, "grandchild.pid")
+            child = (
+                "import subprocess, sys; "
+                "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)'], "
+                "stderr=sys.stderr); "
+                f"open({pidfile!r}, 'w').write(str(p.pid)); "
+                "sys.exit(0)"
+            )
+            hooks_file = os.path.join(tmpdir, "hooks.yaml")
+            with open(hooks_file, "w") as f:
+                yaml.dump(
+                    {
+                        "preSubmission": [
+                            {"command": sys.executable, "args": ["-c", child], "timeout": 30}
+                        ]
+                    },
+                    f,
+                )
+
+            manager = HookManager(tmpdir, lambda _msg: None)
+            manager.load_hooks()
+
+            start = time.monotonic()
+            try:
+                # A blocks-forever regression would hang here; the bounded join instead
+                # surfaces a timeout well within the 30s hook timeout.
+                with pytest.raises(DeadlineOperationError, match="timed out"):
+                    manager.execute_pre_submission_hooks(self._make_metadata(tmpdir), {})
+                elapsed = time.monotonic() - start
+                assert elapsed < 10, f"submission hung on a lingering pipe holder ({elapsed:.1f}s)"
+            finally:
+                self._reap(pidfile)
+
+    def test_abandoned_reader_does_not_call_callback_after_return(self, monkeypatch):
+        """A leaked reader thread (lingering-child timeout path) must not keep calling
+        print_callback or mutating the output buffers after execute() returns — that would
+        race the next hook's output and the main thread's "".join of the buffers. The
+        ``abandoned`` flag makes the leaked reader bow out; assert no callback fires once we
+        record the method as returned.
+        """
+        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 0.5)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Child inherits stderr, records its PID for cleanup, and keeps emitting lines
+            # past the grace period so the drainer is still active when execute() returns.
+            pidfile = os.path.join(tmpdir, "grandchild.pid")
+            grandchild_body = (
+                "import sys, time\n"
+                "for i in range(100):\n"
+                "    print('leaked', i, file=sys.stderr, flush=True)\n"
+                "    time.sleep(0.02)\n"
+            )
+            child = (
+                "import subprocess, sys; "
+                f"p = subprocess.Popen([sys.executable, '-c', {grandchild_body!r}], "
+                "stderr=sys.stderr); "
+                f"open({pidfile!r}, 'w').write(str(p.pid)); "
+                "sys.exit(0)"
+            )
+
+            returned = threading.Event()
+            calls_after_return = []
+
+            def _callback(msg):
+                if returned.is_set():
+                    calls_after_return.append(msg)
+
+            executor = HookExecutor(tmpdir, _callback)
+            hook = HookDefinition(command=sys.executable, args=["-c", child], timeout=30)
+
+            try:
+                result = executor.execute(hook, self._make_metadata(tmpdir), "pre-submission", 1)
+                returned.set()
+                assert result.timed_out is True
+
+                # Give the leaked child time to emit more lines; the abandoned reader must
+                # have stopped forwarding them to the callback.
+                time.sleep(0.5)
+                assert calls_after_return == [], (
+                    "leaked reader kept calling print_callback after execute() returned: "
+                    f"{calls_after_return[:3]}"
+                )
+            finally:
+                self._reap(pidfile)
 
 
 class TestValidateBeforeGUIOutput:
