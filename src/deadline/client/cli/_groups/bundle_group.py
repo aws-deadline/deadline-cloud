@@ -58,6 +58,16 @@ def cli_bundle():
     review and edit parameters in a GUI before submitting.
 
     \b
+    A job bundle directory must contain template.yaml (or template.json).
+    It may also include parameter_values.yaml and asset_references.yaml.
+
+    \b
+    Scripted workflow (no prompts):
+      deadline bundle submit ./bundle --yes
+      deadline job wait --job-id <id>
+      deadline job download-output --job-id <id> --yes
+
+    \b
     Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
@@ -218,7 +228,10 @@ def _interactive_confirmation_prompt(message: str, default_response: bool) -> bo
     "--known-asset-path",
     multiple=True,
     help="Path that should not generate warnings when outside storage profile locations. "
-    "Can be specified multiple times for different paths.",
+    "Use this when submitting from a temporary or non-standard directory to suppress "
+    "the 'unknown asset paths' confirmation prompt. "
+    "Can be specified multiple times for different paths. "
+    "Equivalent to adding paths to config setting 'settings.known_asset_paths'.",
 )
 @click.option(
     "--save-debug-snapshot",
@@ -268,6 +281,23 @@ def bundle_submit(
     The command returns a job id (job-xxxx). Use `deadline job get --job-id <id>`
     to see its current taskRunStatus, or `deadline job wait --job-id <id>` to
     block until the job reaches a terminal state (SUCCEEDED / FAILED / CANCELED).
+
+    \b
+    JOB_BUNDLE_DIR is the path to the directory containing template.yaml (or
+    template.json), and optionally parameter_values.yaml and
+    asset_references.yaml.
+
+    \b
+    If asset files reference paths outside the configured storage profile
+    locations (settings.storage_profile_id), submission will warn about
+    "unknown asset paths" and prompt for confirmation. To suppress this in
+    scripts/agents, either pass --known-asset-path <dir> for each additional
+    root, or pass --yes to auto-confirm all prompts.
+
+    \b
+    After submission, use `deadline job wait --job-id <id>` to block until
+    the job completes (exit code 0 = success), then `deadline job
+    download-output --job-id <id>` to retrieve results.
 
     \b
     Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)

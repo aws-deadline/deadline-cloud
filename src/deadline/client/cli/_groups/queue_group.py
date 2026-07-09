@@ -47,6 +47,19 @@ def cli_queue():
     definitions, or sync job output for all jobs in a queue.
 
     \b
+    Available subcommands:
+      list               List queues in the farm
+      get                Get details of a queue (incl. job attachment settings)
+      paramdefs          List parameters from queue environments (e.g. conda)
+      export-credentials Export temporary queue role credentials
+      sync-output        Incrementally download output for all jobs in queue
+
+    \b
+    Note: There is no subcommand for listing queue environments directly.
+    Use `deadline queue paramdefs` to see what parameters (and therefore
+    which queue environments such as Conda) are configured on a queue.
+
+    \b
     Learn more about [queues](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/queues.html)
     """
 
@@ -200,7 +213,13 @@ def queue_paramdefs(**args):
     Lists the parameter definitions for a Deadline Cloud queue in the farm.
 
     The parameter definitions include all the parameters defined by the
-    queue environments configured for the queue.
+    queue environments configured for the queue. This is the way to
+    discover which queue environments (e.g. Conda, service-managed fleet
+    software) are attached to a queue and what parameters they expose.
+
+    \b
+    For example, a Conda queue environment defines parameters like
+    CondaPackages and CondaChannels that job templates can reference.
 
     \b
     Learn more about [queue environments](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/create-queue-environment.html)

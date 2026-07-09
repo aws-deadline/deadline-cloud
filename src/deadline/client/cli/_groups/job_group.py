@@ -141,6 +141,11 @@ def cli_job():
     cancel, or requeue failed tasks.
 
     \b
+    For scripted/agent workflows, prefer `wait` over polling `get`:
+      deadline job wait --job-id <id>       # blocks, exit 0 = success
+      deadline job download-output --job-id <id> --yes
+
+    \b
     Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
     """
 
@@ -238,6 +243,11 @@ def job_get(search_term: Optional[str], **args):
     SEARCH_TERM can be a job ID (job-xxx) or a search string to find matching jobs.
     If exactly one job matches, shows full details. If multiple match, shows a summary list.
     If no arguments provided, shows the default job from config.
+
+    \b
+    Output includes lifecycleStatus, taskRunStatus, and taskRunStatusCounts.
+    To block until a job finishes, use `deadline job wait --job-id <id>`
+    instead of polling this command.
 
     \b
     Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
@@ -1105,7 +1115,14 @@ def job_download_output(
 ):
     """
     Download the output of a Deadline Cloud job that was saved as job
-    attachments.
+    attachments. Files are downloaded to the paths specified at submission
+    time (mapped via storage profiles, or unmapped with
+    --ignore-storage-profiles).
+
+    \b
+    Pass --yes to skip confirmation prompts (useful in scripts/agents).
+    Pass --ignore-storage-profiles when submitting and downloading on the
+    same machine to skip storage profile path mapping.
 
     Scope is controlled by which ids you pass:
 
@@ -1442,7 +1459,8 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
 
     Blocks until the job reaches a terminal state (SUCCEEDED, FAILED,
     CANCELED, SUSPENDED, or NOT_COMPATIBLE), then prints any failed
-    step-task combinations.
+    step-task combinations. This is the recommended way to poll for job
+    completion in scripts and automation (instead of looping on `job get`).
 
     Uses exponential backoff for polling, starting at 0.5s and doubling
     until reaching --max-poll-interval.
@@ -1456,6 +1474,11 @@ def job_wait_for_completion(max_poll_interval, timeout, output, **args):
         3 - Job was canceled
         4 - Job was suspended
         5 - Job is not compatible
+
+    \b
+    Example (submit then wait):
+      deadline bundle submit ./bundle --yes
+      deadline job wait --job-id job-abc123 && deadline job download-output --job-id job-abc123 --yes
 
     \b
     Learn more about [Deadline Cloud jobs](https://docs.aws.amazon.com/deadline-cloud/latest/userguide/deadline-cloud-jobs.html)
