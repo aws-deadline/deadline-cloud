@@ -1224,6 +1224,53 @@ class TestHookStdoutStreaming:
             elapsed = time.monotonic() - start
             assert elapsed < 15, f"submission hung on a lingering pipe holder ({elapsed:.1f}s)"
 
+    def test_abandoned_reader_does_not_call_callback_after_return(self, monkeypatch):
+        """A leaked reader thread (lingering-child timeout path) must not keep calling
+        print_callback or mutating the output buffers after execute() returns — that would
+        race the next hook's output and the main thread's "".join of the buffers. The
+        ``abandoned`` flag makes the leaked reader bow out; assert no callback fires once we
+        record the method as returned.
+        """
+        from deadline.client.job_bundle._hooks._executor import HookExecutor
+        from deadline.client.job_bundle._hooks import HookDefinition
+
+        monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 1.0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Child inherits stderr and keeps emitting lines for a while after the hook
+            # process itself exits, so the drainer is still active past the grace period.
+            child = (
+                "import subprocess, sys; "
+                "subprocess.Popen([sys.executable, '-c', "
+                "'import sys, time\\n'"
+                "'for i in range(100):\\n'"
+                "'    print(\"leaked\", i, file=sys.stderr, flush=True)\\n'"
+                "'    time.sleep(0.05)'], stderr=sys.stderr); "
+                "sys.exit(0)"
+            )
+
+            returned = threading.Event()
+            calls_after_return = []
+
+            def _callback(msg):
+                if returned.is_set():
+                    calls_after_return.append(msg)
+
+            executor = HookExecutor(tmpdir, _callback)
+            hook = HookDefinition(command=sys.executable, args=["-c", child], timeout=30)
+
+            result = executor.execute(hook, self._make_metadata(tmpdir), "pre-submission", 1)
+            returned.set()
+            assert result.timed_out is True
+
+            # Give the leaked child time to emit more lines; the abandoned reader must have
+            # stopped forwarding them to the callback.
+            time.sleep(1.0)
+            assert calls_after_return == [], (
+                "leaked reader kept calling print_callback after execute() returned: "
+                f"{calls_after_return[:3]}"
+            )
+
 
 class TestValidateBeforeGUIOutput:
     """Tests for pre-GUI hook output validation."""

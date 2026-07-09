@@ -118,9 +118,20 @@ class HookExecutor:
         Reading each pipe on its own thread avoids the deadlock that a single-threaded
         write-then-read would hit when a hook fills one pipe's buffer before we drain it.
         Returns ``(stdout, stderr, timed_out)``.
+
+        The shared output buffers and the ``print_callback`` are guarded by a lock, and an
+        ``abandoned`` flag lets a reader we stop waiting on (the lingering-child timeout
+        path) bow out cleanly: without this, a daemon reader could still be ``append``-ing to
+        a buffer while the main thread joins it via ``"".join(...)`` — a data race that can
+        corrupt output or crash the interpreter — and could keep calling ``print_callback``
+        after this method returns, racing the next hook's output.
         """
         stdout_chunks: _List[str] = []
         stderr_chunks: _List[str] = []
+        output_lock = _threading.Lock()
+        # Set once we give up waiting on the readers; tells any leaked reader thread to stop
+        # touching the shared buffers and the callback.
+        abandoned = _threading.Event()
 
         def _write_stdin() -> None:
             if process.stdin is None:
@@ -135,7 +146,10 @@ class HookExecutor:
         def _drain_stdout() -> None:
             if process.stdout is None:
                 return
-            stdout_chunks.append(process.stdout.read())
+            data = process.stdout.read()
+            with output_lock:
+                if not abandoned.is_set():
+                    stdout_chunks.append(data)
 
         def _drain_stderr() -> None:
             if process.stderr is None:
@@ -143,9 +157,14 @@ class HookExecutor:
             # readline (rather than iterating the file) yields each line without read-ahead
             # buffering, so progress lines reach the user as soon as the hook emits them.
             for line in iter(process.stderr.readline, ""):
-                stderr_chunks.append(line)
-                message = line.rstrip("\n")
-                self.print_callback(f"  [{hook_type} hook {hook_index}] {message}")
+                with output_lock:
+                    if abandoned.is_set():
+                        # We've stopped waiting on this hook; don't append or print past the
+                        # point execute() returned, to avoid racing the next hook's output.
+                        break
+                    stderr_chunks.append(line)
+                    message = line.rstrip("\n")
+                    self.print_callback(f"  [{hook_type} hook {hook_index}] {message}")
 
         threads = [
             _threading.Thread(target=target, daemon=True)
@@ -177,7 +196,12 @@ class HookExecutor:
             if process.poll() is None:
                 process.kill()
 
-        return "".join(stdout_chunks), "".join(stderr_chunks), timed_out
+        # Snapshot under the lock: set ``abandoned`` first so any still-alive reader stops
+        # mutating the buffers, then read a consistent copy. Joined readers have already
+        # exited, so in the normal path this is uncontended.
+        with output_lock:
+            abandoned.set()
+            return "".join(stdout_chunks), "".join(stderr_chunks), timed_out
 
     def _build_environment(self, hook: _HookDefinition, metadata: _HookMetadata) -> _Dict[str, str]:
         """Build environment variables for hook execution."""
