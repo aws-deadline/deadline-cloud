@@ -26,6 +26,7 @@ from deadline.client.job_bundle._hooks import (
     HookResult,
     collect_pre_gui_hook_sources,
 )
+from deadline.client.job_bundle._hooks._executor import HookExecutor
 from deadline.client.job_bundle._hooks._merger import merge_asset_references, merge_payload
 from deadline.client.job_bundle._hooks._validator import (
     validate_pre_gui_output,
@@ -1206,6 +1207,8 @@ class TestHookStdoutStreaming:
             else:
                 os.kill(pid, signal.SIGKILL)
         except (OSError, ProcessLookupError):
+            # Best-effort cleanup: the grandchild may already have exited (its own backstop
+            # sleep elapsed) or never started, so a failure to signal it is fine to ignore.
             pass
 
     def test_lingering_child_holding_pipe_does_not_hang(self, monkeypatch):
@@ -1214,8 +1217,6 @@ class TestHookStdoutStreaming:
         never see EOF; the bounded join must give up after the grace period and report a
         timeout instead of blocking forever.
         """
-        from deadline.client.job_bundle._hooks._executor import HookExecutor
-
         # Keep the test fast: shrink the reader-join grace window.
         monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 0.5)
 
@@ -1265,9 +1266,6 @@ class TestHookStdoutStreaming:
         ``abandoned`` flag makes the leaked reader bow out; assert no callback fires once we
         record the method as returned.
         """
-        from deadline.client.job_bundle._hooks._executor import HookExecutor
-        from deadline.client.job_bundle._hooks import HookDefinition
-
         monkeypatch.setattr(HookExecutor, "_READER_JOIN_GRACE_SECONDS", 0.5)
 
         with tempfile.TemporaryDirectory() as tmpdir:
