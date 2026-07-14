@@ -68,14 +68,13 @@ __all__ = [  # noqa: RUF022  grouped by feature, not sorted
     "UpdateCheckResult",
     "UpdateCheckStatus",
     # Unified Submitter API
-    "SubmitterAPI",
+    "BaseSubmitter",
     "SubmitterSettings",
     "SubmissionContext",
     "get_queue_parameters",
-    "set_conda_packages",
-    "append_conda_packages",
-    "set_rez_packages",
-    "append_rez_packages",
+    "apply_parameter_overrides",
+    "set_queue_parameter",
+    "append_queue_parameter",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -85,7 +84,6 @@ import encodings.idna  # noqa # pylint: disable=unused-import
 from configparser import ConfigParser
 from logging import getLogger
 from typing import Optional
-
 
 # Telemetry must be imported before Submit Job Bundle to avoid circular dependencies.
 from ._telemetry import (
@@ -148,15 +146,14 @@ from ._update_checker import (
     UpdateCheckResult,
     UpdateCheckStatus,
 )
-from ..submitter_api import (
-    SubmitterAPI,
+from ._submitter import (
+    BaseSubmitter,
     SubmitterSettings,
     SubmissionContext,
     get_queue_parameters,
-    set_conda_packages,
-    append_conda_packages,
-    set_rez_packages,
-    append_rez_packages,
+    apply_parameter_overrides,
+    set_queue_parameter,
+    append_queue_parameter,
 )
 
 logger = getLogger(__name__)

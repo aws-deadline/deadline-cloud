@@ -2,22 +2,21 @@
 from __future__ import annotations
 
 __all__ = [
+    "BaseSubmitter",
     "SubmissionContext",
-    "SubmitterAPI",
     "SubmitterSettings",
-    "append_conda_packages",
-    "append_rez_packages",
+    "append_queue_parameter",
+    "apply_parameter_overrides",
     "get_queue_parameters",
-    "set_conda_packages",
-    "set_rez_packages",
+    "set_queue_parameter",
 ]
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Optional, cast
 
-from .config import config_file
-from .exceptions import DeadlineOperationError
+from ..config import config_file
+from ..exceptions import DeadlineOperationError
 
 
 @dataclass
@@ -25,12 +24,23 @@ class SubmitterSettings:
     """Common submission settings across all DCCs.
 
     DCC submitters subclass this to add DCC-specific fields.
+
+    All fields are optional (sensible defaults). ``frame_list`` in particular is
+    not required — it assumes a frame-based rendering workload, and some
+    submitters never set it (e.g. Nuke). An empty ``frame_list`` means "use the
+    frame range defined in the scene."
     """
 
-    name: str = ""
+    job_name: str = ""
     description: str = ""
+    # OpenJD frame-list string (e.g. "1-10", "1-100:2"). Optional: empty means
+    # "use the scene's frame range"; leave unset for non-frame-based workloads.
     frame_list: str = ""
+    # Root working/project directory of the scene (an INPUT path — e.g. the
+    # Maya workspace / project root), used to anchor relative asset paths and as
+    # an input directory. Not the render output location (see output_path).
     project_path: str = ""
+    # Directory the DCC writes rendered frames to (an OUTPUT path).
     output_path: str = ""
     priority: int = 50
     initial_status: str = "READY"
@@ -53,16 +63,18 @@ class SubmissionContext:
     asset_references: dict[str, Any]
 
 
-class SubmitterAPI(ABC):
+class BaseSubmitter(ABC):
     """Abstract base class defining the unified interface all DCC submitters implement."""
 
     @abstractmethod
     def get_settings(self) -> SubmitterSettings:
-        """Create settings fully initialized from the live DCC scene.
+        """Create settings initialized from the live DCC scene.
 
-        This MUST populate frame_list, project_path, output_path,
-        and other scene-derived values. Callers should never need
-        to manually set these after calling get_settings().
+        Populates the scene-derived values that apply to the DCC (e.g.
+        project_path, output_path) so callers rarely need to set them by hand.
+        frame_list is optional — populate it when the DCC exposes a frame range,
+        or leave it empty to mean "use the scene's frame range" (e.g. Nuke does
+        not populate it).
         """
 
     @abstractmethod
@@ -154,16 +166,18 @@ def get_queue_parameters(
         override. These are DCC-submitter inputs (passed to
         ``get_parameter_values``), NOT the reduced name/value
         ``parameterValues`` that ``deadline:CreateJob`` accepts — do not pass
-        them straight to the service, and note the ``set_*``/``append_*``
-        helpers below mutate this definition list in place.
+        them straight to the service, and note the ``set_queue_parameter`` /
+        ``append_queue_parameter`` / ``apply_parameter_overrides`` helpers below
+        mutate this definition list in place.
 
     Raises:
         DeadlineOperationError: If farm_id or queue_id are not configured.
     """
-    # Imported lazily to avoid importing the ``deadline.client.api`` package at
-    # module load time. ``deadline.client.api`` re-exports the symbols defined
-    # here, so a top-level import would create a circular import.
-    from .api._queue_parameters import get_queue_parameter_definitions
+    # Imported lazily to avoid a circular import: ``deadline.client.api``'s
+    # ``__init__`` imports this module to re-export its symbols, so importing a
+    # sibling ``api`` submodule at module load time would re-enter that package
+    # while it is still initializing.
+    from ._queue_parameters import get_queue_parameter_definitions
 
     if farm_id is None:
         farm_id = config_file.get_setting("defaults.farm_id")
@@ -191,57 +205,65 @@ def get_queue_parameters(
     return params
 
 
-# NOTE: deadline-cloud intentionally provides no discovery registry or factory
-# (no register_submitter_api / get_submitter_api). A consumer always runs inside
-# a known DCC and imports that DCC's concrete SubmitterAPI directly. See the TDD
-# "Discovery: consumer-side direct import" section for rationale.
-
-
-def set_conda_packages(
+def set_queue_parameter(
     parameter_values: list[dict[str, Any]],
-    packages: str,
+    name: str,
+    value: Any,
 ) -> None:
-    """Set CondaPackages in parameter values list."""
+    """Override a single queue-parameter value in place, by name.
+
+    Uniform replacement for the old conda/rez-specific setters: works for ANY
+    queue parameter (``CondaPackages``, ``CondaChannels``, ``RezPackages``, or a
+    custom queue parameter). If ``name`` is already present its ``value`` is
+    replaced; otherwise a new ``{"name": name, "value": value}`` entry is
+    appended.
+    """
     for param in parameter_values:
-        if param.get("name") == "CondaPackages":
-            param["value"] = packages
+        if param.get("name") == name:
+            param["value"] = value
             return
-    parameter_values.append({"name": "CondaPackages", "value": packages})
+    parameter_values.append({"name": name, "value": value})
 
 
-def append_conda_packages(
+def append_queue_parameter(
     parameter_values: list[dict[str, Any]],
-    packages: str,
+    name: str,
+    value: str,
+    *,
+    separator: str = " ",
 ) -> None:
-    """Append to existing CondaPackages in parameter values list."""
+    """Append to a string-valued queue parameter in place, by name.
+
+    Uniform replacement for the old conda/rez-specific appenders. Joins the new
+    ``value`` onto any existing value with ``separator`` (default a single
+    space, matching the space-separated ``CondaPackages``/``RezPackages``
+    grammar). If ``name`` is absent, or its existing value is empty, the
+    parameter is set to ``value`` with no leading separator.
+    """
     for param in parameter_values:
-        if param.get("name") == "CondaPackages":
+        if param.get("name") == name:
             existing = param.get("value", "")
-            param["value"] = f"{existing} {packages}".strip() if existing else packages
+            param["value"] = f"{existing}{separator}{value}" if existing else value
             return
-    parameter_values.append({"name": "CondaPackages", "value": packages})
+    parameter_values.append({"name": name, "value": value})
 
 
-def set_rez_packages(
+def apply_parameter_overrides(
     parameter_values: list[dict[str, Any]],
-    packages: str,
+    overrides: dict[str, Any],
 ) -> None:
-    """Set RezPackages in parameter values list."""
-    for param in parameter_values:
-        if param.get("name") == "RezPackages":
-            param["value"] = packages
-            return
-    parameter_values.append({"name": "RezPackages", "value": packages})
+    """Uniformly override default queue-parameter values in place.
 
+    ``overrides`` is a ``{parameter_name: value}`` mapping — the same shape as
+    the submit dialog's ``initial_shared_parameter_values`` (see
+    ``SubmitJobToDeadlineDialog``). Each entry replaces the value of the
+    matching parameter, or is appended if the parameter is not present. This is
+    the single, DCC-agnostic way to override any queue parameter (``CondaPackages``,
+    ``CondaChannels``, ``RezPackages``, or a custom queue parameter).
 
-def append_rez_packages(
-    parameter_values: list[dict[str, Any]],
-    packages: str,
-) -> None:
-    """Append to existing RezPackages in parameter values list."""
-    for param in parameter_values:
-        if param.get("name") == "RezPackages":
-            existing = param.get("value", "")
-            param["value"] = f"{existing} {packages}".strip() if existing else packages
-            return
-    parameter_values.append({"name": "RezPackages", "value": packages})
+    Note: this replaces values wholesale. To *append* to a space-separated
+    parameter (e.g. add packages to an existing ``CondaPackages`` default) use
+    ``append_queue_parameter`` instead.
+    """
+    for name, value in overrides.items():
+        set_queue_parameter(parameter_values, name, value)

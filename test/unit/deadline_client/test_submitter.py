@@ -1,8 +1,9 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Tests for deadline.client.submitter_api: the unified SubmitterAPI base class,
-the get_queue_parameters helper, and the set_*/append_* parameter-value helpers.
+Tests for deadline.client.api._submitter: the unified BaseSubmitter base class,
+the get_queue_parameters helper, and the uniform queue-parameter override
+helpers (set_queue_parameter / append_queue_parameter / apply_parameter_overrides).
 """
 
 from __future__ import annotations
@@ -12,29 +13,28 @@ from unittest.mock import patch
 
 import pytest
 
-from deadline.client import submitter_api
+from deadline.client.api import _submitter
 from deadline.client.exceptions import DeadlineOperationError
-from deadline.client.submitter_api import (
+from deadline.client.api._submitter import (
     SubmissionContext,
-    SubmitterAPI,
+    BaseSubmitter,
     SubmitterSettings,
-    append_conda_packages,
-    append_rez_packages,
+    append_queue_parameter,
+    apply_parameter_overrides,
     get_queue_parameters,
-    set_conda_packages,
-    set_rez_packages,
+    set_queue_parameter,
 )
 
 
-class _StubSubmitterAPI(SubmitterAPI):
-    """Minimal concrete SubmitterAPI for exercising get_submission_context."""
+class _StubSubmitter(BaseSubmitter):
+    """Minimal concrete BaseSubmitter for exercising get_submission_context."""
 
     def __init__(self) -> None:
         self.calls: dict[str, Any] = {}
 
     def get_settings(self) -> SubmitterSettings:
         self.calls["get_settings"] = True
-        return SubmitterSettings(name="from_scene")
+        return SubmitterSettings(job_name="from_scene")
 
     def get_job_template(
         self,
@@ -42,7 +42,7 @@ class _StubSubmitterAPI(SubmitterAPI):
         host_requirements: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         self.calls["host_requirements"] = host_requirements
-        return {"name": settings.name, "steps": []}
+        return {"name": settings.job_name, "steps": []}
 
     def get_parameter_values(
         self,
@@ -57,60 +57,78 @@ class _StubSubmitterAPI(SubmitterAPI):
 
 
 # ---------------------------------------------------------------------------
-# set_* / append_* helpers
+# set_queue_parameter / append_queue_parameter / apply_parameter_overrides
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "setter, key",
-    [(set_conda_packages, "CondaPackages"), (set_rez_packages, "RezPackages")],
-)
-def test_set_packages_replaces_existing_value(setter, key):
+@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages", "CustomParam"])
+def test_set_queue_parameter_replaces_existing_value(key):
     values = [{"name": key, "value": "old"}]
-    setter(values, "new")
+    set_queue_parameter(values, key, "new")
     assert values == [{"name": key, "value": "new"}]
 
 
-@pytest.mark.parametrize(
-    "setter, key",
-    [(set_conda_packages, "CondaPackages"), (set_rez_packages, "RezPackages")],
-)
-def test_set_packages_appends_when_absent(setter, key):
+@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages", "CustomParam"])
+def test_set_queue_parameter_appends_when_absent(key):
     values: list[dict[str, Any]] = [{"name": "Frames", "value": "1-10"}]
-    setter(values, "pkg=1.0")
+    set_queue_parameter(values, key, "pkg=1.0")
     assert {"name": key, "value": "pkg=1.0"} in values
     assert len(values) == 2
 
 
-@pytest.mark.parametrize(
-    "appender, key",
-    [(append_conda_packages, "CondaPackages"), (append_rez_packages, "RezPackages")],
-)
-def test_append_packages_with_existing_value(appender, key):
+def test_set_queue_parameter_preserves_non_string_value():
+    values: list[dict[str, Any]] = []
+    set_queue_parameter(values, "Priority", 75)
+    assert values == [{"name": "Priority", "value": 75}]
+
+
+@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages"])
+def test_append_queue_parameter_with_existing_value(key):
     values = [{"name": key, "value": "a=1"}]
-    appender(values, "b=2")
+    append_queue_parameter(values, key, "b=2")
     assert values[0]["value"] == "a=1 b=2"
 
 
-@pytest.mark.parametrize(
-    "appender, key",
-    [(append_conda_packages, "CondaPackages"), (append_rez_packages, "RezPackages")],
-)
-def test_append_packages_with_empty_existing_value(appender, key):
-    # An existing entry whose value is empty should not gain a leading space.
+@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages"])
+def test_append_queue_parameter_with_empty_existing_value(key):
+    # An existing entry whose value is empty should not gain a leading separator.
     values = [{"name": key, "value": ""}]
-    appender(values, "b=2")
+    append_queue_parameter(values, key, "b=2")
     assert values[0]["value"] == "b=2"
 
 
-@pytest.mark.parametrize(
-    "appender, key",
-    [(append_conda_packages, "CondaPackages"), (append_rez_packages, "RezPackages")],
-)
-def test_append_packages_when_absent(appender, key):
+@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages"])
+def test_append_queue_parameter_when_absent(key):
     values: list[dict[str, Any]] = []
-    appender(values, "b=2")
+    append_queue_parameter(values, key, "b=2")
     assert values == [{"name": key, "value": "b=2"}]
+
+
+def test_append_queue_parameter_custom_separator():
+    values = [{"name": "CondaChannels", "value": "conda-forge"}]
+    append_queue_parameter(values, "CondaChannels", "deadline-cloud", separator=",")
+    assert values[0]["value"] == "conda-forge,deadline-cloud"
+
+
+def test_apply_parameter_overrides_replaces_and_appends():
+    values = [
+        {"name": "Frames", "value": "1-1"},
+        {"name": "CondaPackages", "value": ""},
+    ]
+    apply_parameter_overrides(
+        values,
+        {"Frames": "1-10", "CondaPackages": "maya=2024.*", "RezPackages": "maya-2024"},
+    )
+    by_name = {p["name"]: p["value"] for p in values}
+    assert by_name["Frames"] == "1-10"  # replaced existing
+    assert by_name["CondaPackages"] == "maya=2024.*"  # replaced existing (empty) value
+    assert by_name["RezPackages"] == "maya-2024"  # appended (was absent)
+
+
+def test_apply_parameter_overrides_empty_is_noop():
+    values = [{"name": "Frames", "value": "1-1"}]
+    apply_parameter_overrides(values, {})
+    assert values == [{"name": "Frames", "value": "1-1"}]
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +147,7 @@ def _defs():
 def test_get_queue_parameters_uses_explicit_ids_and_resolves_values():
     with (
         patch.object(
-            submitter_api,
+            _submitter,
             "config_file",
         ),
         patch(
@@ -153,7 +171,7 @@ def test_get_queue_parameters_uses_explicit_ids_and_resolves_values():
 
 def test_get_queue_parameters_initial_values_override():
     with (
-        patch.object(submitter_api, "config_file"),
+        patch.object(_submitter, "config_file"),
         patch(
             "deadline.client.api._queue_parameters.get_queue_parameter_definitions",
             return_value=_defs(),
@@ -172,7 +190,7 @@ def test_get_queue_parameters_falls_back_to_configured_defaults():
         return {"defaults.farm_id": "farm-cfg", "defaults.queue_id": "queue-cfg"}[key]
 
     with (
-        patch.object(submitter_api.config_file, "get_setting", side_effect=fake_get_setting),
+        patch.object(_submitter.config_file, "get_setting", side_effect=fake_get_setting),
         patch(
             "deadline.client.api._queue_parameters.get_queue_parameter_definitions",
             return_value=_defs(),
@@ -183,20 +201,20 @@ def test_get_queue_parameters_falls_back_to_configured_defaults():
 
 
 def test_get_queue_parameters_raises_when_unconfigured():
-    with patch.object(submitter_api.config_file, "get_setting", return_value=""):
+    with patch.object(_submitter.config_file, "get_setting", return_value=""):
         with pytest.raises(DeadlineOperationError):
             get_queue_parameters()
 
 
 # ---------------------------------------------------------------------------
-# SubmitterAPI.get_submission_context
+# BaseSubmitter.get_submission_context
 # ---------------------------------------------------------------------------
 
 
 def test_get_submission_context_builds_from_scene_when_no_settings():
-    api = _StubSubmitterAPI()
+    api = _StubSubmitter()
     with patch.object(
-        submitter_api,
+        _submitter,
         "get_queue_parameters",
         return_value=[{"name": "P", "value": "v"}],
     ) as mock_qp:
@@ -204,17 +222,17 @@ def test_get_submission_context_builds_from_scene_when_no_settings():
 
     assert isinstance(ctx, SubmissionContext)
     assert api.calls.get("get_settings") is True
-    assert ctx.settings.name == "from_scene"
+    assert ctx.settings.job_name == "from_scene"
     # defaults path: no explicit farm/queue/initial_values
     mock_qp.assert_called_once_with(farm_id=None, queue_id=None, initial_values=None)
 
 
 def test_get_submission_context_threads_through_args():
-    api = _StubSubmitterAPI()
+    api = _StubSubmitter()
     host_req = {"attributes": [{"name": "attr.worker.os.family", "anyOf": ["linux"]}]}
-    with patch.object(submitter_api, "get_queue_parameters", return_value=[]) as mock_qp:
+    with patch.object(_submitter, "get_queue_parameters", return_value=[]) as mock_qp:
         api.get_submission_context(
-            SubmitterSettings(name="explicit"),
+            SubmitterSettings(job_name="explicit"),
             farm_id="farm-a",
             queue_id="queue-b",
             initial_values={"Frames": "1-10"},
@@ -228,10 +246,10 @@ def test_get_submission_context_threads_through_args():
 
 
 def test_get_submission_context_uses_prefetched_queue_parameters():
-    api = _StubSubmitterAPI()
+    api = _StubSubmitter()
     prefetched = [{"name": "Pre", "value": "1"}]
-    with patch.object(submitter_api, "get_queue_parameters") as mock_qp:
-        api.get_submission_context(SubmitterSettings(name="x"), queue_parameters=prefetched)
+    with patch.object(_submitter, "get_queue_parameters") as mock_qp:
+        api.get_submission_context(SubmitterSettings(job_name="x"), queue_parameters=prefetched)
     # When queue_parameters is supplied, the fetch helper is not called.
     mock_qp.assert_not_called()
     assert api.calls["queue_parameters"] == prefetched
