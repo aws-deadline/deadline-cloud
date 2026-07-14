@@ -141,7 +141,7 @@ def cli_job():
     cancel, or requeue failed tasks.
 
     \b
-    For scripted/agent workflows, prefer `wait` over polling `get`:
+    For scripted workflows, prefer `wait` over polling `get`:
       deadline job wait --job-id <id>       # blocks, exit 0 = success
       deadline job download-output --job-id <id> --yes
 
@@ -1120,7 +1120,7 @@ def job_download_output(
     --ignore-storage-profiles).
 
     \b
-    Pass --yes to skip confirmation prompts (useful in scripts/agents).
+    Pass --yes to skip confirmation prompts (useful when scripting).
     Pass --ignore-storage-profiles when submitting and downloading on the
     same machine to skip storage profile path mapping.
 
