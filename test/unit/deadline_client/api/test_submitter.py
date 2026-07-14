@@ -17,7 +17,7 @@ from deadline.client.exceptions import DeadlineOperationError
 from deadline.client.api._submitter import (
     SubmissionContext,
     BaseSubmitter,
-    SubmitterSettings,
+    BaseSubmitterSettings,
     get_queue_parameters,
 )
 
@@ -28,13 +28,13 @@ class _StubSubmitter(BaseSubmitter):
     def __init__(self) -> None:
         self.calls: dict[str, Any] = {}
 
-    def get_settings(self) -> SubmitterSettings:
+    def get_settings(self) -> BaseSubmitterSettings:
         self.calls["get_settings"] = True
-        return SubmitterSettings(job_name="from_scene")
+        return BaseSubmitterSettings(job_name="from_scene")
 
     def get_job_template(
         self,
-        settings: SubmitterSettings,
+        settings: BaseSubmitterSettings,
         host_requirements: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         self.calls["host_requirements"] = host_requirements
@@ -42,13 +42,13 @@ class _StubSubmitter(BaseSubmitter):
 
     def get_parameter_values(
         self,
-        settings: SubmitterSettings,
+        settings: BaseSubmitterSettings,
         queue_parameters: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         self.calls["queue_parameters"] = queue_parameters
         return [{"name": "Frames", "value": "1-10"}]
 
-    def get_asset_references(self, settings: SubmitterSettings) -> dict[str, Any]:
+    def get_asset_references(self, settings: BaseSubmitterSettings) -> dict[str, Any]:
         return {"inputFilenames": []}
 
 
@@ -153,7 +153,7 @@ def test_get_submission_context_threads_through_args():
     host_req = {"attributes": [{"name": "attr.worker.os.family", "anyOf": ["linux"]}]}
     with patch.object(_submitter, "get_queue_parameters", return_value=[]) as mock_qp:
         api.get_submission_context(
-            SubmitterSettings(job_name="explicit"),
+            BaseSubmitterSettings(job_name="explicit"),
             farm_id="farm-a",
             queue_id="queue-b",
             initial_values={"Frames": "1-10"},
@@ -170,7 +170,7 @@ def test_get_submission_context_uses_prefetched_queue_parameters():
     api = _StubSubmitter()
     prefetched = [{"name": "Pre", "value": "1"}]
     with patch.object(_submitter, "get_queue_parameters") as mock_qp:
-        api.get_submission_context(SubmitterSettings(job_name="x"), queue_parameters=prefetched)
+        api.get_submission_context(BaseSubmitterSettings(job_name="x"), queue_parameters=prefetched)
     # When queue_parameters is supplied, the fetch helper is not called.
     mock_qp.assert_not_called()
     assert api.calls["queue_parameters"] == prefetched

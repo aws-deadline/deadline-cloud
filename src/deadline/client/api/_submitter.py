@@ -3,8 +3,8 @@ from __future__ import annotations
 
 __all__ = [
     "BaseSubmitter",
+    "BaseSubmitterSettings",
     "SubmissionContext",
-    "SubmitterSettings",
     "get_queue_parameters",
 ]
 
@@ -17,7 +17,7 @@ from ..exceptions import DeadlineOperationError
 
 
 @dataclass
-class SubmitterSettings:
+class BaseSubmitterSettings:
     """Common submission settings across all DCCs.
 
     DCC submitters subclass this to add DCC-specific fields.
@@ -54,7 +54,7 @@ class SubmitterSettings:
 class SubmissionContext:
     """Read-only snapshot of collected submission data."""
 
-    settings: SubmitterSettings
+    settings: BaseSubmitterSettings
     job_template: dict[str, Any]
     parameter_values: list[dict[str, Any]]
     asset_references: dict[str, Any]
@@ -64,7 +64,7 @@ class BaseSubmitter(ABC):
     """Abstract base class defining the unified interface all DCC submitters implement."""
 
     @abstractmethod
-    def get_settings(self) -> SubmitterSettings:
+    def get_settings(self) -> BaseSubmitterSettings:
         """Create settings initialized from the live DCC scene.
 
         Populates the scene-derived values that apply to the DCC (e.g.
@@ -77,7 +77,7 @@ class BaseSubmitter(ABC):
     @abstractmethod
     def get_job_template(
         self,
-        settings: SubmitterSettings,
+        settings: BaseSubmitterSettings,
         host_requirements: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Build the OpenJD job template dict for submission."""
@@ -85,7 +85,7 @@ class BaseSubmitter(ABC):
     @abstractmethod
     def get_parameter_values(
         self,
-        settings: SubmitterSettings,
+        settings: BaseSubmitterSettings,
         queue_parameters: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Build the parameter values list for submission."""
@@ -93,13 +93,13 @@ class BaseSubmitter(ABC):
     @abstractmethod
     def get_asset_references(
         self,
-        settings: SubmitterSettings,
+        settings: BaseSubmitterSettings,
     ) -> dict[str, Any]:
         """Collect asset references (inputs/outputs) from the scene."""
 
     def get_submission_context(
         self,
-        settings: Optional[SubmitterSettings] = None,
+        settings: Optional[BaseSubmitterSettings] = None,
         *,
         farm_id: Optional[str] = None,
         queue_id: Optional[str] = None,

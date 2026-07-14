@@ -69,7 +69,7 @@ __all__ = [  # noqa: RUF022  grouped by feature, not sorted
     "UpdateCheckStatus",
     # Unified Submitter API
     "BaseSubmitter",
-    "SubmitterSettings",
+    "BaseSubmitterSettings",
     "SubmissionContext",
     "get_queue_parameters",
 ]
@@ -145,7 +145,7 @@ from ._update_checker import (
 )
 from ._submitter import (
     BaseSubmitter,
-    SubmitterSettings,
+    BaseSubmitterSettings,
     SubmissionContext,
     get_queue_parameters,
 )
