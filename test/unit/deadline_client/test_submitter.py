@@ -1,9 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-Tests for deadline.client.api._submitter: the unified BaseSubmitter base class,
-the get_queue_parameters helper, and the uniform queue-parameter override
-helpers (set_queue_parameter / append_queue_parameter / apply_parameter_overrides).
+Tests for deadline.client.api._submitter: the unified BaseSubmitter base class
+and the get_queue_parameters helper (including its initial_values override).
 """
 
 from __future__ import annotations
@@ -19,10 +18,7 @@ from deadline.client.api._submitter import (
     SubmissionContext,
     BaseSubmitter,
     SubmitterSettings,
-    append_queue_parameter,
-    apply_parameter_overrides,
     get_queue_parameters,
-    set_queue_parameter,
 )
 
 
@@ -54,81 +50,6 @@ class _StubSubmitter(BaseSubmitter):
 
     def get_asset_references(self, settings: SubmitterSettings) -> dict[str, Any]:
         return {"inputFilenames": []}
-
-
-# ---------------------------------------------------------------------------
-# set_queue_parameter / append_queue_parameter / apply_parameter_overrides
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages", "CustomParam"])
-def test_set_queue_parameter_replaces_existing_value(key):
-    values = [{"name": key, "value": "old"}]
-    set_queue_parameter(values, key, "new")
-    assert values == [{"name": key, "value": "new"}]
-
-
-@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages", "CustomParam"])
-def test_set_queue_parameter_appends_when_absent(key):
-    values: list[dict[str, Any]] = [{"name": "Frames", "value": "1-10"}]
-    set_queue_parameter(values, key, "pkg=1.0")
-    assert {"name": key, "value": "pkg=1.0"} in values
-    assert len(values) == 2
-
-
-def test_set_queue_parameter_preserves_non_string_value():
-    values: list[dict[str, Any]] = []
-    set_queue_parameter(values, "Priority", 75)
-    assert values == [{"name": "Priority", "value": 75}]
-
-
-@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages"])
-def test_append_queue_parameter_with_existing_value(key):
-    values = [{"name": key, "value": "a=1"}]
-    append_queue_parameter(values, key, "b=2")
-    assert values[0]["value"] == "a=1 b=2"
-
-
-@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages"])
-def test_append_queue_parameter_with_empty_existing_value(key):
-    # An existing entry whose value is empty should not gain a leading separator.
-    values = [{"name": key, "value": ""}]
-    append_queue_parameter(values, key, "b=2")
-    assert values[0]["value"] == "b=2"
-
-
-@pytest.mark.parametrize("key", ["CondaPackages", "RezPackages"])
-def test_append_queue_parameter_when_absent(key):
-    values: list[dict[str, Any]] = []
-    append_queue_parameter(values, key, "b=2")
-    assert values == [{"name": key, "value": "b=2"}]
-
-
-def test_append_queue_parameter_custom_separator():
-    values = [{"name": "CondaChannels", "value": "conda-forge"}]
-    append_queue_parameter(values, "CondaChannels", "deadline-cloud", separator=",")
-    assert values[0]["value"] == "conda-forge,deadline-cloud"
-
-
-def test_apply_parameter_overrides_replaces_and_appends():
-    values = [
-        {"name": "Frames", "value": "1-1"},
-        {"name": "CondaPackages", "value": ""},
-    ]
-    apply_parameter_overrides(
-        values,
-        {"Frames": "1-10", "CondaPackages": "maya=2024.*", "RezPackages": "maya-2024"},
-    )
-    by_name = {p["name"]: p["value"] for p in values}
-    assert by_name["Frames"] == "1-10"  # replaced existing
-    assert by_name["CondaPackages"] == "maya=2024.*"  # replaced existing (empty) value
-    assert by_name["RezPackages"] == "maya-2024"  # appended (was absent)
-
-
-def test_apply_parameter_overrides_empty_is_noop():
-    values = [{"name": "Frames", "value": "1-1"}]
-    apply_parameter_overrides(values, {})
-    assert values == [{"name": "Frames", "value": "1-1"}]
 
 
 # ---------------------------------------------------------------------------

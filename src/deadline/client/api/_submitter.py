@@ -5,10 +5,7 @@ __all__ = [
     "BaseSubmitter",
     "SubmissionContext",
     "SubmitterSettings",
-    "append_queue_parameter",
-    "apply_parameter_overrides",
     "get_queue_parameters",
-    "set_queue_parameter",
 ]
 
 from abc import ABC, abstractmethod
@@ -166,9 +163,9 @@ def get_queue_parameters(
         override. These are DCC-submitter inputs (passed to
         ``get_parameter_values``), NOT the reduced name/value
         ``parameterValues`` that ``deadline:CreateJob`` accepts — do not pass
-        them straight to the service, and note the ``set_queue_parameter`` /
-        ``append_queue_parameter`` / ``apply_parameter_overrides`` helpers below
-        mutate this definition list in place.
+        them straight to the service. To override a parameter's resolved value,
+        pass ``initial_values`` here (a ``{parameter_name: value}`` mapping,
+        matching the submit dialog's ``initial_shared_parameter_values``).
 
     Raises:
         DeadlineOperationError: If farm_id or queue_id are not configured.
@@ -203,67 +200,3 @@ def get_queue_parameters(
             param["value"] = initial_values[param["name"]]
 
     return params
-
-
-def set_queue_parameter(
-    parameter_values: list[dict[str, Any]],
-    name: str,
-    value: Any,
-) -> None:
-    """Override a single queue-parameter value in place, by name.
-
-    Uniform replacement for the old conda/rez-specific setters: works for ANY
-    queue parameter (``CondaPackages``, ``CondaChannels``, ``RezPackages``, or a
-    custom queue parameter). If ``name`` is already present its ``value`` is
-    replaced; otherwise a new ``{"name": name, "value": value}`` entry is
-    appended.
-    """
-    for param in parameter_values:
-        if param.get("name") == name:
-            param["value"] = value
-            return
-    parameter_values.append({"name": name, "value": value})
-
-
-def append_queue_parameter(
-    parameter_values: list[dict[str, Any]],
-    name: str,
-    value: str,
-    *,
-    separator: str = " ",
-) -> None:
-    """Append to a string-valued queue parameter in place, by name.
-
-    Uniform replacement for the old conda/rez-specific appenders. Joins the new
-    ``value`` onto any existing value with ``separator`` (default a single
-    space, matching the space-separated ``CondaPackages``/``RezPackages``
-    grammar). If ``name`` is absent, or its existing value is empty, the
-    parameter is set to ``value`` with no leading separator.
-    """
-    for param in parameter_values:
-        if param.get("name") == name:
-            existing = param.get("value", "")
-            param["value"] = f"{existing}{separator}{value}" if existing else value
-            return
-    parameter_values.append({"name": name, "value": value})
-
-
-def apply_parameter_overrides(
-    parameter_values: list[dict[str, Any]],
-    overrides: dict[str, Any],
-) -> None:
-    """Uniformly override default queue-parameter values in place.
-
-    ``overrides`` is a ``{parameter_name: value}`` mapping — the same shape as
-    the submit dialog's ``initial_shared_parameter_values`` (see
-    ``SubmitJobToDeadlineDialog``). Each entry replaces the value of the
-    matching parameter, or is appended if the parameter is not present. This is
-    the single, DCC-agnostic way to override any queue parameter (``CondaPackages``,
-    ``CondaChannels``, ``RezPackages``, or a custom queue parameter).
-
-    Note: this replaces values wholesale. To *append* to a space-separated
-    parameter (e.g. add packages to an existing ``CondaPackages`` default) use
-    ``append_queue_parameter`` instead.
-    """
-    for name, value in overrides.items():
-        set_queue_parameter(parameter_values, name, value)

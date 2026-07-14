@@ -72,9 +72,6 @@ __all__ = [  # noqa: RUF022  grouped by feature, not sorted
     "SubmitterSettings",
     "SubmissionContext",
     "get_queue_parameters",
-    "apply_parameter_overrides",
-    "set_queue_parameter",
-    "append_queue_parameter",
 ]
 
 # The following import is needed to prevent the following sporadic failure:
@@ -151,9 +148,6 @@ from ._submitter import (
     SubmitterSettings,
     SubmissionContext,
     get_queue_parameters,
-    apply_parameter_overrides,
-    set_queue_parameter,
-    append_queue_parameter,
 )
 
 logger = getLogger(__name__)
