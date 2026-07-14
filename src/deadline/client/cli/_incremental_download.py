@@ -1513,64 +1513,109 @@ def _incremental_output_download(
                     last_call_time = time.time()
                 return sigint_handler.continue_operation
 
-            try:
-                _download_manifest_paths(
-                    job_files,
-                    HashAlgorithm.XXH128,
-                    queue,
-                    boto3_session_for_s3,
-                    file_conflict_resolution,
-                    on_downloading_files=_update_download_progress,
-                    print_function_callback=print_function_callback,
+            job_task_results: dict[str, dict[str, Any]] = {}
+            job_error_code: Optional[str] = None
+            job_error_message: Optional[str] = None
+
+            task_map = job_task_manifest_paths.get(job_id, {})
+            fallback_succeeded = False
+            if task_map:
+                # Per-task isolation: download each task independently so individual
+                # task failures don't mark succeeded tasks as failed.
+                for task_id, task_files in task_map.items():
+                    try:
+                        _download_manifest_paths(
+                            task_files,
+                            HashAlgorithm.XXH128,
+                            queue,
+                            boto3_session_for_s3,
+                            file_conflict_resolution,
+                            on_downloading_files=_update_download_progress,
+                            print_function_callback=print_function_callback,
+                        )
+                        if not sigint_handler.continue_operation:
+                            raise AssetSyncCancelledError("File download cancelled.")
+                        job_task_results[task_id] = {
+                            "total_files": len(task_files),
+                            "downloaded_files": len(task_files),
+                            "error_code": None,
+                            "error_message": None,
+                        }
+                    except AssetSyncCancelledError:
+                        raise
+                    except Exception as e:
+                        error_code = _classify_error(e)
+                        with print_lock:
+                            print_function_callback(
+                                f"  ERROR downloading task {task_id} for job {job_name}: {e}"
+                            )
+                        job_task_results[task_id] = {
+                            "total_files": len(task_files),
+                            "downloaded_files": sum(
+                                1 for f in task_files if os.path.exists(f.path)
+                            ),
+                            "error_code": error_code,
+                            "error_message": str(e),
+                        }
+                        if job_error_code is None:
+                            job_error_code = error_code
+                            job_error_message = str(e)
+
+            else:
+                # No task attribution available — fall back to per-job download
+                try:
+                    _download_manifest_paths(
+                        job_files,
+                        HashAlgorithm.XXH128,
+                        queue,
+                        boto3_session_for_s3,
+                        file_conflict_resolution,
+                        on_downloading_files=_update_download_progress,
+                        print_function_callback=print_function_callback,
+                    )
+                    if not sigint_handler.continue_operation:
+                        raise AssetSyncCancelledError("File download cancelled.")
+                    fallback_succeeded = True
+                except AssetSyncCancelledError:
+                    raise
+                except Exception as e:
+                    job_error_code = _classify_error(e)
+                    job_error_message = str(e)
+                    with print_lock:
+                        print_function_callback(
+                            f"  ERROR downloading job {job_name} ({job_id}): {e}"
+                        )
+
+            if job_task_results:
+                # Per-task path: derive counts from task results directly to avoid
+                # inconsistencies from len(job_files) vs sum of per-task file lists.
+                downloaded_count = sum(r["downloaded_files"] for r in job_task_results.values())
+                failed_count = sum(
+                    r["total_files"]
+                    for r in job_task_results.values()
+                    if r["error_code"] is not None
+                ) - sum(
+                    r["downloaded_files"]
+                    for r in job_task_results.values()
+                    if r["error_code"] is not None
                 )
-                # Raise if the user cancelled mid-transfer — _download_manifest_paths returns
-                # normally on cooperative cancellation so we must check explicitly.
-                if not sigint_handler.continue_operation:
-                    raise AssetSyncCancelledError("File download cancelled.")
-                # Record per-task results for succeeded job
-                # Zero-output tasks are included with total_files=0 so they count toward
-                # the progress bar numerator — a task with no outputs is still "done".
-                job_task_results: dict[str, dict[str, Any]] = {
-                    task_id: {
-                        "total_files": len(task_files),
-                        "downloaded_files": len(task_files),
-                        "error_code": None,
-                        "error_message": None,
-                    }
-                    for task_id, task_files in job_task_manifest_paths.get(job_id, {}).items()
-                }
-                return {
-                    "total_files": len(job_files),
-                    "downloaded_files": len(job_files),
-                    "failed_files": 0,
-                    "error_code": None,
-                    "error_message": None,
-                    "task_results": job_task_results,
-                }
-            except AssetSyncCancelledError:
-                raise
-            except Exception as e:
+            elif fallback_succeeded:
+                # Fallback path success: all files downloaded, use exact count.
+                downloaded_count = len(job_files)
+                failed_count = 0
+            else:
+                # Fallback path failure: use filesystem check for partial progress.
                 downloaded_count = sum(1 for f in job_files if os.path.exists(f.path))
-                with print_lock:
-                    print_function_callback(f"  ERROR downloading job {job_name} ({job_id}): {e}")
-                error_code = _classify_error(e)
-                failed_task_results: dict[str, dict[str, Any]] = {
-                    task_id: {
-                        "total_files": len(task_files),
-                        "downloaded_files": sum(1 for f in task_files if os.path.exists(f.path)),
-                        "error_code": error_code,
-                        "error_message": str(e),
-                    }
-                    for task_id, task_files in job_task_manifest_paths.get(job_id, {}).items()
-                }
-                return {
-                    "total_files": len(job_files),
-                    "downloaded_files": downloaded_count,
-                    "failed_files": len(job_files) - downloaded_count,
-                    "error_code": error_code,
-                    "error_message": str(e),
-                    "task_results": failed_task_results,
-                }
+                failed_count = len(job_files) - downloaded_count
+
+            return {
+                "total_files": len(job_files),
+                "downloaded_files": downloaded_count,
+                "failed_files": failed_count,
+                "error_code": job_error_code,
+                "error_message": job_error_message,
+                "task_results": job_task_results,
+            }
 
         cancelled = False
         # Bound concurrency to avoid S3 throttling and socket exhaustion — each
