@@ -20,6 +20,7 @@ from deadline.client.api._submitter import (
     BaseSubmitterSettings,
     get_queue_parameters,
 )
+from deadline.client.job_bundle.submission import AssetReferences
 
 
 class _StubSubmitter(BaseSubmitter):
@@ -48,8 +49,8 @@ class _StubSubmitter(BaseSubmitter):
         self.calls["queue_parameters"] = queue_parameters
         return [{"name": "Frames", "value": "1-10"}]
 
-    def get_asset_references(self, settings: BaseSubmitterSettings) -> dict[str, Any]:
-        return {"inputFilenames": []}
+    def get_asset_references(self, settings: BaseSubmitterSettings) -> AssetReferences:
+        return AssetReferences(input_filenames={"/scene/hero.ma"})
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +145,10 @@ def test_get_submission_context_builds_from_scene_when_no_settings():
     assert isinstance(ctx, SubmissionContext)
     assert api.calls.get("get_settings") is True
     assert ctx.settings.job_name == "from_scene"
+    # asset_references is carried through as the typed AssetReferences object,
+    # not reduced to a dict.
+    assert isinstance(ctx.asset_references, AssetReferences)
+    assert ctx.asset_references.input_filenames == {"/scene/hero.ma"}
     # defaults path: no explicit farm/queue/initial_values
     mock_qp.assert_called_once_with(farm_id=None, queue_id=None, initial_values=None)
 

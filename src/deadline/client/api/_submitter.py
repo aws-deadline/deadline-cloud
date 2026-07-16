@@ -14,6 +14,7 @@ from typing import Any, Optional, cast
 
 from ..config import config_file
 from ..exceptions import DeadlineOperationError
+from ..job_bundle.submission import AssetReferences
 
 
 @dataclass
@@ -57,7 +58,7 @@ class SubmissionContext:
     settings: BaseSubmitterSettings
     job_template: dict[str, Any]
     parameter_values: list[dict[str, Any]]
-    asset_references: dict[str, Any]
+    asset_references: AssetReferences
 
 
 class BaseSubmitter(ABC):
@@ -94,8 +95,13 @@ class BaseSubmitter(ABC):
     def get_asset_references(
         self,
         settings: BaseSubmitterSettings,
-    ) -> dict[str, Any]:
-        """Collect asset references (inputs/outputs) from the scene."""
+    ) -> AssetReferences:
+        """Collect asset references (inputs/outputs) from the scene.
+
+        Returns the typed :class:`AssetReferences` (not a plain dict); call
+        ``.to_dict()`` at the serialization boundary if a job-bundle dict is
+        needed.
+        """
 
     def get_submission_context(
         self,
