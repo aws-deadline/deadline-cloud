@@ -34,7 +34,7 @@
   "Current logging level": "Nivel de registro actual",
   "Custom host requirements": "Requisitos de host personalizados",
   "Data directory": "Directorio de datos",
-  "Deadline Cloud settings": "Configuración de Deadline Cloud",
+  "Job submission settings": "Configuración de envío de trabajos",
   "Default farm": "Granja predeterminada",
   "Default queue": "Cola predeterminada",
   "Default storage profile": "Perfil de almacenamiento predeterminado",

@@ -39,7 +39,7 @@ def get_session_and_worker_logs(
     """
     # Get session details to find the worker and fleet
     session_details = get_session(
-        farm_id=farm_id, queue_id=queue_id, job_id=job_id, session_id=session_id
+        farmId=farm_id, queueId=queue_id, jobId=job_id, sessionId=session_id
     )
     worker_id = session_details.get("workerId")
     fleet_id = session_details.get("fleetId")

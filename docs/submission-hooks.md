@@ -202,6 +202,26 @@ postSubmission:
 
 Hooks receive job metadata via JSON on stdin and through convenience environment variables.
 
+### Progress Output
+
+Hooks can be slow — for example, generating auth tokens for several services before
+submission. To keep the user informed, anything a hook writes to stderr is surfaced to the
+user line-by-line as the hook runs, prefixed with the hook's phase and index (e.g.
+`  [pre-submission hook 1] Fetching token for renderfarm...`). Write progress messages to
+stderr so they appear immediately:
+
+```python
+import sys
+
+print("Fetching token for renderfarm...", file=sys.stderr, flush=True)
+# ... slow work ...
+print("Done.", file=sys.stderr, flush=True)
+```
+
+stdout is not streamed as progress — it is reserved for the JSON contract (see
+[Hook Output](#hook-output)). Use stderr for human-readable progress. In the CLI the
+streamed lines print to the console; in the standalone GUI they go to the submission log.
+
 ### Environment Variables
 
 Environment variables provide a convenient shorthand for simple scripts (e.g., `echo $DEADLINE_JOB_NAME` in bash). For structured or nested data, use the JSON stdin payload instead.

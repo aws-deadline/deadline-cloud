@@ -159,6 +159,21 @@ def _select_by_data(combo, data):
     combo.activated.emit(index)
 
 
+def _current_os_family() -> str:
+    """The storage-profile osFamily matching this host.
+
+    The controller filters storage profiles to the current OS, so a profile seeded for
+    a test must use this OS family to actually appear in (and later linger in) the combo.
+    """
+    if sys.platform.startswith("linux"):
+        return "LINUX"
+    elif sys.platform.startswith("darwin"):
+        return "MACOS"
+    elif sys.platform.startswith("win"):
+        return "WINDOWS"
+    return "LINUX"
+
+
 def _configure_profile(profile_name, *, farm_id="", queue_id=""):
     """Write farm/queue defaults under *profile_name* (settings are profile-scoped)."""
     config_file.set_setting("defaults.aws_profile_name", profile_name)
@@ -418,6 +433,66 @@ class TestCascade:
         queue_items = _items(widget.queue_box.box)
         assert "Queue B only" in queue_items, f"cascade fetched wrong farm's queues: {queue_items}"
         assert "Test Queue" not in queue_items, f"stale farm A queue still present: {queue_items}"
+
+    def test_farm_change_does_not_show_stale_queue_or_storage_id(
+        self, qtbot, widget, seeded_backend
+    ):
+        """Regression for the reported bug: changing farms must not leave the queue and
+        storage-profile combos *displaying a raw id* from the previously selected farm.
+
+        The user picks a new farm that has neither queues nor storage profiles. The old
+        farm's queue/storage ids must not linger as raw-id rows (``queue-...`` /
+        ``sp-...``); the combos must fall back to ``<none selected>``.
+
+        The defect only surfaces when the combo reads a *stale* config object: when
+        ``select_farm`` persists the cleared ids, ``set_setting`` writes to disk and the
+        next ``read_config()`` swaps in a fresh ``ConfigParser``, orphaning the combo's
+        reference. Whether that swap happens hinges on the config file's mtime changing,
+        which is filesystem-granularity dependent -- so we force it deterministically by
+        making ``_should_read_config`` always report a change. That way every
+        ``read_config()`` hands back a new object, reliably reproducing the staleness
+        through the real farm-pick -> cascade -> list-update signal chain regardless of
+        host filesystem. (This test fails if the ``_sync_config`` fix is reverted.)
+        """
+        backend, farm_a, queue_a = seeded_backend
+        # Start on farm A with its queue + a stored storage profile (as after prior use).
+        config_file.set_setting("defaults.farm_id", farm_a)
+        config_file.set_setting("defaults.queue_id", queue_a)
+        sp_a = backend.create_storage_profile(
+            farmId=farm_a,
+            queueId=queue_a,
+            displayName="Farm A SP",
+            osFamily=_current_os_family(),
+        )["storageProfileId"]
+        config_file.set_setting("settings.storage_profile_id", sp_a)
+
+        # Farm B has no queues and no storage profiles, so nothing can auto-select back
+        # in -- any queue/storage shown afterward would be a stale leftover from farm A.
+        farm_b = backend.create_farm(displayName="Farm B")["farmId"]
+
+        controller = DeadlineUIController.getInstance()
+        widget.refresh_setting_controls(deadline_authorized=True)
+        _wait_for_farm(qtbot, widget, farm_b)
+
+        # Force every read_config() to rebuild the ConfigParser, deterministically
+        # orphaning the combo's cached self.config the way a real mtime change would.
+        with patch.object(config_file, "_should_read_config", return_value=True):
+            with qtbot.waitSignal(controller.queues_updated, timeout=5000):
+                _select_by_data(widget.farm_box.box, farm_b)
+            QApplication.processEvents()
+
+        # Config is genuinely cleared...
+        assert config_file.get_setting("defaults.queue_id") == ""
+        assert config_file.get_setting("settings.storage_profile_id") == ""
+
+        # ...and, crucially, the *display* reflects that -- no raw ids from farm A.
+        queue_text = widget.queue_box.box.currentText()
+        assert queue_text != queue_a, f"queue combo shows stale raw id: {queue_text!r}"
+        assert widget.queue_box.box.currentData() == ""
+
+        sp_text = widget.storage_profile_box.box.currentText()
+        assert sp_text != sp_a, f"storage profile combo shows stale raw id: {sp_text!r}"
+        assert widget.storage_profile_box.box.currentData() == ""
 
 
 class TestProfileSwitch:

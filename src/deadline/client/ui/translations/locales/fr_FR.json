@@ -34,7 +34,7 @@
   "Current logging level": "Niveau de journalisation actuel",
   "Custom host requirements": "Exigences d'hôte personnalisées",
   "Data directory": "Répertoire de données",
-  "Deadline Cloud settings": "Paramètres Deadline Cloud",
+  "Job submission settings": "Paramètres de soumission de tâche",
   "Default farm": "Ferme par défaut",
   "Default queue": "File d'attente par défaut",
   "Default storage profile": "Profil de stockage par défaut",

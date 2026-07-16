@@ -82,7 +82,7 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         )
         layout.addWidget(self.shared_job_properties_box)
 
-        # Breathing room between the Job Properties container and the Deadline Cloud
+        # Breathing room between the Job Properties container and the Job submission
         # settings group below it.
         layout.addSpacing(12)
 
@@ -483,7 +483,7 @@ class DeadlineCloudSettingsWidget(QGroupBox):
     _PLACEHOLDER_TEXTS = ("<refreshing>", "<none selected>")
 
     def __init__(self, *, parent: Optional[QWidget] = None):
-        super().__init__(tr("Deadline Cloud settings"), parent=parent)
+        super().__init__(tr("Job submission settings"), parent=parent)
         self.deadline_settings: Dict[str, Any] = {"counter": -1}
         self.layout = QFormLayout(self)
         self.layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
