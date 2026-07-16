@@ -1608,3 +1608,176 @@ def test_incremental_output_download_fallback_failure_marks_run_failed(
         f"completed={saved.downloads_completed_timestamp.isoformat()} "
         f"started={saved.downloads_started_timestamp.isoformat()}"
     )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_per_task_error_isolation(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """Per-task download error isolation: when one task's files fail to download,
+    only that task is marked failed — the other tasks succeed independently.
+
+    Simulates a 3-task job where task-1's output path is inaccessible. The status
+    file must show task-0 and task-2 as 'downloaded' and task-1 as 'failed' with the
+    correct error code, while the job-level status is 'failed'.
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    step_id = "step-b1764261dff54214aace3932bde8ae7e"
+    task_ids = [f"task-b1764261dff54214aace3932bde8ae7e-{i}" for i in range(3)]
+    # Each task writes one file to its own subdirectory under tmp_path.
+    task_file_paths = [str(tmp_path / f"frame_{i}" / "beauty.exr") for i in range(3)]
+    locked_path = task_file_paths[1]  # task-1's file is the one that fails
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 3, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": f"sessionaction-0123456789abcdefabcdefabcdefabcd-{i}",
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {"taskRun": {"taskId": task_ids[i], "stepId": step_id}},
+                "manifests": [{"outputManifestPath": f"{task_ids[i]}/manifest"}],
+            }
+            for i in range(3)
+        ]
+    }
+
+    # One manifest per task, each containing that task's single output file.
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=task_file_paths[i], hash="h", size=1, mtime=1)],
+            ),
+        )
+        for i in range(3)
+    ]
+    # The (applier, job_id, root_path, s3_key) tuples correlate positionally with the
+    # manifests above. The S3 key embeds the task id so per-task attribution works.
+    manifests_to_download = [
+        (None, MOCK_JOB_ID, "/", f"prefix/{step_id}/{task_ids[i]}/manifest") for i in range(3)
+    ]
+
+    def fake_download_all_manifests(
+        queue,
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+        output_unmapped_paths,
+        boto3_session_for_s3,
+        print_function_callback=lambda msg: None,
+    ):
+        return downloaded_manifests
+
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return manifests_to_download
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        # Simulate the download: create files on disk, but raise if task-1's locked
+        # file is in this batch (per-task isolation calls this once per task).
+        for f in files:
+            if f.path == locked_path:
+                raise PermissionError(f"[Errno 13] Permission denied: '{locked_path}'")
+            os.makedirs(os.path.dirname(f.path), exist_ok=True)
+            with open(f.path, "w") as fh:
+                fh.write("output")
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+
+    # The status file records per-task isolation: task-1 failed, task-0 and task-2 succeeded.
+    status_file_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_file_path) as f:
+        status = json.load(f)
+
+    job_entry = status["jobs"][MOCK_JOB_ID]
+    assert job_entry["download_status"] == "failed", job_entry
+    assert job_entry["error_code"] == "PERMISSION_DENIED", job_entry
+
+    tasks = job_entry["tasks"]
+    assert tasks[task_ids[0]]["download_status"] == "downloaded", tasks
+    assert tasks[task_ids[0]]["error_code"] is None, tasks
+    assert tasks[task_ids[2]]["download_status"] == "downloaded", tasks
+    assert tasks[task_ids[2]]["error_code"] is None, tasks
+    assert tasks[task_ids[1]]["download_status"] == "failed", tasks
+    assert tasks[task_ids[1]]["error_code"] == "PERMISSION_DENIED", tasks

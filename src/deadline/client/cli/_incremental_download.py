@@ -1363,15 +1363,20 @@ def _incremental_output_download(
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
     # job_id -> task_id -> [files]: used for per-task download tracking
     job_task_manifest_paths: dict[str, dict[str, list[BaseManifestPath]]] = {}
+    # job_id -> task_id -> [file_paths]: immutable record of all paths originally attributed
+    # to each task, used to generate filesystem-based status for deduped jobs.
+    all_task_file_paths: dict[str, dict[str, list[str]]] = {}
     # global_seen_paths maps normcased_path -> job_id that claimed it first.
     # Prevents concurrent writes to the same destination file across jobs — parallel threads
-    # could write the same path simultaneously, corrupting the file under OVERWRITE.
-    # The first job to claim a path wins; other jobs skip it.
+    # could write the same path simultaneously, corrupting the file under OVERWRITE. When two
+    # jobs share an output path, ownership transfers to the later-iterated job so exactly one
+    # job downloads it. Content correctness is unaffected: jobs sharing a path produce the same
+    # rendered file, so whichever job writes it, the bytes on disk are identical. The transfer
+    # only determines which job_id is credited in the status file; deduped jobs still report
+    # accurate status via the post-download filesystem check.
     global_seen_paths: dict[str, str] = {}
-    # job_path_index tracks the list index for each (job_id, normcased_path) pair so we can
-    # overwrite older entries with newer ones — downloaded_manifests is sorted oldest-to-newest
-    # so iterating in order and overwriting gives newest-wins, matching the old behavior of
-    # _merge_absolute_path_manifest_list.
+    # job_path_index tracks the list index for each (job_id, normcased_path) pair so a later
+    # occurrence of the same path within a job overwrites the earlier one in place.
     job_path_index: dict[str, dict[str, int]] = {}
     # job_id -> task_id -> normcased_path -> list_index, mirrors job_path_index at the task level
     task_path_index: dict[str, dict[str, dict[str, int]]] = {}
@@ -1421,6 +1426,14 @@ def _incremental_output_download(
                         else:
                             t_idx_map[normcased] = len(task_paths)
                             task_paths.append(manifest_path)
+                        # Record path immutably for deduped-job status generation.
+                        # Only add if not already recorded for this task (avoids inflation
+                        # when the same file appears in multiple manifests via task retry).
+                        task_file_list = all_task_file_paths.setdefault(job_id, {}).setdefault(
+                            task_id, []
+                        )
+                        if manifest_path.path not in task_file_list:
+                            task_file_list.append(manifest_path.path)
     else:
         # Attribution skipped: download everything anyway, decoupled from per-job tracking.
         # Collect every downloaded path (deduped) under a synthetic bucket keyed by "" so it
@@ -1659,6 +1672,79 @@ def _incremental_output_download(
     else:
         print_function_callback("Skipping downloads due to DRY RUN")
 
+    # For jobs whose paths were entirely claimed by a newer job (cross-job dedup),
+    # generate task results based on what's actually on disk. The winning job may have
+    # partially failed, so we check the filesystem rather than assuming all downloaded.
+    # When files are missing, reuse the winning job's error for the specific path (same
+    # path, same root cause) so all jobs sharing a path show a consistent error. This
+    # scales to mixed errors — each path maps to its own winning task's error.
+    if not dry_run:
+        # Build path -> (error_code, error_message) from every winning job's per-task results.
+        # A path belongs to the winning job that downloaded it; that task's error explains
+        # why the file is (or isn't) on disk.
+        path_error_map: dict[str, tuple[Optional[str], Optional[str]]] = {}
+        for win_job_id, win_task_results in task_download_results.items():
+            win_task_paths = all_task_file_paths.get(win_job_id, {})
+            for win_task_id, win_result in win_task_results.items():
+                err_code = win_result.get("error_code")
+                if err_code is not None:
+                    for p in win_task_paths.get(win_task_id, []):
+                        path_error_map[os.path.normcase(p)] = (
+                            err_code,
+                            win_result.get("error_message"),
+                        )
+
+        for job_id, task_paths_map in all_task_file_paths.items():
+            if job_id not in job_download_results and job_id not in task_download_results:
+                deduped_task_results: dict[str, dict[str, Any]] = {}
+                for task_id, file_paths in task_paths_map.items():
+                    on_disk = sum(1 for p in file_paths if os.path.exists(p))
+                    if on_disk == len(file_paths):
+                        deduped_task_results[task_id] = {
+                            "total_files": len(file_paths),
+                            "downloaded_files": len(file_paths),
+                            "error_code": None,
+                            "error_message": None,
+                        }
+                    else:
+                        # Inherit the winning job's actual error for a missing path (could be
+                        # PERMISSION_DENIED, DISK_FULL, NETWORK_ERROR, etc.). Fall back to
+                        # UNKNOWN only when no winning job reported an error for this path —
+                        # the file is missing but this run has no attempt explaining why.
+                        err_code = "UNKNOWN"
+                        err_msg = "Output files not found on disk"
+                        for p in file_paths:
+                            if not os.path.exists(p):
+                                mapped = path_error_map.get(os.path.normcase(p))
+                                if mapped is not None and mapped[0] is not None:
+                                    err_code = mapped[0]
+                                    err_msg = mapped[1] or err_msg
+                                    break
+                        deduped_task_results[task_id] = {
+                            "total_files": len(file_paths),
+                            "downloaded_files": on_disk,
+                            "error_code": err_code,
+                            "error_message": err_msg,
+                        }
+                task_download_results[job_id] = deduped_task_results
+
+    # Synthesize job_download_results for deduped jobs so _determine_job_download_status
+    # sees their file counts and errors. These jobs share output paths with the winning
+    # job — their status reflects what's actually on disk.
+    for job_id in list(task_download_results.keys()):
+        if job_id not in job_download_results:
+            task_results = task_download_results[job_id]
+            total = sum(r["total_files"] for r in task_results.values())
+            downloaded = sum(r["downloaded_files"] for r in task_results.values())
+            any_error = next((r for r in task_results.values() if r.get("error_code")), None)
+            job_download_results[job_id] = {
+                "total_files": total,
+                "downloaded_files": downloaded,
+                "failed_files": total - downloaded,
+                "error_code": any_error["error_code"] if any_error else None,
+                "error_message": any_error["error_message"] if any_error else None,
+            }
+
     # Remove failed jobs from checkpoint so they're treated as new (added) next run.
     # Track them in the failed jobs file so they're retried even after the timestamp advances.
     # The synthetic "" fallback bucket (kept above only when it failed) is not a real job, so it
@@ -1704,8 +1790,8 @@ def _incremental_output_download(
         # summary reports the count/size of files that would be downloaded (the preview value).
         "downloaded_files": sum(
             r.get("downloaded_files", 0)
-            for r in job_download_results.values()
-            if r.get("error_code") is None
+            for job_id, r in job_download_results.items()
+            if r.get("error_code") is None and job_id in job_manifest_paths
         )
         if not dry_run
         else sum(len(paths) for paths in job_manifest_paths.values()),
