@@ -1,0 +1,61 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+"""Judge verdict parsing + runner aggregation (no live model calls)."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from agent_evals import judge, runner  # noqa: E402
+
+
+def test_extract_verdict_plain_json() -> None:
+    v = judge._extract_verdict('{"passed": true, "reasoning": "meets the rubric"}')
+    assert v.passed is True and "rubric" in v.reasoning
+
+
+def test_extract_verdict_tolerates_code_fence() -> None:
+    v = judge._extract_verdict('```json\n{"passed": false, "reasoning": "missing"}\n```')
+    assert v.passed is False
+
+
+def test_extract_verdict_rejects_no_json() -> None:
+    with pytest.raises(judge.JudgeError):
+        judge._extract_verdict("I think it passes.")
+
+
+def test_extract_verdict_requires_passed_key() -> None:
+    with pytest.raises(judge.JudgeError):
+        judge._extract_verdict('{"reasoning": "no verdict"}')
+
+
+def test_empty_answer_fails_without_model_call() -> None:
+    v = judge.judge_answer("rubric", "prompt", "   ")
+    assert v.passed is False
+
+
+def test_aggregate_medians_and_pass_rate() -> None:
+    runs = [
+        {"passed": True, "num_turns": 4, "total_cost_usd": 0.10},
+        {"passed": False, "num_turns": 10, "total_cost_usd": 0.30},
+        {"passed": True, "num_turns": 6, "total_cost_usd": 0.20},
+    ]
+    agg = runner._aggregate(runs)
+    assert agg["pass_rate"] == pytest.approx(2 / 3)
+    assert agg["median_turns"] == 6.0
+    assert agg["median_cost_usd"] == pytest.approx(0.20)
+    assert agg["n"] == 3
+
+
+def test_aggregate_empty() -> None:
+    assert runner._aggregate([]) == {
+        "pass_rate": 0.0,
+        "median_turns": 0.0,
+        "median_cost_usd": 0.0,
+        "n": 0,
+    }

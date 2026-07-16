@@ -1,0 +1,16 @@
+[
+  {
+    "id": "discover_submit_workflow",
+    "prompt": "Using only `deadline --help` and its subcommand help pages (do not run any other deadline commands), explain the full workflow to submit a job bundle, wait for it to finish, and download its output. Name the exact commands and flags you would use.",
+    "tools": ["Bash"],
+    "rubric": "The answer names `deadline bundle submit` for submission and identifies real commands/flags for waiting on completion and downloading output (for example `deadline job download-output`). It must not invent flags that do not appear in the help text.",
+    "max_turns": 15
+  },
+  {
+    "id": "explain_farm_queue_defaults",
+    "prompt": "Using only `deadline config --help` and `deadline job get --help`, explain whether --farm-id and --queue-id are required on `deadline job get`, and where their values come from when omitted.",
+    "tools": ["Bash"],
+    "rubric": "The answer states that the id options are optional and fall back to configured defaults (deadline config / defaults.farm_id and defaults.queue_id).",
+    "max_turns": 10
+  }
+]
