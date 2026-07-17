@@ -1,3 +1,7 @@
+# The cache steps below carry `# zizmor: ignore[cache-poisoning]`: this is a
+# test-only workflow whose caches (pip, apt, a pinned Blender version) use
+# deterministic keys and are not published as release artifacts, so the
+# cache-poisoning risk does not apply here.
 name: Blender Submitter UI Integration Test
 
 on:
@@ -19,23 +23,26 @@ jobs:
     env:
       DISPLAY: ':99'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0 # zizmor: ignore[cache-poisoning]
         with:
           python-version: '3.11'
           cache: pip
 
       - name: Cache apt packages
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         id: cache-apt
         with:
           path: ~/apt-cache
           key: apt-blender-ui-${{ runner.os }}-v1
 
       - name: Install system dependencies
+        env:
+          # Pass via env, not inline ${{ }}, to avoid template injection.
+          CACHE_HIT: ${{ steps.cache-apt.outputs.cache-hit }}
         run: |
-          if [ "${{ steps.cache-apt.outputs.cache-hit }}" = "true" ]; then
+          if [ "$CACHE_HIT" = "true" ]; then
             sudo cp -r ~/apt-cache/*.deb /var/cache/apt/archives/ 2>/dev/null || true
           fi
           sudo apt-get update
@@ -52,7 +59,7 @@ jobs:
           cp /var/cache/apt/archives/*.deb ~/apt-cache/ 2>/dev/null || true
 
       - name: Cache Blender
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         id: cache-blender
         with:
           path: /opt/blender-${{ env.BLENDER_VERSION }}-linux-x64
@@ -95,7 +102,7 @@ jobs:
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: screenshots-linux
           path: /tmp/*.png
@@ -106,15 +113,15 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0 # zizmor: ignore[cache-poisoning]
         with:
           python-version: '3.11'
           cache: pip
 
       - name: Cache Blender
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         id: cache-blender
         with:
           path: /Applications/Blender.app
@@ -158,7 +165,7 @@ jobs:
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: screenshots-macos
           path: /tmp/*.png
@@ -170,15 +177,15 @@ jobs:
     timeout-minutes: 15
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0 # zizmor: ignore[cache-poisoning]
         with:
           python-version: '3.11'
           cache: pip
 
       - name: Cache Blender
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         id: cache-blender
         with:
           path: C:\Tools\blender-${{ env.BLENDER_VERSION }}-windows-x64
@@ -226,7 +233,7 @@ jobs:
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: screenshots-windows
           path: C:\Users\runneradmin\AppData\Local\Temp\*.png

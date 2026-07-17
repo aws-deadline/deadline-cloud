@@ -65,7 +65,7 @@ def test_get_session_and_worker_logs_basic(mock_get_session, mock_session_logs, 
     assert result["worker_logs"]["count"] == 3
 
     mock_get_session.assert_called_once_with(
-        farm_id=MOCK_FARM_ID, queue_id=MOCK_QUEUE_ID, job_id=MOCK_JOB_ID, session_id=MOCK_SESSION_ID
+        farmId=MOCK_FARM_ID, queueId=MOCK_QUEUE_ID, jobId=MOCK_JOB_ID, sessionId=MOCK_SESSION_ID
     )
     mock_worker_logs.assert_called_once_with(
         farm_id=MOCK_FARM_ID, fleet_id=MOCK_FLEET_ID, worker_id=MOCK_WORKER_ID, limit=100

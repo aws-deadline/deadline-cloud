@@ -1,0 +1,21 @@
+name: "Security Scan"
+
+on:
+  push:
+    branches: [ "mainline", "feature_*", "patch_*" ]
+  pull_request:
+    branches: [ "mainline", "feature_*", "patch_*" ]
+  schedule:
+    - cron: '0 8 * * MON'
+
+jobs:
+  Scan:
+    name: Scan
+    # Central, extensible security-scan workflow (currently zizmor). New checks
+    # added there apply here automatically — no change needed to this stub.
+    uses: aws-deadline/.github/.github/workflows/reusable_security_scan.yml@mainline
+    permissions:
+      # The reusable workflow checks out this repo and fetches the central
+      # zizmor config, and reports findings to the run log / PR annotations
+      # (not the Security tab), so it only needs read access.
+      contents: read

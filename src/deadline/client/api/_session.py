@@ -8,6 +8,7 @@ of the Deadline-configured IAM credentials.
 from __future__ import annotations
 
 import logging
+import os
 from configparser import ConfigParser
 from contextlib import contextmanager
 from enum import Enum
@@ -83,7 +84,11 @@ def get_boto3_session(
     if force_refresh:
         invalidate_boto3_session_cache()
 
-    return _get_boto3_session_for_profile(profile_name, region)
+    session = _get_boto3_session_for_profile(profile_name, region)
+    # Apply proxy / CA-bundle settings once per cached session. Idempotent: a later
+    # call with a different config that resolves to the same cached session keeps the
+    # proxy/CA first applied (these are machine-level, not per-config, settings).
+    return apply_proxy_settings(session, config=config)
 
 
 @lru_cache
@@ -136,8 +141,121 @@ def get_default_client_config(**kwargs) -> botocore.config.Config:
     agent_name = detect_invoking_agent()
     if agent_name:
         user_agent_extra += f" invoked-by/{agent_name}"
+
     client_config = botocore.config.Config(user_agent_extra=user_agent_extra, **kwargs)
     return client_config
+
+
+def _resolve_https_proxy(config: Optional[ConfigParser] = None) -> Optional[str]:
+    """
+    Return the configured HTTPS proxy URL (``settings.https_proxy``), or ``None``
+    when it is unset.
+    """
+    https_proxy = config_file.get_setting("settings.https_proxy", config=config)
+    if https_proxy and https_proxy.strip():
+        return https_proxy.strip()
+    return None
+
+
+def _resolve_ca_bundle(config: Optional[ConfigParser] = None) -> Optional[str]:
+    """
+    Return the configured CA certificate bundle path (``settings.ca_bundle``),
+    or ``None`` when it is unset.
+    """
+    ca_bundle = config_file.get_setting("settings.ca_bundle", config=config)
+    if ca_bundle and ca_bundle.strip():
+        # ``settings.ca_bundle`` is declared ``is_path: True``, but ``get_setting``
+        # only normalizes slashes -- it does not expand ``~``. Expand it here so a
+        # value like ``~/certs/ca.pem`` resolves before being handed to boto3's
+        # ``verify`` (botocore does not expand ``~`` either).
+        return os.path.expanduser(ca_bundle.strip())
+    return None
+
+
+# Attribute stashing the (https_proxy, ca_bundle) tuple that was first applied to a
+# boto3.Session, so apply_proxy_settings stays idempotent (sessions are cached and
+# reused across many client builds) and can detect when a later config disagrees with
+# the settings already baked into the session and its already-built clients.
+_PROXY_SETTINGS_APPLIED_ATTR = "_deadline_applied_proxy_settings"
+
+
+def apply_proxy_settings(
+    session: boto3.Session, config: Optional[ConfigParser] = None
+) -> boto3.Session:
+    """
+    Apply the ``settings.https_proxy`` and ``settings.ca_bundle`` config settings to
+    ``session`` so that *every* client built from it -- the Deadline Cloud clients
+    created here as well as the S3 / Deadline clients job_attachments builds from the
+    same session -- routes through the configured proxy and verifies TLS against the
+    configured CA bundle.
+
+    Both settings are applied once, at the session level, rather than threaded through
+    every client-creation call: botocore merges a session's default client config into
+    every per-client ``botocore.config.Config`` (so ``proxies`` is inherited) and reads
+    the session's ``ca_bundle`` config variable for the client's ``verify`` value. This
+    gives uniform proxy/CA coverage with no per-client plumbing.
+
+    Proxy and CA bundle are process-global, machine-level settings (a host has one
+    corporate proxy / trust store), so -- unlike region, which is resolved per farm --
+    they are taken from the *first* ``config`` that configures a given cached session.
+    Sessions are cached on ``(profile, region)`` (see ``get_boto3_session``), so a later
+    call with a different ``config`` that resolves to the same cached session does not
+    re-apply or override the proxy/CA already set on it -- clients already built from the
+    session captured the original values at build time, so silently changing the session
+    now would split-brain old and new clients. A later config that *disagrees* with the
+    already-applied settings is therefore ignored with a warning. Pass
+    ``force_refresh=True`` to ``get_boto3_session`` to drop the cached session and pick up
+    changed settings cleanly.
+
+    Args:
+        session: The boto3 session to configure, modified in place.
+        config: An optional AWS Deadline Cloud ConfigParser to resolve the settings
+            from. When ``None``, the on-disk default config is read.
+
+    Returns:
+        The same ``session``, for convenient chaining.
+    """
+    resolved = (_resolve_https_proxy(config), _resolve_ca_bundle(config))
+
+    applied = getattr(session, _PROXY_SETTINGS_APPLIED_ATTR, None)
+    if applied is not None:
+        # Already configured (first config wins). Warn if a later config disagrees,
+        # since the session and its already-built clients keep the original values.
+        if resolved != applied:
+            # Log only *which* setting changed, not the values: a proxy URL can embed
+            # basic-auth credentials (http://user:pass@host), and writing those to a
+            # WARNING-level log risks leaking them to shared/aggregated log stores.
+            changed = []
+            if resolved[0] != applied[0]:
+                changed.append("https_proxy")
+            if resolved[1] != applied[1]:
+                changed.append("ca_bundle")
+            logging.getLogger(__name__).warning(
+                "Ignoring changed %s for an already-configured boto3 session; keeping the "
+                "values applied first. Proxy and CA bundle are machine-level settings fixed "
+                "per session -- use force_refresh to apply changed settings.",
+                " and ".join(changed),
+            )
+        return session
+    setattr(session, _PROXY_SETTINGS_APPLIED_ATTR, resolved)
+
+    https_proxy, ca_bundle = resolved
+    botocore_session = session._session
+    if https_proxy:
+        existing = botocore_session.get_default_client_config() or botocore.config.Config()
+        # Set both schemes so the proxy is honored regardless of the endpoint's scheme.
+        botocore_session.set_default_client_config(
+            existing.merge(
+                botocore.config.Config(proxies={"http": https_proxy, "https": https_proxy})
+            )
+        )
+
+    if ca_bundle:
+        # botocore feeds the session's ``ca_bundle`` config variable into each client's
+        # ``verify``. (_resolve_ca_bundle has already expanded ``~``.)
+        botocore_session.set_config_variable("ca_bundle", ca_bundle)
+
+    return session
 
 
 @lru_cache
@@ -149,6 +267,10 @@ def get_session_client(session: boto3.Session, service_name: str, region: Option
     with the same session, service name, and region return the cached client to
     avoid repeating initialization where possible. The ``region`` argument is part
     of the cache key so clients for different regions are never reused for each other.
+
+    The ``settings.https_proxy`` / ``settings.ca_bundle`` config settings are applied
+    to the session (see ``apply_proxy_settings``), not here, so the created client
+    inherits them automatically via botocore's config merge.
 
     When a profile has a non-standard endpoint override (e.g. via the ``[services ...]``
     section or ``AWS_ENDPOINT_URL*`` env vars), boto3 applies it regardless of the
@@ -351,9 +473,13 @@ def get_queue_user_boto3_session(
     # base session's region.
     region = _resolve_region(config=config, farm_id=farm_id)
 
-    return _get_queue_user_boto3_session(
+    queue_user_session = _get_queue_user_boto3_session(
         deadline, base_session, farm_id, queue_id, queue_display_name, region
     )
+    # Apply proxy / CA-bundle to the queue-user session too, so clients job_attachments
+    # builds from it (S3 uploads/downloads) route through the proxy and trust the CA
+    # bundle. Idempotent per cached session.
+    return apply_proxy_settings(queue_user_session, config=config)
 
 
 @lru_cache

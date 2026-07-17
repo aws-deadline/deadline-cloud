@@ -86,33 +86,33 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
     # Diagnostics - Primitive APIs
     "get_job": {
         "func": api.get_job,
-        "param_names": ["farm_id", "queue_id", "job_id"],
+        "param_names": ["farmId", "queueId", "jobId"],
     },
     "get_session": {
         "func": api.get_session,
-        "param_names": ["farm_id", "queue_id", "job_id", "session_id"],
+        "param_names": ["farmId", "queueId", "jobId", "sessionId"],
     },
     "list_sessions": {
         "func": api.list_sessions,
-        "param_names": ["farm_id", "queue_id", "job_id"],
+        "param_names": ["farmId", "queueId", "jobId"],
     },
     "list_steps": {
         "func": api.list_steps,
-        "param_names": ["farm_id", "queue_id", "job_id"],
+        "param_names": ["farmId", "queueId", "jobId"],
     },
     "list_tasks": {
         "func": api.list_tasks,
-        "param_names": ["farm_id", "queue_id", "job_id", "step_id"],
+        "param_names": ["farmId", "queueId", "jobId", "stepId"],
     },
     "search_jobs": {
         "func": api.search_jobs,
         "param_names": [
-            "farm_id",
-            "queue_ids",
-            "task_run_status",
-            "name_contains",
-            "page_size",
-            "item_offset",
+            "farmId",
+            "queueIds",
+            "taskRunStatus",
+            "nameContains",
+            "pageSize",
+            "itemOffset",
         ],
     },
 }

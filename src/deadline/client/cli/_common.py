@@ -7,6 +7,7 @@ Functionality common to all the CLI groups.
 from __future__ import annotations
 
 __all__ = [
+    "_OUTPUT_FORMAT_HELP",
     "_PROMPT_WHEN_COMPLETE",
     "_ProgressBarCallbackManager",
     "_apply_cli_options_to_config",
@@ -15,6 +16,7 @@ __all__ = [
     "_parse_file_parameter",
     "_parse_multi_format_parameters",
     "_prompt_at_completion",
+    "_resolve_output_format",
     "_suggest_resources_on_client_error",
 ]
 
@@ -43,6 +45,54 @@ from ._groups._sigint_handler import SigIntHandler
 logger = logging.getLogger("deadline.client.cli")
 
 _PROMPT_WHEN_COMPLETE = "PROMPT_WHEN_COMPLETE"
+
+# Shared help text for the `--output` option, documenting the TTY-aware default.
+_OUTPUT_FORMAT_HELP = (
+    "Specifies the output format of the messages printed to stdout.\n"
+    "VERBOSE: Displays messages in a human-readable text format.\n"
+    "JSON: Displays messages in JSON line format, so that the info can be easily "
+    "parsed/consumed by custom scripts.\n"
+    "When this option is not specified, the format is chosen automatically: "
+    "VERBOSE when stdout is an interactive terminal, and JSON otherwise (for example "
+    "when the output is piped, redirected, or run without a TTY such as in CI or by an agent)."
+)
+
+
+def _stdout_is_tty() -> bool:
+    """
+    Returns whether stdout is connected to an interactive terminal.
+
+    A missing or non-TTY stdout (e.g. a closed or redirected stream) is treated as
+    non-interactive. ``isatty()`` can raise on unusual streams, so this is defensive.
+    """
+    try:
+        return bool(sys.stdout.isatty())
+    except (AttributeError, ValueError):
+        return False
+
+
+def _resolve_output_format(output: Optional[str]) -> str:
+    """
+    Resolves the effective ``--output`` format for a CLI command.
+
+    An explicit value always wins. When ``output`` is ``None`` (the option was not
+    provided), the format is auto-detected from whether stdout is an interactive
+    terminal: ``"verbose"`` for a TTY (a human reader) and ``"json"`` otherwise
+    (pipes, redirection, CI, or agents), matching the behavior of tools like the
+    AWS CLI and kubectl.
+
+    Args:
+        output (Optional[str]): The value of the ``--output`` option, or ``None`` if
+            it was not specified. Comparison is case-insensitive.
+
+    Returns:
+        str: The resolved format, either ``"verbose"`` or ``"json"`` (lowercased).
+    """
+    if output is not None:
+        return output.lower()
+
+    return "verbose" if _stdout_is_tty() else "json"
+
 
 # Set up the signal handler for handling Ctrl + C interruptions.
 sigint_handler = SigIntHandler()

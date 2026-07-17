@@ -6,7 +6,14 @@ from __future__ import annotations
 
 import json as _json
 import logging as _logging
-from typing import Any as _Any, Callable as _Callable, Dict as _Dict, Optional as _Optional
+import os as _os
+from typing import (
+    Any as _Any,
+    Callable as _Callable,
+    Dict as _Dict,
+    List as _List,
+    Optional as _Optional,
+)
 
 from deadline.client.exceptions import DeadlineOperationError as _DeadlineOperationError
 from deadline.client.job_bundle.loader import read_yaml_or_json_object as _read_yaml_or_json_object
@@ -22,9 +29,19 @@ from ._validator import validate_modified_payload as _validate_modified_payload
 _logger = _logging.getLogger(__name__)
 
 
-def _generate_hooks_confirmation_message(hooks: _HookConfiguration, bundle_dir: str) -> str:
-    """Generate a confirmation message listing hooks that will execute."""
-    lines = ["This job bundle contains submission hooks that will execute on your machine:\n"]
+def _generate_hooks_confirmation_message(
+    hooks: _HookConfiguration, source_dir: str, source_label: str = "job bundle"
+) -> str:
+    """Generate a confirmation message listing hooks that will execute.
+
+    ``source_label`` names where the hooks came from — the job bundle or the
+    ``DEADLINE_HOOKS_DIR`` environment source — and defaults to the job bundle so existing
+    callers keep their wording. Because hooks execute arbitrary code on the user's machine,
+    this prompt is the user's informed-consent point: an environment-configured source must
+    not be shown as if it came from the job bundle, so both the header and the directory line
+    identify the true origin.
+    """
+    lines = [f"This {source_label} contains submission hooks that will execute on your machine:\n"]
 
     if hooks.pre_gui:
         lines.append("  Pre-GUI hooks:")
@@ -47,8 +64,157 @@ def _generate_hooks_confirmation_message(hooks: _HookConfiguration, bundle_dir: 
             lines.append(f"    [{i + 1}] {cmd}")
         lines.append("")
 
-    lines.append(f"  Bundle: {bundle_dir}\n")
+    lines.append(f"  Location: {source_dir}\n")
     return "\n".join(lines)
+
+
+def _collect_hook_sources(
+    bundle_dir: str,
+    env_hooks_dir: _Optional[str],
+    allow_bundle_hooks: bool,
+    allow_environment_hooks: bool,
+    print_callback: _Callable[[str], None],
+    warning_callback: _Optional[_Callable[[str], None]],
+    hook_manager_cls: _Optional[type],
+    has_runnable_hooks: _Callable[[_HookConfiguration], bool],
+    hook_kind: str,
+) -> _List["HookManager"]:
+    """Return the HookManagers with runnable hooks, in execution order (env then bundle).
+
+    Shared by :func:`collect_pre_gui_hook_sources` and
+    :func:`collect_submission_hook_sources`. ``has_runnable_hooks`` selects which phase's
+    hooks make a source runnable (preGUI vs. pre/post-submission); ``hook_kind`` names that
+    phase in the "present but disabled" guidance so both callers stay in sync while phrasing
+    their messages for their own phase.
+    """
+    warn = warning_callback or print_callback
+    manager_cls = hook_manager_cls or HookManager
+    sources: _List["HookManager"] = []
+
+    # If DEADLINE_HOOKS_DIR resolves to the job bundle directory, the two sources are the
+    # same hooks.yaml. Treat it as the bundle source only (skip the env source) so hooks are
+    # not loaded and run twice.
+    env_is_bundle = (
+        bool(env_hooks_dir)
+        and bool(bundle_dir)
+        and (_os.path.realpath(env_hooks_dir or "") == _os.path.realpath(bundle_dir or ""))
+    )
+
+    # Environment hooks first.
+    if env_hooks_dir and not env_is_bundle:
+        if not _os.path.isdir(env_hooks_dir):
+            warn(f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory")
+        else:
+            env_manager = manager_cls(env_hooks_dir, print_callback)
+            # Label this source as environment-configured so the confirmation prompt does not
+            # present a DEADLINE_HOOKS_DIR source as if it came from the job bundle. Set on the
+            # instance (not via constructor) so a patched hook_manager_cls seam still works.
+            env_manager.source_label = "environment (DEADLINE_HOOKS_DIR)"
+            env_hooks = env_manager.load_hooks()
+            if env_hooks and has_runnable_hooks(env_hooks):
+                if allow_environment_hooks:
+                    sources.append(env_manager)
+                else:
+                    warn(
+                        f"Note: DEADLINE_HOOKS_DIR contains {hook_kind} hooks but environment "
+                        "hooks are disabled.\n"
+                        "Enable with: deadline config set settings.allow_environment_hooks true"
+                    )
+
+    # Bundle hooks second. When env_is_bundle, this single source covers both; it is gated
+    # by allow_bundle_hooks OR allow_environment_hooks (either grant permits the shared dir).
+    #
+    # Only consult the bundle source when there IS a bundle. DCC submitters have no on-disk
+    # bundle at pre-GUI time and pass bundle_dir="" — an empty dir would make HookManager
+    # resolve hooks.yaml/.json relative to the process CWD (os.path.join("", "hooks") →
+    # "hooks"), so a stray hooks file in the launch directory could be loaded and, with
+    # bundle hooks enabled studio-wide, executed for a submission that has no bundle. Skip
+    # the bundle source entirely when bundle_dir is falsy to avoid that CWD footgun.
+    if bundle_dir:
+        bundle_manager = manager_cls(bundle_dir, print_callback)
+        bundle_hooks = bundle_manager.load_hooks()
+        if bundle_hooks and has_runnable_hooks(bundle_hooks):
+            if allow_bundle_hooks or (env_is_bundle and allow_environment_hooks):
+                sources.append(bundle_manager)
+            else:
+                warn(
+                    f"Note: Job bundle contains {hook_kind} hooks but bundle hooks are disabled.\n"
+                    "Enable with: deadline config set settings.allow_bundle_hooks true"
+                )
+
+    return sources
+
+
+def collect_pre_gui_hook_sources(
+    bundle_dir: str,
+    env_hooks_dir: _Optional[str],
+    allow_bundle_hooks: bool,
+    allow_environment_hooks: bool,
+    print_callback: _Callable[[str], None],
+    warning_callback: _Optional[_Callable[[str], None]] = None,
+    hook_manager_cls: _Optional[type] = None,
+) -> _List["HookManager"]:
+    """Return the HookManagers whose preGUI hooks should run, in execution order.
+
+    PreGUI hooks may come from the directory named by ``DEADLINE_HOOKS_DIR`` (gated by
+    ``allow_environment_hooks``) and/or the job bundle (gated by ``allow_bundle_hooks``).
+    Environment hooks run before bundle hooks. Sources without preGUI hooks are omitted.
+
+    ``print_callback`` is attached to each returned HookManager for its execution-time
+    messages. ``warning_callback`` (defaults to ``print_callback``) receives guidance
+    notes — a hooks source that is present but disabled, or an invalid DEADLINE_HOOKS_DIR —
+    so callers can log those at a higher severity than routine execution output.
+    ``hook_manager_cls`` (defaults to ``HookManager``) is the class used to construct each
+    source; callers may pass their own reference so it remains a patchable seam.
+
+    This is deliberately Qt-free so it can be unit-tested without a GUI binding; the caller
+    (the submitter) handles the confirmation prompt and execution.
+    """
+    return _collect_hook_sources(
+        bundle_dir=bundle_dir,
+        env_hooks_dir=env_hooks_dir,
+        allow_bundle_hooks=allow_bundle_hooks,
+        allow_environment_hooks=allow_environment_hooks,
+        print_callback=print_callback,
+        warning_callback=warning_callback,
+        hook_manager_cls=hook_manager_cls,
+        has_runnable_hooks=lambda hooks: bool(hooks.pre_gui),
+        hook_kind="preGUI",
+    )
+
+
+def collect_submission_hook_sources(
+    bundle_dir: str,
+    env_hooks_dir: _Optional[str],
+    allow_bundle_hooks: bool,
+    allow_environment_hooks: bool,
+    print_callback: _Callable[[str], None],
+    warning_callback: _Optional[_Callable[[str], None]] = None,
+    hook_manager_cls: _Optional[type] = None,
+) -> _List["HookManager"]:
+    """Return the HookManagers whose pre/post-submission hooks should run, in execution order.
+
+    Submission (pre- and post-submission) hooks may come from the directory named by
+    ``DEADLINE_HOOKS_DIR`` (gated by ``allow_environment_hooks``) and/or the job bundle
+    (gated by ``allow_bundle_hooks``). Environment hooks run before bundle hooks. Sources
+    with neither pre- nor post-submission hooks are omitted.
+
+    This is the pre/post-submission analog of :func:`collect_pre_gui_hook_sources`. Both must
+    return a *list* of sources — the earlier single-``hook_manager`` merge could only ever run
+    one source, so environment and bundle submission hooks could not run together. See the
+    arguments' documentation on :func:`collect_pre_gui_hook_sources`.
+    """
+    return _collect_hook_sources(
+        bundle_dir=bundle_dir,
+        env_hooks_dir=env_hooks_dir,
+        allow_bundle_hooks=allow_bundle_hooks,
+        allow_environment_hooks=allow_environment_hooks,
+        print_callback=print_callback,
+        warning_callback=warning_callback,
+        hook_manager_cls=hook_manager_cls,
+        has_runnable_hooks=lambda hooks: bool(hooks.pre_submission or hooks.post_submission),
+        hook_kind="submission",
+    )
 
 
 class HookManager:
@@ -58,9 +224,13 @@ class HookManager:
         self,
         job_bundle_dir: str,
         print_callback: _Callable[[str], None],
+        source_label: str = "job bundle",
     ):
         self.job_bundle_dir = job_bundle_dir
         self.print_callback = print_callback
+        # Names this source's origin for the confirmation prompt ("job bundle" vs.
+        # "environment (DEADLINE_HOOKS_DIR)"); the collector sets it per source.
+        self.source_label = source_label
         self.hooks: _Optional[_HookConfiguration] = None
         self._executor = _HookExecutor(job_bundle_dir, print_callback)
         # Use original bundle path for metadata if available (GUI submit case)
@@ -85,11 +255,14 @@ class HookManager:
         Runs before the submission dialog opens. Hooks may output JSON to pre-populate
         dialog fields: parameters, priority, farmId, queueId, name, description.
         Failures block the dialog from opening.
+
+        The caller sets ``metadata.job_bundle_dir`` to the job bundle being submitted; it is
+        respected as-is so environment hooks receive the real bundle dir (not the
+        environment hooks directory), matching the pre/post-submission contract. Relative
+        hook *script* paths are still resolved against this manager's own directory.
         """
         if not self.hooks or not self.hooks.pre_gui:
             return {}
-
-        metadata.job_bundle_dir = self._original_bundle_dir
 
         merged: _Dict[str, _Any] = {}
         for i, hook in enumerate(self.hooks.pre_gui):
@@ -126,8 +299,10 @@ class HookManager:
                         f"Pre-GUI hook [{i + 1}] produced invalid JSON: {e}"
                     )
 
+            # stderr was already streamed to the user line-by-line during execution
+            # (see HookExecutor); keep a full-blob copy only in the debug log.
             if result.stderr:
-                _logger.warning(f"Pre-GUI hook [{i + 1}] stderr: {result.stderr}")
+                _logger.debug(f"Pre-GUI hook [{i + 1}] stderr: {result.stderr}")
 
             _logger.debug(f"Pre-GUI hook [{i + 1}] completed in {result.execution_time:.2f}s")
 
@@ -175,8 +350,10 @@ class HookManager:
                         f"Pre-submission hook [{i + 1}] produced invalid JSON: {e}"
                     )
 
+            # stderr was already streamed to the user line-by-line during execution
+            # (see HookExecutor); keep a full-blob copy only in the debug log.
             if result.stderr:
-                _logger.warning(f"Hook [{i + 1}] stderr: {result.stderr}")
+                _logger.debug(f"Hook [{i + 1}] stderr: {result.stderr}")
 
             _logger.debug(f"Hook [{i + 1}] completed in {result.execution_time:.2f}s")
 
@@ -204,8 +381,9 @@ class HookManager:
                     _logger.warning(
                         f"Post-submission hook [{i + 1}] failed with exit code {result.exit_code}: {hook_name}"
                     )
+                    # stderr was already streamed live during execution (see HookExecutor).
                     if result.stderr:
-                        _logger.warning(f"stderr: {result.stderr}")
+                        _logger.debug(f"stderr: {result.stderr}")
                     continue
 
                 if result.stdout:
@@ -217,7 +395,12 @@ class HookManager:
                 _logger.warning(f"Post-submission hook [{i + 1}] error: {e}")
 
     def _report_failure(self, hook, result, index: int, hook_type: str) -> None:
-        """Report hook failure details."""
+        """Report hook failure details.
+
+        The hook's stderr was already streamed to the user line-by-line while it ran (see
+        HookExecutor), so it is not repeated here. stdout is reserved for the hook's JSON
+        contract and is not streamed, so it is surfaced here to aid debugging a failure.
+        """
         hook_name = f"{hook.command} {' '.join(hook.args)}".strip()
         self.print_callback(f"\n{hook_type.title()} hook [{index}] failed: {hook_name}")
         self.print_callback(f"Exit code: {result.exit_code}")
@@ -225,5 +408,3 @@ class HookManager:
             self.print_callback(f"Timed out after {hook.timeout}s")
         if result.stdout:
             self.print_callback(f"stdout:\n{result.stdout}")
-        if result.stderr:
-            self.print_callback(f"stderr:\n{result.stderr}")

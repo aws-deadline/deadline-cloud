@@ -247,10 +247,10 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
                 logout_visible=self._should_show_logout,
             ),
             AuthenticationState.NEEDS_LOGIN: AuthenticationStateConfig(
+                # The warning icon and the "Log in" button convey the logged-out
+                # state, so the profile button only shows the profile name.
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
-                text=tr("{profile}  -  You are logged out.").format(
-                    profile=self._get_profile_name()
-                ),
+                text=self._get_profile_name,
                 switch_profile_button_visible=True,
                 login_visible=True,
             ),

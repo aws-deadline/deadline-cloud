@@ -36,7 +36,11 @@ from ..job_bundle.loader import (
     parse_yaml_or_json_content,
     validate_directory_symlink_containment,
 )
-from ..job_bundle._hooks import HookManager, HookMetadata, _generate_hooks_confirmation_message
+from ..job_bundle._hooks import (
+    HookMetadata,
+    _generate_hooks_confirmation_message,
+    collect_submission_hook_sources,
+)
 from ..job_bundle.parameters import (
     apply_job_parameters,
     merge_queue_job_parameters,
@@ -501,81 +505,49 @@ def create_job_from_job_bundle(
     # Ensure the job bundle doesn't contain files that resolve outside of the bundle directory
     validate_directory_symlink_containment(job_bundle_dir)
 
-    # Load hooks from environment variable and/or bundle
-    env_hooks_dir = os.environ.get("DEADLINE_HOOKS_DIR")
-    allow_env_hooks = config_file.str2bool(
-        get_setting("settings.allow_environment_hooks", config=config)
+    # Collect the pre/post-submission hook sources — environment (DEADLINE_HOOKS_DIR) and/or
+    # the job bundle — in execution order (environment first, then bundle). Both sources are
+    # returned as their own HookManager so they run together; an earlier single-manager merge
+    # could only ever execute one source, so environment and bundle hooks never ran together.
+    hook_sources = collect_submission_hook_sources(
+        bundle_dir=job_bundle_dir,
+        env_hooks_dir=os.environ.get("DEADLINE_HOOKS_DIR"),
+        allow_bundle_hooks=config_file.str2bool(
+            get_setting("settings.allow_bundle_hooks", config=config)
+        ),
+        allow_environment_hooks=config_file.str2bool(
+            get_setting("settings.allow_environment_hooks", config=config)
+        ),
+        print_callback=print_function_callback,
     )
-    allow_bundle_hooks = config_file.str2bool(
-        get_setting("settings.allow_bundle_hooks", config=config)
-    )
 
-    hook_manager = HookManager(job_bundle_dir, print_function_callback)
-    all_hooks_sources: list[tuple[str, str]] = []  # (source_description, hooks_dir)
-
-    # Check environment hooks
-    if env_hooks_dir:
-        if allow_env_hooks:
-            if os.path.isdir(env_hooks_dir):
-                all_hooks_sources.append(("environment (DEADLINE_HOOKS_DIR)", env_hooks_dir))
-            else:
-                print_function_callback(
-                    f"Warning: DEADLINE_HOOKS_DIR '{env_hooks_dir}' is not a valid directory"
-                )
-        else:
+    # Show confirmation (once) if any hooks will run, listing every source's hooks.
+    if hook_sources and not config_file.str2bool(
+        get_setting("settings.auto_accept", config=config)
+    ):
+        hooks_message = "".join(
+            _generate_hooks_confirmation_message(
+                manager.hooks, manager._original_bundle_dir, manager.source_label
+            )
+            for manager in hook_sources
+            if manager.hooks
+        )
+        if interactive_confirmation_callback is None:
+            print_function_callback(hooks_message)
             print_function_callback(
-                "Warning: DEADLINE_HOOKS_DIR is set but environment hooks are disabled.\n"
-                "Enable with: deadline config set settings.allow_environment_hooks true"
+                "Job submission canceled (hooks present but user confirmation not available)."
             )
+            raise DeadlineOperationCanceled()
+        elif not interactive_confirmation_callback(
+            hooks_message + "Do you want to run these hooks?", True
+        ):
+            print_function_callback("Job submission canceled (user declined hooks).")
+            raise UserInitiatedCancel()
 
-    # Check bundle hooks
-    bundle_has_hooks = hook_manager.load_hooks()
-    if bundle_has_hooks and (bundle_has_hooks.pre_submission or bundle_has_hooks.post_submission):
-        if allow_bundle_hooks:
-            all_hooks_sources.append(("bundle", job_bundle_dir))
-        else:
-            print_function_callback(
-                "Note: Job bundle contains hooks.yaml but bundle hooks are disabled.\n"
-                "Enable with: deadline config set settings.allow_bundle_hooks true"
-            )
-            hook_manager.hooks = None  # Clear bundle hooks
-
-    # Load hooks from all allowed sources
-    hooks = None
-    for source_desc, hooks_dir in all_hooks_sources:
-        if hooks_dir == job_bundle_dir:
-            # Already loaded
-            hooks = bundle_has_hooks
-        else:
-            # Load from environment hooks dir
-            env_hook_manager = HookManager(hooks_dir, print_function_callback)
-            env_hooks = env_hook_manager.load_hooks()
-            if env_hooks:
-                if hooks is None:
-                    hooks = env_hooks
-                    hook_manager = env_hook_manager
-                else:
-                    # Merge hooks - env hooks run first, then bundle hooks
-                    hooks.pre_submission = env_hooks.pre_submission + hooks.pre_submission
-                    hooks.post_submission = env_hooks.post_submission + hooks.post_submission
-
-    # Show confirmation if any hooks will run
-    if hooks and (hooks.pre_submission or hooks.post_submission):
-        if not config_file.str2bool(get_setting("settings.auto_accept", config=config)):
-            hooks_message = _generate_hooks_confirmation_message(
-                hooks, hook_manager._original_bundle_dir
-            )
-            if interactive_confirmation_callback is None:
-                print_function_callback(hooks_message)
-                print_function_callback(
-                    "Job submission canceled (hooks present but user confirmation not available)."
-                )
-                raise DeadlineOperationCanceled()
-            elif not interactive_confirmation_callback(
-                hooks_message + "Do you want to run these hooks?", True
-            ):
-                print_function_callback("Job submission canceled (user declined hooks).")
-                raise UserInitiatedCancel()
+    # Whether any source has pre-/post-submission hooks, so the guards below only build hook
+    # metadata (parsing the template, etc.) when at least one hook will actually run.
+    has_pre_submission_hooks = any(m.hooks and m.hooks.pre_submission for m in hook_sources)
+    has_post_submission_hooks = any(m.hooks and m.hooks.post_submission for m in hook_sources)
 
     # Read in the job template
     file_contents, file_type = read_yaml_or_json(job_bundle_dir, "template", required=True)
@@ -641,21 +613,30 @@ def create_job_from_job_bundle(
         queue_parameter_definitions = api.get_queue_parameter_definitions(
             farmId=farm_id, queueId=queue_id
         )
+    # Bind to a non-Optional local so the nested helper's closure keeps the narrowed type.
+    resolved_queue_parameter_definitions = queue_parameter_definitions
 
-    parameters = merge_queue_job_parameters(
-        queue_id=queue_id,
-        job_parameters=job_bundle_parameters,
-        queue_parameters=queue_parameter_definitions,
-    )
+    def _resolve_parameters(bundle_parameters, target_asset_references, extra_overrides=None):
+        """Merge queue + bundle parameters, apply CLI (and any hook) overrides, and format
+        for CreateJob. ``extra_overrides`` are applied beneath the CLI ``job_parameters``.
+        Mutates ``target_asset_references`` with any PATH parameters, matching prior
+        behavior. Callers that re-resolve pass a freshly-derived AssetReferences so stale
+        PATH values from an earlier pass are not carried over."""
+        resolved = merge_queue_job_parameters(
+            queue_id=queue_id,
+            job_parameters=bundle_parameters,
+            queue_parameters=resolved_queue_parameter_definitions,
+        )
+        apply_job_parameters(
+            (extra_overrides or []) + job_parameters,
+            job_bundle_dir,
+            resolved,
+            target_asset_references,
+        )
+        return resolved, split_parameter_args(resolved, job_bundle_dir)
 
-    apply_job_parameters(
-        job_parameters,
-        job_bundle_dir,
-        parameters,
-        asset_references,
-    )
-    app_parameters_formatted, job_parameters_formatted = split_parameter_args(
-        parameters, job_bundle_dir
+    parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
+        job_bundle_parameters, asset_references
     )
 
     # Extend known_asset_paths with all paths that are treated as known. These are
@@ -690,16 +671,29 @@ def create_job_from_job_bundle(
     # Use the parameter names from job_parameters, but the values from parameters. If a value was provided
     # in job_parameters, it has been applied into parameters and normalized as necessary.
     known_parameter_names = {job_param.get("name") for job_param in job_parameters}
-    for job_param in parameters:
-        if job_param.get("type") == "PATH" and job_param.get("name") in known_parameter_names:
-            job_param_value = job_param.get("value")
-            if job_param_value:
-                if job_param.get("objectType") == "FILE":
-                    # If the job parameter is a file, use its directory as the known path. When collecting
-                    # outputs for upload, only that directory is used, not the file path.
-                    known_asset_paths.append(os.path.dirname(job_param_value))
-                else:
-                    known_asset_paths.append(job_param_value)
+
+    def _path_parameter_known_paths(resolved_parameters):
+        """Return the known-asset-path contributions from PATH parameters in
+        ``resolved_parameters`` (values that were explicitly provided in job_parameters)."""
+        contributed: list[str] = []
+        for job_param in resolved_parameters:
+            if job_param.get("type") == "PATH" and job_param.get("name") in known_parameter_names:
+                job_param_value = job_param.get("value")
+                if job_param_value:
+                    if job_param.get("objectType") == "FILE":
+                        # If the job parameter is a file, use its directory as the known
+                        # path. When collecting outputs for upload, only that directory is
+                        # used, not the file path.
+                        contributed.append(os.path.dirname(job_param_value))
+                    else:
+                        contributed.append(job_param_value)
+        return contributed
+
+    # Base known paths (call args, bundle, storage profile, config) without PATH-parameter
+    # contributions — those are folded in per parameter resolution so they can be recomputed
+    # if a pre-submission hook changes a PATH parameter.
+    base_known_asset_paths = list(known_asset_paths)
+    known_asset_paths.extend(_path_parameter_known_paths(parameters))
 
     # Filter known_asset_paths to remove any paths that have another one as a prefix. This can
     # reduce the amount of processing needed later, and produces a shorter warning message when presenting
@@ -707,7 +701,7 @@ def create_job_from_job_bundle(
     known_asset_paths = _filter_redundant_known_paths(known_asset_paths)
 
     # Execute pre-submission hooks before hashing/uploading
-    if hooks and hooks.pre_submission:
+    if has_pre_submission_hooks:
         template_obj = parse_yaml_or_json_content(
             file_contents, file_type, job_bundle_dir, "template"
         )
@@ -723,7 +717,11 @@ def create_job_from_job_bundle(
             submission_payload={},  # Not yet built
             storage_profile_id=storage_profile_id if storage_profile_id else None,
         )
-        hook_result = hook_manager.execute_pre_submission_hooks(hook_metadata, {})
+        # Thread the payload through every source in order (environment first, then bundle),
+        # so a later source's hooks see — and can override — an earlier source's changes.
+        hook_result: dict = {}
+        for manager in hook_sources:
+            hook_result = manager.execute_pre_submission_hooks(hook_metadata, hook_result)
 
         # Apply template modifications from hooks via stdout output
         if "template" in hook_result:
@@ -740,6 +738,71 @@ def create_job_from_job_bundle(
         if "priority" in hook_result:
             priority = hook_result["priority"]
             create_job_args["priority"] = priority
+
+        # Apply parameter modifications from hooks. A hook may change parameter values
+        # two ways, both of which are honored here:
+        #   1. Rewriting parameter_values.yaml/.json on disk (re-read below).
+        #   2. Emitting a "parameters" map on stdout (applied on top of the disk values).
+        # CLI-supplied job_parameters still take precedence, matching pre-GUI behavior.
+        #
+        # The bundle parameters read earlier (before the hook block) reflect the state of
+        # parameter_values.yaml *before* the hook ran, so they cannot capture an on-disk
+        # rewrite. Re-read here — after the hook has executed — to pick up any change, then
+        # re-resolve. This is only extra work when a hook actually modified parameters.
+        hook_stdout_parameters = hook_result.get("parameters") or {}
+        updated_bundle_parameters = read_job_bundle_parameters(job_bundle_dir)
+        if updated_bundle_parameters != job_bundle_parameters or hook_stdout_parameters:
+            job_bundle_parameters = updated_bundle_parameters
+            # Layer hook stdout parameters beneath the CLI-supplied job_parameters so the
+            # CLI keeps the final say, then re-resolve with the same logic as the initial pass.
+            #
+            # A hook's stdout parameters are layered as job_parameters overrides, which follow
+            # CLI --parameter semantics: a relative PATH would be resolved against the current
+            # working directory. But a hook does not run from — and does not control — the
+            # submitting shell's cwd, so a relative PATH from a hook is ambiguous (unlike an
+            # on-disk parameter_values.yaml rewrite, which resolves against the bundle dir).
+            # Reject relative PATH values here and require hooks to emit absolute paths.
+            bundle_parameter_types = {
+                p.get("name"): p.get("type") for p in job_bundle_parameters if "name" in p
+            }
+            for name, value in hook_stdout_parameters.items():
+                if (
+                    bundle_parameter_types.get(name) == "PATH"
+                    and isinstance(value, str)
+                    and value != ""
+                    and not os.path.isabs(value)
+                ):
+                    raise DeadlineOperationError(
+                        f"Pre-submission hook emitted a relative PATH value for parameter "
+                        f"'{name}': '{value}'. Hooks must emit absolute paths for PATH "
+                        f"parameters on stdout, since a hook does not run from the submitting "
+                        f"working directory. Use an absolute path (e.g. join with "
+                        f"DEADLINE_JOB_BUNDLE_DIR) or rewrite parameter_values.yaml on disk."
+                    )
+            hook_parameter_overrides = [
+                {"name": name, "value": value}
+                for name, value in hook_stdout_parameters.items()
+                if name not in {p.get("name") for p in job_parameters}
+            ]
+            # Re-derive asset_references from the original bundle refs so PATH values from
+            # the first pass are not retained. Otherwise a hook that *changes* a PATH
+            # parameter would leave both the stale and the new path in asset_references and
+            # upload both. The initial-pass object is replaced here; hook-supplied
+            # attachments (merged below) are applied to this fresh object.
+            asset_references = AssetReferences.from_dict(asset_references_obj)
+            parameters, (app_parameters_formatted, job_parameters_formatted) = _resolve_parameters(
+                job_bundle_parameters, asset_references, hook_parameter_overrides
+            )
+            # Recompute known_asset_paths from the re-resolved parameters so a hook that
+            # redirected a PATH parameter keeps its new location recognized as known (rather
+            # than triggering the unknown-path warning / cancellation). Hook-supplied
+            # parameter names count as known here, alongside the original job_parameters.
+            known_parameter_names = known_parameter_names | {
+                o["name"] for o in hook_parameter_overrides
+            }
+            known_asset_paths = _filter_redundant_known_paths(
+                base_known_asset_paths + _path_parameter_known_paths(parameters)
+            )
 
         # Merge any asset references from hooks into asset_references
         if "attachments" in hook_result and "assetReferences" in hook_result["attachments"]:
@@ -1013,7 +1076,7 @@ def create_job_from_job_bundle(
         print_function_callback(status_message + f"\n{job_id}")
 
         # Execute post-submission hooks
-        if hooks and hooks.post_submission:
+        if has_post_submission_hooks:
             template_obj = parse_yaml_or_json_content(
                 file_contents, file_type, job_bundle_dir, "template"
             )
@@ -1030,7 +1093,9 @@ def create_job_from_job_bundle(
                 storage_profile_id=storage_profile_id if storage_profile_id else None,
                 job_id=job_id,
             )
-            hook_manager.execute_post_submission_hooks(hook_metadata)
+            # Run every source's post-submission hooks in order (environment first, then bundle).
+            for manager in hook_sources:
+                manager.execute_post_submission_hooks(hook_metadata)
 
         return job_id
     else:

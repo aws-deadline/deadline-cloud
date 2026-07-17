@@ -1189,3 +1189,106 @@ def test_incremental_output_download_stats_telemetry(
             "unmapped_paths": 0,
         },
     )
+
+
+def test_incremental_output_download_unmapped_paths_without_storage_profile(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """
+    Regression test: when running with --ignore-storage-profiles (no storage profile),
+    outputs whose manifest paths are dropped (e.g. by the job attachments path-traversal
+    containment check) are surfaced via `unmapped_paths`. The warning that reports them
+    must not reference a storage profile that does not exist. Previously this raised
+    UnboundLocalError: cannot access local variable 'storage_profiles'.
+    """
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_1,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {
+                    "taskRun": {
+                        "taskId": "task-b1764261dff54214aace3932bde8ae7e-0",
+                        "stepId": "step-b1764261dff54214aace3932bde8ae7e",
+                    }
+                },
+                "manifests": [],
+            },
+        ]
+    }
+
+    # Simulate the job attachments layer dropping an out-of-root output path into
+    # unmapped_paths (as the path-traversal containment check does), returning no
+    # downloadable manifests.
+    def fake_download_all_manifests(
+        queue,
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+        output_unmapped_paths,
+        boto3_session_for_s3,
+        print_function_callback=lambda msg: None,
+    ):
+        output_unmapped_paths[MOCK_JOB_ID] = ["/etc/cron.d/evil"]
+        return []
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    # Must not crash (previously raised UnboundLocalError on 'storage_profiles').
+    assert result.exit_code == 0, result.output
+    assert "WARNING: THE FOLLOWING FILES WILL NOT BE DOWNLOADED" in result.output, result.output
+    assert "/etc/cron.d/evil" in result.output, result.output

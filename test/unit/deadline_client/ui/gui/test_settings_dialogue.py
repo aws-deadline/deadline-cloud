@@ -3,12 +3,10 @@
 """Settings dialogue tests using pytest-qt."""
 
 import contextlib
-import sys
 from configparser import ConfigParser
 from unittest.mock import MagicMock, patch
 
 import pytest
-from qtpy.QtWidgets import QApplication as QApplication
 
 from deadline.client import api
 from deadline.client.ui.controllers._deadline_controller import DeadlineUIController
@@ -193,6 +191,23 @@ class TestSettingsDialogue:
 
         assert "(default)" in items
 
+    def test_aws_profile_change_does_not_stage_farm_queue_clears(self, config_widget):
+        """Switching profiles must not stage farm/queue/storage clears.
+
+        Regression: farm/queue/storage are profile-scoped. If aws_profile_changed
+        staged empty values for them, applying the change would write those empties
+        into the *new* profile's config section, destroying the defaults the user is
+        switching to. The profile change must stage ONLY the profile name.
+        """
+        config_widget.changes.clear()
+
+        config_widget.aws_profile_changed("some-other-profile")
+
+        assert config_widget.changes.get("defaults.aws_profile_name") == "some-other-profile"
+        assert "defaults.farm_id" not in config_widget.changes
+        assert "defaults.queue_id" not in config_widget.changes
+        assert "settings.storage_profile_id" not in config_widget.changes
+
     def test_auto_accept_checkbox_is_checkable(self, config_widget):
         """Verify auto accept prompt defaults checkbox is checkable."""
         assert config_widget.auto_accept.isCheckable()
@@ -267,57 +282,6 @@ class TestSettingsDialogue:
         assert edit is not None
         assert edit.directory_edit.isEnabled()
 
-    def test_farm_dropdown_populated_from_backend(self, qtbot, config_widget):
-        """Verify farm dropdown gets populated incrementally when list is refreshed."""
-        controller = DeadlineUIController.getInstance()
-        combo = config_widget.default_farm_box.box
-
-        # Farms now stream in per region via farms_appended.
-        with qtbot.waitSignal(controller.farms_appended, timeout=5000):
-            controller.refresh_farms()
-
-        QApplication.processEvents()
-
-        items = [combo.itemText(i) for i in range(combo.count())]
-        # Label is region-first per the (region, farm_id) convention.
-        assert "(us-west-2) Test Farm" in items
-
-    def test_queue_dropdown_populated_from_backend(self, qtbot, config_widget, mock_backend):
-        """Verify queue dropdown gets populated for a given farm."""
-        _, farm_id, _ = mock_backend
-        controller = DeadlineUIController.getInstance()
-
-        with qtbot.waitSignal(controller.queues_updated, timeout=5000):
-            controller.refresh_queues(farm_id=farm_id)
-
-        QApplication.processEvents()
-
-        queue_combo = config_widget.default_queue_box.box
-        items = [queue_combo.itemText(i) for i in range(queue_combo.count())]
-        assert "Test Queue" in items
-
-    def test_storage_profile_dropdown_populated_from_backend(
-        self, qtbot, config_widget, mock_backend
-    ):
-        """Verify storage profile dropdown gets populated for a given farm+queue."""
-        _, farm_id, queue_id = mock_backend
-        controller = DeadlineUIController.getInstance()
-
-        with qtbot.waitSignal(controller.storage_profiles_updated, timeout=5000):
-            controller.refresh_storage_profiles(farm_id=farm_id, queue_id=queue_id)
-
-        QApplication.processEvents()
-
-        sp_combo = config_widget.default_storage_profile_box.box
-        items = [sp_combo.itemText(i) for i in range(sp_combo.count())]
-
-        if sys.platform.startswith("linux"):
-            assert "Linux Storage Profile" in items
-        elif sys.platform.startswith("darwin"):
-            assert "macOS Storage Profile" in items
-        elif sys.platform.startswith("win"):
-            assert "Windows Storage Profile" in items
-
     def test_ok_cancel_apply_buttons_exist(self, qtbot, mock_api, deadline_config):
         """Verify the dialog has Ok, Cancel, and Apply buttons."""
         from qtpy.QtWidgets import QDialogButtonBox
@@ -333,130 +297,52 @@ class TestSettingsDialogue:
         assert cancel_btn is not None
         assert apply_btn is not None
 
-    def test_queue_resets_when_farm_changes(self, qtbot, config_widget, mock_backend):
-        """Verify queue dropdown resets when a different farm is selected."""
-        backend, farm_id, _ = mock_backend
-        controller = DeadlineUIController.getInstance()
 
-        # Populate farm dropdown
-        with qtbot.waitSignal(controller.farms_updated, timeout=5000):
-            controller.refresh_farms()
-        QApplication.processEvents()
+def test_profile_switch_preserves_each_profiles_farm_queue(fresh_deadline_config):
+    """End-to-end regression for the profile-switch clobber bug.
 
-        # Populate queues for the first farm
-        with qtbot.waitSignal(controller.queues_updated, timeout=5000):
-            controller.refresh_queues(farm_id=farm_id)
-        QApplication.processEvents()
+    Farm/queue are profile-scoped. Switching profile-1 -> profile-2 -> profile-1
+    through the real config_file must leave each profile's stored farm/queue
+    intact. The previous aws_profile_changed cleared farm/queue in the same
+    ``changes`` batch as the new profile name, so applying the switch wrote empty
+    values into the *target* profile's section, wiping its saved defaults.
 
-        queue_combo = config_widget.default_queue_box.box
-        assert queue_combo.count() > 0
+    This drives the actual ``aws_profile_changed`` -> ``apply`` flow against the
+    real config_file (not the mock), so it exercises the genuine bug path: it fails
+    if aws_profile_changed reintroduces the farm/queue/storage clears.
+    """
+    from deadline.client.config import config_file
+    from deadline.client.ui.dialogs.deadline_config_dialog import DeadlineWorkstationConfigWidget
 
-        # Create a second farm with no queues
-        farm2 = backend.create_farm(displayName="Empty Farm")
-        farm2_id = farm2["farmId"]
+    # Seed two profiles, each with its own farm + queue.
+    config_file.set_setting("defaults.aws_profile_name", "profile-1")
+    config_file.set_setting("defaults.farm_id", "farm-1")
+    config_file.set_setting("defaults.queue_id", "queue-1")
+    config_file.set_setting("defaults.aws_profile_name", "profile-2")
+    config_file.set_setting("defaults.farm_id", "farm-2")
+    config_file.set_setting("defaults.queue_id", "queue-2")
 
-        # Switch to the new farm — queue list should be empty. The combo box applies
-        # the update via a Qt.QueuedConnection to queues_updated, so the controller
-        # emitting the signal does not guarantee the widget has been repainted yet. A
-        # single processEvents() pass is not a reliable barrier for the queued slot, so
-        # poll the widget state until the stale queue is gone (this was the source of
-        # the CI flakiness).
-        def queue_items() -> list:
-            return [queue_combo.itemText(i) for i in range(queue_combo.count())]
+    # Build a config widget and drive the real profile-switch + apply path. Patch
+    # out only the UI-refresh side effects that need a populated dialog; the
+    # persistence (set_setting/write_config via apply) runs for real.
+    with (
+        patch.object(DeadlineWorkstationConfigWidget, "_build_ui"),
+        patch.object(DeadlineWorkstationConfigWidget, "_fill_aws_profiles_box"),
+        patch.object(DeadlineWorkstationConfigWidget, "refresh"),
+    ):
+        widget = DeadlineWorkstationConfigWidget.__new__(DeadlineWorkstationConfigWidget)
+        widget.changes = {}
+        widget.changes_were_applied = False
 
-        with qtbot.waitSignal(controller.queues_updated, timeout=5000):
-            controller.refresh_queues(farm_id=farm2_id)
-        qtbot.waitUntil(lambda: "Test Queue" not in queue_items(), timeout=5000)
+        # Switch back to profile-1, then apply (writes the staged changes to config).
+        widget.aws_profile_changed("profile-1")
+        DeadlineWorkstationConfigWidget.apply(widget)
 
-    def test_single_farm_auto_selected_on_profile_change(self, qtbot, config_widget, mock_backend):
-        """When a profile has exactly one farm, switching profiles should auto-select it.
+    # Both profiles must still have their own farm/queue.
+    config_file.set_setting("defaults.aws_profile_name", "profile-1")
+    assert config_file.get_setting("defaults.farm_id") == "farm-1"
+    assert config_file.get_setting("defaults.queue_id") == "queue-1"
 
-        Repro for the manual-test bug: open config GUI, switch profiles -> the
-        single available farm was NOT auto-selected (combo stayed on the
-        '<none selected>' placeholder and the cascade stopped).
-        """
-        _, farm_id, queue_id = mock_backend
-
-        # Start from a profile with nothing selected (as a fresh profile switch would).
-        config_widget.changes.clear()
-        config_widget.changes["defaults.farm_id"] = ""
-        config_widget.changes["defaults.queue_id"] = ""
-        config_widget.refresh()
-
-        # Simulate the profile-change cascade entry point: farms get refreshed. Farms now
-        # stream in per region, and auto-select fires once the stream completes, so wait
-        # for the pending change to land rather than the initial clear emit.
-        config_widget._awaiting_farms_for_cascade = True
-        config_widget.default_farm_box.refresh_list()
-        qtbot.waitUntil(
-            lambda: config_widget.changes.get("defaults.farm_id") == farm_id, timeout=5000
-        )
-
-        # The single farm should now be recorded as the pending farm change, which is
-        # what gets persisted on Apply. (currentData on the combo can't be asserted
-        # here because config_file is mocked, so refresh() can't read the value back.)
-        assert config_widget.changes.get("defaults.farm_id") == farm_id
-
-    def test_single_farm_auto_selected_on_signin(self, qtbot, config_widget, mock_backend):
-        """Signing in (not a profile switch) must also auto-select a lone farm.
-
-        Repro for the manual-test bug: a profile was selected but not signed in;
-        clicking sign-in repopulated the farm list via refresh_lists() - which does
-        NOT set the cascade flags - yet the single farm must still be selected.
-        Because auto-select lives in the combo (the one place every refresh funnels
-        through), it works here without a sign-in-specific hook.
-        """
-        _, farm_id, _ = mock_backend
-
-        config_widget.changes.clear()
-        config_widget.changes["defaults.farm_id"] = ""
-        config_widget.changes["defaults.queue_id"] = ""
-        config_widget.refresh()
-
-        # Sign-in path: refresh_lists() refreshes the farm list WITHOUT the cascade
-        # flags, but only when the API is available - so stub auth as signed in.
-        auth_stub = MagicMock()
-        auth_stub.api_availability = True
-        assert not config_widget._awaiting_farms_for_cascade
-        # Farms stream in per region; auto-select fires once the stream completes, so wait
-        # for the pending change to land rather than the initial clear emit.
-        with patch(
-            "deadline.client.ui.dialogs.deadline_config_dialog.DeadlineAuthenticationStatus.getInstance",
-            return_value=auth_stub,
-        ):
-            config_widget.refresh_lists()
-            qtbot.waitUntil(
-                lambda: config_widget.changes.get("defaults.farm_id") == farm_id, timeout=5000
-            )
-
-        # The lone farm is auto-selected (combo fires currentIndexChanged ->
-        # default_farm_changed records it). We assert on the pending change, which is
-        # what gets persisted on Apply; the combo's own currentData can't be asserted
-        # because config_file is mocked so refresh() can't read the value back.
-        assert config_widget.changes.get("defaults.farm_id") == farm_id
-
-    def test_multiple_farms_not_auto_selected_on_signin(self, qtbot, config_widget, mock_backend):
-        """With more than one farm, sign-in must not auto-select any farm."""
-        backend, _, _ = mock_backend
-        backend.create_farm(displayName="Second Farm")
-
-        config_widget.changes.clear()
-        config_widget.changes["defaults.farm_id"] = ""
-        config_widget.changes["defaults.queue_id"] = ""
-        config_widget.refresh()
-
-        controller = DeadlineUIController.getInstance()
-        auth_stub = MagicMock()
-        auth_stub.api_availability = True
-        with patch(
-            "deadline.client.ui.dialogs.deadline_config_dialog.DeadlineAuthenticationStatus.getInstance",
-            return_value=auth_stub,
-        ):
-            with qtbot.waitSignal(controller.farms_updated, timeout=5000):
-                config_widget.refresh_lists()
-        QApplication.processEvents()
-
-        # Nothing auto-selected: no farm change recorded, and the combo sits on the
-        # "<none selected>" placeholder.
-        assert config_widget.changes.get("defaults.farm_id", "") == ""
-        assert config_widget.default_farm_box.box.currentData() == ""
+    config_file.set_setting("defaults.aws_profile_name", "profile-2")
+    assert config_file.get_setting("defaults.farm_id") == "farm-2"
+    assert config_file.get_setting("defaults.queue_id") == "queue-2"

@@ -7,7 +7,9 @@ import json
 def test_cli_auth_status_verbose(deadline_env, run_cli, configure_cli_defaults):
     _, env = deadline_env
     configure_cli_defaults(env)
-    r = run_cli(env, "auth", "status")
+    # run_cli executes the CLI in a subprocess (no TTY), where --output now
+    # auto-detects to json, so request verbose explicitly to assert its format.
+    r = run_cli(env, "auth", "status", "--output", "verbose")
     assert r.returncode == 0, r.stderr or r.stdout
     assert "Profile Name:" in r.stdout
     assert "Source:" in r.stdout

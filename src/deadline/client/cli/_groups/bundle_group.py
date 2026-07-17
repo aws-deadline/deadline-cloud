@@ -31,10 +31,12 @@ from ....job_attachments.models import JobAttachmentsFileSystem
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
 from .._common import (
+    _OUTPUT_FORMAT_HELP,
     _apply_cli_options_to_config,
     _handle_error,
     _ProgressBarCallbackManager,
     _parse_multi_format_parameters,
+    _resolve_output_format,
     _suggest_resources_on_client_error,
 )
 from .._main import deadline as main
@@ -158,12 +160,15 @@ def _interactive_confirmation_prompt(message: str, default_response: bool) -> bo
 @click.option("--region", help="The AWS region of the farm.")
 @click.option("--queue-id", help="The queue to use.")
 @click.option("--storage-profile-id", help="The storage profile to use.")
-@click.option("--name", help="The job name to use in place of the one in the job bundle.")
+@click.option(
+    "--name",
+    help="Override the job name. Defaults to the `name` field in the bundle's job template.",
+)
 @click.option(
     "--priority",
     type=int,
     default=50,
-    help="The priority of the job. Jobs with a higher priority run first.",
+    help="Job priority, 0-100 (default 50). Jobs with a higher priority run first.",
 )
 @click.option(
     "--max-failed-tasks-count",
@@ -197,7 +202,7 @@ def _interactive_confirmation_prompt(message: str, default_response: bool) -> bo
 @click.option(
     "--yes",
     is_flag=True,
-    help="Automatically accept any confirmation prompts",
+    help="Skip the interactive confirmation prompt. Required for non-interactive/scripted use.",
 )
 @click.option(
     "--require-paths-exist",
@@ -251,6 +256,18 @@ def bundle_submit(
     Submits an Open Job Description job bundle to a Deadline Cloud queue.
     You can provide options to set parameter values, the job name, priority,
     and more.
+
+    JOB_BUNDLE_DIR is a DIRECTORY (not a file) that must contain a `template.yaml`
+    (or `template.json`) -- the OpenJD job template. It may optionally contain
+    `parameter_values` and `asset_references` files (also either .yaml or .json).
+
+    \b
+    Example:
+      deadline bundle submit ./my_job --yes
+
+    The command returns a job id (job-xxxx). Use `deadline job get --job-id <id>`
+    to see its current taskRunStatus, or `deadline job wait --job-id <id>` to
+    block until the job reaches a terminal state (SUCCEEDED / FAILED / CANCELED).
 
     \b
     Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
@@ -405,11 +422,8 @@ def bundle_submit(
         ["verbose", "json"],
         case_sensitive=False,
     ),
-    default="verbose",
-    help="Specifies the output format of the messages printed to stdout.\n"
-    "VERBOSE: Displays messages in a human-readable text format.\n"
-    "JSON: Displays messages in JSON line format, so that the info can be easily "
-    "parsed/consumed by custom scripts.",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @click.option(
     "--known-asset-path",
@@ -476,7 +490,7 @@ def bundle_gui_submit(
                     "Specify a job bundle directory or run the bundle command with the --browse flag"
                 )
             )
-        output = output.lower()
+        output = _resolve_output_format(output)
 
         submitter = show_job_bundle_submitter(
             input_job_bundle_dir=job_bundle_dir,

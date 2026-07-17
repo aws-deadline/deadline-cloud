@@ -9,8 +9,10 @@ from configparser import ConfigParser
 from typing import Iterator, List, Optional, Tuple
 
 from ._session import (
+    AwsCredentialsSource,
     get_boto3_client,
     get_boto3_session,
+    get_credentials_source,
     get_user_and_identity_store_id,
 )
 from .. import api
@@ -73,6 +75,18 @@ def _has_explicit_region_list(config: Optional[ConfigParser] = None) -> bool:
         return True
     config_value = config_file.get_setting("settings.deadline_regions", config=config)
     return bool(config_value and config_value.strip())
+
+
+def _is_farm_visible_across_regions(farm: dict, monitor_region: Optional[str]) -> bool:
+    """
+    Whether a farm should be shown by the all-farms fan-out.
+
+    Farms with a customer-managed KMS key (``kmsKeyArn``) aren't yet supported across
+    regions, so a CMK farm is hidden when it lives outside the monitor's own region. A
+    farm in the monitor's region is always kept -- CMK farms are only ever hidden
+    cross-region.
+    """
+    return farm.get("region") == monitor_region or not farm.get("kmsKeyArn")
 
 
 def _list_farms_with_client(
@@ -185,6 +199,20 @@ def _iter_farms_by_region(
         region: get_boto3_client("deadline", config=config, region=region) for region in regions
     }
 
+    # The CMK filter applies only to Deadline Cloud Monitor credentials; BYO credentials
+    # are single-region, so there's nothing cross-region to hide. Resolved up front here
+    # (the calling thread), not in the workers.
+    monitor_region = (
+        get_boto3_session(config=config).region_name
+        if get_credentials_source(config=config)
+        == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
+        else None
+    )
+    # Fail open: only filter when we know BOTH that these are monitor credentials AND the
+    # monitor's own region. Without a resolved region we can't tell which farms are
+    # cross-region, so we hide nothing rather than risk hiding home-region CMK farms.
+    filter_cmk_farms = monitor_region is not None
+
     max_workers = min(len(regions), _MAX_FANOUT_WORKERS)
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_region = {
@@ -204,6 +232,9 @@ def _iter_farms_by_region(
                 # operation can be interrupted rather than silently swallowed.
                 yield (region, None, exc)
             else:
+                # Filter at this shared chokepoint so the CLI and GUI paths stay in sync.
+                if filter_cmk_farms:
+                    farms = [f for f in farms if _is_farm_visible_across_regions(f, monitor_region)]
                 yield (region, farms, None)
 
 

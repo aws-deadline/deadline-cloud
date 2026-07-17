@@ -1,3 +1,28 @@
+## 0.60.1 (2026-07-10)
+
+### Features
+* Farm, queue, and storage profile can now be selected directly in the job submission dialog's "Shared job settings" tab, eliminating the need to open the Settings dialog before submitting a job. (#1199)
+* Added `settings.https_proxy` and `settings.ca_bundle` config settings, allowing you to configure HTTPS proxy and CA certificate bundle for Deadline Cloud API calls via `deadline config set` instead of process-wide environment variables. (#1217)
+* Added a Qt-free `run_pre_gui_hooks` API in `deadline.client.ui.pre_gui_hooks`, enabling DCC submitters (e.g. Maya, Nuke) to run pre-GUI submission hooks without requiring Qt bindings. (#1255)
+
+### Bug Fixes
+* Fixed an issue where switching farms in the job submitter caused the queue and storage profile combo boxes to display stale raw IDs instead of clearing properly. (#1263)
+* Fixed submission hooks so that both environment (DEADLINE_HOOKS_DIR) and bundle pre/post-submission hooks now run together correctly. Previously, only one set of hooks would execute when both were present. (#1261)
+* Submission hooks now stream stderr output to the user in real time while running, instead of buffering all output until the hook finishes (which made slow hooks appear to hang). (#1254)
+* Fixed an `UnboundLocalError` crash in `sync-output` when using `--ignore-storage-profiles` with unmapped paths by properly handling missing storage profile information. (#1260)
+## 0.60.0 (2026-07-06)
+
+### Features
+* The `--output` format for CLI commands now auto-detects based on whether stdout is a TTY. Interactive terminals default to `verbose` (human-readable) output, while pipes, redirection, and CI environments default to `json`. An explicit `--output` flag always takes precedence. This removes the need to pass `--output json` in scripts and automation. (#1237)
+## 0.59.2 (2026-07-03)
+
+### Features
+* Farms encrypted with a customer-managed KMS key (CMK) that reside in a different region than the monitor are now filtered out of the all-farms list, preventing interactions that would fail due to cross-region CMK limitations. (#1244)
+
+### Bug Fixes
+* Pre-submission hooks can now modify job parameters. Previously, parameters were frozen before hooks ran, so changes made by hooks (e.g., rewriting parameter_values.yaml or emitting a "parameters" payload on stdout) were silently ignored. Parameters are now re-resolved after hooks run. (#1242)
+* Pre-GUI environment hooks are now properly loaded during submission. (#1242)
+* Fixed cross-region API calls failing with SigV4 credential-scope mismatches when a non-standard endpoint override was configured in the AWS profile. The endpoint URL is now correctly regionalized for the target region. (#1233)
 ## 0.59.1 (2026-06-24)
 
 ### DEPRECATIONS

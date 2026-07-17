@@ -29,6 +29,11 @@ CONFIG_SETTING_ROUND_TRIP = [
     ("settings.locale", "", "ja_JP"),
     ("settings.force_s3_check", "false", "true"),
     ("settings.deadline_regions", "", "us-east-1,eu-west-1"),
+    ("settings.https_proxy", "", "http://proxy.example.com:8080"),
+    # ca_bundle is an is_path setting: the stored value is normalized to the
+    # native path form on read. Build the alternate value with the native
+    # separator so it round-trips to itself on POSIX and Windows alike.
+    ("settings.ca_bundle", "", os.path.join(os.sep, "etc", "ssl", "certs", "ca-bundle.pem")),
 ]
 
 

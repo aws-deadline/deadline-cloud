@@ -54,6 +54,14 @@ class _DeadlineResourceListComboBoxController(QWidget):
     # Emitted when the background refresh catches an exception
     background_exception = Signal(str, BaseException)
 
+    # Emitted with the resource id when the selection changes due to user intent:
+    # the user picking an item (Qt's ``activated``) or the lone-resource auto-select.
+    # NOT emitted by ``refresh_selected_id``, which only syncs the combo to display
+    # the already-persisted value. This split is what lets the host wire selection
+    # persistence to genuine selections without programmatic display updates
+    # spuriously re-triggering (and clobbering) it.
+    user_selected = Signal(str)
+
     # When True, if nothing is configured yet and the list resolves to exactly one
     # resource, that resource is selected automatically. Subclasses opt in. This lives
     # here - the single point every list refresh funnels through - so auto-select works
@@ -66,6 +74,12 @@ class _DeadlineResourceListComboBoxController(QWidget):
 
         self.resource_name = resource_name
         self.config: Optional[ConfigParser] = None
+        # True only while ``self.config`` is the live module-level config object
+        # (i.e. ``set_config`` was handed ``config_file.read_config()``). When a
+        # caller injects a *different* parser - e.g. the config dialog's deep copy
+        # with unsaved edits layered on - this stays False so ``_sync_config`` won't
+        # clobber those pending edits by re-reading from disk. See ``_sync_config``.
+        self._config_tracks_global: bool = False
         self._controller = DeadlineUIController.getInstance()
         # Maps resource_id -> region for resources that carry a region (farms).
         self._region_by_id: dict = {}
@@ -75,6 +89,10 @@ class _DeadlineResourceListComboBoxController(QWidget):
     def _build_ui(self) -> None:
         """Build the widget UI."""
         self.box = QComboBox(parent=self)
+        # ``activated`` fires only on user interaction, never on programmatic
+        # setCurrentIndex (unlike ``currentIndexChanged``), so display-sync via
+        # refresh_selected_id can't masquerade as a user selection.
+        self.box.activated.connect(self._on_user_activated)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.box, stretch=1)
@@ -120,18 +138,31 @@ class _DeadlineResourceListComboBoxController(QWidget):
 
     def _handle_list_update(self, items_list: List) -> None:
         """Handle a wholesale list (re)set from the controller."""
+        self._sync_config()
         with block_signals(self.box):
             self.box.clear()
             self._region_by_id = {}
             self._add_items(items_list)
             self.refresh_selected_id()
 
-        # If nothing is configured and exactly one resource is available, select it.
-        # Done outside block_signals so currentIndexChanged fires and any connected
-        # dialog logic (e.g. cascading to the next resource) reacts as if the user
-        # had picked it.
+        # Unified selection rule, applied on every list update regardless of what
+        # triggered it (dialog open, profile switch, sign-in, manual refresh):
+        #   1. refresh_selected_id (above) selects the stored default if it's in the
+        #      list, otherwise falls back to "<none selected>".
+        #   2. if nothing is stored and exactly one resource is available, select it.
+        # _maybe_auto_select_single self-guards on a configured id, so it never
+        # overrides a stored default.
         if self._auto_select_when_single:
             self._maybe_auto_select_single()
+
+    def _on_user_activated(self, index: int) -> None:
+        """Emit ``user_selected`` for a genuine user pick from the dropdown."""
+        if index < 0:
+            return
+        resource_id = self.box.itemData(index)
+        if resource_id is None:
+            return
+        self.user_selected.emit(resource_id)
 
     def _maybe_auto_select_single(self) -> None:
         """Select the sole available resource if none is configured yet.
@@ -147,17 +178,14 @@ class _DeadlineResourceListComboBoxController(QWidget):
         if len(real_ids) != 1:
             return
         index = self.box.findData(real_ids[0])
-        if index < 0:
-            return
-        # Not under block_signals: emitting currentIndexChanged is intentional so connected
-        # dialog logic (e.g. cascading to the next resource) reacts as if the user picked it.
-        if self.box.currentIndex() != index:
-            self.box.setCurrentIndex(index)
-        else:
-            # The lone item is already current — e.g. Qt auto-selected it at index 0 when it
-            # streamed in under block_signals (the incremental append path), so no
-            # currentIndexChanged fired. Emit it now so the cascade still runs.
-            self.box.currentIndexChanged.emit(index)
+        if index >= 0:
+            # Update the display under block_signals, then emit user_selected
+            # explicitly: auto-selecting the lone resource is treated as user intent
+            # (it persists + cascades) but ``activated`` does not fire for a
+            # programmatic setCurrentIndex, so we signal it ourselves.
+            with block_signals(self.box):
+                self.box.setCurrentIndex(index)
+            self.user_selected.emit(real_ids[0])
 
     def _add_items(self, items_list: List) -> None:
         """
@@ -255,18 +283,25 @@ class _DeadlineResourceListComboBoxController(QWidget):
 
     def _handle_loading_state(self, is_loading: bool) -> None:
         """Handle loading state changes."""
+        self._sync_config()
         if is_loading:
             # Show refreshing indicator
             selected_id = config_file.get_setting(self._get_setting_name(), config=self.config)
             with block_signals(self.box):
                 self.box.clear()
                 self.box.addItem("<refreshing>", userData=selected_id)
-        elif self._auto_select_when_single:
+        else:
             # Loading finished. For incrementally-populated lists (e.g. farms streaming in
-            # per region via _handle_list_append), this is the point at which the full set
-            # is known, so auto-select a lone resource here. Done outside block_signals so
-            # currentIndexChanged fires and the dialog's cascade reacts naturally.
-            self._maybe_auto_select_single()
+            # per region via _handle_list_append) this is the point at which the full set
+            # is known. Re-sync the display to the stored selection first: an append can
+            # leave Qt defaulting to row 0 with no "<none selected>" row when nothing is
+            # configured, which would *show* a farm that was never persisted. refresh_selected_id
+            # restores the configured id, or re-asserts "<none selected>" when there is none.
+            self.refresh_selected_id()
+            if self._auto_select_when_single:
+                # Then auto-select a lone resource. Done outside block_signals so
+                # currentIndexChanged fires and the dialog's cascade reacts naturally.
+                self._maybe_auto_select_single()
 
         self.refresh_button.setEnabled(not is_loading)
 
@@ -289,9 +324,50 @@ class _DeadlineResourceListComboBoxController(QWidget):
         return self.box.count()
 
     def set_config(self, config: ConfigParser) -> None:
-        """Updates the AWS Deadline Cloud config object the control uses."""
+        """Updates the AWS Deadline Cloud config object the control uses.
+
+        ``self.config`` is the object ``_maybe_auto_select_single`` and
+        ``refresh_selected_id`` read the configured id from. Two kinds of caller hand
+        it in:
+
+        - The submit dialog passes the live ``config_file.read_config()`` object and
+          persists selections through the module-level ``set_setting``. ``set_setting``
+          writes to disk, and the next ``read_config`` detects the mtime change and
+          swaps in a *fresh* ``ConfigParser`` — so the object handed in here can go
+          stale after a cascade (e.g. ``select_farm`` zeroing ``queue_id``).
+          ``_sync_config`` re-points ``self.config`` at the live config before each
+          display sync so those reads never observe the pre-cascade values.
+
+        - The config dialog builds a *copy* of the config and layers the user's
+          unsaved ``changes`` on top before handing it in. That copy intentionally
+          differs from disk, so ``_sync_config`` must NOT re-read over it or the
+          pending edits would vanish from the display. We detect this by identity: the
+          re-sync only happens when the config we were given *is* the live global.
+        """
         self.config = config
+        self._config_tracks_global = config is config_file.read_config()
         self._controller.set_config(config)
+
+    def _sync_config(self) -> None:
+        """Re-point ``self.config`` at the live global config before a display sync.
+
+        ``set_setting`` (used by the controller's ``select_*`` cascade) writes to
+        disk, which makes the next ``read_config()`` detect the mtime change and
+        build a *new* ``ConfigParser``, replacing the cached ``__config``. A combo
+        that keeps its original reference in ``self.config`` would then read stale
+        values - e.g. after selecting a farm the user has used before, the old
+        queue/storage-profile ids stored under that farm's section would still be
+        visible, so the combo shows a raw id instead of "<none selected>".
+
+        Only re-read when ``self.config`` is tracking the live global object (see
+        ``set_config``). If a caller injected its own parser - e.g. the config
+        dialog's copy carrying unsaved edits - re-reading would silently discard
+        those edits, so we leave ``self.config`` untouched. When nothing was
+        configured yet, ``self.config`` stays ``None`` and reads fall through to the
+        global config as before.
+        """
+        if self.config is not None and self._config_tracks_global:
+            self.config = config_file.read_config()
 
     def clear_list(self) -> None:
         """

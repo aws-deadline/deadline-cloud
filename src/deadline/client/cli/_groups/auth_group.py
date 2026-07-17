@@ -15,7 +15,12 @@ from ... import api
 from .._main import deadline as main
 from ...api._session import _modified_logging_level, AwsCredentialsSource
 from ...config import config_file, get_setting
-from .._common import _apply_cli_options_to_config, _handle_error
+from .._common import (
+    _OUTPUT_FORMAT_HELP,
+    _apply_cli_options_to_config,
+    _handle_error,
+    _resolve_output_format,
+)
 
 JSON_FIELD_PROFILE_NAME = "profile_name"
 JSON_FIELD_AUTH_STATUS = "status"
@@ -81,17 +86,15 @@ def auth_logout():
         ["verbose", "json"],
         case_sensitive=False,
     ),
-    default="verbose",
-    help="Specifies the output format of the messages printed to stdout.\n"
-    "VERBOSE: Displays messages in a human-readable text format.\n"
-    "JSON: Displays messages in JSON line format, so that the info can be easily "
-    "parsed/consumed by custom scripts.",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @_handle_error
 def auth_status(output, **args):
     """Gets the status of the selected AWS profile, including its name, whether it was created by
     Deadline Cloud monitor, and whether Deadline Cloud APIs are accessible.
     """
+    output = _resolve_output_format(output)
     # Get a temporary config object with the standard options handled
     config = _apply_cli_options_to_config(**args)
     profile_name = get_setting("defaults.aws_profile_name", config=config)

@@ -128,9 +128,9 @@ class TestGetJob:
             mock_get_client.return_value = deadline_mock
 
             result = get_job(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
             )
 
             assert result["jobId"] == MOCK_JOB_ID
@@ -156,10 +156,10 @@ class TestGetSession:
             mock_get_client.return_value = deadline_mock
 
             result = get_session(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
-                session_id=MOCK_SESSION_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
+                sessionId=MOCK_SESSION_ID,
             )
 
             assert result["sessionId"] == MOCK_SESSION_ID
@@ -185,9 +185,9 @@ class TestListSessions:
             mock_get_client.return_value = deadline_mock
 
             result = list_sessions(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
             )
 
             assert len(result["sessions"]) == 2
@@ -216,9 +216,9 @@ class TestListSessions:
             mock_get_client.return_value = deadline_mock
 
             result = list_sessions(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
             )
 
             assert len(result["sessions"]) == 2
@@ -238,10 +238,10 @@ class TestListSessions:
             mock_get_client.return_value = deadline_mock
 
             result = list_sessions(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
-                max_results=2,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
+                maxResults=2,
             )
 
             assert len(result["sessions"]) == 2
@@ -261,9 +261,9 @@ class TestListSteps:
             mock_get_client.return_value = deadline_mock
 
             result = list_steps(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
             )
 
             assert len(result["steps"]) == 2
@@ -288,10 +288,10 @@ class TestListTasks:
             mock_get_client.return_value = deadline_mock
 
             result = list_tasks(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
-                step_id=MOCK_STEP_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
+                stepId=MOCK_STEP_ID,
             )
 
             assert len(result["tasks"]) == 2
@@ -317,8 +317,8 @@ class TestSearchJobs:
             mock_get_client.return_value = deadline_mock
 
             result = search_jobs(
-                farm_id=MOCK_FARM_ID,
-                queue_ids=[MOCK_QUEUE_ID],
+                farmId=MOCK_FARM_ID,
+                queueIds=[MOCK_QUEUE_ID],
             )
 
             assert len(result["jobs"]) == 2
@@ -339,9 +339,9 @@ class TestSearchJobs:
             mock_get_client.return_value = deadline_mock
 
             result = search_jobs(
-                farm_id=MOCK_FARM_ID,
-                queue_ids=[MOCK_QUEUE_ID],
-                task_run_status="FAILED",
+                farmId=MOCK_FARM_ID,
+                queueIds=[MOCK_QUEUE_ID],
+                taskRunStatus="FAILED",
             )
 
             assert len(result["jobs"]) == 2
@@ -362,9 +362,9 @@ class TestSearchJobs:
             mock_get_client.return_value = deadline_mock
 
             result = search_jobs(
-                farm_id=MOCK_FARM_ID,
-                queue_ids=[MOCK_QUEUE_ID],
-                name_contains="Render",
+                farmId=MOCK_FARM_ID,
+                queueIds=[MOCK_QUEUE_ID],
+                nameContains="Render",
             )
 
             assert len(result["jobs"]) == 2
@@ -384,10 +384,10 @@ class TestSearchJobs:
             mock_get_client.return_value = deadline_mock
 
             result = search_jobs(
-                farm_id=MOCK_FARM_ID,
-                queue_ids=[MOCK_QUEUE_ID],
-                task_run_status="FAILED",
-                name_contains="Render",
+                farmId=MOCK_FARM_ID,
+                queueIds=[MOCK_QUEUE_ID],
+                taskRunStatus="FAILED",
+                nameContains="Render",
             )
 
             assert len(result["jobs"]) == 2
@@ -407,10 +407,10 @@ class TestSearchJobs:
             mock_get_client.return_value = deadline_mock
 
             search_jobs(
-                farm_id=MOCK_FARM_ID,
-                queue_ids=[MOCK_QUEUE_ID],
-                page_size=50,
-                item_offset=100,
+                farmId=MOCK_FARM_ID,
+                queueIds=[MOCK_QUEUE_ID],
+                pageSize=50,
+                itemOffset=100,
             )
 
             call_args = deadline_mock.search_jobs.call_args
@@ -424,21 +424,21 @@ class TestSearchJobs:
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock
 
-            # Test page_size > 100 gets clamped
+            # Test pageSize > 100 gets clamped
             search_jobs(
-                farm_id=MOCK_FARM_ID,
-                queue_ids=[MOCK_QUEUE_ID],
-                page_size=200,
+                farmId=MOCK_FARM_ID,
+                queueIds=[MOCK_QUEUE_ID],
+                pageSize=200,
             )
 
             call_args = deadline_mock.search_jobs.call_args
             assert call_args.kwargs["pageSize"] == 100
 
-            # Test page_size < 1 gets clamped
+            # Test pageSize < 1 gets clamped
             search_jobs(
-                farm_id=MOCK_FARM_ID,
-                queue_ids=[MOCK_QUEUE_ID],
-                page_size=0,
+                farmId=MOCK_FARM_ID,
+                queueIds=[MOCK_QUEUE_ID],
+                pageSize=0,
             )
 
             call_args = deadline_mock.search_jobs.call_args
@@ -468,17 +468,17 @@ class TestSearchJobs:
             )
 
     def test_search_jobs_missing_farm_id_raises(self, fresh_deadline_config):
-        """Test search_jobs raises error when farm_id is missing."""
-        with pytest.raises(ValueError, match="farm_id is required"):
+        """Test search_jobs raises error when farmId is missing."""
+        with pytest.raises(ValueError, match="farmId is required"):
             search_jobs()
 
     def test_search_jobs_missing_queue_ids_raises(self, fresh_deadline_config):
-        """Test search_jobs raises error when queue_ids is missing."""
+        """Test search_jobs raises error when queueIds is missing."""
         from deadline.client.config import config_file
 
         config_file.set_setting("defaults.farm_id", MOCK_FARM_ID)
 
-        with pytest.raises(ValueError, match="queue_ids is required"):
+        with pytest.raises(ValueError, match="queueIds is required"):
             search_jobs()
 
 
@@ -498,7 +498,7 @@ class TestMcpRegionScoping:
             mock_resolve.return_value = "eu-west-1"
             mock_get_client.return_value = MagicMock()
 
-            get_job(farm_id=MOCK_FARM_ID, queue_id=MOCK_QUEUE_ID, job_id=MOCK_JOB_ID)
+            get_job(farmId=MOCK_FARM_ID, queueId=MOCK_QUEUE_ID, jobId=MOCK_JOB_ID)
 
             mock_resolve.assert_called_once_with(config=None, region=None, farm_id=MOCK_FARM_ID)
             assert mock_get_client.call_args.kwargs.get("region") == "eu-west-1"
@@ -512,10 +512,10 @@ class TestMcpRegionScoping:
             mock_get_client.return_value = MagicMock()
 
             get_session(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
-                session_id=MOCK_SESSION_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
+                sessionId=MOCK_SESSION_ID,
             )
 
             mock_resolve.assert_called_once_with(config=None, region=None, farm_id=MOCK_FARM_ID)
@@ -531,7 +531,7 @@ class TestMcpRegionScoping:
             deadline_mock.list_sessions.return_value = {"sessions": []}
             mock_get_client.return_value = deadline_mock
 
-            list_sessions(farm_id=MOCK_FARM_ID, queue_id=MOCK_QUEUE_ID, job_id=MOCK_JOB_ID)
+            list_sessions(farmId=MOCK_FARM_ID, queueId=MOCK_QUEUE_ID, jobId=MOCK_JOB_ID)
 
             mock_resolve.assert_called_once_with(config=None, region=None, farm_id=MOCK_FARM_ID)
             assert mock_get_client.call_args.kwargs.get("region") == "eu-west-1"
@@ -546,7 +546,7 @@ class TestMcpRegionScoping:
             deadline_mock.list_steps.return_value = {"steps": []}
             mock_get_client.return_value = deadline_mock
 
-            list_steps(farm_id=MOCK_FARM_ID, queue_id=MOCK_QUEUE_ID, job_id=MOCK_JOB_ID)
+            list_steps(farmId=MOCK_FARM_ID, queueId=MOCK_QUEUE_ID, jobId=MOCK_JOB_ID)
 
             mock_resolve.assert_called_once_with(config=None, region=None, farm_id=MOCK_FARM_ID)
             assert mock_get_client.call_args.kwargs.get("region") == "eu-west-1"
@@ -562,10 +562,10 @@ class TestMcpRegionScoping:
             mock_get_client.return_value = deadline_mock
 
             list_tasks(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
-                step_id=MOCK_STEP_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
+                stepId=MOCK_STEP_ID,
             )
 
             mock_resolve.assert_called_once_with(config=None, region=None, farm_id=MOCK_FARM_ID)
@@ -581,7 +581,7 @@ class TestMcpRegionScoping:
             deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
             mock_get_client.return_value = deadline_mock
 
-            search_jobs(farm_id=MOCK_FARM_ID, queue_ids=[MOCK_QUEUE_ID])
+            search_jobs(farmId=MOCK_FARM_ID, queueIds=[MOCK_QUEUE_ID])
 
             mock_resolve.assert_called_once_with(config=None, region=None, farm_id=MOCK_FARM_ID)
             assert mock_get_client.call_args.kwargs.get("region") == "eu-west-1"
@@ -596,9 +596,9 @@ class TestMcpRegionScoping:
             mock_get_client.return_value = MagicMock()
 
             get_job(
-                farm_id=MOCK_FARM_ID,
-                queue_id=MOCK_QUEUE_ID,
-                job_id=MOCK_JOB_ID,
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
                 region="ap-south-1",
             )
 
@@ -606,3 +606,143 @@ class TestMcpRegionScoping:
                 config=None, region="ap-south-1", farm_id=MOCK_FARM_ID
             )
             assert mock_get_client.call_args.kwargs.get("region") == "ap-south-1"
+
+
+class TestDeprecatedSnakeCaseAliases:
+    """
+    The functions in this module standardized on camelCase (boto3-style) parameters. The
+    former snake_case keyword arguments remain accepted for one release, forwarding to their
+    camelCase equivalents while emitting a DeprecationWarning. These tests pin that behavior
+    so the aliases keep working until they are removed in the next breaking release.
+    """
+
+    def test_get_job_snake_case_still_works_and_warns(self):
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
+            deadline_mock = MagicMock()
+            deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
+            mock_get_client.return_value = deadline_mock
+
+            with pytest.warns(DeprecationWarning, match="farm_id"):
+                result = get_job(
+                    farm_id=MOCK_FARM_ID,
+                    queue_id=MOCK_QUEUE_ID,
+                    job_id=MOCK_JOB_ID,
+                )
+
+            assert result["jobId"] == MOCK_JOB_ID
+            # The deprecated names are translated to camelCase before hitting boto3.
+            deadline_mock.get_job.assert_called_once_with(
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
+            )
+
+    def test_get_session_snake_case_still_works(self):
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
+            deadline_mock = MagicMock()
+            deadline_mock.get_session.return_value = MOCK_GET_SESSION_RESPONSE
+            mock_get_client.return_value = deadline_mock
+
+            with pytest.warns(DeprecationWarning):
+                result = get_session(
+                    farm_id=MOCK_FARM_ID,
+                    queue_id=MOCK_QUEUE_ID,
+                    job_id=MOCK_JOB_ID,
+                    session_id=MOCK_SESSION_ID,
+                )
+
+            assert result["sessionId"] == MOCK_SESSION_ID
+            deadline_mock.get_session.assert_called_once_with(
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
+                sessionId=MOCK_SESSION_ID,
+            )
+
+    def test_list_sessions_snake_case_max_results(self):
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
+            deadline_mock = MagicMock()
+            deadline_mock.list_sessions.return_value = MOCK_LIST_SESSIONS_RESPONSE
+            mock_get_client.return_value = deadline_mock
+
+            with pytest.warns(DeprecationWarning, match="max_results"):
+                list_sessions(
+                    farm_id=MOCK_FARM_ID,
+                    queue_id=MOCK_QUEUE_ID,
+                    job_id=MOCK_JOB_ID,
+                    max_results=5,
+                )
+
+            call_args = deadline_mock.list_sessions.call_args
+            assert call_args.kwargs["farmId"] == MOCK_FARM_ID
+            assert call_args.kwargs["maxResults"] == 5
+
+    def test_list_tasks_snake_case_still_works(self):
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
+            deadline_mock = MagicMock()
+            deadline_mock.list_tasks.return_value = MOCK_LIST_TASKS_RESPONSE
+            mock_get_client.return_value = deadline_mock
+
+            with pytest.warns(DeprecationWarning, match="step_id"):
+                list_tasks(
+                    farm_id=MOCK_FARM_ID,
+                    queue_id=MOCK_QUEUE_ID,
+                    job_id=MOCK_JOB_ID,
+                    step_id=MOCK_STEP_ID,
+                )
+
+            deadline_mock.list_tasks.assert_called_once_with(
+                farmId=MOCK_FARM_ID,
+                queueId=MOCK_QUEUE_ID,
+                jobId=MOCK_JOB_ID,
+                stepId=MOCK_STEP_ID,
+            )
+
+    def test_search_jobs_snake_case_filters(self, fresh_deadline_config):
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
+            deadline_mock = MagicMock()
+            deadline_mock.search_jobs.return_value = MOCK_SEARCH_JOBS_RESPONSE
+            mock_get_client.return_value = deadline_mock
+
+            with pytest.warns(DeprecationWarning):
+                result = search_jobs(
+                    farm_id=MOCK_FARM_ID,
+                    queue_ids=[MOCK_QUEUE_ID],
+                    task_run_status="FAILED",
+                    name_contains="Render",
+                    page_size=50,
+                    item_offset=10,
+                )
+
+            assert len(result["jobs"]) == 2
+            call_args = deadline_mock.search_jobs.call_args
+            assert call_args.kwargs["farmId"] == MOCK_FARM_ID
+            assert call_args.kwargs["queueIds"] == [MOCK_QUEUE_ID]
+            assert call_args.kwargs["pageSize"] == 50
+            assert call_args.kwargs["itemOffset"] == 10
+            filters = call_args.kwargs["filterExpressions"]["filters"]
+            assert len(filters) == 2
+
+    def test_camel_case_does_not_warn(self, recwarn):
+        """Passing the canonical camelCase names must not emit a DeprecationWarning."""
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
+            deadline_mock = MagicMock()
+            deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
+            mock_get_client.return_value = deadline_mock
+
+            get_job(farmId=MOCK_FARM_ID, queueId=MOCK_QUEUE_ID, jobId=MOCK_JOB_ID)
+
+        assert not [w for w in recwarn.list if issubclass(w.category, DeprecationWarning)]
+
+    def test_mixing_snake_and_camel_for_same_param_raises(self):
+        """Passing both a camelCase param and its deprecated snake_case alias is an error."""
+        with patch("deadline.client.api._mcp.get_boto3_client") as mock_get_client:
+            mock_get_client.return_value = MagicMock()
+
+            with pytest.raises(TypeError, match="both 'farmId' and its deprecated alias"):
+                get_job(
+                    farmId=MOCK_FARM_ID,
+                    farm_id=MOCK_FARM_ID,
+                    queueId=MOCK_QUEUE_ID,
+                    jobId=MOCK_JOB_ID,
+                )

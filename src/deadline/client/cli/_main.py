@@ -121,7 +121,7 @@ def deadline(
 
     \b
       Submit a job:       deadline bundle submit <path>
-      Monitor a job:      deadline job get [search] | deadline job logs
+      Monitor a job:      deadline job get --job-id <job-id>
       Wait for a job:     deadline job wait
       Download output:    deadline job download-output
       Sync all output:    deadline queue sync-output

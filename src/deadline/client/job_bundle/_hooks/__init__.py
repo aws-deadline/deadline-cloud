@@ -2,7 +2,12 @@
 
 """Submission hooks for job bundles."""
 
-from ._manager import HookManager, _generate_hooks_confirmation_message
+from ._manager import (
+    HookManager,
+    _generate_hooks_confirmation_message,
+    collect_pre_gui_hook_sources,
+    collect_submission_hook_sources,
+)
 from ._models import HookConfiguration, HookDefinition, HookMetadata, HookResult
 from ._validator import validate_pre_gui_output
 
@@ -13,5 +18,7 @@ __all__ = [
     "HookMetadata",
     "HookResult",
     "_generate_hooks_confirmation_message",
+    "collect_pre_gui_hook_sources",
+    "collect_submission_hook_sources",
     "validate_pre_gui_output",
 ]

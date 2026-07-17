@@ -37,6 +37,12 @@ def merge_payload(original: _Dict[str, _Any], modified: _Dict[str, _Any]) -> _Di
             for k, v in value.items():
                 if k != "assetReferences":
                     result["attachments"][k] = v
+        elif key == "parameters" and isinstance(value, dict):
+            # Merge parameter maps per-key so later hooks override earlier ones without
+            # discarding parameters set by a previous hook.
+            merged_params = dict(result.get("parameters", {}))
+            merged_params.update(value)
+            result["parameters"] = merged_params
         else:
             result[key] = value
 
