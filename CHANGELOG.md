@@ -1,7 +1,7 @@
 ## 0.60.2 (2026-07-17)
 
 ### BREAKING CHANGES
-* The public API functions in `deadline.client.api` (`get_job`, `get_session`, `list_sessions`, `list_steps`, `list_tasks`, `search_jobs`) now use camelCase parameter names (matching boto3 / Deadline Cloud API style) instead of snake_case. Update any calls to these functions to use camelCase parameter names. (#1271)
+* The public API functions in `deadline.client.api` (`get_job`, `get_session`, `list_sessions`, `list_steps`, `list_tasks`, `search_jobs`) now use camelCase parameter names (matching boto3 / Deadline Cloud API style) instead of snake_case. Update any calls to these functions to use camelCase parameter names. Old snake_case names still work but emit a DeprecationWarning; they will be removed in the next breaking release. Passing both forms of a parameter raises TypeError. (#1271)
 
 ### Features
 * Added a unified `BaseSubmitter` abstract base class, along with `BaseSubmitterSettings`, `SubmissionContext`, and `get_queue_parameters()`. Pipeline integrators can now call a uniform set of methods on any DCC submitter without importing DCC-specific modules. (#1245)
