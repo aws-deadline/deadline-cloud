@@ -20,6 +20,7 @@ import click
 from botocore.exceptions import ClientError
 
 from ... import api
+from ...api._monitor_urls import _get_job_monitor_url
 from ...config import config_file
 from ...dataclasses import SubmitterInfo
 from ....job_attachments.exceptions import (
@@ -508,11 +509,22 @@ def bundle_gui_submit(
 
         app.exec()
 
+        job_url = None
+        if submitter.job_id:
+            # Best-effort monitor URL (only when using Deadline Cloud monitor
+            # credentials). The GUI submitter uses the default config.
+            job_url = _get_job_monitor_url(
+                farm_id=config_file.get_setting("defaults.farm_id"),
+                queue_id=config_file.get_setting("defaults.queue_id"),
+                job_id=submitter.job_id,
+            )
+
         _print_response(
             output=output,
             job_bundle_dir=job_bundle_dir,
             job_history_bundle_dir=submitter.job_history_bundle_dir,
             job_id=submitter.job_id,
+            job_url=job_url,
         )
 
 
@@ -521,6 +533,7 @@ def _print_response(
     job_bundle_dir: str,
     job_history_bundle_dir: Optional[str],
     job_id: Optional[str],
+    job_url: Optional[str] = None,
 ):
     if output == "json":
         if job_id:
@@ -529,6 +542,8 @@ def _print_response(
                 "jobId": job_id,
                 "jobHistoryBundleDirectory": job_history_bundle_dir,
             }
+            if job_url:
+                response["jobUrl"] = job_url
             click.echo(json.dumps(response))
         else:
             click.echo(json.dumps({"status": "CANCELED"}))
@@ -537,5 +552,7 @@ def _print_response(
             click.echo("Submitted job bundle:")
             click.echo(f"   {job_bundle_dir}")
             click.echo(f"Job ID: {job_id}")
+            if job_url:
+                click.echo(f"Job URL: {job_url}")
         else:
             click.echo("Job submission canceled.")
