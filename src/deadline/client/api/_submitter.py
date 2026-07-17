@@ -30,25 +30,41 @@ class BaseSubmitterSettings:
     """
 
     job_name: str = ""
+    """Name shown for the job in Deadline Cloud. Submitters typically default it
+    to the scene/file name."""
     description: str = ""
-    # OpenJD frame-list string (e.g. "1-10", "1-100:2"). Optional: empty means
-    # "use the scene's frame range"; leave unset for non-frame-based workloads.
+    """Optional free-form description of the job."""
     frame_list: str = ""
-    # Root working/project directory of the scene (an INPUT path — e.g. the
-    # Maya workspace / project root), used to anchor relative asset paths and as
-    # an input directory. Not the render output location (see output_path).
+    """OpenJD frame-list string (e.g. "1-10", "1-100:2"). Optional: empty means
+    "use the scene's frame range"; leave unset for non-frame-based workloads
+    (e.g. Nuke does not populate it)."""
     project_path: str = ""
-    # Directory the DCC writes rendered frames to (an OUTPUT path).
+    """Root working/project directory of the scene (an INPUT path — e.g. the Maya
+    workspace / project root), used to anchor relative asset paths and as an
+    input directory. Not the render output location (see ``output_path``)."""
     output_path: str = ""
+    """Directory the DCC writes rendered frames to (an OUTPUT path)."""
     priority: int = 50
+    """Job priority (higher runs first); Deadline Cloud range is 0-100."""
     initial_status: str = "READY"
+    """Lifecycle status the job starts in — ``"READY"`` to run immediately or
+    ``"SUSPENDED"`` to create it paused."""
     max_failed_tasks_count: int = 20
+    """Fail the whole job once this many tasks have failed."""
     max_retries_per_task: int = 5
+    """How many times a single failed task is retried before it is marked failed."""
     max_worker_count: int = -1
+    """Upper bound on workers assigned to this job; ``-1`` means unlimited (let
+    the queue decide)."""
     override_frame_range: bool = False
+    """When True, submit ``frame_list`` instead of the scene's own frame range."""
     input_filenames: list[str] = field(default_factory=list)
+    """Explicit input files to attach (merged with scene-detected inputs in
+    ``get_asset_references``)."""
     input_directories: list[str] = field(default_factory=list)
+    """Explicit input directories whose contents are attached as job inputs."""
     output_directories: list[str] = field(default_factory=list)
+    """Directories whose contents are treated as job outputs."""
 
 
 @dataclass(frozen=True)
@@ -56,9 +72,13 @@ class SubmissionContext:
     """Read-only snapshot of collected submission data."""
 
     settings: BaseSubmitterSettings
+    """The resolved submission settings used to build this context."""
     job_template: dict[str, Any]
+    """The OpenJD job template dict for the submission."""
     parameter_values: list[dict[str, Any]]
+    """Resolved queue/job parameter values as ``{"name": ..., "value": ...}`` dicts."""
     asset_references: AssetReferences
+    """Collected input/output asset references (call ``.to_dict()`` to serialize)."""
 
 
 class BaseSubmitter(ABC):
