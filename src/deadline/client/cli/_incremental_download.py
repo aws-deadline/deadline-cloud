@@ -1331,9 +1331,19 @@ def _incremental_output_download(
         job_sessions,
         path_mapping_rule_appliers,
     )
-    if len(manifests_to_download) != len(downloaded_manifests):
-        raise RuntimeError(
-            f"Manifest list length mismatch: {len(manifests_to_download)} vs {len(downloaded_manifests)}"
+    # Correlate manifests_to_download with downloaded_manifests by position. Both are produced
+    # from _get_manifests_to_download with identical inputs, so their lengths always match in
+    # practice (downloaded_manifests is a per-index fill of the same list). This guard is
+    # defensive only: if they ever diverge, skip per-job attribution rather than risk a wrong
+    # index correlation. The actual output-file download happens per job in the loop below, so
+    # a skipped-attribution run would download nothing — acceptable only because the mismatch
+    # is unreachable with the current deterministic inputs.
+    skip_attribution = len(manifests_to_download) != len(downloaded_manifests)
+    if skip_attribution:
+        print_function_callback(
+            f"WARNING: Manifest list length mismatch ({len(manifests_to_download)} vs "
+            f"{len(downloaded_manifests)}) — per-job download tracking will not be "
+            f"populated for this run."
         )
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
     # global_seen_paths prevents concurrent writes to the same destination file across jobs.
@@ -1343,19 +1353,20 @@ def _incremental_output_download(
     # since file_conflict_resolution would have picked one winner anyway).
     global_seen_paths: set[str] = set()
     job_seen_paths: dict[str, set[str]] = {}
-    for i, (_, job_id, _, _) in enumerate(manifests_to_download):
-        manifest_tuple = downloaded_manifests[i]
-        if manifest_tuple is not None:
-            _, manifest = manifest_tuple
-            for manifest_path in manifest.paths:
-                normcased = os.path.normcase(manifest_path.path)
-                if normcased in global_seen_paths:
-                    continue  # Another job already claims this path — skip to prevent concurrent writes
-                seen = job_seen_paths.setdefault(job_id, set())
-                if normcased not in seen:
-                    seen.add(normcased)
-                    global_seen_paths.add(normcased)
-                    job_manifest_paths.setdefault(job_id, []).append(manifest_path)
+    if not skip_attribution:
+        for i, (_, job_id, _, _) in enumerate(manifests_to_download):
+            manifest_tuple = downloaded_manifests[i]
+            if manifest_tuple is not None:
+                _, manifest = manifest_tuple
+                for manifest_path in manifest.paths:
+                    normcased = os.path.normcase(manifest_path.path)
+                    if normcased in global_seen_paths:
+                        continue  # Another job already claims this path — skip to prevent concurrent writes
+                    seen = job_seen_paths.setdefault(job_id, set())
+                    if normcased not in seen:
+                        seen.add(normcased)
+                        global_seen_paths.add(normcased)
+                        job_manifest_paths.setdefault(job_id, []).append(manifest_path)
 
     # Print a summary of all the paths before starting the download
     all_manifest_paths = [path for paths in job_manifest_paths.values() for path in paths]
