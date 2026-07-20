@@ -1,3 +1,15 @@
+## 0.60.2 (2026-07-20)
+
+### BREAKING CHANGES
+* The public list/get/search functions in `deadline.client.api` (`get_job`, `get_session`, `list_sessions`, `list_steps`, `list_tasks`, `search_jobs`) now use camelCase parameter names (matching boto3 / Deadline Cloud API style) instead of snake_case. Update your call sites to use the new parameter names. (#1271)
+
+### Features
+* Added a public `get_monitor_url()` helper to `deadline.client.api` that formats an AWS Deadline Cloud monitor (web console) URL from a region and optional farm/queue/job/step/task IDs. After job submission, the job URL is now surfaced to the user. (#1272)
+* The `sync-output` command now writes a download status JSON file, allowing external tools to track download progress. (#1220)
+* Added a unified `BaseSubmitter` abstract base class, `BaseSubmitterSettings`, `SubmissionContext`, and `get_queue_parameters()` to `deadline.client.api`. Pipeline integrators can now call a uniform set of methods on any DCC submitter without importing DCC-specific modules. (#1245)
+
+### Bug Fixes
+* Fixed the submitter status bar showing overly long text ("{profile} - You are logged out.") in the profile button when logged out, which caused clipping at default scaling or narrow window widths. The profile button now shows only the profile name. (#1270)
 ## 0.60.2 (2026-07-17)
 
 ### BREAKING CHANGES
