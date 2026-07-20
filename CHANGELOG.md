@@ -1,7 +1,7 @@
 ## 0.60.2 (2026-07-20)
 
 ### BREAKING CHANGES
-* The public list/get/search functions in `deadline.client.api` (`get_job`, `get_session`, `list_sessions`, `list_steps`, `list_tasks`, `search_jobs`) now use camelCase parameter names (matching boto3 / Deadline Cloud API style) instead of snake_case. Update your call sites to use the new parameter names. (#1271)
+* The public API functions in `deadline.client.api` (`get_job`, `get_session`, `list_sessions`, `list_steps`, `list_tasks`, `search_jobs`) now use camelCase parameter names (matching boto3 / Deadline Cloud API style) instead of snake_case. Update any calls to these functions to use camelCase parameter names. Old snake_case names still work but emit a DeprecationWarning; they will be removed in the next breaking release. Passing both forms of a parameter raises TypeError. (#1271)
 
 ### Features
 * Added a public `get_monitor_url()` helper to `deadline.client.api` that formats an AWS Deadline Cloud monitor (web console) URL from a region and optional farm/queue/job/step/task IDs. After job submission, the job URL is now surfaced to the user. (#1272)
