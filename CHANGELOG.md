@@ -10,16 +10,6 @@
 
 ### Bug Fixes
 * Fixed the submitter status bar showing overly long text ("{profile} - You are logged out.") in the profile button when logged out, which caused clipping at default scaling or narrow window widths. The profile button now shows only the profile name. (#1270)
-## 0.60.2 (2026-07-17)
-
-### BREAKING CHANGES
-* The public API functions in `deadline.client.api` (`get_job`, `get_session`, `list_sessions`, `list_steps`, `list_tasks`, `search_jobs`) now use camelCase parameter names (matching boto3 / Deadline Cloud API style) instead of snake_case. Update any calls to these functions to use camelCase parameter names. Old snake_case names still work but emit a DeprecationWarning; they will be removed in the next breaking release. Passing both forms of a parameter raises TypeError. (#1271)
-
-### Features
-* Added a unified `BaseSubmitter` abstract base class, along with `BaseSubmitterSettings`, `SubmissionContext`, and `get_queue_parameters()`. Pipeline integrators can now call a uniform set of methods on any DCC submitter without importing DCC-specific modules. (#1245)
-
-### Bug Fixes
-* Fixed the submitter authentication status bar to show only the profile name when logged out, preventing text from being clipped behind buttons at narrow window widths. (#1270)
 ## 0.60.1 (2026-07-10)
 
 ### Features
