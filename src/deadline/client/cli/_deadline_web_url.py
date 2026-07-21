@@ -1,5 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+import configparser
 import os
 import re
 import sys
@@ -215,13 +216,31 @@ Terminal=true
 MimeType=x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}
 """
 
-        mimeapps_file_content = f"""[Default Applications]
-x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}={DEADLINE_URL_SCHEME_NAME}.desktop;
-"""
         with open(desktop_file_path, "w") as desktop_file:
             desktop_file.write(desktop_file_content)
+
+        # Read/parse any existing mimeapps.list and add/update ONLY the deadline
+        # handler entry, preserving all other default-application associations.
+        # Opening in "w" mode would truncate the file and destroy unrelated
+        # associations (browser, PDF, mailto, etc.), causing permanent data loss.
+        # interpolation=None avoids treating "%" in values specially, and
+        # optionxform=str preserves the case of mime-type/scheme keys.
+        mimeapps = configparser.ConfigParser(interpolation=None)
+        mimeapps.optionxform = str  # type: ignore[assignment,method-assign]
+
+        if os.path.isfile(mimeapps_list_file_path):
+            mimeapps.read(mimeapps_list_file_path)
+
+        if not mimeapps.has_section("Default Applications"):
+            mimeapps.add_section("Default Applications")
+        mimeapps.set(
+            "Default Applications",
+            f"x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}",
+            f"{DEADLINE_URL_SCHEME_NAME}.desktop;",
+        )
+
         with open(mimeapps_list_file_path, "w") as mimeapps_list_file:
-            mimeapps_list_file.write(mimeapps_file_content)
+            mimeapps.write(mimeapps_list_file, space_around_delimiters=False)
 
         try:
             subprocess.run(["update-desktop-database", entry_dir], check=True)

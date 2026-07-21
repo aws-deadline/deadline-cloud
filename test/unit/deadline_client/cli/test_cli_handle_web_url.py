@@ -1006,6 +1006,95 @@ def test_linux_install_generates_valid_desktop_file(fresh_deadline_config, tmp_p
     )
 
 
+def test_linux_install_preserves_existing_mimeapps_entries(fresh_deadline_config, tmp_path):
+    """
+    Regression test: installing the web URL handler on Linux must NOT wipe out
+    unrelated default-application associations already present in mimeapps.list.
+
+    Previously the install opened mimeapps.list in "w" mode, truncating the whole
+    file and destroying every other association (browser, PDF, mailto, etc.).
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    # Pre-populate with unrelated default-application associations.
+    mimeapps_path.write_text(
+        "[Default Applications]\n"
+        "text/html=firefox.desktop\n"
+        "x-scheme-handler/http=firefox.desktop\n"
+        "x-scheme-handler/mailto=thunderbird.desktop\n"
+        "application/pdf=okular.desktop\n"
+    )
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    contents = mimeapps_path.read_text()
+
+    # The pre-existing associations must survive.
+    assert "text/html=firefox.desktop" in contents
+    assert "x-scheme-handler/http=firefox.desktop" in contents
+    assert "x-scheme-handler/mailto=thunderbird.desktop" in contents
+    assert "application/pdf=okular.desktop" in contents
+
+    # And the deadline handler must be added.
+    assert "x-scheme-handler/deadline=deadline.desktop" in contents
+
+
+def test_linux_install_creates_mimeapps_when_missing(fresh_deadline_config, tmp_path):
+    """
+    Tests that when mimeapps.list does not exist yet, installing creates it
+    with the deadline handler entry.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    assert not mimeapps_path.exists()
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    contents = mimeapps_path.read_text()
+    assert "[Default Applications]" in contents
+    assert "x-scheme-handler/deadline=deadline.desktop" in contents
+
+
 def test_linux_install_resolves_bare_command_via_shutil_which(fresh_deadline_config, tmp_path):
     """
     Tests that on Linux, when sys.argv[0] is a bare command name (e.g. 'deadline'),
