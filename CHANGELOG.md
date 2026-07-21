@@ -1,3 +1,7 @@
+## 0.60.3 (2026-07-21)
+
+### Bug Fixes
+* Bumped the minimum `click` dependency to >= 8.3.3 on Python 3.10+ to address CVE-2026-7246 (command-injection vulnerability in `click.edit()`). Note: deadline-cloud was not directly affected, but this resolves security scanner flags. (#1283)
 ## 0.60.2 (2026-07-20)
 
 ### BREAKING CHANGES
