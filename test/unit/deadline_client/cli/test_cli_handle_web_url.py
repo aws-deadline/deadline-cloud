@@ -1095,6 +1095,42 @@ def test_linux_install_creates_mimeapps_when_missing(fresh_deadline_config, tmp_
     assert "x-scheme-handler/deadline=deadline.desktop" in contents
 
 
+def test_linux_install_raises_on_malformed_mimeapps(fresh_deadline_config, tmp_path):
+    """
+    A pre-existing mimeapps.list that is not valid INI (here, a stray key before
+    any section header) must surface as a DeadlineOperationError rather than
+    crashing the CLI with a raw configparser traceback.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    # Not valid INI: a key/value pair before any [section] header.
+    mimeapps_path.write_text("this-is=not-valid-ini\n")
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+        from deadline.client.exceptions import DeadlineOperationError
+
+        with pytest.raises(DeadlineOperationError, match="could not parse existing"):
+            install_deadline_web_url_handler(all_users=False)
+
+
 def test_linux_install_resolves_bare_command_via_shutil_which(fresh_deadline_config, tmp_path):
     """
     Tests that on Linux, when sys.argv[0] is a bare command name (e.g. 'deadline'),

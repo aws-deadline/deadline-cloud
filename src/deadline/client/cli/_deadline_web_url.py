@@ -229,7 +229,18 @@ MimeType=x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}
         mimeapps.optionxform = str  # type: ignore[assignment,method-assign]
 
         if os.path.isfile(mimeapps_list_file_path):
-            mimeapps.read(mimeapps_list_file_path)
+            # A pre-existing mimeapps.list that is not strictly valid INI can make
+            # configparser raise (MissingSectionHeaderError, DuplicateOptionError,
+            # DuplicateSectionError, UnicodeDecodeError, ...). Surface these as a
+            # DeadlineOperationError for consistency with the rest of this function
+            # rather than crashing the CLI with a raw traceback.
+            try:
+                mimeapps.read(mimeapps_list_file_path)
+            except (configparser.Error, UnicodeDecodeError) as e:
+                raise DeadlineOperationError(
+                    f"Failed to install the handler for {DEADLINE_URL_SCHEME_NAME} URLs: "
+                    f"could not parse existing {mimeapps_list_file_path}:\n{e}"
+                ) from e
 
         if not mimeapps.has_section("Default Applications"):
             mimeapps.add_section("Default Applications")
