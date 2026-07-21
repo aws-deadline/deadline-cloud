@@ -131,7 +131,10 @@ def attachment_download(
         if not s3_settings:
             raise MissingJobAttachmentSettingsError(f"Queue {queue_id} has no attachment settings")
 
-        s3_root_uri = s3_settings.to_s3_root_uri()
+        # Only fall back to the queue's S3 settings when the caller did not provide an
+        # explicit --s3-root-uri. An explicitly-supplied value must always be honored.
+        if not s3_root_uri:
+            s3_root_uri = s3_settings.to_s3_root_uri()
 
         deadline_client = get_session_client(boto3_session, "deadline", region=region)
         boto3_session = api.get_queue_user_boto3_session(deadline=deadline_client, config=config)
@@ -243,7 +246,10 @@ def attachment_upload(
         if not s3_settings:
             raise MissingJobAttachmentSettingsError(f"Queue {queue_id} has no attachment settings")
 
-        s3_root_uri = s3_settings.to_s3_root_uri()
+        # Only fall back to the queue's S3 settings when the caller did not provide an
+        # explicit --s3-root-uri. An explicitly-supplied value must always be honored.
+        if not s3_root_uri:
+            s3_root_uri = s3_settings.to_s3_root_uri()
 
         deadline_client = get_session_client(boto3_session, "deadline", region=region)
         boto3_session = api.get_queue_user_boto3_session(deadline=deadline_client, config=config)
