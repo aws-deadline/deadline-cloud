@@ -218,7 +218,15 @@ def _apply_cli_options_to_config(
             )
     else:
         # Remove the standard option names from the args list
-        for name in ["profile", "farm_id", "region", "queue_id", "job_id", "storage_profile_id"]:
+        for name in [
+            "profile",
+            "farm_id",
+            "region",
+            "queue_id",
+            "job_id",
+            "storage_profile_id",
+            "conflict_resolution",
+        ]:
             args.pop(name, None)
 
     # Check that the required options have values, auto-selecting if only one exists
