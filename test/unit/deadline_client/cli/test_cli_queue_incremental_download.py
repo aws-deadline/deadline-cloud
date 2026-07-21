@@ -8,8 +8,8 @@ import json
 import os
 import sys
 import pytest
-from unittest.mock import patch
-from datetime import datetime, timedelta
+from unittest.mock import patch, MagicMock
+from datetime import datetime, timedelta, timezone
 from typing import Callable, NamedTuple
 
 from freezegun import freeze_time
@@ -4450,3 +4450,181 @@ def test_incremental_output_download_mixed_output_and_no_output_steps(
     assert set(entry["tasks"]) == {producing_task}, entry["tasks"]
     assert entry["tasks"][producing_task]["downloaded_files"] == 1, entry["tasks"]
     assert entry["tasks"][producing_task]["error_code"] is None, entry["tasks"]
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _update_checkpoint_jobs_list (checkpoint session-ended timestamps)
+# ---------------------------------------------------------------------------
+
+
+def _make_categorized_job_ids(**kwargs):
+    """Build a CategorizedJobIds with all categories reset to fresh empty sets.
+
+    CategorizedJobIds defines its sets as class attributes, so instances share
+    them unless reassigned. Reset every category to avoid cross-test contamination.
+    """
+    from deadline.client.cli._incremental_download import CategorizedJobIds
+
+    cats = CategorizedJobIds()
+    for name in (
+        "added",
+        "updated",
+        "unchanged",
+        "completed",
+        "inactive",
+        "missing_storage_profile",
+        "attachments_free",
+    ):
+        setattr(cats, name, set(kwargs.get(name, set())))
+    return cats
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_update_checkpoint_jobs_list_does_not_corrupt_session_ended_timestamp():
+    """Each job's session_ended_timestamp must reflect its own sessions.
+
+    Regression for the stale-variable bug: a leftover max_session_ended_timestamp
+    from the last job of the first loop was written to every job in a second loop,
+    corrupting the checkpoint timestamps.
+    """
+    from deadline.client.cli._incremental_download import _update_checkpoint_jobs_list
+    from deadline.job_attachments._incremental_downloads.incremental_download_state import (
+        IncrementalDownloadState,
+    )
+
+    t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    t_a = datetime(2025, 1, 2, tzinfo=timezone.utc)
+    t_b = datetime(2025, 1, 3, tzinfo=timezone.utc)
+
+    checkpoint = IncrementalDownloadState(
+        local_storage_profile_id=None, downloads_started_timestamp=t0
+    )
+    download_candidate_jobs = {
+        "job-a": {"jobId": "job-a", "name": "A"},
+        "job-b": {"jobId": "job-b", "name": "B"},
+    }
+    job_sessions = {
+        "job-a": [
+            {"sessionId": "s-a", "endedAt": t_a, "sessionActions": [{"sessionActionIndex": 1}]}
+        ],
+        "job-b": [
+            {"sessionId": "s-b", "endedAt": t_b, "sessionActions": [{"sessionActionIndex": 1}]}
+        ],
+    }
+    cats = _make_categorized_job_ids(added={"job-a", "job-b"})
+
+    _update_checkpoint_jobs_list(checkpoint, download_candidate_jobs, cats, job_sessions)
+
+    result = {job.job_id: job.session_ended_timestamp for job in checkpoint.jobs}
+    assert result["job-a"] == t_a, result
+    assert result["job-b"] == t_b, result
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_update_checkpoint_running_only_job_keeps_saved_timestamp():
+    """A job whose current sessions are all still running (no endedAt) must keep
+    the session_ended_timestamp saved in the previous checkpoint rather than have
+    it overwritten with None."""
+    from deadline.client.cli._incremental_download import _update_checkpoint_jobs_list
+    from deadline.job_attachments._incremental_downloads.incremental_download_state import (
+        IncrementalDownloadState,
+        IncrementalDownloadJob,
+    )
+
+    t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    t_saved = datetime(2025, 1, 2, tzinfo=timezone.utc)
+
+    prior_job = IncrementalDownloadJob({"jobId": "job-a", "name": "A"}, t_saved, {})
+    checkpoint = IncrementalDownloadState(
+        local_storage_profile_id=None, downloads_started_timestamp=t0, jobs=[prior_job]
+    )
+    download_candidate_jobs = {"job-a": {"jobId": "job-a", "name": "A"}}
+    # Session is still running: no "endedAt" field.
+    job_sessions = {"job-a": [{"sessionId": "s-a", "sessionActions": [{"sessionActionIndex": 1}]}]}
+    cats = _make_categorized_job_ids(updated={"job-a"})
+
+    _update_checkpoint_jobs_list(checkpoint, download_candidate_jobs, cats, job_sessions)
+
+    result = {job.job_id: job.session_ended_timestamp for job in checkpoint.jobs}
+    assert result["job-a"] == t_saved, result
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_filter_session_actions_tolerates_missing_manifests_key():
+    """A session action without a 'manifests' key must not raise KeyError."""
+    from deadline.client.cli._incremental_download import (
+        _filter_session_actions_without_manifests_from_job_sessions,
+    )
+
+    job_sessions = {
+        "job-a": [
+            {
+                "sessionId": "s-a",
+                "sessionActions": [{"sessionActionId": "sa-0"}],  # no "manifests" key
+            }
+        ]
+    }
+    download_candidate_jobs = {"job-a": {"jobId": "job-a", "name": "A"}}
+
+    # Must not raise (previously raised KeyError on session_action["manifests"]).
+    _filter_session_actions_without_manifests_from_job_sessions(
+        job_sessions, download_candidate_jobs
+    )
+    # The action lacked any output manifests, so it is filtered out.
+    assert job_sessions["job-a"][0].get("sessionActions", []) == []
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_get_job_sessions_requeued_job_uses_eventual_consistency_window():
+    """A requeued job reappears categorized as 'added' but carries a saved
+    session_ended_timestamp. It must get the eventual-consistency window applied,
+    like updated/completed jobs, so sessions near the requeue boundary aren't missed."""
+    import deadline.client.cli._incremental_download as mod
+    from deadline.client.cli._incremental_download import _get_job_sessions
+    from deadline.job_attachments._incremental_downloads.incremental_download_state import (
+        IncrementalDownloadState,
+        IncrementalDownloadJob,
+    )
+
+    t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    t_saved = datetime(2025, 1, 5, tzinfo=timezone.utc)
+
+    prior_job = IncrementalDownloadJob({"jobId": "job-a"}, t_saved, {})
+    checkpoint = IncrementalDownloadState(
+        local_storage_profile_id=None, downloads_started_timestamp=t0, jobs=[prior_job]
+    )
+    download_candidate_jobs = {"job-a": {"jobId": "job-a", "name": "A"}}
+    cats = _make_categorized_job_ids(added={"job-a"})
+
+    captured_thresholds = {}
+
+    def fake_retrieve_sessions_for_job(
+        deadline_client, farm_id, queue_id, job_id, session_ended_threshold, output_job_sessions
+    ):
+        captured_thresholds[job_id] = session_ended_threshold
+
+    with (
+        patch.object(mod, "get_session_client", return_value=MagicMock()),
+        patch.object(mod, "_retrieve_sessions_for_job", side_effect=fake_retrieve_sessions_for_job),
+    ):
+        _get_job_sessions(
+            MagicMock(),  # boto3_session
+            MagicMock(),  # boto3_session_for_s3
+            MOCK_FARM_ID,
+            {"queueId": MOCK_QUEUE_ID},
+            {},  # checkpoint_job_session_completed_indexes
+            cats,
+            checkpoint,
+            download_candidate_jobs,
+        )
+
+    expected = t_saved - timedelta(seconds=checkpoint.eventual_consistency_max_seconds)
+    assert captured_thresholds["job-a"] == expected, captured_thresholds
