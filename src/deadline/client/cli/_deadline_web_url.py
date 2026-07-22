@@ -225,15 +225,20 @@ MimeType=x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}
         # associations (browser, PDF, mailto, etc.), causing permanent data loss.
         # interpolation=None avoids treating "%" in values specially, and
         # optionxform=str preserves the case of mime-type/scheme keys.
-        mimeapps = configparser.ConfigParser(interpolation=None)
+        # strict=False tolerates duplicate keys/sections (last value wins),
+        # which real-world mimeapps.list files written by other desktop tools
+        # have historically contained; the default strict=True would turn an
+        # otherwise-usable file into a hard install failure.
+        mimeapps = configparser.ConfigParser(interpolation=None, strict=False)
         mimeapps.optionxform = str  # type: ignore[assignment,method-assign]
 
         if os.path.isfile(mimeapps_list_file_path):
-            # A pre-existing mimeapps.list that is not strictly valid INI can make
-            # configparser raise (MissingSectionHeaderError, DuplicateOptionError,
-            # DuplicateSectionError, UnicodeDecodeError, ...). Surface these as a
-            # DeadlineOperationError for consistency with the rest of this function
-            # rather than crashing the CLI with a raw traceback.
+            # A pre-existing mimeapps.list that is not valid INI can still make
+            # configparser raise even with strict=False (MissingSectionHeaderError
+            # for a key before any section header, UnicodeDecodeError for a
+            # non-text file, ...). Surface these as a DeadlineOperationError for
+            # consistency with the rest of this function rather than crashing the
+            # CLI with a raw traceback.
             try:
                 mimeapps.read(mimeapps_list_file_path)
             except (configparser.Error, UnicodeDecodeError) as e:

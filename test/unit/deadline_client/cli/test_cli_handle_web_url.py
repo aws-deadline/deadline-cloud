@@ -1131,6 +1131,64 @@ def test_linux_install_raises_on_malformed_mimeapps(fresh_deadline_config, tmp_p
             install_deadline_web_url_handler(all_users=False)
 
 
+def test_linux_install_tolerates_duplicate_mimeapps_entries(fresh_deadline_config, tmp_path):
+    """
+    Regression test: real-world mimeapps.list files written by other desktop
+    tools have historically contained duplicate keys/sections. The default
+    configparser strict=True would raise DuplicateOptionError/DuplicateSectionError
+    on these, turning a previously always-succeeding install into a hard failure.
+
+    With strict=False the install must succeed (last value wins) while still
+    preserving unrelated associations and adding the deadline handler.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    # Duplicate key (x-scheme-handler/http appears twice) AND a duplicate section
+    # ([Default Applications] appears twice) — both illegal under strict=True.
+    mimeapps_path.write_text(
+        "[Default Applications]\n"
+        "x-scheme-handler/http=firefox.desktop\n"
+        "x-scheme-handler/http=chrome.desktop\n"
+        "application/pdf=okular.desktop\n"
+        "[Default Applications]\n"
+        "x-scheme-handler/mailto=thunderbird.desktop\n"
+    )
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        # Must NOT raise despite the duplicate key/section.
+        install_deadline_web_url_handler(all_users=False)
+
+    contents = mimeapps_path.read_text()
+
+    # Unrelated associations survive; duplicate key resolves last-value-wins.
+    assert "x-scheme-handler/http=chrome.desktop" in contents
+    assert "x-scheme-handler/http=firefox.desktop" not in contents
+    assert "application/pdf=okular.desktop" in contents
+    assert "x-scheme-handler/mailto=thunderbird.desktop" in contents
+
+    # And the deadline handler is added.
+    assert "x-scheme-handler/deadline=deadline.desktop" in contents
+
+
 def test_linux_install_resolves_bare_command_via_shutil_which(fresh_deadline_config, tmp_path):
     """
     Tests that on Linux, when sys.argv[0] is a bare command name (e.g. 'deadline'),
