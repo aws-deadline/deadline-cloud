@@ -6,6 +6,7 @@ Tests for the CLI handle-web-url command.
 
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -1108,6 +1109,86 @@ def test_linux_install_preserves_mimeapps_when_write_fails(fresh_deadline_config
     assert mimeapps_path.read_text() == original
     leftover = [p.name for p in config_dir.iterdir() if p.name != "mimeapps.list"]
     assert leftover == [], f"temp files not cleaned up: {leftover}"
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes are not meaningful on Windows"
+)
+def test_linux_install_preserves_mimeapps_permissions(fresh_deadline_config, tmp_path):
+    """
+    Regression test: the atomic temp-file rewrite must not change the permissions
+    of an existing mimeapps.list. tempfile.mkstemp() creates the temp file with
+    mode 0600 and os.replace() would keep that mode -- e.g. turning a
+    world-readable system-wide /usr/share/applications/mimeapps.list into a
+    root-only file that other users' desktop environments cannot read.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    mimeapps_path.write_text("[Default Applications]\ntext/html=firefox.desktop\n")
+    mimeapps_path.chmod(0o644)
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    assert stat.S_IMODE(mimeapps_path.stat().st_mode) == 0o644
+    # Sanity check that the rewrite happened.
+    assert "x-scheme-handler/deadline=deadline.desktop" in mimeapps_path.read_text()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes are not meaningful on Windows"
+)
+def test_linux_install_creates_mimeapps_with_default_permissions(fresh_deadline_config, tmp_path):
+    """
+    When mimeapps.list does not exist yet, the new file must get a standard
+    world-readable config file mode (0644), not mkstemp's private 0600.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    assert not mimeapps_path.exists()
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    assert stat.S_IMODE(mimeapps_path.stat().st_mode) == 0o644
 
 
 def test_linux_install_creates_mimeapps_when_missing(fresh_deadline_config, tmp_path):

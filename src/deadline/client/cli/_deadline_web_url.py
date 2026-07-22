@@ -261,18 +261,34 @@ MimeType=x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}
         # the destination directly in "w" mode would truncate it before write()
         # runs, so a crash/kill/disk-full mid-write would leave it empty or partial
         # -- losing exactly the unrelated associations this change protects.
+        import stat
         import tempfile
+
+        # tempfile.mkstemp() creates the temp file with mode 0600, and os.replace()
+        # keeps that mode on the final file. That would silently drop the
+        # permissions of a pre-existing mimeapps.list, and for the all_users case
+        # (/usr/share/applications/mimeapps.list, written as root) would leave a
+        # system-wide file that other users' desktop environments cannot read.
+        # Preserve the existing file's mode, or default to 0644 for a new file.
+        if os.path.isfile(mimeapps_list_file_path):
+            mimeapps_list_file_mode = stat.S_IMODE(os.stat(mimeapps_list_file_path).st_mode)
+        else:
+            mimeapps_list_file_mode = 0o644
 
         dir_name = os.path.dirname(mimeapps_list_file_path)
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".mimeapps.list.", suffix=".tmp")
         try:
             with os.fdopen(fd, "w") as tmp_file:
                 mimeapps.write(tmp_file, space_around_delimiters=False)
+            os.chmod(tmp_path, mimeapps_list_file_mode)
             os.replace(tmp_path, mimeapps_list_file_path)
         except BaseException:
             try:
                 os.unlink(tmp_path)
             except OSError:
+                # Best-effort temp file cleanup; the original exception below is
+                # the actual failure to surface, and a leftover temp file is
+                # harmless compared to masking it.
                 pass
             raise
 
