@@ -109,6 +109,8 @@ def judge_answer(
         if isinstance(envelope, dict) and isinstance(envelope.get("result"), str):
             reply = envelope["result"]
     except json.JSONDecodeError:
+        # stdout wasn't the JSON envelope (e.g. plain-text or truncated output);
+        # fall through and try to grade the raw stdout instead.
         pass
 
     # Parse the verdict from stdout FIRST: the CLI sometimes exits non-zero after

@@ -29,6 +29,10 @@ BASE_REF = "eval-base"
 CORPUS_DOC = "source.md"
 
 
+class SubjectError(RuntimeError):
+    """Raised when a git operation on the subject fails or would lose work."""
+
+
 @dataclass
 class Subject:
     """A git checkout + the pathspec its evals own (scopes diffs and cleanup)."""
@@ -39,10 +43,38 @@ class Subject:
     def _git(self, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run(["git", "-C", str(self.root), *args], capture_output=True, text=True)
 
+    def _git_checked(self, *args: str) -> subprocess.CompletedProcess:
+        """Like _git, but raises on failure. Used where a silent git failure would
+        corrupt the experiment -- e.g. a checkout that never happened leaves the
+        'revised' variant running baseline source and reporting a bogus no-delta."""
+        proc = self._git(*args)
+        if proc.returncode != 0:
+            raise SubjectError(
+                f"git {' '.join(args)} failed in {self.root}: {proc.stderr.strip()[:300]}"
+            )
+        return proc
+
+    def assert_clean(self) -> None:
+        """Refuse to operate on a checkout with uncommitted work under the owned paths.
+
+        checkout()/reset_clean() discard working-tree changes under the pathspec by
+        design (one variant must not bleed into the next) -- but the operator's own
+        uncommitted work must never be what gets discarded. Callers invoke this once
+        before the first destructive operation; a dirty tree is the operator's to
+        stash or commit, not ours to delete.
+        """
+        status = self._git_checked("status", "--porcelain", "--", self.diff_pathspec).stdout.strip()
+        if status:
+            raise SubjectError(
+                f"the checkout at {self.root} has uncommitted changes under "
+                f"'{self.diff_pathspec}':\n{status[:500]}\n"
+                "Commit or stash them first -- running evals would discard them."
+            )
+
     def checkout(self, ref: str) -> None:
         """Put the checkout on `ref`, discarding working-tree edits first."""
         self.reset_clean()
-        self._git("checkout", "-q", ref)
+        self._git_checked("checkout", "-q", ref)
 
     def reset_clean(self) -> None:
         """Discard uncommitted edits so one variant never bleeds into the next."""
@@ -57,15 +89,15 @@ class Subject:
 
     def diff_refs(self, base: str, revised: str) -> str:
         """The committed change a candidate ref is testing, as a unified diff."""
-        return self._git("diff", f"{base}..{revised}", "--", self.diff_pathspec).stdout
+        return self._git_checked("diff", f"{base}..{revised}", "--", self.diff_pathspec).stdout
 
     def commit_scratch(self, ref: str, message: str) -> str:
         """Commit ONLY the owned paths to a fresh branch `ref` (recreated if it
         exists) and return the ref. Scoped so stray edits elsewhere never land in a
         proposal."""
-        self._git("checkout", "-B", ref)
-        self._git("add", self.diff_pathspec)
-        self._git("commit", "-m", message)
+        self._git_checked("checkout", "-B", ref)
+        self._git_checked("add", self.diff_pathspec)
+        self._git_checked("commit", "-m", message)
         return ref
 
 

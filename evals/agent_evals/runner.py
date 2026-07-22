@@ -119,6 +119,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
         subj = subject_mod.repo_subject(args.pathspec)
         base = subj._git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         base_ref = args.base_ref or base
+        # Fail fast, BEFORE any (costly) agent runs: both refs must resolve, and the
+        # operator's working tree must be clean -- checkout() discards changes under
+        # the pathspec, and that must never eat uncommitted work.
+        try:
+            subj.assert_clean()
+            for ref in (base_ref, args.revised_ref):
+                subj._git_checked("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+        except subject_mod.SubjectError as e:
+            print(f"ERROR: {e}")
+            return 2
         print(f"[subject] {subj.root} (pathspec={subj.diff_pathspec})")
         print(f"[variants] baseline={base_ref}  revised={args.revised_ref}")
 
