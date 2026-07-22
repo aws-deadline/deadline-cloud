@@ -41,7 +41,8 @@ pre-install-commands = [
   "pip install -r requirements-ui-testing.txt",
   "pip install \"moto[server,s3]>=5\" boto3",
   "pip install --no-deps deadline-cloud-for-blender",
-  "pip install deadline-job-attachments openjd-adaptor-runtime",
+  # openjd-adaptor-runtime pinned: 0.9.6 breaks the blender submitter dialog startup. Unpin once fixed upstream.
+  "pip install deadline-job-attachments openjd-adaptor-runtime==0.9.5",
 ]
 
 [envs.blender-ui.scripts]
