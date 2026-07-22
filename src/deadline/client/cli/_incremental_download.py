@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
 
-__all__ = ["_incremental_output_download"]
+__all__ = ["CategorizedJobIds", "_incremental_output_download"]
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
@@ -991,7 +991,7 @@ def _incremental_output_download(
     print_function_callback: Callable[[Any], None] = lambda msg: None,
     *,
     dry_run: bool = False,
-) -> IncrementalDownloadState:
+) -> tuple[IncrementalDownloadState, CategorizedJobIds, dict[str, dict[str, Any]]]:
     """
     This function downloads all the task run outputs from the specified queue, that have become
     available since the last time the function was called. The checkpoint object
@@ -1015,7 +1015,7 @@ def _incremental_output_download(
         dry_run: If True, the operation will print out information but not perform any data downloads.
 
     Returns:
-        An updated checkpoint object.
+        A tuple of (updated checkpoint, categorized job IDs, download candidate jobs dict).
     """
     durations = IncrementalOutputDownloadLatencies()
     # Operations here are within a single farm, so scope the deadline client to that
@@ -1294,4 +1294,4 @@ def _incremental_output_download(
     print_function_callback(f"    unchanged: {stats['jobs_without_downloads']['unchanged']}")
     print_function_callback(f"    inactive: {stats['jobs_without_downloads']['inactive']}")
 
-    return checkpoint
+    return checkpoint, categorized_job_ids, download_candidate_jobs

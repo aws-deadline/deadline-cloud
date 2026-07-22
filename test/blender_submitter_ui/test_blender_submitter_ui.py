@@ -184,6 +184,18 @@ def blender_env(tmp_path, mock_backend, moto_server, s3_client):
         "\n"
         "[profile-(default) settings]\n"
         f"job_history_dir = {tmp_path / 'job_history'}\n"
+        "\n"
+        # The submitter checks a remote manifest
+        # (downloads.deadlinecloud.amazonaws.com/submitters/manifest.json) at
+        # startup and, if it advertises a newer version than the installed one,
+        # pops a BLOCKING modal "update available" dialog. In headless CI nobody
+        # dismisses it, so the submitter dialog never appears and the test times
+        # out. The trigger is server-side (the manifest gaining a new version),
+        # which is why the same commit flips from pass to fail with no change to
+        # any installed package. Disable the notification so the test exercises
+        # the submitter, not the update prompt.
+        "[settings]\n"
+        "submitter_update_notification = false\n"
     )
 
     scene_dir = tmp_path / "scene"
@@ -354,13 +366,18 @@ class TestBlenderSubmitterUI:
             )
             assert len(backend.jobs) == 1, f"Expected 1 job, got {len(backend.jobs)}"
 
-        except Exception:
+        except BaseException:
+            # Catch BaseException, not Exception: the dialog-wait timeout raises
+            # pytest.Failed (a BaseException subclass), so a bare `except Exception`
+            # never fires and the failure diagnostics below are skipped.
             _screenshot("blender_submitter_failure")
             try:
-                apps = xa11y.App.list()
-                for a in apps:
-                    if a.name not in baseline_apps:
-                        _dump_tree(a)
+                # Dump every app tree, not just newly-appeared ones: when the dialog
+                # never opens the baseline set is all we have, and it's the evidence.
+                for a in xa11y.App.list():
+                    origin = "new" if a.name not in baseline_apps else "baseline"
+                    sys.stderr.write(f"--- app ({origin}): {a.name} ---\n")
+                    _dump_tree(a)
             except Exception:
                 pass
             raise
@@ -384,7 +401,7 @@ class TestBlenderSubmitterUI:
                 stderr = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
                 pytest.fail(
                     f"Blender exited early with code {proc.returncode}\n"
-                    f"stdout: {stdout[-2000:]}\nstderr: {stderr[-2000:]}"
+                    f"stdout: {stdout[-8000:]}\nstderr: {stderr[-8000:]}"
                 )
             # Check all apps for the submitter dialog
             for app in xa11y.App.list():
@@ -410,8 +427,8 @@ class TestBlenderSubmitterUI:
         pytest.fail(
             f"Submitter dialog not found within {timeout}s\n"
             f"Apps: {all_trees}\n"
-            f"Blender stdout: {stdout[-2000:]}\n"
-            f"Blender stderr: {stderr[-2000:]}"
+            f"Blender stdout: {stdout[-8000:]}\n"
+            f"Blender stderr: {stderr[-8000:]}"
         )
 
     def _wait_farm_resolved(self, app: xa11y.App, timeout: float = FARM_RESOLVE_TIMEOUT):

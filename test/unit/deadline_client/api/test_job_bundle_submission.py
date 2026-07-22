@@ -351,6 +351,69 @@ def test_create_job_from_job_bundle(
     )
 
 
+def test_create_job_from_job_bundle_prints_monitor_url(fresh_deadline_config, temp_job_bundle_dir):
+    """When a monitor URL is available, create_job_from_job_bundle prints it."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+    monitor_url = (
+        f"https://mymonitor.us-east-1.deadlinecloud.amazonaws.com/us-east-1/"
+        f"farms/{MOCK_FARM_ID}/queues/{MOCK_QUEUE_ID}?jobId={MOCK_JOB_ID}"
+    )
+    printed: list[str] = []
+
+    with (
+        patch_calls_for_create_job_from_job_bundle(),
+        patch.object(
+            api._submit_job_bundle, "_get_job_monitor_url", return_value=monitor_url
+        ) as mock_get_url,
+    ):
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as f:
+            f.write(job_template)
+
+        api.create_job_from_job_bundle(
+            job_bundle_dir=temp_job_bundle_dir,
+            queue_parameter_definitions=[],
+            print_function_callback=lambda msg: printed.append(msg),
+        )
+
+    mock_get_url.assert_called_once()
+    assert f"Job URL: {monitor_url}" in printed
+
+
+def test_create_job_from_job_bundle_no_monitor_url(fresh_deadline_config, temp_job_bundle_dir):
+    """With no monitor URL available, no 'Job URL:' line is printed."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+    printed: list[str] = []
+
+    with (
+        patch_calls_for_create_job_from_job_bundle(),
+        patch.object(api._submit_job_bundle, "_get_job_monitor_url", return_value=None),
+    ):
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as f:
+            f.write(job_template)
+
+        api.create_job_from_job_bundle(
+            job_bundle_dir=temp_job_bundle_dir,
+            queue_parameter_definitions=[],
+            print_function_callback=lambda msg: printed.append(msg),
+        )
+
+    assert not any(msg.startswith("Job URL:") for msg in printed)
+
+
 def test_create_job_from_job_bundle_error_missing_template(
     fresh_deadline_config, temp_job_bundle_dir
 ):

@@ -90,6 +90,12 @@ def aws_config(monkeypatch):
         monkeypatch.setenv("AWS_CONFIG_FILE", str(temp_file_path))
         monkeypatch.delenv("AWS_DEFAULT_PROFILE", raising=False)
         monkeypatch.delenv("AWS_PROFILE", raising=False)
+        # Also clear the region env vars. Otherwise a leaked AWS_DEFAULT_REGION/AWS_REGION
+        # (e.g. the "us-west-2" that the deadline_mock fixture writes directly to os.environ)
+        # takes precedence over the config-file region, so tests that write a [default] region
+        # to AWS_CONFIG_FILE become order-dependent and flaky.
+        monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+        monkeypatch.delenv("AWS_REGION", raising=False)
 
         yield temp_file_path
 

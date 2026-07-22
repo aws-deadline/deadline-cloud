@@ -463,6 +463,9 @@ def test_incremental_output_download_storage_profile_path_mapping(
             }
 
     deadline_mock.get_storage_profile_for_queue = mock_get_storage_profile_for_queue
+    # Create the local storage profile directories so pre-flight validation passes
+    (tmp_path / "Location1").mkdir(exist_ok=True)
+    (tmp_path / "Location2").mkdir(exist_ok=True)
     # Mock list_sessions to return one session
     deadline_mock.list_sessions.return_value = {
         "sessions": [

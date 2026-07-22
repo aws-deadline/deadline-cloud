@@ -85,6 +85,7 @@ class MockDeadlineBackend:
         self.sessions: dict[tuple, dict] = {}
         self.session_actions: dict[tuple, dict] = {}
         self.storage_profiles: dict[tuple, dict] = {}
+        self.monitors: dict[str, dict] = {}  # monitorId -> monitor
         self.call_counts: dict[str, int] = {}
         self.batch_call_sizes: dict[str, list[int]] = {}
         self._job_environments: dict[str, list[str]] = {}  # job_id -> [env_name, ...]
@@ -106,6 +107,7 @@ class MockDeadlineBackend:
         self.tasks.clear()
         self.sessions.clear()
         self.session_actions.clear()
+        self.monitors.clear()
         self.call_counts.clear()
         self.batch_call_sizes.clear()
         self._job_environments.clear()
@@ -283,6 +285,40 @@ class MockDeadlineBackend:
         params.update(kwargs)
         self._validate("ListFarms", params)
         return {"farms": list(self.farms.values())}
+
+    # ========== Monitor APIs ==========
+
+    def create_monitor(
+        self,
+        *,
+        subdomain: str,
+        region: str = "us-west-2",
+        displayName: str = "Test Monitor",
+        **kwargs,
+    ) -> dict:
+        """Seed a monitor. Not an HTTP route (no CreateMonitor call is made by the
+        client under test); tests use this to set up GetMonitor responses."""
+        monitor_id = self._gen_id("monitor")
+        self.monitors[monitor_id] = {
+            "monitorId": monitor_id,
+            "displayName": displayName,
+            "subdomain": subdomain,
+            "url": f"https://{subdomain}.{region}.deadlinecloud.amazonaws.com",
+            "roleArn": "arn:aws:iam::123456789012:role/MonitorRole",
+            "identityCenterInstanceArn": "arn:aws:sso:::instance/ssoins-mock",
+            "identityCenterApplicationArn": "arn:aws:sso::123456789012:application/ssoins-mock/apl-mock",
+            "createdAt": self._now(),
+            "createdBy": "mock-user",
+            **kwargs,
+        }
+        return self.monitors[monitor_id]
+
+    @route("GET", "/monitors/{monitorId}", "GetMonitor")
+    def get_monitor(self, *, monitorId: str) -> dict:
+        self._validate("GetMonitor", {"monitorId": monitorId})
+        if monitorId not in self.monitors:
+            raise _resource_not_found("monitor", monitorId, "GetMonitor")
+        return self.monitors[monitorId]
 
     # ========== Queue APIs ==========
 

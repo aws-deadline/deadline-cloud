@@ -87,6 +87,13 @@ option is omitted: `verbose` at an interactive terminal, `json` otherwise
 this with the shared `_resolve_output_format()` helper and the
 `_OUTPUT_FORMAT_HELP` text rather than hand-rolling the default per command.
 
+### Cross-region: two regions are in play
+
+The farm's region (`defaults.farm_region`, used by `get_boto3_client`) can differ
+from the profile/monitor's region. Farm-scoped APIs (CreateJob etc.) need the farm
+region; monitor-scoped APIs (GetMonitor) need the profile region — don't reuse a
+client across that boundary, and test region-sensitive code with the two set differently.
+
 ### CHANGELOG.md is auto-generated — do not edit it
 
 `CHANGELOG.md` is generated automatically from conventional commit messages

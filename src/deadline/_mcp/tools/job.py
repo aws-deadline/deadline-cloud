@@ -12,6 +12,7 @@ from contextlib import redirect_stdout
 from typing import Any, Dict, Optional
 
 from ...client.api import create_job_from_job_bundle
+from ...client.api._monitor_urls import _get_job_monitor_url
 from ...client.cli._groups.job_group import _download_job_output
 from ...client.config import config_file
 
@@ -117,9 +118,19 @@ def submit_job(
 
     total_time = time.time() - start_time
 
+    # Best-effort monitor URL for the job (only when using Deadline Cloud monitor
+    # credentials); None otherwise.
+    job_url = _get_job_monitor_url(
+        config=config,
+        farm_id=farm_id,
+        queue_id=queue_id,
+        job_id=job_id,
+    )
+
     return {
         "status": "success",
         "job_id": job_id,
+        "job_url": job_url,
         "message": f"Successfully submitted job bundle from {job_bundle_dir}",
         "total_time_seconds": round(total_time, 1),
     }
