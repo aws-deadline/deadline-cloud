@@ -11,6 +11,7 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta, timezone
 from typing import Callable, NamedTuple
 
+import boto3
 from freezegun import freeze_time
 import click
 from click.testing import CliRunner
@@ -25,6 +26,7 @@ from ..shared_constants import (
     MOCK_STORAGE_PROFILE_ID,
     MOCK_FLEET_ID,
     MOCK_WORKER_ID,
+    MOCK_BUCKET_NAME,
 )
 from ..mock_deadline_job_apis import (
     mock_search_jobs_for_set,
@@ -35,6 +37,11 @@ from deadline.job_attachments._incremental_downloads.incremental_download_state 
     EVENTUAL_CONSISTENCY_MAX_SECONDS,
     IncrementalDownloadState,
     IncrementalDownloadJob,
+)
+from deadline.job_attachments.asset_manifests.hash_algorithms import HashAlgorithm
+from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+    AssetManifest,
+    ManifestPath,
 )
 from deadline.job_attachments.models import StorageProfileOperatingSystemFamily
 import deadline.client.api
@@ -4515,3 +4522,175 @@ def test_incremental_output_download_json_mode_emits_no_debug_lines(
 
     assert result.exit_code == 0, result.output
     assert "DEBUG" not in result.output, result.output
+
+
+def _put_manifest_and_data_objects_in_s3(root_path: str) -> dict[str, bytes]:
+    """Upload asset manifests and CAS data objects to the moto S3 bucket so that
+    sync-output performs real S3 downloads. Returns {relative_path: content}.
+
+    The keys follow the job attachments layout under the queue's rootPrefix
+    ("MockRootPrefix" from the deadline_mock fixture's get_queue response):
+    manifests at MockRootPrefix/Manifests/<outputManifestPath> and CAS data at
+    MockRootPrefix/Data/<hash>.xxh128.
+    """
+    files = {
+        "output/file1.txt": b"content of file one",
+        "output/file2.txt": b"content of file two, a bit longer",
+        "output/deeper/file3.txt": b"third file content",
+    }
+    hashes = {path: f"fakehash{i}" for i, path in enumerate(files)}
+
+    def make_manifest(paths: list[str]) -> str:
+        return AssetManifest(
+            hash_alg=HashAlgorithm.XXH128,
+            paths=[
+                ManifestPath(path=path, hash=hashes[path], size=len(files[path]), mtime=1)
+                for path in paths
+            ],
+            total_size=sum(len(files[path]) for path in paths),
+        ).encode()
+
+    s3 = boto3.client("s3", region_name="us-west-2")
+    s3.put_object(
+        Bucket=MOCK_BUCKET_NAME,
+        Key="MockRootPrefix/Manifests/manifest_action_0_output.xxh128",
+        Body=make_manifest(["output/file1.txt", "output/file2.txt"]).encode("utf-8"),
+    )
+    s3.put_object(
+        Bucket=MOCK_BUCKET_NAME,
+        Key="MockRootPrefix/Manifests/manifest_action_1_output.xxh128",
+        Body=make_manifest(["output/deeper/file3.txt"]).encode("utf-8"),
+    )
+    for path, content in files.items():
+        s3.put_object(
+            Bucket=MOCK_BUCKET_NAME,
+            Key=f"MockRootPrefix/Data/{hashes[path]}.xxh128",
+            Body=content,
+        )
+    return files
+
+
+def test_incremental_output_download_json_mode_with_real_s3_download(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """In --json mode, stdout must stay byte-clean even while sync-output performs
+    real S3 file downloads (via moto) with the real ProgressTracker firing progress
+    callbacks. A contrast run without --json verifies that the same download emits
+    progress output, proving the callbacks fired and were suppressed rather than
+    the download being skipped."""
+    root_path = str(tmp_path / "job_root")
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "READY"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 2, "READY": 1}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {
+                "rootPath": root_path,
+                "rootPathFormat": "posix",
+                "outputRelativeDirectories": ["output"],
+            }
+        ],
+        "fileSystem": "VIRTUAL",
+    }
+    del mock_jobs[0]["endedAt"]
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    # One running session (no endedAt, so it passes the session threshold filter)
+    # with two SUCCEEDED task-run session actions carrying output manifests.
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": "2025-05-26T11:40:00+00:00",
+                "lifecycleStatus": "STARTED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_1,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-05-26T11:41:00+00:00",
+                "endedAt": "2025-05-26T11:42:00+00:00",
+                "definition": {"taskRun": {"taskId": "task-abc-0", "stepId": "step-abc"}},
+                "manifests": [{"outputManifestPath": "manifest_action_0_output.xxh128"}],
+            },
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_2,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-05-26T11:43:00+00:00",
+                "endedAt": "2025-05-26T11:44:00+00:00",
+                "definition": {"taskRun": {"taskId": "task-abc-1", "stepId": "step-abc"}},
+                "manifests": [{"outputManifestPath": "manifest_action_1_output.xxh128"}],
+            },
+        ]
+    }
+
+    files = _put_manifest_and_data_objects_in_s3(root_path)
+
+    # RUN 1: --json mode, real downloads through moto S3.
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--json",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+    assert result.exit_code == 0, result.output
+
+    # The files must have actually been downloaded from S3, byte-for-byte.
+    for rel_path, content in files.items():
+        local_file = os.path.join(root_path, *rel_path.split("/"))
+        assert os.path.isfile(local_file), f"missing downloaded file: {local_file}"
+        with open(local_file, "rb") as f:
+            assert f.read() == content, rel_path
+
+    # stdout must be byte-clean for scripting: the command currently emits no JSON
+    # payload of its own, so any output at all is leakage. If a legitimate JSON
+    # payload is added later, every line must still parse as JSON.
+    for line in result.output.splitlines():
+        if line.strip():
+            json.loads(line)
+    assert result.output == "", repr(result.output)
+
+    # RUN 2 (contrast): the same download without --json emits the progress report and
+    # the ProgressTracker's 100% progress message, proving the progress callbacks
+    # fired during RUN 1 and were suppressed rather than the download not happening.
+    contrast_checkpoint_dir = str(tmp_path / "contrast_checkpoint")
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                contrast_checkpoint_dir,
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    assert "Mock Job: downloading 3 files" in result.output, result.output
+    # The 100% progress callback message, e.g. "Downloaded 70 B / 70 B of 3 files (...)"
+    assert "Downloaded 70 B / 70 B of 3 files" in result.output, result.output
+    assert "downloaded 3 files" in result.output, result.output
