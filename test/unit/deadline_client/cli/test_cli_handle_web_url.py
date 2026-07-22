@@ -1059,6 +1059,57 @@ def test_linux_install_preserves_existing_mimeapps_entries(fresh_deadline_config
     assert "x-scheme-handler/deadline=deadline.desktop" in contents
 
 
+def test_linux_install_preserves_mimeapps_when_write_fails(fresh_deadline_config, tmp_path):
+    """
+    Regression test: the mimeapps.list rewrite must be atomic. If writing the new
+    content fails partway through (crash, disk-full, exception inside write()),
+    the original file must be left intact rather than truncated/emptied -- losing
+    the unrelated associations this change exists to protect.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    original = (
+        "[Default Applications]\n"
+        "text/html=firefox.desktop\n"
+        "x-scheme-handler/http=firefox.desktop\n"
+        "application/pdf=okular.desktop\n"
+    )
+    mimeapps_path.write_text(original)
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+        # Simulate a failure while rendering the new content to the temp file.
+        patch(
+            "configparser.ConfigParser.write",
+            side_effect=OSError("No space left on device"),
+        ),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        with pytest.raises(OSError, match="No space left on device"):
+            install_deadline_web_url_handler(all_users=False)
+
+    # The original file must be untouched, and no temp files left behind.
+    assert mimeapps_path.read_text() == original
+    leftover = [p.name for p in config_dir.iterdir() if p.name != "mimeapps.list"]
+    assert leftover == [], f"temp files not cleaned up: {leftover}"
+
+
 def test_linux_install_creates_mimeapps_when_missing(fresh_deadline_config, tmp_path):
     """
     Tests that when mimeapps.list does not exist yet, installing creates it

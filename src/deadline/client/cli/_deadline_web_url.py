@@ -255,8 +255,26 @@ MimeType=x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}
             f"{DEADLINE_URL_SCHEME_NAME}.desktop;",
         )
 
-        with open(mimeapps_list_file_path, "w") as mimeapps_list_file:
-            mimeapps.write(mimeapps_list_file, space_around_delimiters=False)
+        # Write atomically: rendering to a temp file in the same directory and
+        # os.replace()-ing it into place means the original mimeapps.list is only
+        # replaced once the new content is fully and successfully written. Opening
+        # the destination directly in "w" mode would truncate it before write()
+        # runs, so a crash/kill/disk-full mid-write would leave it empty or partial
+        # -- losing exactly the unrelated associations this change protects.
+        import tempfile
+
+        dir_name = os.path.dirname(mimeapps_list_file_path)
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".mimeapps.list.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as tmp_file:
+                mimeapps.write(tmp_file, space_around_delimiters=False)
+            os.replace(tmp_path, mimeapps_list_file_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
         try:
             subprocess.run(["update-desktop-database", entry_dir], check=True)
