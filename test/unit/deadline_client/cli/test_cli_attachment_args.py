@@ -4,7 +4,8 @@
 Tests for argument plumbing in the `deadline attachment` CLI group:
   * `--conflict-resolution` must not trip the `_apply_cli_options_to_config`
     "not standard CLI options" RuntimeError guard in the config-defaults workflow.
-  * `--s3-root-uri` must be honored independently of `--profile`.
+  * `--s3-root-uri` must be honored independently of `--profile`, including when the
+    queue has no jobAttachmentSettings of its own.
 """
 
 from __future__ import annotations
@@ -95,6 +96,52 @@ def test_attachment_download_honors_s3_root_uri_without_profile(configured_farm_
 
     mock_queue = MagicMock()
     mock_queue.jobAttachmentSettings = MOCK_S3_SETTINGS
+
+    with (
+        patch.object(attachment_group.api, "get_boto3_session", return_value=MagicMock()),
+        patch.object(attachment_group, "get_queue", return_value=mock_queue),
+        patch.object(attachment_group, "get_session_client", return_value=MagicMock()),
+        patch.object(
+            attachment_group.api, "get_queue_user_boto3_session", return_value=MagicMock()
+        ),
+        patch.object(
+            attachment_group,
+            "_attachment_download",
+            return_value=DownloadSummaryStatistics(),
+        ) as mock_download,
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                "download",
+                "--manifests",
+                manifest_path,
+                "--s3-root-uri",
+                explicit_uri,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_download.assert_called_once()
+    assert mock_download.call_args.kwargs["s3_root_uri"] == explicit_uri
+
+
+def test_attachment_download_honors_s3_root_uri_when_queue_lacks_settings(
+    configured_farm_region, tmp_path
+):
+    """
+    Bug: an explicit --s3-root-uri must be usable even when the queue has no
+    jobAttachmentSettings. The MissingJobAttachmentSettingsError guard only applies
+    when falling back to the queue's settings.
+    """
+    manifest_path = _write_manifest(tmp_path)
+
+    explicit_uri = "s3://my-explicit-bucket/my-explicit-prefix"
+
+    mock_queue = MagicMock()
+    mock_queue.jobAttachmentSettings = None
 
     with (
         patch.object(attachment_group.api, "get_boto3_session", return_value=MagicMock()),
