@@ -1,3 +1,8 @@
+## 0.60.3 (2026-07-24)
+
+### Bug Fixes
+* Fixed a privacy issue where the telemetry stack-trace sanitizer could inadvertently log customer directory paths that happened to share a name with framework packages (e.g. `~/deadline/...`). Such paths are now correctly identified as customer-specific and redacted. (#1295)
+* Bumped the minimum `click` dependency to >= 8.3.3 on Python 3.10+ to address CVE-2026-7246. While deadline-cloud was not directly exploitable, this resolves security scanner warnings. (#1283)
 ## 0.60.2 (2026-07-20)
 
 ### BREAKING CHANGES
