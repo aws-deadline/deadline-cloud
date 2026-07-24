@@ -10,12 +10,33 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
-    ignore:
-      - dependency-name: "pyside6-essentials"
-        versions: [ "6" ]
+    # requirements-installer.txt pins dependencies (e.g. pyinstaller,
+    # PySide6-Essentials) that we manage deliberately and are particular about,
+    # so exclude the whole file from automatic updates. Dependabot still
+    # maintains pyproject.toml and the other requirements files.
+    exclude-paths:
+      - "requirements-installer.txt"
     commit-message: 
       prefix: "chore(deps):"
+    # Combine all minor and patch bumps into a single PR. Major bumps do not
+    # match this group and so each get their own individual PR.
+    groups:
+      pip-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "github-actions"
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
+    # Combine all minor and patch bumps into a single PR. Major bumps do not
+    # match this group and so each get their own individual PR.
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
