@@ -1,3 +1,12 @@
+## 0.60.4 (2026-07-27)
+
+### Bug Fixes
+* `DeadlineLoginDialog.login()` now correctly returns `True` on successful login. Previously it always returned `False` due to an incorrect comparison, breaking the documented `if ...login():` usage pattern. (#1289)
+* Fixed a crash (`UnboundLocalError`) when saving a debug snapshot during job bundle submission for bundles that have no job attachments. (#1290)
+* Fixed data loss in the config dialog where editing a known-asset path to a duplicate value would silently drop the original row from the configuration. (#1291)
+* Fixed a boolean setting data loss issue in the config dialog. (#1291)
+* `job trace-schedule` no longer crashes with a `ZeroDivisionError` for in-flight or partial jobs that have no completed session durations or zero session actions. (#1293)
+* Fixed a security issue where the known-path containment check during job bundle submission used an unanchored prefix match, causing sibling directories sharing a common prefix (e.g., `/trusted/project-secret/`) to be incorrectly treated as contained within a known root (e.g., `/trusted/project/`). Unknown asset paths are now correctly flagged. (#1294)
 ## 0.60.3 (2026-07-24)
 
 ### Bug Fixes
