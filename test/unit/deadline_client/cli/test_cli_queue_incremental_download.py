@@ -1622,6 +1622,9 @@ def test_incremental_output_download_per_task_error_isolation(
     Simulates a 3-task job where task-1's output path is inaccessible. The status
     file must show task-0 and task-2 as 'downloaded' and task-1 as 'failed' with the
     correct error code, while the job-level status is 'failed'.
+
+    Also asserts the run summary counts the two successful tasks' files (2 of 3) rather
+    than dropping the whole partially-failed job to zero.
     """
     from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
         AssetManifest,

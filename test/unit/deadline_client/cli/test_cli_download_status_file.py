@@ -974,6 +974,96 @@ class TestPerTaskTracking:
         assert tasks["task-abc-0"]["download_status"] == "failed"
         assert tasks["task-abc-0"]["error_code"] == "PERMISSION_DENIED"
 
+    def test_farm_failed_task_recorded_as_farm_failed(self):
+        """A task that failed on the farm is recorded with an explicit "farm_failed" status
+        (not "downloaded"/"failed") and carries no error code — nothing failed to download,
+        the render produced nothing to fetch."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=2, total=3, ended=True)
+        jobs = {MOCK_JOB_ID: job}
+        task_results: dict[str, dict[str, dict[str, Any]]] = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 3,
+                    "downloaded_files": 3,
+                    "error_code": None,
+                    "error_message": None,
+                },
+                # Farm-failed task: explicit farm_failed status, no error code.
+                "task-abc-1": {
+                    "total_files": 0,
+                    "downloaded_files": 0,
+                    "error_code": None,
+                    "error_message": None,
+                    "download_status": "farm_failed",
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            task_download_results=task_results,
+        )
+        tasks = result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert tasks["task-abc-0"]["download_status"] == "downloaded"
+        assert tasks["task-abc-1"]["download_status"] == "farm_failed"
+        assert tasks["task-abc-1"]["error_code"] is None
+
+    def test_farm_failed_does_not_clobber_previously_downloaded_task(self):
+        """A task requeued after a farm failure, then succeeded and downloaded, must stay
+        "downloaded". The FAILED taskRun from the earlier attempt keeps being reported by the
+        API on every no-op run, so a later run re-collects it as farm_failed — but the download
+        already succeeded and its output is on disk, so farm_failed must not overwrite it."""
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "downloaded",
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "last_updated": "2026-01-01T00:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+                "skip_reason": None,
+                "tasks": {
+                    "task-abc-0": {
+                        "download_status": "downloaded",
+                        "total_files": 3,
+                        "downloaded_files": 3,
+                        "error_code": None,
+                        "error_message": None,
+                    },
+                },
+            }
+        }
+        cjids = _make_categorized_job_ids(unchanged={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=1, total=1, ended=True)
+        jobs = {MOCK_JOB_ID: job}
+        # This run re-collects the stale earlier FAILED attempt as farm_failed for the same task.
+        task_results: dict[str, dict[str, dict[str, Any]]] = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 0,
+                    "downloaded_files": 0,
+                    "error_code": None,
+                    "error_message": None,
+                    "download_status": "farm_failed",
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            existing_jobs=existing_jobs,
+            task_download_results=task_results,
+        )
+        task = result["jobs"][MOCK_JOB_ID]["tasks"]["task-abc-0"]
+        assert task["download_status"] == "downloaded", task
+        assert task["downloaded_files"] == 3, task
+
     def test_existing_tasks_preserved_when_no_new_download(self):
         """Tasks from previous runs are preserved when no new download this run."""
         existing_jobs = {
@@ -1200,3 +1290,80 @@ class TestClassifyError:
         from deadline.client.cli._incremental_download import _classify_error
 
         assert _classify_error(Exception("something unexpected")) == "UNKNOWN"
+
+
+class TestRetrieveSessionActionsFarmFailures:
+    """Tests that _retrieve_session_actions_for_session collects farm-failed task IDs
+    separately without adding them to the downloadable session-action list."""
+
+    def _make_deadline_mock(self, session_actions):
+        from unittest.mock import MagicMock
+
+        deadline = MagicMock()
+        paginator = MagicMock()
+        paginator.paginate.return_value = [{"sessionActions": session_actions}]
+        deadline.get_paginator.return_value = paginator
+        return deadline
+
+    def test_failed_taskrun_collected_and_not_downloaded(self):
+        from deadline.client.cli._incremental_download import (
+            _retrieve_session_actions_for_session,
+        )
+
+        session_actions = [
+            {
+                "sessionActionId": "sessionaction-abc-0",
+                "status": "SUCCEEDED",
+                "definition": {"taskRun": {"taskId": "task-abc-0", "stepId": "step-abc"}},
+                "manifests": [{"outputManifestPath": "task-abc-0/m"}],
+            },
+            {
+                "sessionActionId": "sessionaction-abc-1",
+                "status": "FAILED",
+                "definition": {"taskRun": {"taskId": "task-abc-1", "stepId": "step-abc"}},
+            },
+        ]
+        deadline = self._make_deadline_mock(session_actions)
+        output_session: dict[str, Any] = {"sessionId": "session-abc"}
+        farm_failed: set[str] = set()
+
+        _retrieve_session_actions_for_session(
+            deadline,
+            {},
+            "farm-1",
+            "queue-1",
+            "job-1",
+            output_session,
+            farm_failed,
+        )
+
+        # The failed taskRun is collected separately.
+        assert farm_failed == {"task-abc-1"}
+        # Only the succeeded taskRun is in the downloadable list (failed one excluded).
+        downloaded_ids = {
+            sa["definition"]["taskRun"]["taskId"] for sa in output_session["sessionActions"]
+        }
+        assert downloaded_ids == {"task-abc-0"}
+
+    def test_no_failed_set_ignores_failed_actions(self):
+        """Backward compatible: without the output set, failed actions are simply skipped."""
+        from deadline.client.cli._incremental_download import (
+            _retrieve_session_actions_for_session,
+        )
+
+        session_actions = [
+            {
+                "sessionActionId": "sessionaction-abc-0",
+                "status": "FAILED",
+                "definition": {"taskRun": {"taskId": "task-abc-0", "stepId": "step-abc"}},
+            },
+        ]
+        deadline = self._make_deadline_mock(session_actions)
+        output_session: dict[str, Any] = {"sessionId": "session-abc"}
+
+        _retrieve_session_actions_for_session(
+            deadline, {}, "farm-1", "queue-1", "job-1", output_session
+        )
+
+        # No sessionActions populated (nothing succeeded), no crash.
+        assert "sessionActions" not in output_session

@@ -235,19 +235,29 @@ def _build_status_file_content(
         # Merge task entries: preserve existing tasks, overwrite only tasks seen this run
         existing_tasks: dict[str, Any] = (existing_entry or {}).get("tasks", {})
         new_tasks: dict[str, Any] = (task_download_results or {}).get(job_id, {})
-        merged_tasks = {
-            **existing_tasks,
-            **{
-                task_id: {
-                    "download_status": "downloaded" if r.get("error_code") is None else "failed",
-                    "total_files": r["total_files"],
-                    "downloaded_files": r["downloaded_files"],
-                    "error_code": r.get("error_code"),
-                    "error_message": r.get("error_message"),
-                }
-                for task_id, r in new_tasks.items()
-            },
-        }
+        merged_tasks = dict(existing_tasks)
+        for task_id, r in new_tasks.items():
+            # Honor an explicit download_status (e.g. "farm_failed" for a task that
+            # failed on the farm); otherwise derive it from whether the download errored.
+            status = r.get(
+                "download_status",
+                "downloaded" if r.get("error_code") is None else "failed",
+            )
+            # A prior-run success is terminal: its output is on disk. A FAILED taskRun from an
+            # earlier attempt keeps being reported by the API on every no-op run, so without this
+            # guard a task that was requeued, succeeded, and downloaded would flip back to
+            # farm_failed forever. Never let farm_failed clobber an already-downloaded task.
+            if status == "farm_failed" and existing_tasks.get(task_id, {}).get(
+                "download_status"
+            ) in ("downloaded", "failed"):
+                continue
+            merged_tasks[task_id] = {
+                "download_status": status,
+                "total_files": r["total_files"],
+                "downloaded_files": r["downloaded_files"],
+                "error_code": r.get("error_code"),
+                "error_message": r.get("error_message"),
+            }
         new_entry["tasks"] = merged_tasks
 
         if (
