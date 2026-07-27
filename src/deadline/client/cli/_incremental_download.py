@@ -126,13 +126,13 @@ def _get_download_candidate_jobs(
             region=region,
         )
     }
-    print(f"DEBUG: Got {len(download_candidate_jobs)} active jobs")
+    print_function_callback(f"DEBUG: Got {len(download_candidate_jobs)} active jobs")
     download_candidate_jobs = {
         job_id: _datetimes_to_str(job)
         for job_id, job in download_candidate_jobs.items()
         if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     }
-    print(
+    print_function_callback(
         f"DEBUG: Filtered down to {len(download_candidate_jobs)} active jobs based on SUCCEEDED task filter"
     )
 
@@ -157,14 +157,16 @@ def _get_download_candidate_jobs(
         },
         region=region,
     )
-    print(
+    print_function_callback(
         f"DEBUG: Got {len(recently_ended_jobs)} jobs with job[endedAt] >= {starting_timestamp.astimezone().isoformat()}"
     )
     # Filter to jobs where the count of SUCCEEDED tasks is positive.
     recently_ended_jobs = [
         job for job in recently_ended_jobs if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     ]
-    print(f"DEBUG: Filtered down to {len(recently_ended_jobs)} jobs based on SUCCEEDED task filter")
+    print_function_callback(
+        f"DEBUG: Filtered down to {len(recently_ended_jobs)} jobs based on SUCCEEDED task filter"
+    )
     download_candidate_jobs.update(
         {job["jobId"]: _datetimes_to_str(job) for job in recently_ended_jobs}
     )
@@ -599,13 +601,21 @@ def _get_job_sessions(
         for job_id in job_ids:
             # Use the greater of the bootstrap command timestamp and the session ended timestamps
             # recorded in the checkpoint.
-            session_ended_threshold = job_session_ended_timestamp.get(job_id)
+            saved_session_ended_timestamp = job_session_ended_timestamp.get(job_id)
+            session_ended_threshold = saved_session_ended_timestamp
             if session_ended_threshold is None:
                 session_ended_threshold = checkpoint.downloads_started_timestamp
 
-            # For all jobs that are not NEW (including re-queued jobs) - i.e. completed and updated jobs
-            # Use an eventual consistency window to accept a little extra
-            if job_id not in categorized_job_ids.added:
+            # For all jobs that are not brand new - i.e. completed, updated, and re-queued jobs -
+            # use an eventual consistency window to accept a little extra. A brand new job is one
+            # in the 'added' category with no previously saved session_ended_timestamp. A re-queued
+            # job is also categorized as 'added' but carries a saved session_ended_timestamp from
+            # when it was previously tracked, so it must still get the window to avoid missing
+            # sessions near the re-queue boundary.
+            is_brand_new_job = (
+                job_id in categorized_job_ids.added and saved_session_ended_timestamp is None
+            )
+            if not is_brand_new_job:
                 session_ended_threshold = session_ended_threshold - timedelta(
                     seconds=checkpoint.eventual_consistency_max_seconds
                 )
@@ -849,7 +859,7 @@ def _filter_session_actions_without_manifests_from_job_sessions(
             filtered_session_action_list = [
                 session_action
                 for session_action in session.get("sessionActions", [])
-                if any(item != {} for item in session_action["manifests"])
+                if any(item != {} for item in session_action.get("manifests", []))
             ]
             filtered_count += len(filtered_session_action_list)
             if total_count != filtered_count:
@@ -891,7 +901,10 @@ def _update_checkpoint_jobs_list(
         if job.session_ended_timestamp is not None
     }
     for job_id, session_list in job_sessions.items():
-        max_session_ended_timestamp = None
+        # Seed with the value carried over from the previous checkpoint so that a job whose
+        # current sessions are all still running (no endedAt yet) keeps its saved timestamp
+        # instead of having it overwritten with None.
+        max_session_ended_timestamp = job_session_ended_timestamps.get(job_id)
         for session in session_list:
             if "endedAt" in session:
                 if max_session_ended_timestamp is None:
@@ -915,7 +928,6 @@ def _update_checkpoint_jobs_list(
                 job_session_completed_indexes.setdefault(job_id, {})[session["sessionId"]] = max(
                     session_action["sessionActionIndex"] for session_action in session_actions
                 )
-        job_session_ended_timestamps[job_id] = max_session_ended_timestamp
 
     # These categories keep the download_candidate_jobs job as is.
     for job_id in (
