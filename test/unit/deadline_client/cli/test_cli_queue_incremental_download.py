@@ -4,6 +4,7 @@
 Tests for the CLI queue incremental output download command.
 """
 
+import json
 import os
 import sys
 import pytest
@@ -30,6 +31,7 @@ from ..mock_deadline_job_apis import (
 )
 from deadline.job_attachments._incremental_downloads.incremental_download_state import (
     EVENTUAL_CONSISTENCY_MAX_SECONDS,
+    IncrementalDownloadState,
 )
 from deadline.job_attachments.models import StorageProfileOperatingSystemFamily
 import deadline.client.api
@@ -1295,3 +1297,314 @@ def test_incremental_output_download_unmapped_paths_without_storage_profile(
     assert result.exit_code == 0, result.output
     assert "WARNING: THE FOLLOWING FILES WILL NOT BE DOWNLOADED" in result.output, result.output
     assert "/etc/cron.d/evil" in result.output, result.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_manifest_mismatch_still_downloads(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """Decouple guard: if the manifest lists ever diverge in length (skip_attribution),
+    downloads must still proceed — the files are downloaded from downloaded_manifests via a
+    fallback bucket, and per-job attribution is skipped only for reporting. Previously a
+    mismatch left job_manifest_paths empty and silently downloaded nothing."""
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_1,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {
+                    "taskRun": {
+                        "taskId": "task-b1764261dff54214aace3932bde8ae7e-0",
+                        "stepId": "step-b1764261dff54214aace3932bde8ae7e",
+                    }
+                },
+                "manifests": [{"outputManifestPath": "task-0/manifest"}],
+            },
+        ]
+    }
+
+    downloaded_file = "/tmp/mismatch_test_output.exr"
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=downloaded_file, hash="h", size=1, mtime=1)],
+            ),
+        )
+    ]
+
+    def fake_download_all_manifests(
+        queue,
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+        output_unmapped_paths,
+        boto3_session_for_s3,
+        print_function_callback=lambda msg: None,
+    ):
+        return downloaded_manifests  # length 1
+
+    # Force a length mismatch: return 2 tuples here vs 1 downloaded manifest -> skip_attribution.
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return [
+            (None, MOCK_JOB_ID, "/", "prefix/step/task-0/manifest"),
+            (None, MOCK_JOB_ID, "/", "prefix/step/task-1/manifest"),
+        ]
+
+    downloaded_files_seen: list = []
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        # Record what got handed to the downloader — proves downloads proceed despite the mismatch.
+        downloaded_files_seen.extend(f.path for f in files)
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    # The mismatch warning fired, but the file was STILL downloaded (via the fallback bucket).
+    assert "Manifest list length mismatch" in result.output, result.output
+    assert downloaded_file in downloaded_files_seen, (
+        f"Expected {downloaded_file} to be downloaded despite skip_attribution; "
+        f"got {downloaded_files_seen}"
+    )
+    # A successful fallback run must still report what it downloaded — the retained "" bucket
+    # feeds the run-level stats, so a real download never reports "0 files downloaded".
+    assert "Downloaded files: 1" in result.output, result.output
+    # ...and the run is reported successful, with no synthetic "" job leaking into the entries.
+    status_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_path) as f:
+        status = json.load(f)
+    assert status["sync_metadata"]["last_run_status"] == "success", status
+    assert "" not in status["jobs"], status["jobs"]
+
+
+def test_incremental_output_download_fallback_failure_marks_run_failed(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """When attribution is skipped (manifest mismatch) AND the fallback download fails, the
+    failure must not be silently swallowed with the synthetic "" bucket: the run is reported
+    failed and the checkpoint timestamp is held back so the lost window is retried next run."""
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_1,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {
+                    "taskRun": {
+                        "taskId": "task-b1764261dff54214aace3932bde8ae7e-0",
+                        "stepId": "step-b1764261dff54214aace3932bde8ae7e",
+                    }
+                },
+                "manifests": [{"outputManifestPath": "task-0/manifest"}],
+            },
+        ]
+    }
+
+    downloaded_file = "/tmp/mismatch_fail_output.exr"
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=downloaded_file, hash="h", size=1, mtime=1)],
+            ),
+        )
+    ]
+
+    def fake_download_all_manifests(
+        queue,
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+        output_unmapped_paths,
+        boto3_session_for_s3,
+        print_function_callback=lambda msg: None,
+    ):
+        return downloaded_manifests
+
+    # Force a length mismatch (2 vs 1) so attribution is skipped -> fallback bucket.
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return [
+            (None, MOCK_JOB_ID, "/", "prefix/step/task-0/manifest"),
+            (None, MOCK_JOB_ID, "/", "prefix/step/task-1/manifest"),
+        ]
+
+    def fake_download_manifest_paths(*args, **kwargs):
+        raise PermissionError("Access is denied")  # fallback download fails
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+
+    # The run is reported failed — not silently swallowed with the "" bucket.
+    status_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_path) as f:
+        status = json.load(f)
+    assert status["sync_metadata"]["last_run_status"] == "failed", status
+    # The synthetic "" bucket never leaks into the per-job entries.
+    assert "" not in status["jobs"], status["jobs"]
+
+    # The checkpoint timestamp is held back to the bootstrap start (completed == started), not
+    # advanced, so the lost window is re-attempted on the next run. A successful run would have
+    # advanced completed to (now - eventual_consistency), strictly after started.
+    checkpoint_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_checkpoint.json"
+    )
+    saved = IncrementalDownloadState.from_file(checkpoint_path)
+    assert saved.downloads_completed_timestamp == saved.downloads_started_timestamp, (
+        f"Expected timestamp held back to bootstrap start for retry, got "
+        f"completed={saved.downloads_completed_timestamp.isoformat()} "
+        f"started={saved.downloads_started_timestamp.isoformat()}"
+    )

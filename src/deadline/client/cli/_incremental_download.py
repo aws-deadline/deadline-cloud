@@ -1331,19 +1331,19 @@ def _incremental_output_download(
         job_sessions,
         path_mapping_rule_appliers,
     )
-    # Correlate manifests_to_download with downloaded_manifests by position. Both are produced
-    # from _get_manifests_to_download with identical inputs, so their lengths always match in
-    # practice (downloaded_manifests is a per-index fill of the same list). This guard is
-    # defensive only: if they ever diverge, skip per-job attribution rather than risk a wrong
-    # index correlation. The actual output-file download happens per job in the loop below, so
-    # a skipped-attribution run would download nothing — acceptable only because the mismatch
-    # is unreachable with the current deterministic inputs.
+    # Correlate manifests_to_download with downloaded_manifests by position to attribute each
+    # downloaded manifest to its job. Both lists come from _get_manifests_to_download with
+    # identical inputs, so their lengths match in practice. If they ever diverge we skip only
+    # the per-job attribution — the downloads still proceed via the fallback bucket below, so a
+    # mismatch degrades reporting but never causes a silent zero-download run. (Downloads are
+    # decoupled from attribution: what gets downloaded comes from downloaded_manifests either
+    # way; attribution is best-effort layered on top.)
     skip_attribution = len(manifests_to_download) != len(downloaded_manifests)
     if skip_attribution:
         print_function_callback(
             f"WARNING: Manifest list length mismatch ({len(manifests_to_download)} vs "
             f"{len(downloaded_manifests)}) — per-job download tracking will not be "
-            f"populated for this run."
+            f"populated for this run; files will still be downloaded."
         )
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
     # global_seen_paths prevents concurrent writes to the same destination file across jobs.
@@ -1367,6 +1367,23 @@ def _incremental_output_download(
                         seen.add(normcased)
                         global_seen_paths.add(normcased)
                         job_manifest_paths.setdefault(job_id, []).append(manifest_path)
+    else:
+        # Attribution skipped: download everything anyway, decoupled from per-job tracking.
+        # Collect every downloaded path (deduped) under a synthetic bucket keyed by "" so it
+        # never collides with a real job id. Per-job counts aren't populated this run, but no
+        # files are lost; the "" bucket is dropped from results before the status file is built.
+        fallback_seen: set[str] = set()
+        fallback_paths: list[BaseManifestPath] = []
+        for manifest_tuple in downloaded_manifests:
+            if manifest_tuple is not None:
+                _, manifest = manifest_tuple
+                for manifest_path in manifest.paths:
+                    normcased = os.path.normcase(manifest_path.path)
+                    if normcased not in fallback_seen:
+                        fallback_seen.add(normcased)
+                        fallback_paths.append(manifest_path)
+        if fallback_paths:
+            job_manifest_paths[""] = fallback_paths
 
     # Print a summary of all the paths before starting the download
     all_manifest_paths = [path for paths in job_manifest_paths.values() for path in paths]
@@ -1383,6 +1400,9 @@ def _incremental_output_download(
 
     # Download per-job with error isolation, running jobs in parallel to restore throughput.
     job_download_results: dict[str, dict[str, Any]] = {}
+    # Set when the synthetic "" fallback bucket (attribution skipped) failed to download —
+    # gates the timestamp advance below so the lost window is re-attempted next run.
+    fallback_download_failed = False
 
     if not dry_run:
         total_files = sum(len(paths) for paths in job_manifest_paths.values())
@@ -1479,6 +1499,15 @@ def _incremental_output_download(
         if cancelled:
             raise AssetSyncCancelledError("File download cancelled.")
 
+        # The synthetic fallback bucket (used when attribution was skipped) is retained in
+        # job_download_results so the run-level file/byte stats and the success/failure signal are
+        # computed from it — dropping it would report zero downloads (on success) or a false
+        # success (on failure) for a run that actually moved the full window. It is never a real
+        # job id, so it stays out of the per-job status entries (built from categorized_job_ids
+        # only) and the failed-jobs tracker (comprehensions below skip falsy job ids). On failure
+        # the flag also holds the timestamp back so the lost window is re-attempted next run.
+        fallback_download_failed = job_download_results.get("", {}).get("error_code") is not None
+
         durations.download = time.perf_counter_ns() - start_t
         duration = datetime.now(tz=timezone.utc) - start_time
         print_function_callback(f"...downloaded in {duration}")
@@ -1487,11 +1516,18 @@ def _incremental_output_download(
 
     # Remove failed jobs from checkpoint so they're treated as new (added) next run.
     # Track them in the failed jobs file so they're retried even after the timestamp advances.
+    # The synthetic "" fallback bucket (kept above only when it failed) is not a real job, so it
+    # is excluded here — it must never reach the checkpoint filter or the failed-jobs tracker. Its
+    # retry is driven by the held-back timestamp (fallback_download_failed), not per-job tracking.
     failed_job_ids = {
-        job_id for job_id, r in job_download_results.items() if r.get("error_code") is not None
+        job_id
+        for job_id, r in job_download_results.items()
+        if job_id and r.get("error_code") is not None
     }
     succeeded_job_ids = {
-        job_id for job_id, r in job_download_results.items() if r.get("error_code") is None
+        job_id
+        for job_id, r in job_download_results.items()
+        if job_id and r.get("error_code") is None
     }
     # Any previously-tracked job that was in this run's candidate set but produced no result
     # entry (e.g. deleted, attachments_free, missing storage profile, or all paths claimed by
@@ -1507,7 +1543,11 @@ def _incremental_output_download(
 
     # Always advance the timestamp — failed jobs are tracked separately so they don't
     # pin the global window. This prevents a single stuck job from degrading the entire queue.
-    checkpoint.downloads_completed_timestamp = new_completed_timestamp
+    # Exception: when attribution was skipped, there is no per-job tracker entry to carry a
+    # failed download's retry, so the global window is the only retry lever — hold it back on
+    # a fallback failure so the lost outputs are re-attempted next run.
+    if not fallback_download_failed:
+        checkpoint.downloads_completed_timestamp = new_completed_timestamp
 
     stats: dict[str, Any] = {
         "downloaded_session_actions": sum(
