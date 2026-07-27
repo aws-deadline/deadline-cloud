@@ -1,3 +1,13 @@
+## 0.60.3 (2026-07-27)
+
+### Bug Fixes
+* `DeadlineLoginDialog.login()` now correctly returns `True` on successful login. Previously it always returned `False` due to comparing against the wrong dialog result code, breaking the documented `if ...login():` usage pattern. (#1289)
+* Fixed a crash (`UnboundLocalError`) when saving a debug snapshot for a job bundle that has no attachments during `create_job_from_job_bundle`. (#1290)
+* Fixed data loss in the config dialog: editing a known-asset path to a duplicate value no longer silently drops the original row. Also fixed a boolean setting data loss issue. (#1291)
+* The `job trace-schedule` command no longer crashes with `ZeroDivisionError` when run against in-flight or partial jobs that have no completed session durations or zero session actions. (#1293)
+* Fixed a security issue where the known-path containment check during job bundle submission used an unanchored prefix match. A known root like `/trusted/project` would incorrectly suppress warnings for paths in sibling directories like `/trusted/project-secret/file`. The check is now properly anchored. (#1294)
+* Fixed a privacy issue where the telemetry stack-trace sanitizer could leak customer directory names if they happened to share a name with framework packages (e.g., a project directory named `deadline`). Such paths are now properly redacted. (#1295)
+* The minimum `click` dependency has been raised to >= 8.3.3 on Python 3.10+ to address CVE-2026-7246. While deadline-cloud was not directly vulnerable, this resolves security scanner flags. (#1283)
 ## 0.60.2 (2026-07-20)
 
 ### BREAKING CHANGES
