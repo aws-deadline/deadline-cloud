@@ -120,7 +120,10 @@ line-length = 100
 
 [tool.ruff.lint]
 # F822 (undefined name in __all__) is on by default; RUF022 keeps __all__ sorted.
-extend-select = ["RUF022"]
+# E402 (imports must be at the top of the file) is pinned explicitly here so it
+# can't silently regress if a future ruff drops it from the defaults; it is
+# build-failing via `hatch run lint`.
+extend-select = ["RUF022", "E402"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]

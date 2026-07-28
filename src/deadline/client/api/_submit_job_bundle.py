@@ -80,6 +80,27 @@ def hashing_telemetry_callback(hashing_summary: SummaryStatistics):
     api.get_deadline_cloud_library_telemetry_client().record_hashing_summary(hashing_summary)
 
 
+def _is_known_path(path: Path | str, known_roots: Iterable[Path | str]) -> bool:
+    """Return True iff ``path`` equals or is a descendant of any root in ``known_roots``.
+
+    Containment is anchored via ``os.path.commonpath`` equality (the same idiom as
+    loader.py): a path is contained only when it shares a whole-component prefix with a
+    root, so a sibling that merely shares a string prefix (root ``/trusted/project`` vs
+    candidate ``/trusted/project-secret``) is outside the root.
+    """
+    norm_candidate = os.path.normpath(str(path))
+    for known_path in known_roots:
+        norm_root = os.path.normpath(str(known_path))
+        try:
+            if os.path.commonpath([norm_root, norm_candidate]) == norm_root:
+                return True
+        except ValueError:
+            # commonpath raises for mixed absolute/relative paths or different Windows
+            # drives; such paths are not contained.
+            continue
+    return False
+
+
 def _summarize_asset_paths(
     input_paths: Collection[Path | str], output_paths: Collection[Path | str], name: str
 ) -> list[str]:
@@ -114,14 +135,11 @@ def _generate_message_for_asset_paths(
 
     # Filter to get the unknown paths
     if known_asset_paths:
-        known_path_regex = re.compile(
-            f"{'|'.join(re.escape(path) for path in known_asset_paths)}.*"
-        )
         unknown_input_paths = {
-            path for path in all_input_paths if not known_path_regex.match(str(path))
+            path for path in all_input_paths if not _is_known_path(path, known_asset_paths)
         }
         unknown_output_paths = {
-            path for path in all_output_paths if not known_path_regex.match(str(path))
+            path for path in all_output_paths if not _is_known_path(path, known_asset_paths)
         }
     else:
         unknown_input_paths = all_input_paths
@@ -309,11 +327,13 @@ def _filter_redundant_known_paths(known_asset_paths: Iterable[str]) -> list[str]
 def _save_debug_snapshot(
     debug_snapshot_dir: str,
     create_job_args: dict,
-    asset_manager: S3AssetManager,
+    asset_manager: Optional[S3AssetManager],
     queue: dict,
     storage_profile_id: str,
     storage_profile: Optional[StorageProfile],
 ):
+    # ``asset_manager`` is only dereferenced when the create_job args carry
+    # attachments; a snapshot with no attachments passes None here.
     # Save the full set of arguments for passing to the deadline.create_job API
     with open(
         os.path.join(debug_snapshot_dir, "create_job_args.json"), "w", encoding="utf-8"
@@ -821,6 +841,9 @@ def create_job_from_job_bundle(
 
     # Hash and upload job attachments if there are any
     files_processed = False
+    # Only assigned when there are attachments to process, but referenced
+    # unconditionally by the debug-snapshot path below, so initialize it here.
+    asset_manager: Optional[S3AssetManager] = None
     if asset_references and "jobAttachmentSettings" in queue:
         # Extend input_filenames with all the files in the input_directories
         missing_directories: set[str] = set()
@@ -949,6 +972,7 @@ def create_job_from_job_bundle(
                     asset_manifests,
                     print_function_callback,
                     upload_progress_callback,
+                    config=config,
                     from_gui=from_gui,
                     force_s3_check=force_s3_check,
                 )
@@ -959,6 +983,7 @@ def create_job_from_job_bundle(
                     asset_manifests,
                     print_function_callback,
                     upload_progress_callback,
+                    config=config,
                     from_gui=from_gui,
                 )
 
@@ -1153,9 +1178,9 @@ def wait_for_create_job_to_complete(
             time.sleep(delay)
             delay = min(delay * 2, max_delay)
         elif current_status in failure_statuses:
-            return False, job["lifecycleStatusMessage"]
+            return False, job.get("lifecycleStatusMessage", "")
         else:
-            return True, job["lifecycleStatusMessage"]
+            return True, job.get("lifecycleStatusMessage", "")
 
     raise TimeoutError(
         f"Timed out after {timeout_seconds} seconds while waiting for Job to be created: {job_id}"

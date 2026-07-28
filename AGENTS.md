@@ -69,6 +69,23 @@ class _PrivateClass:  # Private
     pass
 ```
 
+### Comments
+
+Prefer clear code over comments — rename, extract, or restructure before adding
+one. Comment only where the code can't be made clear on its own. Comments are
+terse, explain *why* not *what*, and are stateless: no history, past approaches,
+or migrations (git holds that).
+
+```python
+# DON'T
+# previously we used urllib, now we use requests  (history)
+count += 1  # increment count  (restates the code)
+
+# DO
+# STS is eventually consistent right after role creation.
+resp = retry_once(fetch)
+```
+
 ### Commit Messages
 Use [conventional commits](https://www.conventionalcommits.org/):
 - `feat:` - New features

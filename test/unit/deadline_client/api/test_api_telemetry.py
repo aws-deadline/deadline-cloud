@@ -22,6 +22,7 @@ from deadline.client.api._telemetry import (
     record_success_fail_telemetry_event,
     record_function_latency_telemetry_event,
 )
+from deadline.client.api import _stack_trace_sanitizer
 from deadline.client.api._stack_trace_sanitizer import (
     _sanitize_path,
     sanitize_exception,
@@ -697,11 +698,16 @@ class TestTelemetryClientSwallowExceptions:
             "deadline/client/api/_telemetry.py",
             id="known_package_deadline",
         ),
+        # Embedded / custom-sys.path layout: the package's genuine install
+        # dir is outside site-packages. The test patches the install-dir
+        # anchors so this location counts as genuine.
         pytest.param(
             "/opt/libs/openjd/sessions/runner.py",
             "openjd/sessions/runner.py",
             id="known_package_openjd",
         ),
+        # Debian/Ubuntu system Python installs under dist-packages rather
+        # than site-packages.
         pytest.param(
             "/usr/lib/python3/dist-packages/botocore/client.py",
             "botocore/client.py",
@@ -752,7 +758,33 @@ class TestTelemetryClientSwallowExceptions:
     ],
 )
 def test_sanitize_path(filepath, expected):
-    assert _sanitize_path(filepath) == expected
+    # _sanitize_path only keeps a package-relative path when the on-disk
+    # prefix is a genuine install location for that package, so declare the
+    # framework locations used by the cases above as genuine.
+    fake_install_dirs = {
+        "deadline": [
+            _stack_trace_sanitizer._normalize(p)
+            for p in [
+                "/home/customer/secret/venv/lib/python3.11/site-packages/deadline",
+                "C:/Users/customer/AppData/Local/deadline",
+                "/home/user/deadline/scripts/venv/lib/python3.11/site-packages/deadline",
+            ]
+        ],
+        "openjd": [
+            _stack_trace_sanitizer._normalize(p)
+            for p in [
+                "/opt/libs/openjd",
+                "/opt/openjd/customer-vendored/openjd",
+            ]
+        ],
+        "botocore": [
+            _stack_trace_sanitizer._normalize("/usr/lib/python3/dist-packages/botocore"),
+        ],
+    }
+    with patch.object(
+        _stack_trace_sanitizer, "_known_package_install_dirs", return_value=fake_install_dirs
+    ):
+        assert _sanitize_path(filepath) == expected
 
 
 class TestSanitizeException:

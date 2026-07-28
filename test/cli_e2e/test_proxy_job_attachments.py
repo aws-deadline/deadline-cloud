@@ -126,10 +126,13 @@ def s3_proxy_setup(tmp_path: Path, moto_server: str) -> Iterator[tuple]:
         "no_proxy": "",
         "HTTPS_PROXY": "",
         "https_proxy": "",
-        "AWS_CA_BUNDLE": "",
         "AWS_MAX_ATTEMPTS": "1",
         "AWS_RETRY_MODE": "standard",
     }
+    # Remove rather than blank the CA bundle vars: botocore >= 1.43.54 rejects an
+    # empty-string CA bundle with InvalidConfigError.
+    for var in ("AWS_CA_BUNDLE", "REQUESTS_CA_BUNDLE"):
+        env.pop(var, None)
     try:
         yield env, proxy, ca_pem, s3_client
     finally:

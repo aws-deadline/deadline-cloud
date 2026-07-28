@@ -10,8 +10,12 @@ exception's message string and source-line context are dropped entirely
 because we have no control over what third-party libraries put in them.
 """
 
+import functools
+import importlib.util
+import os
+import re
 import traceback
-from typing import FrozenSet, List
+from typing import Dict, FrozenSet, List
 
 # Packages we author or vendor — emitting paths relative to these is safe
 # because the path itself only reveals which of our own modules raised.
@@ -23,6 +27,70 @@ _KNOWN_PACKAGES: FrozenSet[str] = frozenset(
         "botocore",
     }
 )
+
+
+def _normalize(path: str) -> str:
+    """Normalize a path for equality comparison across OSes.
+
+    Collapses Windows separators to forward slashes, strips any trailing
+    separator, and applies case folding on case-insensitive filesystems so
+    two spellings of the same location compare equal.
+    """
+    return os.path.normcase(path.replace("\\", "/").rstrip("/"))
+
+
+@functools.lru_cache(maxsize=None)
+def _known_package_install_dirs() -> Dict[str, List[str]]:
+    """Map each known package name to the normalized directories it is installed in.
+
+    These are the genuine on-disk locations of the package directory itself
+    (e.g. ``.../site-packages/deadline``). They are used to distinguish a real
+    framework frame from a customer directory that merely shares a package's
+    name (e.g. a customer project tree rooted at ``~/deadline/...``). Only
+    packages that are importable with a real filesystem location contribute an
+    anchor; anything else (frozen modules without a file) is simply omitted.
+
+    ``deadline`` and ``openjd`` are PEP 420 namespace packages, so a single
+    namespace can be contributed by several distributions installed into
+    different ``sys.path`` roots. ``submodule_search_locations`` may therefore
+    hold more than one path; we record all of them so a genuine framework frame
+    under any of those roots is recognized.
+
+    The install locations are fixed for the life of the process, so the result
+    is memoized with ``lru_cache`` (a deep traceback would otherwise recompute
+    it, hitting ``find_spec`` once per known package per frame).
+    """
+    dirs: Dict[str, List[str]] = {}
+    for name in _KNOWN_PACKAGES:
+        try:
+            spec = importlib.util.find_spec(name)
+        except (ImportError, ValueError, AttributeError, ModuleNotFoundError):
+            continue
+        if spec is None:
+            continue
+        # Prefer the package directories themselves. A regular/namespace package
+        # reports them via submodule_search_locations (e.g.
+        # ".../site-packages/deadline"); a single-file module only has an origin
+        # (".../foo.py"), whose parent directory is the container.
+        origin = spec.origin
+        locations = list(spec.submodule_search_locations or [])
+        pkg_dirs: List[str] = []
+        if locations:
+            pkg_dirs = list(locations)
+        elif origin and origin not in ("built-in", "frozen"):
+            pkg_dirs = [os.path.dirname(origin)]
+        normalized = [_normalize(os.path.abspath(p)) for p in pkg_dirs if p]
+        if not normalized:
+            continue
+        dirs[name] = normalized
+    return dirs
+
+
+# Parent directory names that corroborate a genuine site-packages /
+# dist-packages segment: "lib"/"Lib"/"lib64" (e.g. venv Lib\site-packages on
+# Windows), or a python version directory ("python3.11", "Python311", e.g.
+# POSIX venvs, Debian dist-packages, Windows user site-packages).
+_PACKAGES_DIR_PARENT_RE = re.compile(r"^([Ll]ib(64)?|[Pp]ython\d+(\.\d+)?)$")
 
 
 def _sanitize_path(filepath: str) -> str:
@@ -37,26 +105,42 @@ def _sanitize_path(filepath: str) -> str:
     # with forward slashes.
     parts = filepath.replace("\\", "/").split("/")
 
-    # If any path segment names one of our known packages, return everything
-    # from that segment onward. Scan right-to-left and match the *rightmost*
-    # occurrence: the actually-installed package is always at the tail of
-    # the path, so a customer directory that happens to share a name with
-    # one of our packages (e.g. ~/deadline/...) earlier in the path can't
-    # cause us to keep the customer-named segments between them. `stem`
-    # strips a trailing extension so paths like ".../deadline.egg-info/..."
-    # still match "deadline".
+    # Keep a package-relative path only when the reconstructed absolute prefix
+    # equals the package's real install directory on this machine. A bare name
+    # match is insufficient because a customer directory can share a package
+    # name (e.g. ~/deadline/...) and keeping its segments would leak customer
+    # content (violating the no-customer-content tenet). Scan right-to-left so
+    # the deepest genuine match wins. (Ordinary pip installs under
+    # site-packages are also covered by the generic site-packages branch
+    # below; this branch additionally handles embedded / custom-sys.path
+    # layouts where the package isn't under a site-packages directory.)
+    install_dirs = _known_package_install_dirs()
     for i in range(len(parts) - 1, -1, -1):
         stem = parts[i].split(".")[0]
-        if stem in _KNOWN_PACKAGES:
+        anchors = install_dirs.get(stem)
+        if anchors is not None and _normalize("/".join(parts[: i + 1])) in anchors:
             return "/".join(parts[i:])
 
-    # Unknown third-party library installed into a venv: keep the
-    # library-relative subpath but drop everything above site-packages
-    # (which would otherwise leak the customer's home / venv layout).
-    # Same right-to-left rationale as above — the real site-packages
-    # directory is always at the tail.
-    for i in range(len(parts) - 1, -1, -1):
-        if parts[i] == "site-packages" and i + 1 < len(parts):
+    # Unknown third-party library installed into a venv or system Python:
+    # keep the library-relative subpath but drop everything above the
+    # site-packages / dist-packages directory (which would otherwise leak
+    # the customer's home / venv layout). "dist-packages" is the Debian /
+    # Ubuntu system-Python equivalent of "site-packages". Same right-to-left
+    # rationale as above — the real packages directory is always at the tail.
+    # A bare "site-packages" segment is not proof by itself — a customer
+    # directory can be named "site-packages" too, and everything below it
+    # would leak. Real interpreter layouts always place site-packages /
+    # dist-packages under a "lib"/"Lib"/"lib64" or "pythonX.Y" directory
+    # (POSIX: lib/python3.11/site-packages; Windows venv: Lib\site-packages;
+    # Debian: lib/python3/dist-packages), so require that corroborating
+    # parent before trusting the segment. When in doubt, fall through to the
+    # bare-filename branch: dropping detail is safe, leaking is not.
+    for i in range(len(parts) - 1, 0, -1):
+        if (
+            parts[i] in ("site-packages", "dist-packages")
+            and i + 1 < len(parts)
+            and _PACKAGES_DIR_PARENT_RE.match(parts[i - 1])
+        ):
             return "/".join(parts[i + 1 :])
 
     # Anything else (customer scripts, project trees) — keep only the
