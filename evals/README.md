@@ -22,7 +22,7 @@ The material under test can be almost anything the agent relies on:
 | `deadline` CLI | `pip install -e .` this repo; A/B two git refs of `src/` |
 | AWS CLI usage | goal + rubric only — no subject needed |
 | AWS documentation / blog / web page | fetch it to markdown, pass as `materials`, seed a corpus to revise |
-| This repo's docs | A/B with `--pathspec ':(glob)docs/**/*.md'` |
+| This repo's docs | A/B with `--pathspec ':(glob)docs/**/*.md' --seed-subject` |
 
 ## Setup
 
@@ -45,7 +45,10 @@ python -m agent_evals.runner run examples/deadline_cli.json --k 3
 python -m agent_evals.runner run examples/deadline_cli.json --k 3 --revised-ref my-improvement
 
 # A/B a docs change instead of code
-python -m agent_evals.runner run my_docs_eval.json --revised-ref docs-fix --pathspec ':(glob)docs/**/*.md'
+# --seed-subject copies the owned files into each run's sandbox (under subject/) so
+# the agent actually reads them; without it a docs A/B compares identical sandboxes.
+python -m agent_evals.runner run my_docs_eval.json --revised-ref docs-fix \
+    --pathspec ':(glob)docs/**/*.md' --seed-subject
 ```
 
 Artifacts land under `evals/output/<eval>/<timestamp>/`: per-run telemetry and

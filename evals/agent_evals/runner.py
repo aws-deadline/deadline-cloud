@@ -47,13 +47,28 @@ OUTPUT_ROOT = Path(__file__).resolve().parents[1] / "output"
 DEFAULT_TOOLS = ["Bash", "Read", "Write", "Edit"]
 
 
-def _run_case(case: dict, run_dir: Path, model: Optional[str]) -> dict:
+def _subject_files(subj) -> dict:
+    """The subject's owned files (per its pathspec) at the CURRENTLY checked-out ref,
+    as {relative_path: content}. Used to seed read-material subjects into the
+    sandbox so a ref swap actually changes what the agent sees."""
+    listing = subj._git_checked("ls-files", "-z", "--", subj.diff_pathspec).stdout
+    files = {}
+    for rel in filter(None, listing.split("\0")):
+        p = subj.root / rel
+        if p.is_file():
+            files[rel] = p.read_text(errors="replace")
+    return files
+
+
+def _run_case(case: dict, run_dir: Path, model: Optional[str], subject_files=None) -> dict:
     """One agent run + judge verdict; artifacts under run_dir."""
     prompt = case["prompt"]
     materials = case.get("materials", {})
     if materials:
         listing = ", ".join(f"materials/{name}" for name in materials)
         prompt = f"{prompt}\n\nReference material is available in this directory: {listing}"
+    if subject_files:
+        prompt = f"{prompt}\n\nThe material under evaluation is available under subject/ in this directory."
 
     workdir = Path(tempfile.mkdtemp(prefix=f"eval-{case['id']}-"))
     try:
@@ -62,6 +77,14 @@ def _run_case(case: dict, run_dir: Path, model: Optional[str]) -> dict:
             mdir.mkdir()
             for name, content in materials.items():
                 (mdir / name).write_text(content)
+        if subject_files:
+            # Seed the subject's owned files (docs, etc.) into the sandbox. Without
+            # this, a read-material A/B would compare two identical sandboxes: the
+            # ref swap happens in the repo checkout the sandboxed agent can't see.
+            for rel, content in subject_files.items():
+                dest = workdir / "subject" / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content)
 
         result = run_agent(
             prompt,
@@ -113,6 +136,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print("ERROR: eval file must be a JSON array of cases.")
         return 2
 
+    if args.seed_subject and not args.revised_ref:
+        print("ERROR: --seed-subject only applies in A/B mode; pass --revised-ref too.")
+        return 2
+
     subj = None
     base_ref = None
     if args.revised_ref:
@@ -147,11 +174,23 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 {"baseline": base_ref, "revised": args.revised_ref} if subj else {"baseline": None}
             )
             for variant, ref in refs.items():
+                subject_files = None
                 if subj and ref:
                     subj.checkout(ref)
                     print(f"  [{variant}] subject at {ref}")
+                    if args.seed_subject:
+                        # Read-material subject (docs): the sandboxed agent can't see
+                        # the repo checkout, so seed the owned files AT THIS REF into
+                        # the sandbox -- otherwise both variants get identical input
+                        # and the A/B silently reports no_change.
+                        subject_files = _subject_files(subj)
                 runs = [
-                    _run_case(case, out_root / case["id"] / variant / f"run-{i}", args.model)
+                    _run_case(
+                        case,
+                        out_root / case["id"] / variant / f"run-{i}",
+                        args.model,
+                        subject_files,
+                    )
                     for i in range(1, k + 1)
                 ]
                 variants[variant] = {"aggregate": _aggregate(runs), "runs": runs}
@@ -219,6 +258,14 @@ def main(argv: Optional[list] = None) -> int:
         "--pathspec",
         default="src",
         help="repo paths the A/B owns, e.g. 'src' or ':(glob)docs/**/*.md'",
+    )
+    run.add_argument(
+        "--seed-subject",
+        action="store_true",
+        help="copy the subject's owned files into each run's sandbox (under subject/) "
+        "so the agent READS them -- required for docs/prose A/B, where the agent has "
+        "no path to the repo checkout. Not needed for the CLI-source case (pip install "
+        "-e makes the ref swap take effect through the installed `deadline`).",
     )
 
     args = ap.parse_args(argv)

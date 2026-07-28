@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent_evals import judge, runner  # noqa: E402
+from agent_evals.subject import CORPUS_DOC, corpus_subject  # noqa: E402
 
 
 def test_extract_verdict_plain_json() -> None:
@@ -96,3 +97,27 @@ def test_proposal_suppressed_without_improvement() -> None:
 
 def test_proposal_suppressed_on_empty_diff() -> None:
     assert runner._should_emit_proposal([{"verdict": "improved"}], "  \n") is False
+
+
+def test_subject_files_reflects_checked_out_ref(tmp_path) -> None:
+    # The seeded files must track the CURRENT ref, so baseline and revised runs get
+    # different content -- otherwise a docs A/B compares identical sandboxes.
+    subj = corpus_subject("# Guide\nbaseline text\n", tmp_path / "corpus")
+    base_files = runner._subject_files(subj)
+    assert base_files[CORPUS_DOC] == "# Guide\nbaseline text\n"
+
+    (subj.root / CORPUS_DOC).write_text("# Guide\nrevised text\n")
+    revised_ref = subj.commit_scratch("revised", "revise")
+    subj.checkout(revised_ref)
+    assert runner._subject_files(subj)[CORPUS_DOC] == "# Guide\nrevised text\n"
+
+
+def test_subject_files_scoped_to_pathspec(tmp_path) -> None:
+    # corpus_subject owns *.md; a non-markdown file must not be seeded.
+    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
+    (subj.root / "notes.txt").write_text("not markdown")
+    subj._git("add", "-A")
+    subj._git("commit", "-q", "-m", "add non-md")
+    files = runner._subject_files(subj)
+    assert CORPUS_DOC in files
+    assert "notes.txt" not in files
