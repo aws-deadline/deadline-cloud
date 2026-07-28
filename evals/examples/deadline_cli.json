@@ -12,5 +12,12 @@
     "tools": ["Bash"],
     "rubric": "The answer states that the id options are optional and fall back to configured defaults (deadline config / defaults.farm_id and defaults.queue_id).",
     "max_turns": 10
+  },
+  {
+    "id": "what_is_openjd",
+    "prompt": "Using only `deadline bundle --help`, `deadline bundle submit --help`, and any references to Open Job Description you find in the CLI help text, explain what Open Job Description is and what kinds of workloads it supports.",
+    "tools": ["Bash"],
+    "rubric": "The answer describes Open Job Description as a general-purpose compute job template specification (or words to that effect) — not as something limited to rendering, visual effects, or visual compute specifically. It may mention rendering as one example use case, but must not frame OpenJD as exclusively or primarily for visual/render workloads.",
+    "max_turns": 10
   }
 ]
