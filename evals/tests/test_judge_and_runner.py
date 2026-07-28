@@ -75,3 +75,24 @@ def test_aggregate_empty() -> None:
         "median_cost_usd": 0.0,
         "n": 0,
     }
+
+
+def test_proposal_emitted_when_improved_and_none_regressed() -> None:
+    summaries = [{"verdict": "improved"}, {"verdict": "no_change"}]
+    assert runner._should_emit_proposal(summaries, "diff --git a b\n") is True
+
+
+def test_proposal_suppressed_on_mixed_verdicts() -> None:
+    # The patch is the whole base..revised diff -- a change that regressed ANY
+    # eval must never be surfaced as PR-ready, even if it improved another.
+    summaries = [{"verdict": "improved"}, {"verdict": "regressed"}]
+    assert runner._should_emit_proposal(summaries, "diff --git a b\n") is False
+
+
+def test_proposal_suppressed_without_improvement() -> None:
+    summaries = [{"verdict": "no_change"}, {"verdict": "no_change"}]
+    assert runner._should_emit_proposal(summaries, "diff --git a b\n") is False
+
+
+def test_proposal_suppressed_on_empty_diff() -> None:
+    assert runner._should_emit_proposal([{"verdict": "improved"}], "  \n") is False

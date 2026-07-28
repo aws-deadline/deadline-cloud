@@ -182,13 +182,24 @@ def _cmd_run(args: argparse.Namespace) -> int:
     (out_root / "summary.json").write_text(json.dumps(summaries, indent=2))
     print(f"\nsummary -> {out_root / 'summary.json'}")
 
-    # Emit the PR-ready patch only when the change measurably improved an eval.
     if subj and args.revised_ref:
         diff = summaries[0].get("source_diff", "") if summaries else ""
-        if any(s.get("verdict") == "improved" for s in summaries) and diff.strip():
+        if _should_emit_proposal(summaries, diff):
             (out_root / "proposal.patch").write_text(diff)
             print(f"proposal -> {out_root / 'proposal.patch'}")
+        elif any(s.get("verdict") == "regressed" for s in summaries):
+            print("[proposal] skipped: the change regressed at least one eval.")
     return exit_code
+
+
+def _should_emit_proposal(summaries: list, diff: str) -> bool:
+    """Emit the PR-ready patch only when the change measurably improved at least
+    one eval AND regressed none. The patch is the whole base..revised diff, so a
+    change that breaks any eval must never be surfaced as ready to ship."""
+    if not diff.strip():
+        return False
+    verdicts = [s.get("verdict") for s in summaries]
+    return "improved" in verdicts and "regressed" not in verdicts
 
 
 def main(argv: Optional[list] = None) -> int:
