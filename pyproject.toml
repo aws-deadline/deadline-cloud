@@ -56,7 +56,7 @@ gui = [
   "PySide6-essentials >= 6.6,< 6.11",
 ]
 mcp = [
-  "mcp >= 1.13.0",
+  "mcp >= 1.13.0, < 2",
 ]
 
 [project.scripts]
