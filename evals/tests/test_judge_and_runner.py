@@ -34,6 +34,22 @@ def test_extract_verdict_requires_passed_key() -> None:
         judge._extract_verdict('{"reasoning": "no verdict"}')
 
 
+def test_extract_verdict_string_false_is_fail() -> None:
+    # bool("false") is True in Python — the coercion must handle string forms safely.
+    v = judge._extract_verdict('{"passed": "false", "reasoning": "did not meet rubric"}')
+    assert v.passed is False
+
+
+def test_extract_verdict_string_true_is_pass() -> None:
+    v = judge._extract_verdict('{"passed": "true", "reasoning": "ok"}')
+    assert v.passed is True
+
+
+def test_extract_verdict_ambiguous_value_raises() -> None:
+    with pytest.raises(judge.JudgeError, match="ambiguous"):
+        judge._extract_verdict('{"passed": "maybe", "reasoning": "unsure"}')
+
+
 def test_empty_answer_fails_without_model_call() -> None:
     v = judge.judge_answer("rubric", "prompt", "   ")
     assert v.passed is False

@@ -140,4 +140,22 @@ def _extract_verdict(text: str) -> Verdict:
         raise JudgeError(f"judge JSON did not parse: {e}") from e
     if "passed" not in obj:
         raise JudgeError(f"judge JSON missing 'passed': {obj!r}")
-    return Verdict(passed=bool(obj["passed"]), reasoning=str(obj.get("reasoning", "")))
+    return Verdict(passed=_coerce_passed(obj["passed"]), reasoning=str(obj.get("reasoning", "")))
+
+
+def _coerce_passed(value: object) -> bool:
+    """Safely coerce the judge's 'passed' field to a Python bool.
+
+    The prompt asks for a JSON boolean, but models sometimes emit strings. Plain
+    bool("false") is True in Python, which would silently flip a FAIL to a PASS --
+    so we handle known string forms explicitly and reject anything ambiguous.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        low = value.strip().lower()
+        if low in ("true", "pass", "yes", "1"):
+            return True
+        if low in ("false", "fail", "no", "0"):
+            return False
+    raise JudgeError(f"judge 'passed' field has ambiguous value {value!r}; expected a JSON boolean")
