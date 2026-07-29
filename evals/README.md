@@ -52,6 +52,18 @@ python -m agent_evals.runner run my_docs_eval.json --revised-ref docs-fix \
     --pathspec ':(glob)docs/**/*.md' --seed-subject
 ```
 
+Flags:
+
+| Flag | Effect |
+| --- | --- |
+| `--k N` | runs per case per variant (default 1); a case's own `k` overrides it |
+| `--model ALIAS` | model for both the agent and the judge |
+| `--revised-ref REF` | enable A/B mode: also run with the repo at this git ref |
+| `--base-ref REF` | baseline ref for A/B (default: current branch) |
+| `--pathspec SPEC` | repo paths the A/B owns, e.g. `src` or `:(glob)docs/**/*.md` |
+| `--seed-subject` | copy the subject's owned files into each sandbox (docs A/B — see above) |
+| `--allow-real-aws` | opt in to `real_aws` cases, which submit real jobs (see below) |
+
 Artifacts land under `evals/output/<eval>/<timestamp>/`: per-run telemetry and
 transcripts, `summary.json`, and — when a revision measurably improved an eval —
 `proposal.patch`. Exit code 4 means the revision regressed.
@@ -91,15 +103,28 @@ with a clear reason rather than submitting to the wrong place.
     "rubric": "What a passing answer must do, in plain language.",
     "materials": {"guide.md": "optional reference text the agent can read"},
     "max_turns": 20,
-    "k": 3
+    "k": 3,
+    "env": "real_aws"
   }
 ]
 ```
+
+Fields: `id`, `prompt`, and `rubric` are required; the rest are optional.
+
+| Field | Meaning |
+| --- | --- |
+| `tools` | Claude Code tools the agent may use (default: `Bash`, `Read`, `Write`, `Edit`) |
+| `materials` | `{path: content}` written under `materials/` in the sandbox and named in the prompt; keys may contain `/` but not `..` or absolute paths |
+| `max_turns` | agent turn cap (default 20) |
+| `k` | runs per variant for this case (overrides the `--k` flag) |
+| `env` | set to `real_aws` to mark a case that submits real jobs — see above; omit for ordinary offline cases |
 
 The rubric is the only per-eval authoring step that matters: it should state the
 *material's own* success criterion (for a docs page, what the page promises the
 reader can do), including what a correct answer looks like when the evidence is
 incomplete — a good judge passes an agent that refuses to invent missing details.
+For `real_aws` cases, `prompt` and `rubric` may use `{farm_id}` / `{queue_id}` /
+`{region}` placeholders, filled from the environment variables above.
 
 ## Close the loop automatically
 
