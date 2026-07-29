@@ -16,6 +16,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+# Wall-clock ceiling for a single agent run. --max-turns bounds model turns, but a
+# hung network/auth interaction has no turn cost, so without this one stuck run
+# could block the whole batch indefinitely.
+DEFAULT_TIMEOUT_S = 1200
+
+
+class HarnessError(RuntimeError):
+    """Raised when the agent subprocess cannot be launched or times out."""
+
 
 @dataclass
 class RunResult:
@@ -57,8 +66,14 @@ def run_agent(
     max_turns: int = 20,
     model: Optional[str] = None,
     claude_bin: str = "claude",
+    timeout_s: int = DEFAULT_TIMEOUT_S,
 ) -> RunResult:
-    """Run Claude Code headless in `workdir`, restricted to `allowed_tools`."""
+    """Run Claude Code headless in `workdir`, restricted to `allowed_tools`.
+
+    Raises HarnessError if the agent binary can't be launched or the run exceeds
+    `timeout_s`, so one bad run surfaces a clear error rather than aborting the
+    batch with a raw traceback or hanging forever.
+    """
     cmd = [
         claude_bin,
         "-p",
@@ -78,9 +93,19 @@ def run_agent(
 
     # stdin=DEVNULL: with -p the CLI still waits on stdin and can exit non-zero on a
     # closed pipe; DEVNULL makes the call cleanly non-interactive.
-    proc = subprocess.run(
-        cmd, cwd=str(workdir), capture_output=True, text=True, stdin=subprocess.DEVNULL
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(workdir),
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=timeout_s,
+        )
+    except OSError as e:
+        raise HarnessError(f"could not launch {claude_bin}: {e}") from e
+    except subprocess.TimeoutExpired as e:
+        raise HarnessError(f"agent run exceeded {timeout_s}s wall-clock timeout") from e
 
     events = []
     for line in proc.stdout.splitlines():

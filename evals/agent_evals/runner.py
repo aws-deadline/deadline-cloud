@@ -40,11 +40,44 @@ from pathlib import Path
 from typing import Optional
 
 from . import judge, subject as subject_mod
-from .harness import run_agent
+from .harness import HarnessError, run_agent
 
 OUTPUT_ROOT = Path(__file__).resolve().parents[1] / "output"
 
 DEFAULT_TOOLS = ["Bash", "Read", "Write", "Edit"]
+
+
+# Telemetry shape for a run that never produced a result (harness error). Mirrors
+# RunResult.telemetry_dict so aggregation treats it like any other failed run.
+_EMPTY_TELEMETRY = {
+    "success": False,
+    "subtype": "harness_error",
+    "tool_calls": [],
+    "tool_call_count": 0,
+    "num_turns": 0,
+    "total_cost_usd": 0.0,
+    "duration_ms": 0,
+    "final_text": "",
+}
+
+
+def _write_failed_run(run_dir: Path, detail: str) -> None:
+    """Persist a harness-error run so its artifact exists alongside the others."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "result.json").write_text(
+        json.dumps({**_EMPTY_TELEMETRY, "passed": False, "detail": detail}, indent=2)
+    )
+
+
+def _safe_write(base: Path, rel: str, content: str) -> None:
+    """Write content to base/rel, creating parent dirs. Rejects absolute paths and
+    '..' segments so a material/subject key can never write outside the sandbox."""
+    rel_path = Path(rel)
+    if rel_path.is_absolute() or ".." in rel_path.parts:
+        raise ValueError(f"unsafe sandbox path: {rel!r}")
+    dest = base / rel_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(content)
 
 
 def _subject_files(subj) -> dict:
@@ -72,27 +105,29 @@ def _run_case(case: dict, run_dir: Path, model: Optional[str], subject_files=Non
 
     workdir = Path(tempfile.mkdtemp(prefix=f"eval-{case['id']}-"))
     try:
-        if materials:
-            mdir = workdir / "materials"
-            mdir.mkdir()
-            for name, content in materials.items():
-                (mdir / name).write_text(content)
+        for name, content in materials.items():
+            _safe_write(workdir / "materials", name, content)
         if subject_files:
             # Seed the subject's owned files (docs, etc.) into the sandbox. Without
             # this, a read-material A/B would compare two identical sandboxes: the
             # ref swap happens in the repo checkout the sandboxed agent can't see.
             for rel, content in subject_files.items():
-                dest = workdir / "subject" / rel
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(content)
+                _safe_write(workdir / "subject", rel, content)
 
-        result = run_agent(
-            prompt,
-            workdir,
-            case.get("tools", DEFAULT_TOOLS),
-            max_turns=case.get("max_turns", 20),
-            model=model,
-        )
+        try:
+            result = run_agent(
+                prompt,
+                workdir,
+                case.get("tools", DEFAULT_TOOLS),
+                max_turns=case.get("max_turns", 20),
+                model=model,
+            )
+        except HarnessError as e:
+            # A run that could not launch or timed out fails just this run -- it must
+            # not abort the batch, and must not be scored as a pass.
+            _write_failed_run(run_dir, f"harness error: {e}")
+            print(f"    run: FAIL (harness error) -- {e}")
+            return {**_EMPTY_TELEMETRY, "passed": False, "detail": f"harness error: {e}"}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

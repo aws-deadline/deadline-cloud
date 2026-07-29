@@ -121,3 +121,20 @@ def test_subject_files_scoped_to_pathspec(tmp_path) -> None:
     files = runner._subject_files(subj)
     assert CORPUS_DOC in files
     assert "notes.txt" not in files
+
+
+def test_safe_write_creates_nested_dirs(tmp_path) -> None:
+    # A material/subject key with a path separator must create parent dirs, not
+    # raise FileNotFoundError.
+    runner._safe_write(tmp_path / "materials", "docs/guide.md", "content")
+    assert (tmp_path / "materials" / "docs" / "guide.md").read_text() == "content"
+
+
+def test_safe_write_rejects_parent_traversal(tmp_path) -> None:
+    with pytest.raises(ValueError, match="unsafe"):
+        runner._safe_write(tmp_path / "materials", "../escape.md", "x")
+
+
+def test_safe_write_rejects_absolute_path(tmp_path) -> None:
+    with pytest.raises(ValueError, match="unsafe"):
+        runner._safe_write(tmp_path / "materials", "/etc/evil", "x")
