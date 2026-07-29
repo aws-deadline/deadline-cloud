@@ -219,6 +219,36 @@ def _run_case(
     return {**result.telemetry_dict(), "passed": passed, "detail": reasoning}
 
 
+def _deadline_provenance() -> str:
+    """A one-line description of the `deadline` the agent will drive: path, version,
+    and whether it's an editable install (points at a source checkout). Surfaced at
+    startup so an operator never unknowingly evaluates a stale or fork-shadowed CLI
+    -- the 'editable install shadows your real deadline' footgun."""
+    path = shutil.which("deadline")
+    if not path:
+        return "deadline: NOT ON PATH (agent runs that need it will fail)"
+    try:
+        version = subprocess.run(
+            [path, "--version"], capture_output=True, text=True, timeout=30
+        ).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        version = "version unknown"
+    editable = ""
+    try:
+        # A console-script shebang names the interpreter; ask pip where the package
+        # lives and whether it's an editable (source-checkout) install.
+        interp = Path(path).read_text().splitlines()[0].lstrip("#!").strip()
+        show = subprocess.run(
+            [interp, "-m", "pip", "show", "deadline"], capture_output=True, text=True, timeout=30
+        ).stdout
+        for line in show.splitlines():
+            if line.lower().startswith("editable project location"):
+                editable = f" [EDITABLE -> {line.split(':', 1)[1].strip()}]"
+    except (OSError, subprocess.TimeoutExpired, IndexError):
+        pass
+    return f"deadline: {version} at {path}{editable}"
+
+
 def _aggregate(runs: list) -> dict:
     if not runs:
         return {"pass_rate": 0.0, "median_turns": 0.0, "median_cost_usd": 0.0, "n": 0}
@@ -239,6 +269,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.seed_subject and not args.revised_ref:
         print("ERROR: --seed-subject only applies in A/B mode; pass --revised-ref too.")
         return 2
+
+    # Always report which deadline CLI the agent will drive -- guards against
+    # silently evaluating a stale or fork-shadowed editable install.
+    print(f"[env] {_deadline_provenance()}")
 
     subj = None
     base_ref = None
