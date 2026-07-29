@@ -23,6 +23,7 @@ The material under test can be almost anything the agent relies on:
 | AWS CLI usage | goal + rubric only — no subject needed |
 | AWS documentation / blog / web page | fetch it to markdown, pass as `materials`, seed a corpus to revise |
 | This repo's docs | A/B with `--pathspec ':(glob)docs/**/*.md' --seed-subject` |
+| Real Deadline Cloud (submit a job) | `"env": "real_aws"` case + `--allow-real-aws` and sandbox env vars (see below) |
 
 ## Setup
 
@@ -54,6 +55,30 @@ python -m agent_evals.runner run my_docs_eval.json --revised-ref docs-fix \
 Artifacts land under `evals/output/<eval>/<timestamp>/`: per-run telemetry and
 transcripts, `summary.json`, and — when a revision measurably improved an eval —
 `proposal.patch`. Exit code 4 means the revision regressed.
+
+## Real-AWS evals (submit real jobs)
+
+A case with `"env": "real_aws"` (see `examples/real_aws_submit.json`) has the agent
+submit a real job bundle to a real farm and confirm it reaches SUCCEEDED — a true
+end-to-end check. Because these submit **real, billable jobs**, they are opt-in and
+never name an account in the eval file:
+
+- They are **skipped** (not failed) unless you pass `--allow-real-aws`, so a plain
+  `run` stays green in CI.
+- The farm/queue come from environment variables — set them to a **non-production
+  sandbox you own**:
+
+```bash
+export DEADLINE_EVAL_FARM_ID=farm-...
+export DEADLINE_EVAL_QUEUE_ID=queue-...
+export DEADLINE_EVAL_REGION=us-west-2        # optional
+deadline auth login                          # the runner prechecks auth
+python -m agent_evals.runner run examples/real_aws_submit.json --allow-real-aws
+```
+
+The case's `prompt`/`rubric` may reference `{farm_id}`, `{queue_id}`, and `{region}`,
+which are filled from those env vars. Missing vars or expired auth skip the case
+with a clear reason rather than submitting to the wrong place.
 
 ## Write an eval
 

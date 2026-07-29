@@ -138,3 +138,32 @@ def test_safe_write_rejects_parent_traversal(tmp_path) -> None:
 def test_safe_write_rejects_absolute_path(tmp_path) -> None:
     with pytest.raises(ValueError, match="unsafe"):
         runner._safe_write(tmp_path / "materials", "/etc/evil", "x")
+
+
+def test_real_aws_context_requires_env(monkeypatch) -> None:
+    monkeypatch.delenv(runner.ENV_FARM_ID, raising=False)
+    monkeypatch.delenv(runner.ENV_QUEUE_ID, raising=False)
+    with pytest.raises(runner.RealAwsConfigError, match="FARM_ID"):
+        runner._real_aws_context()
+
+
+def test_real_aws_context_reads_env(monkeypatch) -> None:
+    monkeypatch.setenv(runner.ENV_FARM_ID, "farm-x")
+    monkeypatch.setenv(runner.ENV_QUEUE_ID, "queue-y")
+    monkeypatch.setenv(runner.ENV_REGION, "eu-central-1")
+    ctx = runner._real_aws_context()
+    assert ctx == {"farm_id": "farm-x", "queue_id": "queue-y", "region": "eu-central-1"}
+
+
+def test_real_aws_skipped_without_optin(monkeypatch) -> None:
+    monkeypatch.setenv(runner.ENV_FARM_ID, "farm-x")
+    monkeypatch.setenv(runner.ENV_QUEUE_ID, "queue-y")
+    reason = runner._real_aws_skip_reason(allow_real_aws=False)
+    assert reason and "allow-real-aws" in reason
+
+
+def test_real_aws_skip_reason_flags_missing_env(monkeypatch) -> None:
+    monkeypatch.delenv(runner.ENV_FARM_ID, raising=False)
+    monkeypatch.delenv(runner.ENV_QUEUE_ID, raising=False)
+    reason = runner._real_aws_skip_reason(allow_real_aws=True)
+    assert reason and "FARM_ID" in reason

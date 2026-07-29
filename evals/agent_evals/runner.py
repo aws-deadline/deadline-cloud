@@ -31,8 +31,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import statistics
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -45,6 +47,61 @@ from .harness import HarnessError, run_agent
 OUTPUT_ROOT = Path(__file__).resolve().parents[1] / "output"
 
 DEFAULT_TOOLS = ["Bash", "Read", "Write", "Edit"]
+
+# A case with "env": "real_aws" submits real, billable jobs to a real farm. Such
+# cases are SKIPPED unless the operator passes --allow-real-aws, and the farm/queue
+# come from these env vars -- never hardcoded, so a public eval file names no
+# account. Prompts may reference {farm_id}/{queue_id}/{region}, filled from here.
+REAL_AWS_ENV = "real_aws"
+ENV_FARM_ID = "DEADLINE_EVAL_FARM_ID"
+ENV_QUEUE_ID = "DEADLINE_EVAL_QUEUE_ID"
+ENV_REGION = "DEADLINE_EVAL_REGION"
+
+
+class RealAwsConfigError(RuntimeError):
+    """Raised when a real_aws case is requested but the environment isn't ready."""
+
+
+def _real_aws_context() -> dict:
+    """Farm/queue/region for real_aws cases, from env vars. Raises if the required
+    ones are unset -- we never fall back to a hardcoded or ambient default farm."""
+    farm = os.environ.get(ENV_FARM_ID, "").strip()
+    queue = os.environ.get(ENV_QUEUE_ID, "").strip()
+    missing = [n for n, v in ((ENV_FARM_ID, farm), (ENV_QUEUE_ID, queue)) if not v]
+    if missing:
+        raise RealAwsConfigError(
+            f"real_aws case needs {' and '.join(missing)} set to a NON-PRODUCTION "
+            "sandbox farm/queue you own (these submit real, billable jobs)."
+        )
+    return {"farm_id": farm, "queue_id": queue, "region": os.environ.get(ENV_REGION, "").strip()}
+
+
+def _aws_authenticated() -> bool:
+    """True when `deadline auth status` reports the API reachable."""
+    try:
+        out = subprocess.run(
+            ["deadline", "auth", "status"], capture_output=True, text=True, timeout=30
+        ).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return '"api_availability": true' in out or "API Availability: True" in out
+
+
+def _real_aws_skip_reason(allow_real_aws: bool) -> Optional[str]:
+    """Why a real_aws case should be skipped, or None if it's clear to run.
+
+    Skipping (rather than failing) keeps a default `run` green: real_aws cases are
+    opt-in, submit billable jobs, and need live auth + a configured sandbox farm.
+    """
+    if not allow_real_aws:
+        return "requires --allow-real-aws (submits real, billable jobs)"
+    try:
+        _real_aws_context()
+    except RealAwsConfigError as e:
+        return str(e)
+    if not _aws_authenticated():
+        return "deadline auth status is not authenticated; run `deadline auth login`"
+    return None
 
 
 # Telemetry shape for a run that never produced a result (harness error). Mirrors
@@ -93,9 +150,17 @@ def _subject_files(subj) -> dict:
     return files
 
 
-def _run_case(case: dict, run_dir: Path, model: Optional[str], subject_files=None) -> dict:
-    """One agent run + judge verdict; artifacts under run_dir."""
-    prompt = case["prompt"]
+def _run_case(
+    case: dict, run_dir: Path, model: Optional[str], subject_files=None, aws_ctx=None
+) -> dict:
+    """One agent run + judge verdict; artifacts under run_dir.
+
+    `aws_ctx` (farm_id/queue_id/region) is filled into {placeholders} in the prompt
+    and rubric for real_aws cases; None for offline/mock cases.
+    """
+    fmt = dict(aws_ctx or {})
+    prompt = case["prompt"].format(**fmt) if fmt else case["prompt"]
+    rubric = case["rubric"].format(**fmt) if fmt else case["rubric"]
     materials = case.get("materials", {})
     if materials:
         listing = ", ".join(f"materials/{name}" for name in materials)
@@ -132,7 +197,7 @@ def _run_case(case: dict, run_dir: Path, model: Optional[str], subject_files=Non
         shutil.rmtree(workdir, ignore_errors=True)
 
     try:
-        verdict = judge.judge_answer(case["rubric"], prompt, result.final_text, model=model)
+        verdict = judge.judge_answer(rubric, prompt, result.final_text, model=model)
         passed, reasoning = verdict.passed, verdict.reasoning
     except judge.JudgeError as e:
         # A judge that can't render a verdict must not silently pass a run.
@@ -202,6 +267,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
     try:
         for case in cases:
             k = case.get("k", args.k)
+
+            # real_aws cases submit real, billable jobs: skip (don't fail) unless the
+            # operator opted in, the farm/queue env vars are set, and auth is live.
+            # Skipping keeps a plain `run` green in CI while these are opt-in only.
+            aws_ctx = None
+            if case.get("env") == REAL_AWS_ENV:
+                skip = _real_aws_skip_reason(args.allow_real_aws)
+                if skip:
+                    print(f"\n=== {case['id']} === SKIPPED (real_aws): {skip}")
+                    summaries.append({"case_id": case["id"], "skipped": skip})
+                    continue
+                aws_ctx = _real_aws_context()
+
             print(f"\n=== {case['id']} (k={k}) ===")
             variants = {}
 
@@ -225,6 +303,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                         out_root / case["id"] / variant / f"run-{i}",
                         args.model,
                         subject_files,
+                        aws_ctx,
                     )
                     for i in range(1, k + 1)
                 ]
@@ -301,6 +380,14 @@ def main(argv: Optional[list] = None) -> int:
         "so the agent READS them -- required for docs/prose A/B, where the agent has "
         "no path to the repo checkout. Not needed for the CLI-source case (pip install "
         "-e makes the ref swap take effect through the installed `deadline`).",
+    )
+    run.add_argument(
+        "--allow-real-aws",
+        action="store_true",
+        help=f'opt in to running cases with "env": "{REAL_AWS_ENV}", which submit '
+        f"REAL, BILLABLE jobs. Requires {ENV_FARM_ID}/{ENV_QUEUE_ID} (optionally "
+        f"{ENV_REGION}) set to a non-production sandbox you own, and `deadline auth "
+        "login`. Without this flag such cases are skipped.",
     )
 
     args = ap.parse_args(argv)
