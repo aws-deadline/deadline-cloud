@@ -77,8 +77,12 @@ class Subject:
         self._git_checked("checkout", "-q", ref)
 
     def reset_clean(self) -> None:
-        """Discard uncommitted edits so one variant never bleeds into the next."""
-        self._git("reset", "--hard", "HEAD")
+        """Discard uncommitted edits under the owned paths so one variant never
+        bleeds into the next. Scoped to diff_pathspec -- NOT a whole-tree
+        `git reset --hard` -- so an operator's uncommitted work outside the owned
+        paths is never destroyed. `checkout HEAD` reverts tracked (staged and
+        worktree) edits; `clean -fd` removes untracked files; both scoped."""
+        self._git("checkout", "HEAD", "--", self.diff_pathspec)
         self._git("clean", "-fd", self.diff_pathspec)
 
     def capture_diff(self) -> str:

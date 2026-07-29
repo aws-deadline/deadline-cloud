@@ -82,6 +82,57 @@ def test_subject_dataclass_on_plain_repo(tmp_path: Path) -> None:
     assert "world" in subj.capture_diff()
 
 
+def _two_dir_repo(tmp_path: Path) -> Path:
+    """A committed repo with src/ and docs/ so pathspec scoping can be exercised."""
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "docs").mkdir()
+    (repo / "src" / "a.py").write_text("orig code\n")
+    (repo / "docs" / "b.md").write_text("orig doc\n")
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
+    return repo
+
+
+def test_reset_clean_preserves_work_outside_pathspec(tmp_path: Path) -> None:
+    # reset_clean is scoped: an operator A/Bing `src` while carrying uncommitted
+    # edits to docs/ must NOT have those edits destroyed (the bug an unscoped
+    # `git reset --hard HEAD` would cause).
+    repo = _two_dir_repo(tmp_path)
+    subj = Subject(root=repo, diff_pathspec="src")
+    (repo / "src" / "a.py").write_text("variant edit\n")
+    (repo / "src" / "extra.py").write_text("untracked variant file\n")
+    (repo / "docs" / "b.md").write_text("OPERATOR WIP\n")
+
+    subj.reset_clean()
+
+    assert (repo / "src" / "a.py").read_text() == "orig code\n"  # tracked edit reverted
+    assert not (repo / "src" / "extra.py").exists()  # untracked removed
+    assert (repo / "docs" / "b.md").read_text() == "OPERATOR WIP\n"  # out-of-pathspec preserved
+
+
+def test_reset_clean_reverts_staged_edits_in_pathspec(tmp_path: Path) -> None:
+    # A staged (git add'd) edit under the pathspec must also be reverted.
+    repo = _two_dir_repo(tmp_path)
+    subj = Subject(root=repo, diff_pathspec="src")
+    (repo / "src" / "a.py").write_text("staged edit\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True)
+
+    subj.reset_clean()
+
+    assert (repo / "src" / "a.py").read_text() == "orig code\n"
+    staged = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--cached", "--name-only"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert staged == ""
+
+
 def test_checkout_raises_on_missing_ref(tmp_path: Path) -> None:
     # A checkout that silently fails would leave the "revised" variant running
     # baseline source, producing a plausible-looking but meaningless A/B result.
