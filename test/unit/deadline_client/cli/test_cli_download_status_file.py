@@ -903,6 +903,13 @@ class TestExtractTaskId:
         key = "DeadlineCloud/Manifests/farm-abc/queue-abc/job-abc/step-abc/task-xyz123-3/ts_sessionaction/hash_output"
         assert _extract_task_id_from_s3_key(key) == "task-xyz123-3"
 
+    def test_ignores_task_substring_in_customer_root_prefix(self):
+        """A rootPrefix containing 'task-' must not be mistaken for the real task id."""
+        from deadline.client.cli._incremental_download import _extract_task_id_from_s3_key
+
+        key = "my-task-outputs/Manifests/farm-abc/queue-abc/job-abc/step-abc/task-real-1/ts_sessionaction/hash_output"
+        assert _extract_task_id_from_s3_key(key) == "task-real-1"
+
 
 class TestPerTaskTracking:
     """Tests for per-task download tracking in status file."""
@@ -1114,29 +1121,80 @@ class TestClassifyError:
         assert _classify_error(ConnectionError("reset")) == "NETWORK_ERROR"
         assert _classify_error(TimeoutError("timed out")) == "NETWORK_ERROR"
 
-    def test_permission_denied_by_message(self):
+    def test_client_error_access_denied(self):
+        from deadline.client.cli._incremental_download import _classify_error
+        from botocore.exceptions import ClientError
+
+        e = ClientError({"Error": {"Code": "AccessDenied", "Message": "nope"}}, "GetObject")
+        assert _classify_error(e) == "PERMISSION_DENIED"
+
+    def test_client_error_no_such_key(self):
+        from deadline.client.cli._incremental_download import _classify_error
+        from botocore.exceptions import ClientError
+
+        e = ClientError({"Error": {"Code": "NoSuchKey", "Message": "gone"}}, "GetObject")
+        assert _classify_error(e) == "PATH_NOT_FOUND"
+
+    def test_client_error_request_timeout(self):
+        from deadline.client.cli._incremental_download import _classify_error
+        from botocore.exceptions import ClientError
+
+        e = ClientError({"Error": {"Code": "RequestTimeout", "Message": "slow"}}, "GetObject")
+        assert _classify_error(e) == "NETWORK_ERROR"
+
+    def test_job_attachments_s3_client_error_by_status_code(self):
+        """The actual download path wraps S3 errors in JobAttachmentsS3ClientError,
+        which carries a structured HTTP status code — classify from that, not the message."""
+        from deadline.client.cli._incremental_download import _classify_error
+        from deadline.job_attachments.exceptions import JobAttachmentsS3ClientError
+
+        forbidden = JobAttachmentsS3ClientError(
+            action="downloading file", status_code=403, bucket_name="b", key_or_prefix="k"
+        )
+        assert _classify_error(forbidden) == "PERMISSION_DENIED"
+
+        not_found = JobAttachmentsS3ClientError(
+            action="downloading file", status_code=404, bucket_name="b", key_or_prefix="k"
+        )
+        assert _classify_error(not_found) == "PATH_NOT_FOUND"
+
+    def test_job_attachments_botocore_error_is_network(self):
+        from deadline.client.cli._incremental_download import _classify_error
+        from deadline.job_attachments.exceptions import JobAttachmentS3BotoCoreError
+
+        e = JobAttachmentS3BotoCoreError(action="downloading file", error_details="conn reset")
+        assert _classify_error(e) == "NETWORK_ERROR"
+
+    def test_wrapped_cause_is_classified(self):
+        """job_attachments wraps low-level failures (AssetSyncError(original)); the classifier
+        walks __cause__ to reach the structured signal instead of guessing from the message."""
+        from deadline.client.cli._incremental_download import _classify_error
+        from deadline.job_attachments.exceptions import AssetSyncError
+
+        wrapped = AssetSyncError("File download failed.")
+        wrapped.__cause__ = PermissionError("denied")
+        assert _classify_error(wrapped) == "PERMISSION_DENIED"
+
+    def test_cyclic_cause_chain_does_not_recurse_forever(self):
+        """A cyclic __cause__ chain must terminate at UNKNOWN, not blow the stack."""
         from deadline.client.cli._incremental_download import _classify_error
 
-        assert _classify_error(Exception("Access Denied")) == "PERMISSION_DENIED"
-        assert _classify_error(Exception("permission error")) == "PERMISSION_DENIED"
+        a = Exception("a")
+        b = Exception("b")
+        a.__cause__ = b
+        b.__cause__ = a  # cycle: neither carries a structured signal
+        assert _classify_error(a) == "UNKNOWN"
 
-    def test_disk_full_by_message(self):
+    def test_message_only_errors_are_unknown(self):
+        """Message-substring matching is intentionally not used — wrapped S3 errors carry
+        verbose text that produces confidently-wrong codes, so anything without a structured
+        signal (exception type or S3 error code) is classified as UNKNOWN."""
         from deadline.client.cli._incremental_download import _classify_error
 
-        assert _classify_error(Exception("No space left on device")) == "DISK_FULL"
-        assert _classify_error(Exception("disk full")) == "DISK_FULL"
-
-    def test_path_not_found_by_message(self):
-        from deadline.client.cli._incremental_download import _classify_error
-
-        assert _classify_error(Exception("No such file or directory")) == "PATH_NOT_FOUND"
-        assert _classify_error(Exception("path not found")) == "PATH_NOT_FOUND"
-
-    def test_network_error_by_message(self):
-        from deadline.client.cli._incremental_download import _classify_error
-
-        assert _classify_error(Exception("Connection timeout")) == "NETWORK_ERROR"
-        assert _classify_error(Exception("network unreachable")) == "NETWORK_ERROR"
+        assert _classify_error(Exception("Access Denied")) == "UNKNOWN"
+        assert _classify_error(Exception("No space left on device")) == "UNKNOWN"
+        assert _classify_error(Exception("No such file or directory")) == "UNKNOWN"
+        assert _classify_error(Exception("Connection timeout")) == "UNKNOWN"
 
     def test_unknown_error(self):
         from deadline.client.cli._incremental_download import _classify_error
