@@ -1,3 +1,11 @@
+## 0.60.4 (2026-08-03)
+
+### Features
+* Added per-task download tracking and skip_reason to the output download status file, providing more granular visibility into download progress and reasons files were skipped. (#1258)
+* Added per-job file counts, error isolation, and retry logic for output downloads. Inactive jobs and partial task completions are now handled gracefully, and failed job downloads can be retried. (#1223)
+
+### Bug Fixes
+* Constrained the MCP dependency to v1 to prevent compatibility issues with newer major versions. (#1315)
 ## 0.60.3 (2026-07-27)
 
 ### Bug Fixes
