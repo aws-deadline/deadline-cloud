@@ -16,7 +16,12 @@ from deadline.client.cli._download_status_file import (
     _status_file_lock,
     write_download_status_file,
 )
-from deadline.client.cli._incremental_download import CategorizedJobIds
+from deadline.client.cli._incremental_download import (
+    CategorizedJobIds,
+    _FailedJobsTracker,
+    _MAX_FAILED_JOB_RETRIES,
+)
+from deadline.client.cli._download_status_file import _is_job_fully_complete
 
 from ..shared_constants import MOCK_QUEUE_ID, MOCK_STORAGE_PROFILE_ID, MOCK_JOB_ID
 
@@ -45,15 +50,21 @@ def _make_job(
     ended: bool = True,
     attachments: bool = True,
     storage_profile_id: Optional[str] = MOCK_STORAGE_PROFILE_ID,
+    failed: int = 0,
 ) -> dict[str, Any]:
-    """Helper to create a fake job dict."""
+    """Helper to create a fake job dict.
+
+    Any tasks not accounted for by ``succeeded`` or ``failed`` are treated as still
+    RUNNING (i.e. active). Pass ``failed`` to model tasks that failed on the farm — a
+    failed task is terminal, so it does not count as active for completeness checks.
+    """
     job: dict[str, Any] = {
         "jobId": job_id,
         "name": f"test-job-{job_id[-8:]}",
         "taskRunStatusCounts": {
             "SUCCEEDED": succeeded,
-            "FAILED": 0,
-            "RUNNING": total - succeeded,
+            "FAILED": failed,
+            "RUNNING": total - succeeded - failed,
             "READY": 0,
             "PENDING": 0,
             "ASSIGNED": 0,
@@ -146,6 +157,87 @@ class TestDetermineJobDownloadStatus:
         assert "error_message" in result
         assert "skip_reason" in result
         assert "tasks" in result
+
+
+class TestIsJobFullyComplete:
+    """Tests for _is_job_fully_complete — the completeness gate used to decide
+    downloaded vs in_progress."""
+
+    def test_ended_with_no_active_tasks_is_complete(self):
+        job = _make_job(MOCK_JOB_ID, succeeded=5, total=5, ended=True)
+        assert _is_job_fully_complete(job) is True
+
+    def test_not_ended_is_not_complete(self):
+        job = _make_job(MOCK_JOB_ID, succeeded=5, total=5, ended=False)
+        assert _is_job_fully_complete(job) is False
+
+    def test_ended_but_active_tasks_remain_is_not_complete(self):
+        """A requeued job can carry endedAt yet still have READY/RUNNING tasks."""
+        job = _make_job(MOCK_JOB_ID, succeeded=2, total=5, ended=True)  # 3 RUNNING
+        assert _is_job_fully_complete(job) is False
+
+    def test_ended_with_failed_tasks_but_none_active_is_complete(self):
+        """Pins the _is_job_fully_complete change: a FAILED task is terminal, not active,
+        so a job that ended with some farm-failed tasks and no still-running tasks is
+        complete — all downloadable output (from succeeded tasks) is available."""
+        job = _make_job(MOCK_JOB_ID, succeeded=3, failed=2, total=5, ended=True)
+        assert job["taskRunStatusCounts"]["RUNNING"] == 0
+        assert _is_job_fully_complete(job) is True
+
+    def test_ended_with_failed_and_still_running_is_not_complete(self):
+        job = _make_job(MOCK_JOB_ID, succeeded=1, failed=1, total=5, ended=True)  # 3 RUNNING
+        assert _is_job_fully_complete(job) is False
+
+
+class TestFailedJobsTracker:
+    """Tests for _FailedJobsTracker — the per-job retry/abandon bookkeeping."""
+
+    def _tracker(self, tmp_path):
+        return _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+
+    def test_record_failure_increments_and_is_tracked(self, tmp_path):
+        tracker = self._tracker(tmp_path)
+        tracker.record_failures({MOCK_JOB_ID}, print_function_callback=lambda *_: None)
+        assert MOCK_JOB_ID in tracker.get_tracked_job_ids()
+        assert tracker.is_abandoned(MOCK_JOB_ID) is False
+
+    def test_abandoned_after_max_retries_and_warns(self, tmp_path):
+        tracker = self._tracker(tmp_path)
+        warnings: list[str] = []
+        for _ in range(_MAX_FAILED_JOB_RETRIES):
+            tracker.record_failures({MOCK_JOB_ID}, print_function_callback=warnings.append)
+        assert tracker.is_abandoned(MOCK_JOB_ID) is True
+        # An abandoned job is no longer offered for retry...
+        assert MOCK_JOB_ID not in tracker.get_tracked_job_ids()
+        # ...but it is NOT dropped, so a timestamp-window rediscovery stays suppressed.
+        assert any("no longer be retried" in w for w in warnings)
+
+    def test_record_success_clears_job(self, tmp_path):
+        tracker = self._tracker(tmp_path)
+        tracker.record_failures({MOCK_JOB_ID}, print_function_callback=lambda *_: None)
+        tracker.record_successes({MOCK_JOB_ID})
+        assert MOCK_JOB_ID not in tracker.get_tracked_job_ids()
+        assert tracker.is_abandoned(MOCK_JOB_ID) is False
+
+    def test_save_and_load_round_trips_counts(self, tmp_path):
+        path = str(tmp_path / "failed_jobs.json")
+        tracker = _FailedJobsTracker(path)
+        tracker.record_failures({MOCK_JOB_ID}, print_function_callback=lambda *_: None)
+        tracker.record_failures({MOCK_JOB_ID}, print_function_callback=lambda *_: None)
+        tracker.save()
+
+        reloaded = _FailedJobsTracker(path)
+        # A fresh tracker over the same file sees the persisted count (2, below the cap).
+        assert MOCK_JOB_ID in reloaded.get_tracked_job_ids()
+        reloaded.record_failures({MOCK_JOB_ID}, print_function_callback=lambda *_: None)
+        assert reloaded._counts[MOCK_JOB_ID] == 3
+
+    def test_load_tolerates_corrupt_file(self, tmp_path):
+        path = str(tmp_path / "failed_jobs.json")
+        with open(path, "w") as f:
+            f.write("{ not valid json")
+        tracker = _FailedJobsTracker(path)  # must not raise
+        assert tracker.get_tracked_job_ids() == set()
 
 
 class TestGetStatusFilePaths:
@@ -799,61 +891,6 @@ class TestFileCountPreservation:
         )
         assert result["jobs"][MOCK_JOB_ID]["total_files"] == 5
         assert result["jobs"][MOCK_JOB_ID]["downloaded_files"] == 5
-
-
-class TestFailedJobsTracker:
-    """Tests for _FailedJobsTracker."""
-
-    def test_empty_on_missing_file(self, tmp_path):
-        from deadline.client.cli._incremental_download import _FailedJobsTracker
-
-        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
-        assert tracker.get_tracked_job_ids() == set()
-
-    def test_record_and_retrieve_failure(self, tmp_path):
-        from deadline.client.cli._incremental_download import _FailedJobsTracker
-
-        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
-        messages: list[str] = []
-        tracker.record_failures({MOCK_JOB_ID}, messages.append)
-        assert MOCK_JOB_ID in tracker.get_tracked_job_ids()
-
-    def test_record_success_removes_job(self, tmp_path):
-        from deadline.client.cli._incremental_download import _FailedJobsTracker
-
-        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
-        messages: list[str] = []
-        tracker.record_failures({MOCK_JOB_ID}, messages.append)
-        tracker.record_successes({MOCK_JOB_ID})
-        assert MOCK_JOB_ID not in tracker.get_tracked_job_ids()
-
-    def test_retry_cap_removes_job_and_warns(self, tmp_path):
-        from deadline.client.cli._incremental_download import (
-            _FailedJobsTracker,
-            _MAX_FAILED_JOB_RETRIES,
-        )
-
-        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
-        messages: list[str] = []
-        for _ in range(_MAX_FAILED_JOB_RETRIES):
-            tracker.record_failures({MOCK_JOB_ID}, messages.append)
-        # Abandoned job is excluded from get_tracked_job_ids (not retried)
-        assert MOCK_JOB_ID not in tracker.get_tracked_job_ids()
-        # But is_abandoned returns True so it can be filtered from timestamp window too
-        assert tracker.is_abandoned(MOCK_JOB_ID)
-        assert any("WARNING" in m for m in messages)
-
-    def test_persists_and_reloads(self, tmp_path):
-        from deadline.client.cli._incremental_download import _FailedJobsTracker
-
-        file_path = str(tmp_path / "failed_jobs.json")
-        tracker = _FailedJobsTracker(file_path)
-        messages: list[str] = []
-        tracker.record_failures({MOCK_JOB_ID}, messages.append)
-        tracker.save()
-
-        tracker2 = _FailedJobsTracker(file_path)
-        assert MOCK_JOB_ID in tracker2.get_tracked_job_ids()
 
 
 class TestSkipReason:

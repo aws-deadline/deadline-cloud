@@ -10,6 +10,7 @@ import sys
 import pytest
 from unittest.mock import patch
 from datetime import datetime, timedelta
+from typing import Callable, NamedTuple
 
 from freezegun import freeze_time
 from click.testing import CliRunner
@@ -48,6 +49,16 @@ MOCK_STORAGE_PROFILE_ID_LOCAL = "sp-a123456789abcdefabcdefabcdefabcf"
 MOCK_SESSION_ID = "session-0123456789abcdefabcdefabcdefabcd"
 MOCK_SESSION_ACTION_ID_1 = "sessionaction-0123456789abcdefabcdefabcdefabcd-0"
 MOCK_SESSION_ACTION_ID_2 = "sessionaction-0123456789abcdefabcdefabcdefabcd-1"
+
+_STEP_ID = "step-b1764261dff54214aace3932bde8ae7e"
+_OUTPUT_FILE_NAMES = ("beauty.exr", "depth.exr", "normal.exr")
+
+
+def _ignore_profiles_status_file(checkpoint_dir):
+    """Path of the status file written in --ignore-storage-profiles mode."""
+    return os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
 
 
 # Fixtures for shared resources
@@ -2275,3 +2286,592 @@ def test_incremental_output_download_shared_path_newest_wins_regardless_of_order
     assert loser_entry["total_files"] == 1, loser_entry
     assert loser_entry["downloaded_files"] == 1, loser_entry
     assert loser_entry["tasks"][task_id_old]["downloaded_files"] == 1, loser_entry
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_deduped_job_inherits_winning_jobs_error(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """When the job that WON a shared output path fails to download it, the deduped (losing)
+    job reports the winner's actual error rather than a generic UNKNOWN.
+
+    The loser performs no download of its own, so its status is synthesized from the
+    filesystem. The file is missing, and the reason is the winner's failure — surfacing
+    UNKNOWN there would tell the artist "not found on disk" when the real cause is a
+    permission error, sending them down the wrong path.
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    job_id_old = MOCK_JOB_ID
+    job_id_new = "job-0123456789abcdefabcdefabcdefab99"
+    task_id_old = "task-b1764261dff54214aace3932bde8ae7e-0"
+    task_id_new = "task-b1764261dff54214aace3932bde8ae7e-1"
+    shared_path = str(tmp_path / "shared" / "beauty.exr")
+
+    mock_jobs = create_fake_job_list(2)
+    for job, jid, name in (
+        (mock_jobs[0], job_id_old, "Old Job"),
+        (mock_jobs[1], job_id_new, "New Job"),
+    ):
+        job["name"] = name
+        job["jobId"] = jid
+        job["taskRunStatus"] = "SUCCEEDED"
+        job["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+        job["attachments"] = {
+            "manifests": [
+                {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+            ],
+            "fileSystem": "COPIED",
+        }
+        job["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    task_by_job = {job_id_old: task_id_old, job_id_new: task_id_new}
+    deadline_mock.list_session_actions.side_effect = lambda **kwargs: {
+        "sessionActions": [
+            {
+                "sessionActionId": "sessionaction-0123456789abcdefabcdefabcdefabcd-0",
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {
+                    "taskRun": {"taskId": task_by_job[kwargs.get("jobId")], "stepId": _STEP_ID}
+                },
+                "manifests": [
+                    {"outputManifestPath": f"{task_by_job[kwargs.get('jobId')]}/manifest"}
+                ],
+            }
+        ]
+    }
+
+    def make_manifest():
+        return AssetManifest(
+            hash_alg=HashAlgorithm.XXH128,
+            total_size=1,
+            paths=[ManifestPath(path=shared_path, hash="h", size=1, mtime=1)],
+        )
+
+    # The newer job wins the shared path; the older job is deduped out.
+    downloaded_manifests = [
+        (datetime.fromisoformat(ISO_FREEZE_TIME), make_manifest()),
+        (datetime.fromisoformat(ISO_FREEZE_TIME_MINUS_5MIN), make_manifest()),
+    ]
+    manifests_to_download = [
+        (None, job_id_new, "/", f"prefix/{_STEP_ID}/{task_id_new}/manifest"),
+        (None, job_id_old, "/", f"prefix/{_STEP_ID}/{task_id_old}/manifest"),
+    ]
+
+    def failing_downloader(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        # The winner's download fails, so the shared file never lands on disk.
+        raise PermissionError(f"[Errno 13] Permission denied: '{shared_path}'")
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=lambda *a, **k: downloaded_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=lambda *a, **k: manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=failing_downloader,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert not os.path.exists(shared_path), "the winner's download was supposed to fail"
+
+    with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
+        status = json.load(f)
+
+    # The winning job reports its own download failure.
+    winner_entry = status["jobs"][job_id_new]
+    assert winner_entry["download_status"] == "failed", winner_entry
+    assert winner_entry["error_code"] == "PERMISSION_DENIED", winner_entry
+
+    # The losing job downloaded nothing itself, so its status is synthesized from the
+    # filesystem — and it inherits the winner's real error for the shared path, NOT UNKNOWN.
+    loser_task = status["jobs"][job_id_old]["tasks"][task_id_old]
+    assert loser_task["error_code"] == "PERMISSION_DENIED", loser_task
+    assert loser_task["total_files"] == 1, loser_task
+    assert loser_task["downloaded_files"] == 0, loser_task
+
+
+class _TwoJobEnv(NamedTuple):
+    """Mocks for a two-job run where each job has one task writing one or more files."""
+
+    mock_jobs: list
+    downloaded_manifests: list
+    manifests_to_download: list
+    downloader: Callable
+    downloaded_paths: list
+    job_ids: list
+    task_ids: list
+    job_file_paths: list  # job_file_paths[i] = output paths owned by job i
+
+
+def _two_job_download_env(tmp_path, files_per_job=(1, 1), failing_job_path=None, cancel=False):
+    """Builds the mocks for a two-job run, each job having one task.
+
+    ``files_per_job`` sets how many output files each job writes, which is what makes
+    per-job count attribution observable. If ``failing_job_path`` is given the fake
+    downloader raises PermissionError for that path; if ``cancel`` is True it raises
+    AssetSyncCancelledError for every path.
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+    from deadline.job_attachments.exceptions import AssetSyncCancelledError
+
+    job_ids = [MOCK_JOB_ID, "job-0123456789abcdefabcdefabcdefab99"]
+    task_ids = [f"task-b1764261dff54214aace3932bde8ae7e-{i}" for i in range(2)]
+    job_file_paths = [
+        [str(tmp_path / f"job_{i}" / _OUTPUT_FILE_NAMES[k]) for k in range(files_per_job[i])]
+        for i in range(2)
+    ]
+
+    mock_jobs = create_fake_job_list(2)
+    for i, (job, jid) in enumerate(zip(mock_jobs, job_ids)):
+        job["name"] = f"Job {i}"
+        job["jobId"] = jid
+        job["taskRunStatus"] = "SUCCEEDED"
+        job["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+        job["attachments"] = {
+            "manifests": [
+                {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+            ],
+            "fileSystem": "COPIED",
+        }
+        job["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=len(job_file_paths[i]),
+                paths=[ManifestPath(path=p, hash="h", size=1, mtime=1) for p in job_file_paths[i]],
+            ),
+        )
+        for i in range(2)
+    ]
+    manifests_to_download = [
+        (None, job_ids[i], "/", f"prefix/{_STEP_ID}/{task_ids[i]}/manifest") for i in range(2)
+    ]
+
+    downloaded_paths: list[str] = []
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        for f in files:
+            if cancel:
+                raise AssetSyncCancelledError("File download cancelled.")
+            if failing_job_path is not None and f.path == failing_job_path:
+                raise PermissionError(f"[Errno 13] Permission denied: '{f.path}'")
+            downloaded_paths.append(f.path)
+            os.makedirs(os.path.dirname(f.path), exist_ok=True)
+            with open(f.path, "w") as fh:
+                fh.write("output")
+
+    return _TwoJobEnv(
+        mock_jobs=mock_jobs,
+        downloaded_manifests=downloaded_manifests,
+        manifests_to_download=manifests_to_download,
+        downloader=fake_download_manifest_paths,
+        downloaded_paths=downloaded_paths,
+        job_ids=job_ids,
+        task_ids=task_ids,
+        job_file_paths=job_file_paths,
+    )
+
+
+def _run_two_job_sync(deadline_mock, checkpoint_dir, env):
+    """Wires ``env``'s mocks onto deadline_mock and runs `queue sync-output` to completion.
+
+    Each job reports a single succeeded task run whose output manifest is the one
+    ``env`` built for it, so the attribution path sees one manifest per job.
+    """
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, env.mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, env.mock_jobs)
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    task_by_job = dict(zip(env.job_ids, env.task_ids))
+    deadline_mock.list_session_actions.side_effect = lambda **kwargs: {
+        "sessionActions": [
+            {
+                "sessionActionId": "sessionaction-0123456789abcdefabcdefabcdefabcd-0",
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {
+                    "taskRun": {"taskId": task_by_job[kwargs.get("jobId")], "stepId": _STEP_ID}
+                },
+                "manifests": [
+                    {"outputManifestPath": f"{task_by_job[kwargs.get('jobId')]}/manifest"}
+                ],
+            }
+        ]
+    }
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=lambda *a, **k: env.downloaded_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=lambda *a, **k: env.manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=env.downloader,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        return runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_cross_job_error_isolation(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """Two independent jobs, one raises on download: the other job's files still download
+    and it reports 'downloaded', while the failing job reports 'failed'. A failure in one
+    job must not taint a sibling job in the same run."""
+    env = _two_job_download_env(
+        tmp_path, failing_job_path=str(tmp_path / "job_0" / _OUTPUT_FILE_NAMES[0])
+    )
+
+    result = _run_two_job_sync(deadline_mock, checkpoint_dir, env)
+
+    assert result.exit_code == 0, result.output
+    # The healthy job's file downloaded despite the sibling's failure.
+    assert env.job_file_paths[1][0] in env.downloaded_paths, env.downloaded_paths
+
+    with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
+        status = json.load(f)
+
+    jobs = status["jobs"]
+    assert jobs[env.job_ids[0]]["download_status"] == "failed", jobs
+    assert jobs[env.job_ids[0]]["error_code"] == "PERMISSION_DENIED", jobs
+    assert jobs[env.job_ids[1]]["download_status"] == "downloaded", jobs
+    assert jobs[env.job_ids[1]]["error_code"] is None, jobs
+    # The run is flagged failed overall because at least one job failed.
+    assert status["sync_metadata"]["last_run_status"] == "failed", status["sync_metadata"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_cancellation_propagates(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """An AssetSyncCancelledError from the downloader propagates as a cancellation of the
+    whole run — it is NOT swallowed and recorded as a per-job download failure."""
+    from deadline.job_attachments.exceptions import AssetSyncCancelledError
+
+    env = _two_job_download_env(tmp_path, cancel=True)
+
+    result = _run_two_job_sync(deadline_mock, checkpoint_dir, env)
+
+    # Cancellation aborts the run (non-zero exit) rather than completing successfully and
+    # recording per-job download failures. The AssetSyncCancelledError propagates out of the
+    # download loop and is surfaced by the CLI's error handler.
+    assert result.exit_code != 0, result.output
+    assert AssetSyncCancelledError.__name__ in result.output, result.output
+    assert not env.downloaded_paths, "cancellation must abort before writing outputs"
+    # No status file claims these jobs succeeded — the run never reached a clean completion.
+    assert not os.path.exists(_ignore_profiles_status_file(checkpoint_dir)), (
+        "cancelled run must not write a status file"
+    )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_per_job_counts_are_correctly_attributed(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """Two jobs with DIFFERENT file counts download successfully, and each job's
+    downloaded_files/total_files are attributed to that job — not lumped together.
+
+    This pins the attribution block that correlates manifests_to_download with
+    downloaded_manifests by index: job_0 owns 2 files, job_1 owns 1 file. A regression
+    that mis-indexed the correlation (e.g. crediting every file to the last job) shows up
+    here as wrong per-job counts even though the run-wide total is unchanged.
+    """
+    env = _two_job_download_env(tmp_path, files_per_job=(2, 1))
+
+    result = _run_two_job_sync(deadline_mock, checkpoint_dir, env)
+
+    assert result.exit_code == 0, result.output
+    # All three files downloaded across the two jobs.
+    assert sorted(env.downloaded_paths) == sorted(env.job_file_paths[0] + env.job_file_paths[1]), (
+        env.downloaded_paths
+    )
+
+    with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
+        status = json.load(f)
+
+    # The load-bearing assertion: counts are attributed per job, not lumped together.
+    jobs = status["jobs"]
+    for i, expected_count in enumerate((2, 1)):
+        entry = jobs[env.job_ids[i]]
+        assert entry["download_status"] == "downloaded", entry
+        assert entry["total_files"] == expected_count, entry
+        assert entry["downloaded_files"] == expected_count, entry
+        # The per-task entry carries the same count, since each job has exactly one task.
+        assert entry["tasks"][env.task_ids[i]]["downloaded_files"] == expected_count, entry
+    assert status["sync_metadata"]["last_run_status"] == "success", status["sync_metadata"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_retries_failed_job_via_get_job(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """A job tracked as previously-failed but outside the search_jobs window is re-fetched
+    individually via GetJob and injected into the download candidates.
+
+    A second tracked job that no longer exists (GetJob → ResourceNotFoundException) is
+    dropped from the tracker instead of being retried forever. A third tracked job that has
+    hit the retry cap is suppressed even though it is returned by search_jobs.
+    """
+    from botocore.exceptions import ClientError
+    from deadline.client.cli._incremental_download import _MAX_FAILED_JOB_RETRIES
+
+    retried_job_id = "job-0123456789abcdefabcdefabcdefab01"
+    deleted_job_id = "job-0123456789abcdefabcdefabcdefab02"
+    abandoned_job_id = "job-0123456789abcdefabcdefabcdefab03"
+
+    # Pre-seed the failed-jobs tracker file the CLI reads on startup.
+    failed_jobs_file = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_failed_jobs.json"
+    )
+    with open(failed_jobs_file, "w") as f:
+        json.dump(
+            {
+                retried_job_id: 1,
+                deleted_job_id: 1,
+                abandoned_job_id: _MAX_FAILED_JOB_RETRIES,  # at the cap → abandoned
+            },
+            f,
+        )
+
+    # search_jobs returns only the abandoned job (in-window); the retried/deleted jobs are
+    # outside the window and only reachable via GetJob.
+    abandoned_job = create_fake_job_list(1)[0]
+    abandoned_job["jobId"] = abandoned_job_id
+    abandoned_job["name"] = "Abandoned Job"
+    abandoned_job["taskRunStatus"] = "SUCCEEDED"
+    abandoned_job["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+    abandoned_job["attachments"] = {"manifests": []}
+    abandoned_job["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(
+        MOCK_FARM_ID, MOCK_QUEUE_ID, [abandoned_job]
+    )
+
+    retried_job = create_fake_job_list(1)[0]
+    retried_job["jobId"] = retried_job_id
+    retried_job["name"] = "Retried Job"
+    retried_job["taskRunStatus"] = "SUCCEEDED"
+    retried_job["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+    retried_job["attachments"] = {"manifests": []}
+    retried_job["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+
+    def fake_get_job(farmId, queueId, jobId):
+        # Only the deleted job is gone; every other GetJob (retried job, plus any
+        # categorize-time lookups) resolves normally.
+        if jobId == deleted_job_id:
+            raise ClientError(
+                {"Error": {"Code": "ResourceNotFoundException", "Message": "gone"}}, "GetJob"
+            )
+        if jobId == retried_job_id:
+            return retried_job
+        return abandoned_job
+
+    deadline_mock.get_job.side_effect = fake_get_job
+
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    # --force-bootstrap is intentionally omitted: it clears the failed-jobs tracker for a
+    # fresh start. Without it (and with no checkpoint file) the run still bootstraps but
+    # preserves the tracker, so the previously-failed jobs are retried.
+    assert "Retrying 2 previously failed job(s)" in result.output, result.output
+    # The re-fetched job was pulled in via GetJob.
+    assert retried_job_id in [c.kwargs.get("jobId") for c in deadline_mock.get_job.call_args_list]
+
+    # The abandoned job is suppressed even though search_jobs returned it in-window, so it
+    # never reaches the status file as a download candidate.
+    status_file_path = _ignore_profiles_status_file(checkpoint_dir)
+    if os.path.exists(status_file_path):
+        with open(status_file_path) as f:
+            status = json.load(f)
+        assert abandoned_job_id not in status["jobs"], status["jobs"]
+
+    # The deleted job was removed from the tracker (GetJob → ResourceNotFoundException), so
+    # it stops being retried forever. The abandoned job's count is retained at the cap
+    # rather than dropped, which is what keeps a timestamp-window rediscovery suppressed.
+    with open(failed_jobs_file) as f:
+        tracker_after = json.load(f)
+    assert deleted_job_id not in tracker_after, tracker_after
+    assert tracker_after.get(abandoned_job_id) == _MAX_FAILED_JOB_RETRIES, tracker_after
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_force_bootstrap_clears_failed_jobs_tracker(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """--force-bootstrap deletes the failed-jobs tracker, giving abandoned jobs a fresh start.
+
+    This is the escape hatch for a job stuck at the retry cap: without it, an abandoned job
+    stays suppressed forever. The consequence is that a forced bootstrap does NOT retry
+    previously-failed jobs individually — the tracker is gone before that step runs.
+    """
+    from deadline.client.cli._incremental_download import _MAX_FAILED_JOB_RETRIES
+
+    abandoned_job_id = "job-0123456789abcdefabcdefabcdefab03"
+    failed_jobs_file = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_failed_jobs.json"
+    )
+    with open(failed_jobs_file, "w") as f:
+        json.dump({abandoned_job_id: _MAX_FAILED_JOB_RETRIES}, f)
+
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, [])
+
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    # The seeded tracker was cleared, so no retry pass ran for the previously-failed job.
+    assert "previously failed job(s)" not in result.output, result.output
+    # The seeded counts are gone. The end-of-run save rewrites the file unconditionally, so it
+    # may exist again — but empty, with the abandoned job no longer suppressed.
+    if os.path.exists(failed_jobs_file):
+        with open(failed_jobs_file) as f:
+            assert json.load(f) == {}, "forced bootstrap must clear the tracked counts"
