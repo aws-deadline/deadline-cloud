@@ -123,6 +123,44 @@ def _make_status_entry(
     }
 
 
+# Job statuses that assert the job is finished and nothing failed to download. An errored task
+# contradicts any of them, so these are the states _reconcile_entry_with_tasks overrides.
+# "in_progress" is excluded on purpose: it claims nothing, and the download may still be retried
+# before the job ends, so the honest report is a failed task row under a still-running job.
+_NO_DOWNLOAD_FAILURE_STATUSES = ("downloaded", "skipped")
+
+
+def _reconcile_entry_with_tasks(entry: dict[str, Any]) -> None:
+    """Forces a job entry back to "failed" while any of its tasks still carries a download error.
+
+    A job's category-derived status only says the job finished on the farm, which is not
+    evidence that its outputs reached disk. Without this, a job whose task failed in an
+    earlier run and which produced no new results this run flips to "downloaded" while its
+    task entry still reads "failed" — a green job badge over a red task, and a real failure
+    silently dropped. The same applies to "skipped": a job stopped mid-download reports
+    "skipped" once it goes inactive, which reads as "nothing to fetch" rather than "a file is
+    missing and here is why". Preferring the task evidence keeps the two levels consistent
+    without claiming a missing file is present.
+
+    Tasks that failed on the farm carry no error_code and are deliberately excluded: the
+    render failed, the download didn't, so they must not drag the job to a download failure.
+    """
+    if entry.get("download_status") not in _NO_DOWNLOAD_FAILURE_STATUSES:
+        return
+    errored = [t for t in entry.get("tasks", {}).values() if t.get("error_code")]
+    if not errored:
+        return
+    entry["download_status"] = "failed"
+    entry["error_code"] = errored[0]["error_code"]
+    entry["error_message"] = errored[0].get("error_message")
+    # A download failure is not a skip. Leaving skip_reason set would produce an entry that
+    # claims both, and the monitor keys its "why is this file missing" copy off skip_reason.
+    entry["skip_reason"] = None
+    missing = sum(t.get("total_files", 0) - t.get("downloaded_files", 0) for t in errored)
+    if missing > 0:
+        entry["failed_files"] = missing
+
+
 def _is_job_fully_complete(job: dict[str, Any]) -> bool:
     """Returns True if the job has ended with no active tasks remaining.
 
@@ -276,7 +314,9 @@ def _build_status_file_content(
                     existing_entry["error_message"] = None
                     existing_entry["failed_files"] = 0
             existing_entry["tasks"] = merged_tasks
+            _reconcile_entry_with_tasks(existing_entry)
         else:
+            _reconcile_entry_with_tasks(new_entry)
             jobs_status[job_id] = new_entry
 
     # Update inactive jobs with non-terminal status to a terminal state
@@ -290,6 +330,7 @@ def _build_status_file_content(
                 # No downloads at all — mark as skipped (job stopped before any output)
                 existing_entry["download_status"] = "skipped"
             existing_entry["last_updated"] = now
+            _reconcile_entry_with_tasks(existing_entry)
 
     # Determine run status — "failed" if any job in this run had errors
     has_failures = any(

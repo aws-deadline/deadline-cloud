@@ -107,11 +107,17 @@ def _classify_error(e: BaseException) -> str:
     boto error codes — which are reliable. Message-substring matching is intentionally
     avoided: wrapped S3 errors carry verbose guidance text that produces confidently
     wrong codes. job_attachments wraps low-level failures (e.g. an OSError or a botocore
-    ClientError) inside its own exception types, so we also walk the __cause__ chain to
+    ClientError) inside its own exception types, so we also walk the exception chain to
     reach the structured signal underneath. Anything without such a signal is UNKNOWN.
     """
-    # Walk the __cause__ chain iteratively, tracking visited exceptions by identity so a
-    # cyclic chain (A raised `from` B and B raised `from` A) can't cause infinite recursion.
+    # Walk the chain iteratively, tracking visited exceptions by identity so a cyclic chain
+    # (A raised `from` B and B raised `from` A) can't cause infinite recursion.
+    #
+    # __cause__ (explicit `raise ... from`) is preferred, but fall back to __context__: much of
+    # job_attachments re-raises inside an `except` block without `from`, which records the
+    # original only as __context__. Following __cause__ alone reports UNKNOWN for those.
+    # __suppress_context__ (`raise ... from None`) means the author declared the inner error
+    # irrelevant, so honor it and stop rather than attaching a misleading code.
     current: Optional[BaseException] = e
     seen: set[int] = set()
     while current is not None and id(current) not in seen:
@@ -119,7 +125,12 @@ def _classify_error(e: BaseException) -> str:
         code = _classify_single_error(current)
         if code is not None:
             return code
-        current = current.__cause__
+        if current.__cause__ is not None:
+            current = current.__cause__
+        elif current.__suppress_context__:
+            break
+        else:
+            current = current.__context__
 
     return "UNKNOWN"
 
@@ -1438,146 +1449,70 @@ def _incremental_output_download(
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
     # job_id -> task_id -> [files]: used for per-task download tracking
     job_task_manifest_paths: dict[str, dict[str, list[BaseManifestPath]]] = {}
-    # job_id -> task_id -> [file_paths]: record of the paths originally attributed to each task.
-    # Unlike job_task_manifest_paths, this is NOT emptied by cross-job transfers — a losing job
-    # keeps its record so the deduped-job block below can still report its filesystem-based status
-    # after the winning job takes over the paths.
-    all_task_file_paths: dict[str, dict[str, list[str]]] = {}
-    # job_id -> task_id -> {paths}: membership set mirroring all_task_file_paths so the per-file
-    # dedup check is O(1) instead of a linear scan of the growing list.
-    all_task_file_paths_seen: dict[str, dict[str, set[str]]] = {}
-    # job_id -> normcased_path -> task_id that currently owns it, so a path emitted by more than
-    # one task of the same job (e.g. a requeue) is attributed to a single task rather than
-    # duplicated across tasks (which would double-download it and inflate the file count).
-    task_owner_by_job: dict[str, dict[str, str]] = {}
-    # global_seen_paths maps normcased_path -> job_id that claimed it first.
-    # Prevents concurrent writes to the same destination file across jobs — parallel threads
-    # could write the same path simultaneously, corrupting the file under OVERWRITE. When two
-    # jobs share an output path, ownership transfers to the later-iterated job so exactly one
-    # job downloads it. Content correctness is unaffected: jobs sharing a path produce the same
-    # rendered file, so whichever job writes it, the bytes on disk are identical. The transfer
-    # only determines which job_id is credited in the status file; deduped jobs still report
-    # accurate status via the post-download filesystem check.
-    global_seen_paths: dict[str, str] = {}
-    # job_path_index tracks the list index for each (job_id, normcased_path) pair so a later
-    # occurrence of the same path within a job overwrites the earlier one in place.
-    job_path_index: dict[str, dict[str, int]] = {}
-    # job_id -> task_id -> normcased_path -> list_index, mirrors job_path_index at the task level
-    task_path_index: dict[str, dict[str, dict[str, int]]] = {}
+    # job_id -> task_id -> [file_paths]: every path originally attributed to each task. Unlike
+    # job_task_manifest_paths this keeps the paths a newer job took ownership of, so a losing job
+    # can still report its filesystem-derived status in the deduped-job block below. Built as
+    # dict keys (an ordered set) to dedup a file that reappears across manifests via task retry.
+    task_file_paths: dict[str, dict[str, dict[str, None]]] = {}
     if not skip_attribution:
-        # Visit manifests oldest-to-newest by their S3 LastModified timestamp so the
-        # last write of any shared path wins. downloaded_manifests is filled positionally
-        # (correlated to manifests_to_download by index) and is NOT pre-sorted, so we derive
-        # the chronological order here rather than relying on iteration order.
-        ordered_indices = sorted(
-            (i for i in range(len(manifests_to_download)) if downloaded_manifests[i] is not None),
-            key=lambda i: downloaded_manifests[i][0],
+        # Visit manifests oldest-to-newest by their S3 LastModified timestamp so the last write of
+        # any shared path wins. downloaded_manifests is filled positionally (correlated to
+        # manifests_to_download by index) and is NOT pre-sorted, so derive the order here.
+        records = sorted(
+            (
+                (
+                    downloaded_manifests[i][0],
+                    manifests_to_download[i][1],  # job_id
+                    manifests_to_download[i][3],  # manifest_s3_key
+                    downloaded_manifests[i][1],  # manifest
+                )
+                for i in range(len(manifests_to_download))
+                if downloaded_manifests[i] is not None
+            ),
+            key=lambda record: record[0],
         )
-        for i in ordered_indices:
-            _, job_id, _, manifest_s3_key = manifests_to_download[i]
-            manifest_tuple = downloaded_manifests[i]
-            if manifest_tuple is not None:
-                _, manifest = manifest_tuple
-                task_id = _extract_task_id_from_s3_key(manifest_s3_key)
-                for manifest_path in manifest.paths:
-                    normcased = os.path.normcase(manifest_path.path)
-                    prior_job_id = global_seen_paths.get(normcased)
-                    if prior_job_id is not None and prior_job_id != job_id:
-                        # A different job previously claimed this path with an older manifest.
-                        # We iterate manifests oldest-to-newest (see ordered_indices above), so
-                        # the current manifest is newer — transfer ownership to preserve
-                        # newest-wins semantics.
-                        prior_paths = job_manifest_paths.get(prior_job_id, [])
-                        prior_idx_map = job_path_index.get(prior_job_id, {})
-                        if normcased in prior_idx_map:
-                            # Remove from old job's manifest list — mark as None so indices stay stable
-                            prior_paths[prior_idx_map[normcased]] = None  # type: ignore[call-overload]
-                            del prior_idx_map[normcased]
-                        # Remove from all of the old job's per-task paths using the index for O(1) lookup.
-                        # Scan all tasks since the same path could appear in multiple tasks.
-                        for t_id, t_idx_map in task_path_index.get(prior_job_id, {}).items():
-                            if normcased in t_idx_map:
-                                job_task_manifest_paths[prior_job_id][t_id][
-                                    t_idx_map[normcased]
-                                ] = None  # type: ignore[call-overload]
-                                del t_idx_map[normcased]
-                    job_paths = job_manifest_paths.setdefault(job_id, [])
-                    idx_map = job_path_index.setdefault(job_id, {})
-                    if normcased in idx_map:
-                        # Overwrite with newer version within same job
-                        job_paths[idx_map[normcased]] = manifest_path
-                    else:
-                        idx_map[normcased] = len(job_paths)
-                        job_paths.append(manifest_path)
-                    global_seen_paths[normcased] = job_id
-                    if task_id:
-                        # If another task in this same job already owns this path (e.g. a requeue
-                        # re-emitted it under a different task), transfer ownership to the current
-                        # task. We iterate oldest-to-newest, so the current task is the newer
-                        # writer; leaving the path in both tasks would download it twice and
-                        # inflate the file count.
-                        owner_map = task_owner_by_job.setdefault(job_id, {})
-                        prior_task_id = owner_map.get(normcased)
-                        if prior_task_id is not None and prior_task_id != task_id:
-                            prior_t_idx_map = task_path_index.get(job_id, {}).get(prior_task_id, {})
-                            if normcased in prior_t_idx_map:
-                                job_task_manifest_paths[job_id][prior_task_id][
-                                    prior_t_idx_map[normcased]
-                                ] = None  # type: ignore[call-overload]
-                                del prior_t_idx_map[normcased]
-                        owner_map[normcased] = task_id
-                        job_task_manifest_paths.setdefault(job_id, {}).setdefault(task_id, [])
-                        task_paths = job_task_manifest_paths[job_id][task_id]
-                        t_idx_map = task_path_index.setdefault(job_id, {}).setdefault(task_id, {})
-                        if normcased in t_idx_map:
-                            # Overwrite with newer version (O(1) lookup)
-                            task_paths[t_idx_map[normcased]] = manifest_path
-                        else:
-                            t_idx_map[normcased] = len(task_paths)
-                            task_paths.append(manifest_path)
-                        # Record the path immutably for deduped-job status generation. This record
-                        # is intentionally NOT pruned by cross-job transfers, so a losing job can
-                        # still report filesystem-based status after another job claims its paths.
-                        # Dedup per task (O(1) via the _seen set) to avoid inflating counts when the
-                        # same file reappears across manifests via task retry.
-                        task_file_list = all_task_file_paths.setdefault(job_id, {}).setdefault(
-                            task_id, []
-                        )
-                        task_file_seen = all_task_file_paths_seen.setdefault(job_id, {}).setdefault(
-                            task_id, set()
-                        )
-                        if manifest_path.path not in task_file_seen:
-                            task_file_seen.add(manifest_path.path)
-                            task_file_list.append(manifest_path.path)
+        # normcased destination path -> the (job, task) that wrote it last. Overwriting the key IS
+        # the dedup rule: exactly one job and one task owns each path, so a path emitted by several
+        # manifests — a task retry, a requeue under a new task, or two jobs sharing an output path —
+        # is downloaded once and counted once. Without this, parallel threads could write the same
+        # path simultaneously and corrupt it under OVERWRITE. Because we iterate oldest-to-newest,
+        # the surviving owner is the newest writer. Content correctness is unaffected: jobs sharing
+        # a path render the same bytes, so only the job_id credited in the status file differs, and
+        # a job that loses a path still reports accurate status via the filesystem check below.
+        path_owner: dict[str, tuple[str, Optional[str], BaseManifestPath]] = {}
+        for _, job_id, manifest_s3_key, manifest in records:
+            task_id = _extract_task_id_from_s3_key(manifest_s3_key)
+            for manifest_path in manifest.paths:
+                path_owner[os.path.normcase(manifest_path.path)] = (job_id, task_id, manifest_path)
+                if task_id:
+                    task_file_paths.setdefault(job_id, {}).setdefault(task_id, {})[
+                        manifest_path.path
+                    ] = None
+        for job_id, task_id, manifest_path in path_owner.values():
+            job_manifest_paths.setdefault(job_id, []).append(manifest_path)
+            if task_id:
+                job_task_manifest_paths.setdefault(job_id, {}).setdefault(task_id, []).append(
+                    manifest_path
+                )
     else:
         # Attribution skipped: download everything anyway, decoupled from per-job tracking.
         # Collect every downloaded path (deduped) under a synthetic bucket keyed by "" so it
         # never collides with a real job id. Per-job (and per-task) counts aren't populated this
         # run, but no files are lost; the "" bucket feeds the run-level stats and never becomes a
         # per-job status entry.
-        fallback_seen: set[str] = set()
-        fallback_paths: list[BaseManifestPath] = []
+        fallback_paths: dict[str, BaseManifestPath] = {}
         for manifest_tuple in downloaded_manifests:
             if manifest_tuple is not None:
                 _, manifest = manifest_tuple
                 for manifest_path in manifest.paths:
-                    normcased = os.path.normcase(manifest_path.path)
-                    if normcased not in fallback_seen:
-                        fallback_seen.add(normcased)
-                        fallback_paths.append(manifest_path)
+                    fallback_paths.setdefault(os.path.normcase(manifest_path.path), manifest_path)
         if fallback_paths:
-            job_manifest_paths[""] = fallback_paths
+            job_manifest_paths[""] = list(fallback_paths.values())
 
-    # Filter out None entries left by cross-job path transfers (newer job took over the path)
-    for job_id in list(job_manifest_paths.keys()):
-        job_manifest_paths[job_id] = [p for p in job_manifest_paths[job_id] if p is not None]
-        if not job_manifest_paths[job_id]:
-            del job_manifest_paths[job_id]
-    for job_id, task_map in job_task_manifest_paths.items():
-        for task_id in list(task_map.keys()):
-            task_map[task_id] = [p for p in task_map[task_id] if p is not None]
-            if not task_map[task_id]:
-                del task_map[task_id]
+    all_task_file_paths: dict[str, dict[str, list[str]]] = {
+        job_id: {task_id: list(paths) for task_id, paths in task_map.items()}
+        for job_id, task_map in task_file_paths.items()
+    }
 
     # Print a summary of all the paths before starting the download
     all_manifest_paths = [path for paths in job_manifest_paths.values() for path in paths]
