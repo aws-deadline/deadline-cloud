@@ -144,6 +144,8 @@ class TestDetermineJobDownloadStatus:
         assert "last_updated" in result
         assert "error_code" in result
         assert "error_message" in result
+        assert "skip_reason" in result
+        assert "tasks" in result
 
 
 class TestGetStatusFilePaths:
@@ -574,3 +576,627 @@ class TestStatusFileLock:
             with open(lock_file) as f:
                 content = json.load(f)
             assert content["hostname"] == socket.gethostname()
+
+
+class TestPerJobFileCountsAndErrors:
+    """Tests for per-job file counts, error isolation, and failed status."""
+
+    def test_file_counts_populated_from_download_results(self):
+        """Job download results populate total_files and downloaded_files."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID)
+        download_results = {
+            MOCK_JOB_ID: {
+                "total_files": 10,
+                "downloaded_files": 10,
+                "failed_files": 0,
+                "error_code": None,
+                "error_message": None,
+            }
+        }
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, download_results)
+        assert result["download_status"] == "downloaded"
+        assert result["total_files"] == 10
+        assert result["downloaded_files"] == 10
+        assert result["failed_files"] == 0
+
+    def test_failed_job_returns_failed_status(self):
+        """A job with failed files returns 'failed' status with error info."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID)
+        download_results = {
+            MOCK_JOB_ID: {
+                "total_files": 5,
+                "downloaded_files": 0,
+                "failed_files": 5,
+                "error_code": "PERMISSION_DENIED",
+                "error_message": "Access denied to S3 object",
+            }
+        }
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, download_results)
+        assert result["download_status"] == "failed"
+        assert result["total_files"] == 5
+        assert result["failed_files"] == 5
+        assert result["error_code"] == "PERMISSION_DENIED"
+        assert result["error_message"] == "Access denied to S3 object"
+
+    def test_failed_status_overrides_category(self):
+        """Even if categorized as 'completed', a failed download shows 'failed'."""
+        cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=3, total=10, ended=False)
+        download_results = {
+            MOCK_JOB_ID: {
+                "total_files": 8,
+                "downloaded_files": 0,
+                "failed_files": 8,
+                "error_code": "DISK_FULL",
+                "error_message": "No space left on device",
+            }
+        }
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, download_results)
+        assert result["download_status"] == "failed"
+        assert result["error_code"] == "DISK_FULL"
+
+    def test_no_download_results_defaults_to_zero(self):
+        """Without download results, file counts default to 0."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids, None)
+        assert result["total_files"] == 0
+        assert result["downloaded_files"] == 0
+        assert result["failed_files"] == 0
+
+    def test_last_run_status_failed_when_any_job_fails(self):
+        """sync_metadata.last_run_status is 'failed' when any job has errors."""
+        cjids = _make_categorized_job_ids(
+            completed={MOCK_JOB_ID},
+            added={MOCK_JOB_ID_2},
+        )
+        jobs = {
+            MOCK_JOB_ID: _make_job(MOCK_JOB_ID),
+            MOCK_JOB_ID_2: _make_job(MOCK_JOB_ID_2, succeeded=3, total=5, ended=False),
+        }
+        download_results: dict[str, dict[str, Any]] = {
+            MOCK_JOB_ID: {
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "error_code": None,
+                "error_message": None,
+            },
+            MOCK_JOB_ID_2: {
+                "total_files": 5,
+                "downloaded_files": 0,
+                "failed_files": 5,
+                "error_code": "NETWORK_ERROR",
+                "error_message": "Connection timeout",
+            },
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            job_download_results=download_results,
+        )
+        assert result["sync_metadata"]["last_run_status"] == "failed"
+        assert result["jobs"][MOCK_JOB_ID]["download_status"] == "downloaded"
+        assert result["jobs"][MOCK_JOB_ID_2]["download_status"] == "failed"
+
+    def test_last_run_status_success_when_all_jobs_succeed(self):
+        """sync_metadata.last_run_status is 'success' when no errors."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        jobs = {MOCK_JOB_ID: _make_job(MOCK_JOB_ID)}
+        download_results = {
+            MOCK_JOB_ID: {
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "error_code": None,
+                "error_message": None,
+            },
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            job_download_results=download_results,
+        )
+        assert result["sync_metadata"]["last_run_status"] == "success"
+        assert result["jobs"][MOCK_JOB_ID]["total_files"] == 3
+        assert result["jobs"][MOCK_JOB_ID]["downloaded_files"] == 3
+
+
+class TestFileCountPreservation:
+    """Tests for preserving file counts when new entry has no download results."""
+
+    def test_existing_file_counts_not_zeroed_by_inactive_job(self):
+        """An inactive job without download results should not zero out existing file counts."""
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "downloaded",
+                "total_files": 4,
+                "downloaded_files": 4,
+                "failed_files": 0,
+                "last_updated": "2026-06-18T12:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+            }
+        }
+        cjids = _make_categorized_job_ids(inactive={MOCK_JOB_ID})
+        jobs = {MOCK_JOB_ID: _make_job(MOCK_JOB_ID)}
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            existing_jobs=existing_jobs,
+            job_download_results={},
+        )
+        assert result["jobs"][MOCK_JOB_ID]["total_files"] == 4
+        assert result["jobs"][MOCK_JOB_ID]["downloaded_files"] == 4
+
+    def test_status_update_preserved_when_file_counts_kept(self):
+        """If status changes but no file counts, update status but keep counts."""
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "downloaded",
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "last_updated": "2026-06-18T12:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+            }
+        }
+        cjids = _make_categorized_job_ids(updated={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=2, total=5, ended=False)
+        jobs = {MOCK_JOB_ID: job}
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            existing_jobs=existing_jobs,
+            job_download_results={},
+        )
+        assert result["jobs"][MOCK_JOB_ID]["download_status"] == "in_progress"
+        assert result["jobs"][MOCK_JOB_ID]["total_files"] == 3
+
+    def test_new_download_results_overwrite_existing(self):
+        """When new download results have real counts, they overwrite existing."""
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "downloaded",
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "last_updated": "2026-06-18T12:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+            }
+        }
+        cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=5, total=5, ended=True)
+        jobs = {MOCK_JOB_ID: job}
+        download_results = {
+            MOCK_JOB_ID: {
+                "total_files": 5,
+                "downloaded_files": 5,
+                "failed_files": 0,
+                "error_code": None,
+                "error_message": None,
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            existing_jobs=existing_jobs,
+            job_download_results=download_results,
+        )
+        assert result["jobs"][MOCK_JOB_ID]["total_files"] == 5
+        assert result["jobs"][MOCK_JOB_ID]["downloaded_files"] == 5
+
+
+class TestFailedJobsTracker:
+    """Tests for _FailedJobsTracker."""
+
+    def test_empty_on_missing_file(self, tmp_path):
+        from deadline.client.cli._incremental_download import _FailedJobsTracker
+
+        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+        assert tracker.get_tracked_job_ids() == set()
+
+    def test_record_and_retrieve_failure(self, tmp_path):
+        from deadline.client.cli._incremental_download import _FailedJobsTracker
+
+        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+        messages: list[str] = []
+        tracker.record_failures({MOCK_JOB_ID}, messages.append)
+        assert MOCK_JOB_ID in tracker.get_tracked_job_ids()
+
+    def test_record_success_removes_job(self, tmp_path):
+        from deadline.client.cli._incremental_download import _FailedJobsTracker
+
+        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+        messages: list[str] = []
+        tracker.record_failures({MOCK_JOB_ID}, messages.append)
+        tracker.record_successes({MOCK_JOB_ID})
+        assert MOCK_JOB_ID not in tracker.get_tracked_job_ids()
+
+    def test_retry_cap_removes_job_and_warns(self, tmp_path):
+        from deadline.client.cli._incremental_download import (
+            _FailedJobsTracker,
+            _MAX_FAILED_JOB_RETRIES,
+        )
+
+        tracker = _FailedJobsTracker(str(tmp_path / "failed_jobs.json"))
+        messages: list[str] = []
+        for _ in range(_MAX_FAILED_JOB_RETRIES):
+            tracker.record_failures({MOCK_JOB_ID}, messages.append)
+        # Abandoned job is excluded from get_tracked_job_ids (not retried)
+        assert MOCK_JOB_ID not in tracker.get_tracked_job_ids()
+        # But is_abandoned returns True so it can be filtered from timestamp window too
+        assert tracker.is_abandoned(MOCK_JOB_ID)
+        assert any("WARNING" in m for m in messages)
+
+    def test_persists_and_reloads(self, tmp_path):
+        from deadline.client.cli._incremental_download import _FailedJobsTracker
+
+        file_path = str(tmp_path / "failed_jobs.json")
+        tracker = _FailedJobsTracker(file_path)
+        messages: list[str] = []
+        tracker.record_failures({MOCK_JOB_ID}, messages.append)
+        tracker.save()
+
+        tracker2 = _FailedJobsTracker(file_path)
+        assert MOCK_JOB_ID in tracker2.get_tracked_job_ids()
+
+
+class TestSkipReason:
+    """Tests for skip_reason field in skipped job entries."""
+
+    def test_attachments_free_has_no_attachments_reason(self):
+        cjids = _make_categorized_job_ids(attachments_free={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, attachments=False)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
+        assert result["skip_reason"] == "no_attachments"
+
+    def test_missing_storage_profile_has_reason(self):
+        cjids = _make_categorized_job_ids(missing_storage_profile={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, storage_profile_id=None)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
+        assert result["skip_reason"] == "missing_storage_profile"
+
+    def test_downloaded_job_has_null_skip_reason(self):
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID)
+        result = _determine_job_download_status(MOCK_JOB_ID, job, cjids)
+        assert result["skip_reason"] is None
+
+
+class TestExtractTaskId:
+    """Tests for _extract_task_id_from_s3_key."""
+
+    def test_extracts_task_id_from_s3_key(self):
+        from deadline.client.cli._incremental_download import _extract_task_id_from_s3_key
+
+        key = "DeadlineCloud/Manifests/farm-abc/queue-abc/job-abc/step-abc/task-abc-0/2026-01-01T00:00:00Z_sessionaction-abc-2/hash_output"
+        assert _extract_task_id_from_s3_key(key) == "task-abc-0"
+
+    def test_returns_none_for_key_without_task_id(self):
+        from deadline.client.cli._incremental_download import _extract_task_id_from_s3_key
+
+        assert (
+            _extract_task_id_from_s3_key(
+                "DeadlineCloud/Manifests/farm-abc/queue-abc/job-abc/hash_output"
+            )
+            is None
+        )
+
+    def test_extracts_task_id_with_different_suffix(self):
+        from deadline.client.cli._incremental_download import _extract_task_id_from_s3_key
+
+        key = "DeadlineCloud/Manifests/farm-abc/queue-abc/job-abc/step-abc/task-xyz123-3/ts_sessionaction/hash_output"
+        assert _extract_task_id_from_s3_key(key) == "task-xyz123-3"
+
+    def test_ignores_task_substring_in_customer_root_prefix(self):
+        """A rootPrefix containing 'task-' must not be mistaken for the real task id."""
+        from deadline.client.cli._incremental_download import _extract_task_id_from_s3_key
+
+        key = "my-task-outputs/Manifests/farm-abc/queue-abc/job-abc/step-abc/task-real-1/ts_sessionaction/hash_output"
+        assert _extract_task_id_from_s3_key(key) == "task-real-1"
+
+
+class TestPerTaskTracking:
+    """Tests for per-task download tracking in status file."""
+
+    def test_task_download_results_added_to_job_entry(self):
+        """Tasks from this run appear in the job's tasks dict."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=2, total=2, ended=True)
+        jobs = {MOCK_JOB_ID: job}
+        task_results = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 3,
+                    "downloaded_files": 3,
+                    "error_code": None,
+                    "error_message": None,
+                },
+                "task-abc-1": {
+                    "total_files": 3,
+                    "downloaded_files": 3,
+                    "error_code": None,
+                    "error_message": None,
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            task_download_results=task_results,
+        )
+        tasks = result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert "task-abc-0" in tasks
+        assert "task-abc-1" in tasks
+        assert tasks["task-abc-0"]["download_status"] == "downloaded"
+        assert tasks["task-abc-0"]["total_files"] == 3
+
+    def test_failed_task_download_results_in_failed_status(self):
+        """Tasks with error_code show download_status failed."""
+        cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=1, total=2, ended=False)
+        jobs = {MOCK_JOB_ID: job}
+        task_results = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 3,
+                    "downloaded_files": 0,
+                    "error_code": "PERMISSION_DENIED",
+                    "error_message": "denied",
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            task_download_results=task_results,
+        )
+        tasks = result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert tasks["task-abc-0"]["download_status"] == "failed"
+        assert tasks["task-abc-0"]["error_code"] == "PERMISSION_DENIED"
+
+    def test_existing_tasks_preserved_when_no_new_download(self):
+        """Tasks from previous runs are preserved when no new download this run."""
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "in_progress",
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "last_updated": "2026-01-01T00:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+                "skip_reason": None,
+                "tasks": {
+                    "task-abc-0": {
+                        "download_status": "downloaded",
+                        "total_files": 3,
+                        "downloaded_files": 3,
+                        "error_code": None,
+                        "error_message": None,
+                    },
+                },
+            }
+        }
+        cjids = _make_categorized_job_ids(unchanged={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=1, total=2, ended=False)
+        jobs = {MOCK_JOB_ID: job}
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            existing_jobs=existing_jobs,
+            task_download_results={},
+        )
+        # Existing task preserved
+        assert "task-abc-0" in result["jobs"][MOCK_JOB_ID]["tasks"]
+
+    def test_new_task_overwrites_existing_same_id(self):
+        """New task result overwrites existing entry with same task ID."""
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "downloaded",
+                "total_files": 3,
+                "downloaded_files": 3,
+                "failed_files": 0,
+                "last_updated": "2026-01-01T00:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+                "skip_reason": None,
+                "tasks": {
+                    "task-abc-0": {
+                        "download_status": "downloaded",
+                        "total_files": 3,
+                        "downloaded_files": 3,
+                        "error_code": None,
+                        "error_message": None,
+                    },
+                },
+            }
+        }
+        cjids = _make_categorized_job_ids(added={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, succeeded=1, total=1, ended=True)
+        jobs = {MOCK_JOB_ID: job}
+        task_results = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 3,
+                    "downloaded_files": 3,
+                    "error_code": None,
+                    "error_message": None,
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            existing_jobs=existing_jobs,
+            task_download_results=task_results,
+        )
+        assert result["jobs"][MOCK_JOB_ID]["tasks"]["task-abc-0"]["download_status"] == "downloaded"
+
+    def test_zero_file_tasks_included_as_downloaded(self):
+        """Tasks with zero output files are included with downloaded status so they count toward the progress bar."""
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID)
+        jobs = {MOCK_JOB_ID: job}
+        task_results = {
+            MOCK_JOB_ID: {
+                "task-abc-0": {
+                    "total_files": 0,
+                    "downloaded_files": 0,
+                    "error_code": None,
+                    "error_message": None,
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            task_download_results=task_results,
+        )
+        assert "task-abc-0" in result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert result["jobs"][MOCK_JOB_ID]["tasks"]["task-abc-0"]["download_status"] == "downloaded"
+
+    def test_skipped_job_has_empty_tasks(self):
+        """Skipped jobs always have an empty tasks dict."""
+        cjids = _make_categorized_job_ids(attachments_free={MOCK_JOB_ID})
+        job = _make_job(MOCK_JOB_ID, attachments=False)
+        jobs = {MOCK_JOB_ID: job}
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+        )
+        assert result["jobs"][MOCK_JOB_ID]["tasks"] == {}
+
+
+class TestClassifyError:
+    """Tests for _classify_error."""
+
+    def test_permission_denied_by_type(self):
+        from deadline.client.cli._incremental_download import _classify_error
+
+        assert _classify_error(PermissionError("cannot write")) == "PERMISSION_DENIED"
+
+    def test_disk_full_by_type(self):
+        from deadline.client.cli._incremental_download import _classify_error
+
+        e = OSError(28, "No space left on device")
+        assert _classify_error(e) == "DISK_FULL"
+
+    def test_path_not_found_by_type(self):
+        from deadline.client.cli._incremental_download import _classify_error
+
+        assert _classify_error(FileNotFoundError("missing")) == "PATH_NOT_FOUND"
+
+    def test_network_error_by_type(self):
+        from deadline.client.cli._incremental_download import _classify_error
+
+        assert _classify_error(ConnectionError("reset")) == "NETWORK_ERROR"
+        assert _classify_error(TimeoutError("timed out")) == "NETWORK_ERROR"
+
+    def test_client_error_access_denied(self):
+        from deadline.client.cli._incremental_download import _classify_error
+        from botocore.exceptions import ClientError
+
+        e = ClientError({"Error": {"Code": "AccessDenied", "Message": "nope"}}, "GetObject")
+        assert _classify_error(e) == "PERMISSION_DENIED"
+
+    def test_client_error_no_such_key(self):
+        from deadline.client.cli._incremental_download import _classify_error
+        from botocore.exceptions import ClientError
+
+        e = ClientError({"Error": {"Code": "NoSuchKey", "Message": "gone"}}, "GetObject")
+        assert _classify_error(e) == "PATH_NOT_FOUND"
+
+    def test_client_error_request_timeout(self):
+        from deadline.client.cli._incremental_download import _classify_error
+        from botocore.exceptions import ClientError
+
+        e = ClientError({"Error": {"Code": "RequestTimeout", "Message": "slow"}}, "GetObject")
+        assert _classify_error(e) == "NETWORK_ERROR"
+
+    def test_job_attachments_s3_client_error_by_status_code(self):
+        """The actual download path wraps S3 errors in JobAttachmentsS3ClientError,
+        which carries a structured HTTP status code — classify from that, not the message."""
+        from deadline.client.cli._incremental_download import _classify_error
+        from deadline.job_attachments.exceptions import JobAttachmentsS3ClientError
+
+        forbidden = JobAttachmentsS3ClientError(
+            action="downloading file", status_code=403, bucket_name="b", key_or_prefix="k"
+        )
+        assert _classify_error(forbidden) == "PERMISSION_DENIED"
+
+        not_found = JobAttachmentsS3ClientError(
+            action="downloading file", status_code=404, bucket_name="b", key_or_prefix="k"
+        )
+        assert _classify_error(not_found) == "PATH_NOT_FOUND"
+
+    def test_job_attachments_botocore_error_is_network(self):
+        from deadline.client.cli._incremental_download import _classify_error
+        from deadline.job_attachments.exceptions import JobAttachmentS3BotoCoreError
+
+        e = JobAttachmentS3BotoCoreError(action="downloading file", error_details="conn reset")
+        assert _classify_error(e) == "NETWORK_ERROR"
+
+    def test_wrapped_cause_is_classified(self):
+        """job_attachments wraps low-level failures (AssetSyncError(original)); the classifier
+        walks __cause__ to reach the structured signal instead of guessing from the message."""
+        from deadline.client.cli._incremental_download import _classify_error
+        from deadline.job_attachments.exceptions import AssetSyncError
+
+        wrapped = AssetSyncError("File download failed.")
+        wrapped.__cause__ = PermissionError("denied")
+        assert _classify_error(wrapped) == "PERMISSION_DENIED"
+
+    def test_cyclic_cause_chain_does_not_recurse_forever(self):
+        """A cyclic __cause__ chain must terminate at UNKNOWN, not blow the stack."""
+        from deadline.client.cli._incremental_download import _classify_error
+
+        a = Exception("a")
+        b = Exception("b")
+        a.__cause__ = b
+        b.__cause__ = a  # cycle: neither carries a structured signal
+        assert _classify_error(a) == "UNKNOWN"
+
+    def test_message_only_errors_are_unknown(self):
+        """Message-substring matching is intentionally not used — wrapped S3 errors carry
+        verbose text that produces confidently-wrong codes, so anything without a structured
+        signal (exception type or S3 error code) is classified as UNKNOWN."""
+        from deadline.client.cli._incremental_download import _classify_error
+
+        assert _classify_error(Exception("Access Denied")) == "UNKNOWN"
+        assert _classify_error(Exception("No space left on device")) == "UNKNOWN"
+        assert _classify_error(Exception("No such file or directory")) == "UNKNOWN"
+        assert _classify_error(Exception("Connection timeout")) == "UNKNOWN"
+
+    def test_unknown_error(self):
+        from deadline.client.cli._incremental_download import _classify_error
+
+        assert _classify_error(Exception("something unexpected")) == "UNKNOWN"

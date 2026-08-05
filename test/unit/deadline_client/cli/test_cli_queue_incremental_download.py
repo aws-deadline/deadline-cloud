@@ -4,6 +4,7 @@
 Tests for the CLI queue incremental output download command.
 """
 
+import json
 import os
 import sys
 import pytest
@@ -30,6 +31,7 @@ from ..mock_deadline_job_apis import (
 )
 from deadline.job_attachments._incremental_downloads.incremental_download_state import (
     EVENTUAL_CONSISTENCY_MAX_SECONDS,
+    IncrementalDownloadState,
 )
 from deadline.job_attachments.models import StorageProfileOperatingSystemFamily
 import deadline.client.api
@@ -1295,3 +1297,978 @@ def test_incremental_output_download_unmapped_paths_without_storage_profile(
     assert result.exit_code == 0, result.output
     assert "WARNING: THE FOLLOWING FILES WILL NOT BE DOWNLOADED" in result.output, result.output
     assert "/etc/cron.d/evil" in result.output, result.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_manifest_mismatch_still_downloads(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """Decouple guard: if the manifest lists ever diverge in length (skip_attribution),
+    downloads must still proceed — the files are downloaded from downloaded_manifests via a
+    fallback bucket, and per-job attribution is skipped only for reporting. Previously a
+    mismatch left job_manifest_paths empty and silently downloaded nothing."""
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_1,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {
+                    "taskRun": {
+                        "taskId": "task-b1764261dff54214aace3932bde8ae7e-0",
+                        "stepId": "step-b1764261dff54214aace3932bde8ae7e",
+                    }
+                },
+                "manifests": [{"outputManifestPath": "task-0/manifest"}],
+            },
+        ]
+    }
+
+    downloaded_file = "/tmp/mismatch_test_output.exr"
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=downloaded_file, hash="h", size=1, mtime=1)],
+            ),
+        )
+    ]
+
+    def fake_download_all_manifests(
+        queue,
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+        output_unmapped_paths,
+        boto3_session_for_s3,
+        print_function_callback=lambda msg: None,
+    ):
+        return downloaded_manifests  # length 1
+
+    # Force a length mismatch: return 2 tuples here vs 1 downloaded manifest -> skip_attribution.
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return [
+            (None, MOCK_JOB_ID, "/", "prefix/step/task-0/manifest"),
+            (None, MOCK_JOB_ID, "/", "prefix/step/task-1/manifest"),
+        ]
+
+    downloaded_files_seen: list = []
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        # Record what got handed to the downloader — proves downloads proceed despite the mismatch.
+        downloaded_files_seen.extend(f.path for f in files)
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    # The mismatch warning fired, but the file was STILL downloaded (via the fallback bucket).
+    assert "Manifest list length mismatch" in result.output, result.output
+    assert downloaded_file in downloaded_files_seen, (
+        f"Expected {downloaded_file} to be downloaded despite skip_attribution; "
+        f"got {downloaded_files_seen}"
+    )
+    # A successful fallback run must still report what it downloaded — the retained "" bucket
+    # feeds the run-level stats, so a real download never reports "0 files downloaded".
+    assert "Downloaded files: 1" in result.output, result.output
+    # ...and the run is reported successful, with no synthetic "" job leaking into the entries.
+    status_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_path) as f:
+        status = json.load(f)
+    assert status["sync_metadata"]["last_run_status"] == "success", status
+    assert "" not in status["jobs"], status["jobs"]
+
+
+def test_incremental_output_download_fallback_failure_marks_run_failed(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """When attribution is skipped (manifest mismatch) AND the fallback download fails, the
+    failure must not be silently swallowed with the synthetic "" bucket: the run is reported
+    failed and the checkpoint timestamp is held back so the lost window is retried next run."""
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_1,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {
+                    "taskRun": {
+                        "taskId": "task-b1764261dff54214aace3932bde8ae7e-0",
+                        "stepId": "step-b1764261dff54214aace3932bde8ae7e",
+                    }
+                },
+                "manifests": [{"outputManifestPath": "task-0/manifest"}],
+            },
+        ]
+    }
+
+    downloaded_file = "/tmp/mismatch_fail_output.exr"
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=downloaded_file, hash="h", size=1, mtime=1)],
+            ),
+        )
+    ]
+
+    def fake_download_all_manifests(
+        queue,
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+        output_unmapped_paths,
+        boto3_session_for_s3,
+        print_function_callback=lambda msg: None,
+    ):
+        return downloaded_manifests
+
+    # Force a length mismatch (2 vs 1) so attribution is skipped -> fallback bucket.
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return [
+            (None, MOCK_JOB_ID, "/", "prefix/step/task-0/manifest"),
+            (None, MOCK_JOB_ID, "/", "prefix/step/task-1/manifest"),
+        ]
+
+    def fake_download_manifest_paths(*args, **kwargs):
+        raise PermissionError("Access is denied")  # fallback download fails
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+
+    # The run is reported failed — not silently swallowed with the "" bucket.
+    status_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_path) as f:
+        status = json.load(f)
+    assert status["sync_metadata"]["last_run_status"] == "failed", status
+    # The synthetic "" bucket never leaks into the per-job entries.
+    assert "" not in status["jobs"], status["jobs"]
+
+    # The checkpoint timestamp is held back to the bootstrap start (completed == started), not
+    # advanced, so the lost window is re-attempted on the next run. A successful run would have
+    # advanced completed to (now - eventual_consistency), strictly after started.
+    checkpoint_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_checkpoint.json"
+    )
+    saved = IncrementalDownloadState.from_file(checkpoint_path)
+    assert saved.downloads_completed_timestamp == saved.downloads_started_timestamp, (
+        f"Expected timestamp held back to bootstrap start for retry, got "
+        f"completed={saved.downloads_completed_timestamp.isoformat()} "
+        f"started={saved.downloads_started_timestamp.isoformat()}"
+    )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_per_task_error_isolation(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """Per-task download error isolation: when one task's files fail to download,
+    only that task is marked failed — the other tasks succeed independently.
+
+    Simulates a 3-task job where task-1's output path is inaccessible. The status
+    file must show task-0 and task-2 as 'downloaded' and task-1 as 'failed' with the
+    correct error code, while the job-level status is 'failed'.
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    step_id = "step-b1764261dff54214aace3932bde8ae7e"
+    task_ids = [f"task-b1764261dff54214aace3932bde8ae7e-{i}" for i in range(3)]
+    # Each task writes one file to its own subdirectory under tmp_path.
+    task_file_paths = [str(tmp_path / f"frame_{i}" / "beauty.exr") for i in range(3)]
+    locked_path = task_file_paths[1]  # task-1's file is the one that fails
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 3, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": f"sessionaction-0123456789abcdefabcdefabcdefabcd-{i}",
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {"taskRun": {"taskId": task_ids[i], "stepId": step_id}},
+                "manifests": [{"outputManifestPath": f"{task_ids[i]}/manifest"}],
+            }
+            for i in range(3)
+        ]
+    }
+
+    # One manifest per task, each containing that task's single output file.
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=task_file_paths[i], hash="h", size=1, mtime=1)],
+            ),
+        )
+        for i in range(3)
+    ]
+    # The (applier, job_id, root_path, s3_key) tuples correlate positionally with the
+    # manifests above. The S3 key embeds the task id so per-task attribution works.
+    manifests_to_download = [
+        (None, MOCK_JOB_ID, "/", f"prefix/{step_id}/{task_ids[i]}/manifest") for i in range(3)
+    ]
+
+    def fake_download_all_manifests(
+        queue,
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+        output_unmapped_paths,
+        boto3_session_for_s3,
+        print_function_callback=lambda msg: None,
+    ):
+        return downloaded_manifests
+
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return manifests_to_download
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        # Simulate the download: create files on disk, but raise if task-1's locked
+        # file is in this batch (per-task isolation calls this once per task).
+        for f in files:
+            if f.path == locked_path:
+                raise PermissionError(f"[Errno 13] Permission denied: '{locked_path}'")
+            os.makedirs(os.path.dirname(f.path), exist_ok=True)
+            with open(f.path, "w") as fh:
+                fh.write("output")
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+
+    # The run summary counts the succeeded tasks even though the job carries an error_code:
+    # task-0 and task-2 landed their files, so 2 (not 0) files are reported downloaded.
+    assert "Downloaded files: 2" in result.output, result.output
+
+    # The status file records per-task isolation: task-1 failed, task-0 and task-2 succeeded.
+    status_file_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_file_path) as f:
+        status = json.load(f)
+
+    job_entry = status["jobs"][MOCK_JOB_ID]
+    assert job_entry["download_status"] == "failed", job_entry
+    assert job_entry["error_code"] == "PERMISSION_DENIED", job_entry
+
+    tasks = job_entry["tasks"]
+    assert tasks[task_ids[0]]["download_status"] == "downloaded", tasks
+    assert tasks[task_ids[0]]["error_code"] is None, tasks
+    assert tasks[task_ids[2]]["download_status"] == "downloaded", tasks
+    assert tasks[task_ids[2]]["error_code"] is None, tasks
+    assert tasks[task_ids[1]]["download_status"] == "failed", tasks
+    assert tasks[task_ids[1]]["error_code"] == "PERMISSION_DENIED", tasks
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_leftover_non_task_paths_are_downloaded(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """A job with a mix of task-attributed and non-task-attributed manifests must
+    download both. The task-attributed path goes through per-task isolation; the
+    leftover path (its manifest key carries no step-/task- segment) must still be
+    downloaded rather than silently dropped just because the job also has task files.
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    step_id = "step-b1764261dff54214aace3932bde8ae7e"
+    task_id = "task-b1764261dff54214aace3932bde8ae7e-0"
+    task_file_path = str(tmp_path / "frame_0" / "beauty.exr")
+    leftover_file_path = str(tmp_path / "aux" / "report.txt")
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": "sessionaction-0123456789abcdefabcdefabcdefabcd-0",
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {"taskRun": {"taskId": task_id, "stepId": step_id}},
+                "manifests": [{"outputManifestPath": f"{task_id}/manifest"}],
+            }
+        ]
+    }
+
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=task_file_path, hash="h", size=1, mtime=1)],
+            ),
+        ),
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=leftover_file_path, hash="h2", size=1, mtime=1)],
+            ),
+        ),
+    ]
+    # First key carries a step-/task- segment (attributed); second does not (leftover).
+    manifests_to_download = [
+        (None, MOCK_JOB_ID, "/", f"prefix/{step_id}/{task_id}/manifest"),
+        (None, MOCK_JOB_ID, "/", "prefix/no-task-segment/manifest"),
+    ]
+
+    def fake_download_all_manifests(*args, **kwargs):
+        return downloaded_manifests
+
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return manifests_to_download
+
+    downloaded_paths: list[str] = []
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        for f in files:
+            downloaded_paths.append(f.path)
+            os.makedirs(os.path.dirname(f.path), exist_ok=True)
+            with open(f.path, "w") as fh:
+                fh.write("output")
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    # Both the task-attributed file and the leftover file must have been downloaded.
+    assert task_file_path in downloaded_paths, downloaded_paths
+    assert leftover_file_path in downloaded_paths, downloaded_paths
+    assert os.path.exists(leftover_file_path), "leftover non-task path was silently dropped"
+    assert "Downloaded files: 2" in result.output, result.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_same_path_across_tasks_downloaded_once(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """When two tasks of the same job emit the same output path (e.g. a requeue re-ran
+    a task under a new task id), the path must be downloaded once and attributed to the
+    newer task — not downloaded twice and double-counted.
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    step_id = "step-b1764261dff54214aace3932bde8ae7e"
+    task_ids = [f"task-b1764261dff54214aace3932bde8ae7e-{i}" for i in range(2)]
+    shared_file_path = str(tmp_path / "frame_0" / "beauty.exr")
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 2, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": f"sessionaction-0123456789abcdefabcdefabcdefabcd-{i}",
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {"taskRun": {"taskId": task_ids[i], "stepId": step_id}},
+                "manifests": [{"outputManifestPath": f"{task_ids[i]}/manifest"}],
+            }
+            for i in range(2)
+        ]
+    }
+
+    # Two manifests, older then newer, both writing the SAME path under different tasks.
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat("2025-08-06T00:10:00.000000+00:00"),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=shared_file_path, hash="h", size=1, mtime=1)],
+            ),
+        ),
+        (
+            datetime.fromisoformat("2025-08-06T00:20:00.000000+00:00"),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=shared_file_path, hash="h", size=1, mtime=1)],
+            ),
+        ),
+    ]
+    manifests_to_download = [
+        (None, MOCK_JOB_ID, "/", f"prefix/{step_id}/{task_ids[i]}/manifest") for i in range(2)
+    ]
+
+    def fake_download_all_manifests(*args, **kwargs):
+        return downloaded_manifests
+
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return manifests_to_download
+
+    downloaded_paths: list[str] = []
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        for f in files:
+            downloaded_paths.append(f.path)
+            os.makedirs(os.path.dirname(f.path), exist_ok=True)
+            with open(f.path, "w") as fh:
+                fh.write("output")
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    # The shared path is downloaded once, not once per task.
+    assert downloaded_paths.count(shared_file_path) == 1, downloaded_paths
+    assert "Downloaded files: 1" in result.output, result.output
+
+    # It is attributed to the newer task only; the older task no longer owns it.
+    status_file_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_file_path) as f:
+        status = json.load(f)
+    tasks = status["jobs"][MOCK_JOB_ID]["tasks"]
+    assert task_ids[1] in tasks, tasks
+    assert tasks[task_ids[1]]["downloaded_files"] == 1, tasks
+    assert task_ids[0] not in tasks, tasks
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_shared_path_newest_wins_regardless_of_order(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """When two jobs write the same output path, the job with the newer manifest
+    (by S3 LastModified) is credited — even when its manifest appears earlier in the
+    download list. The attribution loop must sort by timestamp, not rely on list order.
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    job_id_old = MOCK_JOB_ID
+    job_id_new = "job-0123456789abcdefabcdefabcdefab99"
+    step_id = "step-b1764261dff54214aace3932bde8ae7e"
+    task_id_old = "task-b1764261dff54214aace3932bde8ae7e-0"
+    task_id_new = "task-b1764261dff54214aace3932bde8ae7e-1"
+    shared_path = str(tmp_path / "shared" / "beauty.exr")
+
+    mock_jobs = create_fake_job_list(2)
+    for job, jid, name in (
+        (mock_jobs[0], job_id_old, "Old Job"),
+        (mock_jobs[1], job_id_new, "New Job"),
+    ):
+        job["name"] = name
+        job["jobId"] = jid
+        job["taskRunStatus"] = "SUCCEEDED"
+        job["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 0}
+        job["attachments"] = {
+            "manifests": [
+                {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+            ],
+            "fileSystem": "COPIED",
+        }
+        job["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    def sessions_for(job_id):
+        return {
+            "sessions": [
+                {
+                    "sessionId": MOCK_SESSION_ID,
+                    "fleetId": MOCK_FLEET_ID,
+                    "workerId": MOCK_WORKER_ID,
+                    "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                    "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                    "lifecycleStatus": "ENDED",
+                }
+            ]
+        }
+
+    task_by_job = {job_id_old: task_id_old, job_id_new: task_id_new}
+    deadline_mock.list_sessions.side_effect = lambda **kwargs: sessions_for(kwargs.get("jobId"))
+    deadline_mock.list_session_actions.side_effect = lambda **kwargs: {
+        "sessionActions": [
+            {
+                "sessionActionId": "sessionaction-0123456789abcdefabcdefabcdefabcd-0",
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {
+                    "taskRun": {"taskId": task_by_job[kwargs.get("jobId")], "stepId": step_id}
+                },
+                "manifests": [
+                    {"outputManifestPath": f"{task_by_job[kwargs.get('jobId')]}/manifest"}
+                ],
+            }
+        ]
+    }
+
+    older_ts = datetime.fromisoformat(ISO_FREEZE_TIME_MINUS_5MIN)
+    newer_ts = datetime.fromisoformat(ISO_FREEZE_TIME)
+
+    def make_manifest():
+        return AssetManifest(
+            hash_alg=HashAlgorithm.XXH128,
+            total_size=1,
+            paths=[ManifestPath(path=shared_path, hash="h", size=1, mtime=1)],
+        )
+
+    # The NEW job's manifest (newer timestamp) is placed FIRST — list order is the
+    # reverse of chronological order, so relying on iteration order would credit the
+    # OLD job. The fix sorts by timestamp so the NEW job wins.
+    downloaded_manifests = [
+        (newer_ts, make_manifest()),
+        (older_ts, make_manifest()),
+    ]
+    manifests_to_download = [
+        (None, job_id_new, "/", f"prefix/{step_id}/{task_id_new}/manifest"),
+        (None, job_id_old, "/", f"prefix/{step_id}/{task_id_old}/manifest"),
+    ]
+
+    def fake_download_all_manifests(*args, **kwargs):
+        return downloaded_manifests
+
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return manifests_to_download
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        for f in files:
+            os.makedirs(os.path.dirname(f.path), exist_ok=True)
+            with open(f.path, "w") as fh:
+                fh.write("output")
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+
+    # The newer job owns the shared path and performs the actual download; the older job
+    # is deduped out and downloads nothing. With list-order attribution (the bug), the
+    # older job — appearing later in the list — would incorrectly claim the path.
+    assert "for job: New Job" in result.output, result.output
+    assert "for job: Old Job" not in result.output, result.output
+
+    # The deduped (losing) job must still report filesystem-based status, not total=0/downloaded=0.
+    # Its paths were claimed by the winning job and pruned from the download lists, so its status
+    # depends on all_task_file_paths being retained (not derived from the pruned lists). The shared
+    # file is on disk, so the loser reports it as downloaded.
+    status_file_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_file_path) as f:
+        status = json.load(f)
+    loser_entry = status["jobs"][job_id_old]
+    assert loser_entry["download_status"] == "downloaded", loser_entry
+    assert loser_entry["total_files"] == 1, loser_entry
+    assert loser_entry["downloaded_files"] == 1, loser_entry
+    assert loser_entry["tasks"][task_id_old]["downloaded_files"] == 1, loser_entry

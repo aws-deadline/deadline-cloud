@@ -106,6 +106,8 @@ def _make_status_entry(
     failed_files: int = 0,
     error_code: Optional[str] = None,
     error_message: Optional[str] = None,
+    skip_reason: Optional[str] = None,
+    tasks: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Constructs a per-job status entry for the status file."""
     return {
@@ -116,58 +118,80 @@ def _make_status_entry(
         "last_updated": datetime.now(timezone.utc).isoformat(),
         "error_code": error_code,
         "error_message": error_message,
+        "skip_reason": skip_reason,
+        "tasks": tasks or {},
     }
 
 
-def _is_job_fully_complete(job: dict[str, Any], check_active_tasks: bool = False) -> bool:
-    """Returns True if all tasks succeeded and the job has ended."""
+def _is_job_fully_complete(job: dict[str, Any]) -> bool:
+    """Returns True if the job has ended with no active tasks remaining.
+
+    A job is considered complete when it has ended and no tasks are still
+    active — even if some tasks failed or were canceled. All available
+    outputs from succeeded tasks have been downloaded.
+    """
     task_counts = job.get("taskRunStatusCounts", {})
-    succeeded = task_counts.get("SUCCEEDED", 0)
-    total = sum(task_counts.values()) if task_counts else 0
-    if check_active_tasks:
-        active_tasks = sum(
-            task_counts.get(s, 0) for s in ["READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED"]
-        )
-        if active_tasks > 0:
-            return False
-    return succeeded == total and "endedAt" in job
+    active_tasks = sum(
+        task_counts.get(s, 0) for s in ["READY", "RUNNING", "ASSIGNED", "STARTING", "SCHEDULED"]
+    )
+    return "endedAt" in job and active_tasks == 0
 
 
 def _determine_job_download_status(
     job_id: str,
     job: dict[str, Any],
     categorized_job_ids: CategorizedJobIds,
+    job_download_results: Optional[dict[str, dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """
-    Determines the download status entry for a single job based on its category.
+    Determines the download status entry for a single job based on its category
+    and download results.
 
     Returns a dict representing the job's status in the status file.
     """
+    # If we have per-job download results, use them for file counts and error info
+    results = (job_download_results or {}).get(job_id)
+
+    # If download failed for this job, report it immediately
+    if results and results.get("error_code") is not None:
+        return _make_status_entry(
+            "failed",
+            total_files=results["total_files"],
+            downloaded_files=results["downloaded_files"],
+            failed_files=results["failed_files"],
+            error_code=results["error_code"],
+            error_message=results.get("error_message"),
+        )
+
+    # File counts from results (or 0 if no results available)
+    total_files = results["total_files"] if results else 0
+    downloaded_files = results["downloaded_files"] if results else 0
+
     if job_id in categorized_job_ids.attachments_free:
-        return _make_status_entry("skipped")
+        return _make_status_entry("skipped", skip_reason="no_attachments")
 
     if job_id in categorized_job_ids.missing_storage_profile:
-        return _make_status_entry("skipped")
+        return _make_status_entry("skipped", skip_reason="missing_storage_profile")
 
     if job_id in categorized_job_ids.completed:
-        return _make_status_entry("downloaded")
+        return _make_status_entry("downloaded", total_files, downloaded_files)
 
     if job_id in categorized_job_ids.added:
-        if _is_job_fully_complete(job, check_active_tasks=True):
-            return _make_status_entry("downloaded")
-        return _make_status_entry("in_progress")
+        if _is_job_fully_complete(job):
+            return _make_status_entry("downloaded", total_files, downloaded_files)
+        return _make_status_entry("in_progress", total_files, downloaded_files)
 
     if job_id in categorized_job_ids.updated:
         if _is_job_fully_complete(job):
-            return _make_status_entry("downloaded")
-        return _make_status_entry("in_progress")
+            return _make_status_entry("downloaded", total_files, downloaded_files)
+        return _make_status_entry("in_progress", total_files, downloaded_files)
 
     if job_id in categorized_job_ids.unchanged:
         if _is_job_fully_complete(job):
-            return _make_status_entry("downloaded")
-        return _make_status_entry("in_progress")
+            return _make_status_entry("downloaded", total_files, downloaded_files)
+        return _make_status_entry("in_progress", total_files, downloaded_files)
 
-    return _make_status_entry("in_progress")
+    return _make_status_entry("in_progress", total_files, downloaded_files)
 
 
 def _build_status_file_content(
@@ -176,6 +200,8 @@ def _build_status_file_content(
     categorized_job_ids: CategorizedJobIds,
     download_candidate_jobs: dict[str, dict[str, Any]],
     existing_jobs: Optional[dict[str, Any]] = None,
+    job_download_results: Optional[dict[str, dict[str, Any]]] = None,
+    task_download_results: Optional[dict[str, dict[str, dict[str, Any]]]] = None,
 ) -> dict[str, Any]:
     """
     Builds the full status file JSON structure by merging existing job entries
@@ -201,7 +227,64 @@ def _build_status_file_content(
 
     for job_id in all_job_ids:
         job = download_candidate_jobs.get(job_id, {})
-        jobs_status[job_id] = _determine_job_download_status(job_id, job, categorized_job_ids)
+        new_entry = _determine_job_download_status(
+            job_id, job, categorized_job_ids, job_download_results
+        )
+        existing_entry = jobs_status.get(job_id)
+
+        # Merge task entries: preserve existing tasks, overwrite only tasks seen this run
+        existing_tasks: dict[str, Any] = (existing_entry or {}).get("tasks", {})
+        new_tasks: dict[str, Any] = (task_download_results or {}).get(job_id, {})
+        merged_tasks = {
+            **existing_tasks,
+            **{
+                task_id: {
+                    "download_status": "downloaded" if r.get("error_code") is None else "failed",
+                    "total_files": r["total_files"],
+                    "downloaded_files": r["downloaded_files"],
+                    "error_code": r.get("error_code"),
+                    "error_message": r.get("error_message"),
+                }
+                for task_id, r in new_tasks.items()
+            },
+        }
+        new_entry["tasks"] = merged_tasks
+
+        if (
+            existing_entry
+            and existing_entry.get("total_files", 0) > 0
+            and new_entry.get("total_files", 0) == 0
+        ):
+            # No download this run — preserve existing counts, update status if changed.
+            # Also clear stale error fields when transitioning away from a failed state to
+            # avoid an inconsistent entry with download_status="downloaded" + error_code set.
+            if new_entry["download_status"] != existing_entry["download_status"]:
+                existing_entry["download_status"] = new_entry["download_status"]
+                existing_entry["last_updated"] = new_entry["last_updated"]
+                if new_entry["download_status"] != "failed":
+                    existing_entry["error_code"] = None
+                    existing_entry["error_message"] = None
+                    existing_entry["failed_files"] = 0
+            existing_entry["tasks"] = merged_tasks
+        else:
+            jobs_status[job_id] = new_entry
+
+    # Update inactive jobs with non-terminal status to a terminal state
+    for job_id in categorized_job_ids.inactive:
+        existing_entry = jobs_status.get(job_id)
+        if existing_entry and existing_entry.get("download_status") == "in_progress":
+            if existing_entry.get("downloaded_files", 0) > 0:
+                # Had some downloads — mark as downloaded (all available outputs are on disk)
+                existing_entry["download_status"] = "downloaded"
+            else:
+                # No downloads at all — mark as skipped (job stopped before any output)
+                existing_entry["download_status"] = "skipped"
+            existing_entry["last_updated"] = now
+
+    # Determine run status — "failed" if any job in this run had errors
+    has_failures = any(
+        r.get("error_code") is not None for r in (job_download_results or {}).values()
+    )
 
     return {
         "schema_version": DOWNLOAD_STATUS_FILE_SCHEMA_VERSION,
@@ -209,7 +292,7 @@ def _build_status_file_content(
             "queue_id": queue_id,
             "storage_profile_id": storage_profile_id,
             "last_sync_completed_at": now,
-            "last_run_status": "success",
+            "last_run_status": "failed" if has_failures else "success",
             "hostname": socket.gethostname(),
         },
         "jobs": jobs_status,
@@ -290,6 +373,8 @@ def write_download_status_file(
     local_storage_profile_id: Optional[str],
     local_storage_profile: Optional[dict[str, Any]],
     checkpoint_dir: str,
+    job_download_results: Optional[dict[str, dict[str, Any]]] = None,
+    task_download_results: Optional[dict[str, dict[str, dict[str, Any]]]] = None,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> None:
     """
@@ -305,6 +390,7 @@ def write_download_status_file(
         local_storage_profile_id: The local storage profile ID, or None if --ignore-storage-profiles.
         local_storage_profile: The full storage profile dict (with fileSystemLocations), or None.
         checkpoint_dir: The checkpoint directory path (used for --ignore-storage-profiles case).
+        job_download_results: Per-job download results with file counts and error info.
         print_function_callback: Callback for printing output.
     """
     status_file_paths = _get_status_file_paths(
@@ -325,6 +411,8 @@ def write_download_status_file(
                     categorized_job_ids=categorized_job_ids,
                     download_candidate_jobs=download_candidate_jobs,
                     existing_jobs=existing_jobs,
+                    job_download_results=job_download_results,
+                    task_download_results=task_download_results,
                 )
 
                 _atomic_write_json(status_file_path, status_content)
