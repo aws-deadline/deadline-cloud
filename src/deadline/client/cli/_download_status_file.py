@@ -281,13 +281,15 @@ def _build_status_file_content(
                 "download_status",
                 "downloaded" if r.get("error_code") is None else "failed",
             )
-            # A prior-run success is terminal: its output is on disk. A FAILED taskRun from an
-            # earlier attempt keeps being reported by the API on every no-op run, so without this
-            # guard a task that was requeued, succeeded, and downloaded would flip back to
-            # farm_failed forever. Never let farm_failed clobber an already-downloaded task.
-            if status == "farm_failed" and existing_tasks.get(task_id, {}).get(
-                "download_status"
-            ) in ("downloaded", "failed"):
+            # A prior-run download success is terminal: the output is on disk. Never let a stale
+            # farm_failed action (the API reports it indefinitely) overwrite it.
+            # "failed" is intentionally not guarded here: a task may have succeeded on the farm
+            # but its download failed, so a subsequent run re-collects the FAILED action as
+            # farm_failed and should overwrite the stale download error.
+            if (
+                status == "farm_failed"
+                and existing_tasks.get(task_id, {}).get("download_status") == "downloaded"
+            ):
                 continue
             merged_tasks[task_id] = {
                 "download_status": status,

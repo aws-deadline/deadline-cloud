@@ -642,6 +642,7 @@ def _retrieve_session_actions_for_session(
     job_id: str,
     output_session: dict[str, Any],
     output_farm_failed_task_ids: Optional[set[str]] = None,
+    output_succeeded_task_ids: Optional[set[str]] = None,
 ):
     """
     Args:
@@ -655,6 +656,9 @@ def _retrieve_session_actions_for_session(
         output_session: The session to populate with a sessionActions field.
         output_farm_failed_task_ids: Optional set populated with task IDs of taskRun actions that
             FAILED on the farm. These produce no output to download and are recorded separately.
+        output_succeeded_task_ids: Optional set populated with task IDs of taskRun actions that
+            SUCCEEDED on the farm. Used to clear stale farm_failed entries for tasks that later
+            succeeded.
     """
     session_actions_paginator = deadline_client.get_paginator("list_session_actions")
 
@@ -673,6 +677,10 @@ def _retrieve_session_actions_for_session(
             if status == "SUCCEEDED":
                 # Succeeded taskRun — has output to download.
                 session_action_list.append(session_action)
+                if output_succeeded_task_ids is not None:
+                    task_id = definition["taskRun"].get("taskId")
+                    if task_id:
+                        output_succeeded_task_ids.add(task_id)
             elif status == "FAILED" and output_farm_failed_task_ids is not None:
                 # Failed on the farm — produced no output. Record the task id separately so the
                 # status file can show a stable "farm_failed" entry; never add it to
@@ -828,10 +836,12 @@ def _get_job_sessions(
         # Collect farm-failed task IDs per job across threads. Each worker collects into a
         # local set, then merges under a lock — dict/set mutation across threads needs it.
         farm_failed_task_ids: dict[str, set[str]] = {}
+        succeeded_task_ids: dict[str, set[str]] = {}
         farm_failed_lock = threading.Lock()
 
         def _retrieve_and_collect(job_id: str, session: dict[str, Any]) -> None:
             local_failed: set[str] = set()
+            local_succeeded: set[str] = set()
             _retrieve_session_actions_for_session(
                 deadline,
                 checkpoint_job_session_completed_indexes,
@@ -840,10 +850,14 @@ def _get_job_sessions(
                 job_id,
                 session,
                 local_failed,
+                local_succeeded,
             )
-            if local_failed:
+            if local_failed or local_succeeded:
                 with farm_failed_lock:
-                    farm_failed_task_ids.setdefault(job_id, set()).update(local_failed)
+                    if local_failed:
+                        farm_failed_task_ids.setdefault(job_id, set()).update(local_failed)
+                    if local_succeeded:
+                        succeeded_task_ids.setdefault(job_id, set()).update(local_succeeded)
 
         for job_id, session_list in job_sessions.items():
             for session in session_list:
@@ -871,6 +885,15 @@ def _get_job_sessions(
 
     duration = datetime.now(tz=timezone.utc) - start_time
     print_function_callback(f"...populated in {duration}")
+
+    # A FAILED taskRun action is reported by the API indefinitely — even after the task is
+    # requeued and SUCCEEDED. Remove any task that has a SUCCEEDED action in this same run so
+    # a stale farm_failed does not overwrite a task whose output has since arrived on disk.
+    for job_id, s_ids in succeeded_task_ids.items():
+        if job_id in farm_failed_task_ids:
+            farm_failed_task_ids[job_id] -= s_ids
+            if not farm_failed_task_ids[job_id]:
+                del farm_failed_task_ids[job_id]
 
     return job_sessions, farm_failed_task_ids
 
@@ -1529,7 +1552,9 @@ def _incremental_output_download(
 
     # Download per-job with error isolation, running jobs in parallel to restore throughput.
     job_download_results: dict[str, dict[str, Any]] = {}
-    # task_download_results: job_id -> task_id -> {total_files, downloaded_files, error_code, error_message}
+    # task_download_results: job_id -> task_id -> {total_files, downloaded_files, error_code, error_message, download_status?}
+    # download_status is optional: absent means "derive from error_code"; "farm_failed" is set
+    # explicitly for tasks that failed on the farm (no download was attempted).
     task_download_results: dict[str, dict[str, dict[str, Any]]] = {}
     # Set when the synthetic "" fallback bucket (attribution skipped) failed to download —
     # gates the timestamp advance below so the lost window is re-attempted next run.
@@ -1852,17 +1877,21 @@ def _incremental_output_download(
     # render itself failed — a different cause and fix than a download failure. It's also
     # distinct from a task that succeeded with no output (those stay absent from the dict).
     # Skip a task if a real download result already exists for it this run.
-    for job_id, task_ids in farm_failed_task_ids.items():
-        job_task_results = task_download_results.setdefault(job_id, {})
-        for task_id in task_ids:
-            if task_id not in job_task_results:
-                job_task_results[task_id] = {
-                    "total_files": 0,
-                    "downloaded_files": 0,
-                    "error_code": None,
-                    "error_message": None,
-                    "download_status": "farm_failed",
-                }
+    # Gated under not dry_run so dry runs don't mutate task_download_results, which is returned
+    # and passed to write_download_status_file — that call is also skipped on dry runs, but
+    # keeping the dict clean avoids confusion if callers inspect it on a dry run.
+    if not dry_run:
+        for job_id, task_ids in farm_failed_task_ids.items():
+            job_task_results = task_download_results.setdefault(job_id, {})
+            for task_id in task_ids:
+                if task_id not in job_task_results:
+                    job_task_results[task_id] = {
+                        "total_files": 0,
+                        "downloaded_files": 0,
+                        "error_code": None,
+                        "error_message": None,
+                        "download_status": "farm_failed",
+                    }
 
     # Synthesize job_download_results for deduped jobs so _determine_job_download_status
     # sees their file counts and errors. These jobs share output paths with the winning

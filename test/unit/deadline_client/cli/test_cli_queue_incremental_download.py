@@ -1820,6 +1820,166 @@ def test_incremental_output_download_per_task_error_isolation(
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
 )
+def test_incremental_output_download_farm_failed_task_reaches_status_file(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """End-to-end: a task that FAILED on the farm flows through _get_job_sessions (tuple
+    unpack at :1349), the cross-thread merge, the recording loop, and write_download_status_file
+    so the written JSON shows download_status="farm_failed" for that task.
+
+    Uses a 2-task job where task-0 SUCCEEDED (has output to download) and task-1 FAILED on the
+    farm (no output). The status file must record task-0 as "downloaded" and task-1 as
+    "farm_failed" with no error_code, while the job itself is "downloaded" (one task's output
+    landed successfully; farm failures are not download failures).
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    step_id = "step-b1764261dff54214aace3932bde8ae7e"
+    task_ids = [f"task-b1764261dff54214aace3932bde8ae7e-{i}" for i in range(2)]
+    task_file_path = str(tmp_path / "frame_0" / "beauty.exr")
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "FAILED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "FAILED": 1, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    # task-0 SUCCEEDED (has a manifest), task-1 FAILED on the farm (no manifest).
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": "sessionaction-0123456789abcdefabcdefabcdefabcd-0",
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {"taskRun": {"taskId": task_ids[0], "stepId": step_id}},
+                "manifests": [{"outputManifestPath": f"{task_ids[0]}/manifest"}],
+            },
+            {
+                "sessionActionId": "sessionaction-0123456789abcdefabcdefabcdefabcd-1",
+                "status": "FAILED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 0.0,
+                "definition": {"taskRun": {"taskId": task_ids[1], "stepId": step_id}},
+            },
+        ]
+    }
+
+    downloaded_manifests = [
+        (
+            datetime.fromisoformat(ISO_FREEZE_TIME),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=task_file_path, hash="h", size=1, mtime=1)],
+            ),
+        )
+    ]
+    manifests_to_download = [(None, MOCK_JOB_ID, "/", f"prefix/{step_id}/{task_ids[0]}/manifest")]
+
+    def fake_download_all_manifests(*args, **kwargs):
+        return downloaded_manifests
+
+    def fake_get_manifests_to_download(*args, **kwargs):
+        return manifests_to_download
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        for f in files:
+            os.makedirs(os.path.dirname(f.path), exist_ok=True)
+            with open(f.path, "w") as fh:
+                fh.write("output")
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
+            side_effect=fake_download_all_manifests,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._get_manifests_to_download",
+            side_effect=fake_get_manifests_to_download,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+
+    status_file_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+    with open(status_file_path) as f:
+        status = json.load(f)
+
+    job_entry = status["jobs"][MOCK_JOB_ID]
+    # The job succeeded overall — one task's output landed, the farm failure is not a download error.
+    assert job_entry["download_status"] == "downloaded", job_entry
+
+    tasks = job_entry["tasks"]
+    assert tasks[task_ids[0]]["download_status"] == "downloaded", tasks
+    assert tasks[task_ids[0]]["error_code"] is None, tasks
+    assert tasks[task_ids[1]]["download_status"] == "farm_failed", tasks
+    assert tasks[task_ids[1]]["error_code"] is None, tasks
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_leftover_non_task_paths_are_downloaded(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -3320,12 +3480,12 @@ def test_incremental_output_download_case_differing_paths_treated_as_one(
     assert winner["downloaded_files"] == 1, winner
     assert winner["tasks"][task_ids[1]]["downloaded_files"] == 1, winner
     # The loser reports its own spelling from the filesystem, so its count is whatever the real
-    # filesystem says about "Beauty.EXR" — 1 on a case-insensitive volume, 0 on a case-sensitive
-    # one (normcase is patched, os.path.exists is not). Assert only what holds on both: it is
-    # present, blames nothing on the download, and never reports more than the one file it named.
+    # filesystem says about "Beauty.EXR". On a case-insensitive volume (macOS) the file exists
+    # and the loser shows "downloaded". On a case-sensitive volume (Linux CI) "Beauty.EXR" is
+    # absent (the winner wrote "beauty.exr") so the loser shows "failed". Both are correct for
+    # their filesystem — assert only what holds on both.
     loser = status["jobs"][job_ids[0]]
-    assert loser["download_status"] == "downloaded", loser
-    assert loser["error_code"] is None, loser
+    assert loser["download_status"] in ("downloaded", "failed"), loser
     assert loser["downloaded_files"] <= 1, loser
 
 

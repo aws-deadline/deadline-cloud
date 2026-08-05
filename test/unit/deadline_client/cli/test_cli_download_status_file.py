@@ -748,7 +748,7 @@ class TestStatusFileLock:
 
         status_file = str(tmp_path / "status.json")
         writer_count = 8
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         barrier = threading.Barrier(writer_count)
 
         def writer(index: int) -> None:
@@ -762,7 +762,7 @@ class TestStatusFileLock:
                             existing = json.load(f).get("jobs", {})
                     existing[job_id] = {"download_status": "downloaded"}
                     _atomic_write_json(status_file, {"schema_version": 1, "jobs": existing})
-            except BaseException as e:  # noqa: BLE001 - surfaced via assert below
+            except Exception as e:  # noqa: BLE001 - surfaced via assert below
                 errors.append(e)
 
         threads = [threading.Thread(target=writer, args=(i,)) for i in range(writer_count)]
