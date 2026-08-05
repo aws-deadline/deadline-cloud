@@ -244,7 +244,11 @@ def _deadline_provenance() -> str:
         for line in show.splitlines():
             if line.lower().startswith("editable project location"):
                 editable = f" [EDITABLE -> {line.split(':', 1)[1].strip()}]"
-    except (OSError, subprocess.TimeoutExpired, IndexError):
+    except (OSError, subprocess.TimeoutExpired, IndexError, ValueError):
+        # Provenance is a diagnostic, never a gate: if the launcher isn't a readable
+        # text stub (a native `deadline.exe` on Windows raises UnicodeDecodeError, a
+        # ValueError subclass) or pip can't be reached, report without the editable
+        # detail rather than aborting the run before any eval executes.
         pass
     return f"deadline: {version} at {path}{editable}"
 
@@ -370,7 +374,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print(f"\nsummary -> {out_root / 'summary.json'}")
 
     if subj and args.revised_ref:
-        diff = summaries[0].get("source_diff", "") if summaries else ""
+        # The diff is identical across A/B cases, so take it from any case that has
+        # one -- summaries[0] may be a skipped real_aws case with no source_diff,
+        # which would silently suppress a genuinely earned proposal.
+        diff = next((s["source_diff"] for s in summaries if s.get("source_diff")), "")
         if _should_emit_proposal(summaries, diff):
             (out_root / "proposal.patch").write_text(diff)
             print(f"proposal -> {out_root / 'proposal.patch'}")

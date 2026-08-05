@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -11,8 +12,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent_evals import judge, runner  # noqa: E402
-from agent_evals.subject import CORPUS_DOC, corpus_subject  # noqa: E402
+from agent_evals import judge, reviser, runner  # noqa: E402
+from agent_evals.subject import BASE_REF, CORPUS_DOC, corpus_subject  # noqa: E402
 
 
 def test_extract_verdict_plain_json() -> None:
@@ -99,6 +100,18 @@ def test_proposal_suppressed_on_empty_diff() -> None:
     assert runner._should_emit_proposal([{"verdict": "improved"}], "  \n") is False
 
 
+def test_source_diff_found_past_skipped_case() -> None:
+    # A skipped real_aws case carries no source_diff. Picking summaries[0] blindly
+    # would yield "" and silently suppress a proposal a later case earned.
+    summaries = [
+        {"case_id": "real_aws", "skipped": "requires --allow-real-aws"},
+        {"case_id": "docs", "verdict": "improved", "source_diff": "diff --git a b\n"},
+    ]
+    diff = next((s["source_diff"] for s in summaries if s.get("source_diff")), "")
+    assert diff == "diff --git a b\n"
+    assert runner._should_emit_proposal(summaries, diff) is True
+
+
 def test_subject_files_reflects_checked_out_ref(tmp_path) -> None:
     # The seeded files must track the CURRENT ref, so baseline and revised runs get
     # different content -- otherwise a docs A/B compares identical sandboxes.
@@ -167,3 +180,62 @@ def test_real_aws_skip_reason_flags_missing_env(monkeypatch) -> None:
     monkeypatch.delenv(runner.ENV_QUEUE_ID, raising=False)
     reason = runner._real_aws_skip_reason(allow_real_aws=True)
     assert reason and "FARM_ID" in reason
+
+
+def test_provenance_survives_binary_launcher(tmp_path, monkeypatch) -> None:
+    # A native launcher (deadline.exe on Windows) isn't decodable UTF-8. Reading it
+    # raises UnicodeDecodeError (a ValueError, NOT an OSError) -- that must not abort
+    # the whole run before any eval executes.
+    launcher = tmp_path / "deadline"
+    launcher.write_bytes(b"\x7fELF\x02\x01\x01\x00\xff\xfe\xfd")
+    monkeypatch.setattr(runner.shutil, "which", lambda _: str(launcher))
+    monkeypatch.setattr(
+        runner.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout="1.2.3", stderr=""),
+    )
+    line = runner._deadline_provenance()
+    assert "1.2.3" in line and "EDITABLE" not in line
+
+
+def test_judge_timeout_raises_judge_error(monkeypatch) -> None:
+    # A hung judge must fail its own run, not hang the batch -- the harness timeout
+    # can't cover the judge call.
+    def _timeout(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="claude", timeout=k.get("timeout", 0))
+
+    monkeypatch.setattr(judge.subprocess, "run", _timeout)
+    with pytest.raises(judge.JudgeError, match="timeout"):
+        judge.judge_answer("rubric", "prompt", "an answer", timeout_s=1)
+
+
+def test_revise_timeout_raises_revise_error(tmp_path, monkeypatch) -> None:
+    # The reviser drives a full edit session; a hung one must fail loudly instead of
+    # blocking with no ceiling.
+    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
+    run_dir = tmp_path / "out" / "case" / "run-1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "events.jsonl").write_text("")
+
+    real_run = subprocess.run
+
+    def _timeout(cmd, *a, **k):
+        # Only the agent launch times out; git calls must still work.
+        if "claude" in cmd[0]:
+            raise subprocess.TimeoutExpired(cmd=cmd[0], timeout=k.get("timeout", 0))
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr(reviser.subprocess, "run", _timeout)
+    with pytest.raises(reviser.ReviseError, match="timeout"):
+        reviser.revise(subj, run_dir, goal="g", base_ref=BASE_REF, timeout_s=1)
+
+
+def test_revise_missing_binary_raises_revise_error(tmp_path) -> None:
+    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
+    run_dir = tmp_path / "out" / "case" / "run-1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "events.jsonl").write_text("")
+    with pytest.raises(reviser.ReviseError, match="could not launch"):
+        reviser.revise(
+            subj, run_dir, goal="g", base_ref=BASE_REF, claude_bin="definitely-not-real-xyz"
+        )

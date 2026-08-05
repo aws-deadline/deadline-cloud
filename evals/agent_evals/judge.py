@@ -17,6 +17,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+# Wall-clock ceiling for one judge call. --max-turns bounds model turns, but a hung
+# network/auth interaction has no turn cost, and the judge runs once per run in the
+# batch -- so without this a single stuck judge would hang the whole eval.
+DEFAULT_TIMEOUT_S = 300
+
+
 class JudgeError(RuntimeError):
     """Raised when the judge call fails to produce a usable verdict."""
 
@@ -59,8 +65,13 @@ def judge_answer(
     *,
     model: Optional[str] = None,
     claude_bin: str = "claude",
+    timeout_s: int = DEFAULT_TIMEOUT_S,
 ) -> Verdict:
-    """Grade `answer` against `rubric` with a headless, tool-less model call."""
+    """Grade `answer` against `rubric` with a headless, tool-less model call.
+
+    Raises JudgeError if the judge binary can't be launched, the call exceeds
+    `timeout_s`, or the reply carries no usable verdict.
+    """
     if not (answer or "").strip():
         return Verdict(passed=False, reasoning="agent produced no final answer")
 
@@ -97,9 +108,13 @@ def judge_answer(
     try:
         # stdin=DEVNULL: with -p the CLI still waits on stdin and can exit non-zero
         # on a closed pipe.
-        proc = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=timeout_s
+        )
     except OSError as e:
         raise JudgeError(f"could not launch {claude_bin}: {e}") from e
+    except subprocess.TimeoutExpired as e:
+        raise JudgeError(f"judge call exceeded {timeout_s}s wall-clock timeout") from e
 
     # --output-format json wraps the reply in an envelope whose `result` field is
     # the text we asked for.

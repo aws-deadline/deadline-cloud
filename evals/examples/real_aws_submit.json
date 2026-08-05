@@ -2,7 +2,7 @@
   {
     "id": "submit_job_end_to_end",
     "env": "real_aws",
-    "prompt": "There is a Deadline Cloud job bundle in the ./bundle/ directory (an Open Job Description template that runs a short echo task). Using the `deadline` CLI, submit this bundle to farm {farm_id} and queue {queue_id}, wait for the job to finish, and report its final lifecycle/task-run status. Use `deadline bundle submit ./bundle --farm-id {farm_id} --queue-id {queue_id} --yes` and then wait for completion (for example with `deadline job wait` or by polling `deadline job get`). State the final status clearly in your answer.",
+    "prompt": "There is a Deadline Cloud job bundle in the ./materials/bundle/ directory (an Open Job Description template that runs a short echo task). Using the `deadline` CLI, submit this bundle to farm {farm_id} and queue {queue_id}, wait for the job to finish, and report its final lifecycle/task-run status. Use `deadline bundle submit ./materials/bundle --farm-id {farm_id} --queue-id {queue_id} --yes` and then wait for completion (for example with `deadline job wait` or by polling `deadline job get`). State the final status clearly in your answer.",
     "tools": ["Bash", "Read"],
     "rubric": "A passing answer shows the agent submitted the bundle with `deadline bundle submit` and obtained a job id, then waited for and reported the job's terminal status. The job must have reached SUCCEEDED (task run status SUCCEEDED / lifecycle status UPDATE_SUCCEEDED). An answer that only submitted without confirming completion, or where the job did not succeed, fails.",
     "max_turns": 40,

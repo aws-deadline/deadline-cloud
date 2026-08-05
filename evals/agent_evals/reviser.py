@@ -18,8 +18,15 @@ from pathlib import Path
 from .subject import Subject
 
 
+# Bounds for the reviser agent. It drives a full edit session, so it needs both a
+# turn ceiling and a wall-clock ceiling -- otherwise a runaway or hung session has
+# no limit at all.
+DEFAULT_MAX_TURNS = 40
+DEFAULT_TIMEOUT_S = 1200
+
+
 class ReviseError(RuntimeError):
-    """Raised when the reviser produces no change to the subject."""
+    """Raised when the reviser cannot run or produces no change to the subject."""
 
 
 _REVISE_PROMPT = """\
@@ -72,11 +79,14 @@ def revise(
     goal: str,
     base_ref: str,
     claude_bin: str = "claude",
+    max_turns: int = DEFAULT_MAX_TURNS,
+    timeout_s: int = DEFAULT_TIMEOUT_S,
 ) -> str:
     """Edit the subject from a struggling run's transcript; commit to a scratch ref.
 
-    Returns the scratch ref name. Raises ReviseError if the agent made no edits --
-    a candidate identical to baseline would make any measured delta pure noise.
+    Returns the scratch ref name. Raises ReviseError if the agent can't be launched,
+    exceeds `timeout_s`, or made no edits -- a candidate identical to baseline would
+    make any measured delta pure noise.
     """
     prompt = _REVISE_PROMPT.format(goal=goal, transcript=transcript_text(run_dir / "events.jsonl"))
 
@@ -89,6 +99,8 @@ def revise(
                 prompt,
                 "--permission-mode",
                 "bypassPermissions",
+                "--max-turns",
+                str(max_turns),
                 "--allowedTools",
                 "Read",
                 "Edit",
@@ -100,9 +112,12 @@ def revise(
             capture_output=True,
             text=True,
             stdin=subprocess.DEVNULL,
+            timeout=timeout_s,
         )
     except OSError as e:
         raise ReviseError(f"could not launch {claude_bin}: {e}") from e
+    except subprocess.TimeoutExpired as e:
+        raise ReviseError(f"reviser agent exceeded {timeout_s}s wall-clock timeout") from e
     if proc.returncode != 0:
         raise ReviseError(f"reviser agent exited {proc.returncode}: {proc.stderr.strip()[:200]}")
 
