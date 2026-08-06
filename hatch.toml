@@ -1,5 +1,8 @@
 [envs.default]
-features = ["gui"]
+# "console" brings in botocore[crt], needed to exercise the AWS Console sign-in
+# profile paths. It stays an opt-in extra for consumers (awscrt is a compiled
+# wheel) but the test env always has it so those paths are covered.
+features = ["gui", "console"]
 pre-install-commands = ["pip install -r requirements-testing.txt"]
 
 [envs.default.scripts]

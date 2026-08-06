@@ -217,12 +217,16 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
         """
         Determine whether the logout option should be visible based on the credential source.
 
-        The logout option is only shown when using Deadline Cloud Monitor credentials.
+        The logout option is only shown for the profile types that support logging out:
+        Deadline Cloud monitor and AWS Console sign-in.
 
         Returns:
             bool: True if logout should be visible, False otherwise.
         """
-        return self._status.creds_source == api.AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
+        return self._status.creds_source in (
+            api.AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN,
+            api.AwsCredentialsSource.AWS_CONSOLE_LOGIN,
+        )
 
     def _get_auth_state_configs(self) -> Dict[AuthenticationState, AuthenticationStateConfig]:
         """

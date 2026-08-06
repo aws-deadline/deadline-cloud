@@ -234,6 +234,82 @@ def set_monitor_profile(env: dict, *, monitor_id: str, region: str = REGION) -> 
     return profile_name
 
 
+def set_console_login_profile(env: dict, *, region: str = REGION) -> str:
+    """
+    Write an AWS Console sign-in profile (as `aws login` / Deadline Cloud monitor's
+    console sign-in flow creates) and point the CLI at it.
+
+    The marker the client detects is the ``login_session`` key in the config file.
+    Real console profiles keep no credentials there -- botocore's LoginProvider
+    resolves them from the token cache under ``~/.aws/login/cache``, which needs the
+    ``awscrt`` extra and a live browser handshake. Neither is available here, so the
+    static test credentials go in a shared credentials file instead: botocore's
+    resolver reaches ``shared-credentials-file`` before the login provider, so API
+    calls succeed while ``get_credentials_source`` still sees a console profile.
+
+    Returns the profile name.
+    """
+    profile_name = "console-signin"
+    aws_dir = Path(env["HOME"]) / ".aws"
+    aws_dir.mkdir(parents=True, exist_ok=True)
+
+    aws_config = aws_dir / "config"
+    aws_config.write_text(
+        f"[profile {profile_name}]\n"
+        f"region = {region}\n"
+        f"login_session = arn:aws:sts::123456789012:assumed-role/Admin/someone\n"
+    )
+    aws_credentials = aws_dir / "credentials"
+    aws_credentials.write_text(
+        f"[{profile_name}]\n"
+        f"aws_access_key_id = {ACCESS_KEY}\n"
+        f"aws_secret_access_key = {SECRET_KEY}\n"
+    )
+    # Set both explicitly: boto3 resolves the default locations from %USERPROFILE%
+    # on Windows, which the subprocess env doesn't set.
+    env["AWS_CONFIG_FILE"] = str(aws_config)
+    env["AWS_SHARED_CREDENTIALS_FILE"] = str(aws_credentials)
+    r = run_deadline(env, "config", "set", "defaults.aws_profile_name", profile_name)
+    assert r.returncode == 0, f"set aws_profile_name failed: {r.stderr}"
+    return profile_name
+
+
+def make_fake_aws_cli(tmp_path: Path, env: dict, *, exit_code: int = 0, output: str = "") -> Path:
+    """
+    Put a stub `aws` executable at the front of the subprocess PATH and return the
+    file it records its argv into.
+
+    `deadline auth login` on a console profile shells out to `aws login`, which would
+    otherwise open a real browser. The stub lets the e2e test assert the exact command
+    line the CLI builds without any in-process patching.
+    """
+    bin_dir = tmp_path / "fake-aws-bin"
+    bin_dir.mkdir(exist_ok=True)
+    argv_log = tmp_path / "aws-argv.txt"
+
+    if sys.platform == "win32":
+        # Subprocess resolves `aws` via PATHEXT; a .bat is what actually gets found.
+        script = bin_dir / "aws.bat"
+        script.write_text(
+            "@echo off\r\n"
+            f'echo %*>>"{argv_log}"\r\n'
+            + (f"echo {output}\r\n" if output else "")
+            + f"exit /b {exit_code}\r\n"
+        )
+    else:
+        script = bin_dir / "aws"
+        script.write_text(
+            "#!/bin/sh\n"
+            f'printf "%s\\n" "$*" >> "{argv_log}"\n'
+            + (f'echo "{output}"\n' if output else "")
+            + f"exit {exit_code}\n"
+        )
+        script.chmod(0o755)
+
+    env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+    return argv_log
+
+
 # ---- helpers exposed to tests ----------------------------------------------
 
 
@@ -277,3 +353,21 @@ def set_cli_monitor_profile():
     """Returns a `set(env, monitor_id=..., region=...)` callable that writes a
     Deadline Cloud monitor AWS profile and selects it."""
     return set_monitor_profile
+
+
+@pytest.fixture
+def set_cli_console_login_profile():
+    """Returns a `set(env, region=...)` callable that writes an AWS Console sign-in
+    AWS profile and selects it."""
+    return set_console_login_profile
+
+
+@pytest.fixture
+def fake_aws_cli(tmp_path: Path):
+    """Returns a `make(env, exit_code=..., output=...)` callable that installs a stub
+    `aws` executable on PATH and returns the path it logs its argv to."""
+
+    def make(env: dict, *, exit_code: int = 0, output: str = "") -> Path:
+        return make_fake_aws_cli(tmp_path, env, exit_code=exit_code, output=output)
+
+    return make

@@ -30,11 +30,16 @@ JSON_FIELD_AUTH_API_AVAILABLE = "api_availability"
 
 def _cli_on_pending_authorization(**kwargs):
     """
-    Callback for `login`, to tell the user that Deadline Cloud monitor is opening
+    Callback for `login`, to tell the user which login flow is opening
     """
 
     if kwargs["credentials_source"] == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
         click.echo("Opening Deadline Cloud monitor. Please log in and then return here.")
+    elif kwargs["credentials_source"] == AwsCredentialsSource.AWS_CONSOLE_LOGIN:
+        click.echo(
+            "Opening the AWS Console sign-in page in your browser. "
+            "Please sign in and then return here."
+        )
 
 
 @main.group(name="auth")
