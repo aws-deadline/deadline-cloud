@@ -26,10 +26,7 @@ from ....job_attachments.models import (
     JobAttachmentS3Settings,
     PathFormat,
 )
-from ....job_attachments._utils import (
-    WINDOWS_MAX_PATH_LENGTH,
-    _is_windows_long_path_registry_enabled,
-)
+from ....job_attachments._utils import WINDOWS_MAX_PATH_LENGTH
 from ....job_attachments.progress_tracker import (
     DownloadSummaryStatistics,
     ProgressReportMetadata,
@@ -717,7 +714,10 @@ def _download_job_output(
     def _check_and_warn_long_output_paths(
         output_paths_by_root: dict[str, list[str]],
     ) -> None:
-        if sys.platform == "win32" and not _is_windows_long_path_registry_enabled():
+        # Not gated on the LongPathsEnabled registry setting: that only takes effect for
+        # processes declaring longPathAware in their manifest, so it does not indicate
+        # whether a long path is safe for the applications that will open these files.
+        if sys.platform == "win32":
             for root, paths in output_paths_by_root.items():
                 for output_path in paths:
                     if len(root + output_path) >= WINDOWS_MAX_PATH_LENGTH:

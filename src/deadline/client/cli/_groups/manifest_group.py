@@ -27,10 +27,7 @@ from deadline.client.api._session import (
 )
 from deadline.client.config import config_file
 from deadline.job_attachments._diff import pretty_print_cli
-from deadline.job_attachments._utils import (
-    WINDOWS_MAX_PATH_LENGTH,
-    _is_windows_long_path_registry_enabled,
-)
+from deadline.job_attachments._utils import WINDOWS_MAX_PATH_LENGTH
 from deadline.job_attachments.api.manifest import (
     _glob_files,
     _manifest_diff,
@@ -164,11 +161,10 @@ def manifest_snapshot(
         hash_cache_dir=hash_cache_dir,
     )
     if manifest_out:
-        if (
-            sys.platform == "win32"
-            and len(manifest_out.manifest) >= WINDOWS_MAX_PATH_LENGTH
-            and not _is_windows_long_path_registry_enabled()
-        ):
+        # Not gated on the LongPathsEnabled registry setting: that only takes effect for
+        # processes declaring longPathAware in their manifest, so it does not indicate
+        # whether a long path is safe for the tools consuming this one.
+        if sys.platform == "win32" and len(manifest_out.manifest) >= WINDOWS_MAX_PATH_LENGTH:
             long_manifest_path_warning = f"""WARNING: Manifest file path {manifest_out.manifest} exceeds Windows path length limit. This may cause unexpected issues.
 For details and a fix using the registry, see: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation"""
             logger.echo(
