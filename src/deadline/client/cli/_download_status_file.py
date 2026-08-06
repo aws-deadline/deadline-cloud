@@ -240,6 +240,7 @@ def _build_status_file_content(
     existing_jobs: Optional[dict[str, Any]] = None,
     job_download_results: Optional[dict[str, dict[str, Any]]] = None,
     task_download_results: Optional[dict[str, dict[str, dict[str, Any]]]] = None,
+    succeeded_task_ids: Optional[dict[str, set[str]]] = None,
 ) -> dict[str, Any]:
     """
     Builds the full status file JSON structure by merging existing job entries
@@ -274,6 +275,18 @@ def _build_status_file_content(
         existing_tasks: dict[str, Any] = (existing_entry or {}).get("tasks", {})
         new_tasks: dict[str, Any] = (task_download_results or {}).get(job_id, {})
         merged_tasks = dict(existing_tasks)
+        # A task that SUCCEEDED this run with no output must clear any stale farm_failed
+        # entry carried forward from a prior run. The farm FAILED action is reported by the
+        # API indefinitely, so _get_job_sessions subtracts succeeded IDs from
+        # farm_failed_task_ids — preventing a new entry — but the prior disk entry is
+        # preserved by the merge above unless we explicitly remove it here.
+        job_succeeded_ids: set[str] = (succeeded_task_ids or {}).get(job_id, set())
+        for task_id in job_succeeded_ids:
+            if (
+                task_id not in new_tasks
+                and merged_tasks.get(task_id, {}).get("download_status") == "farm_failed"
+            ):
+                del merged_tasks[task_id]
         for task_id, r in new_tasks.items():
             # Honor an explicit download_status (e.g. "farm_failed" for a task that
             # failed on the farm); otherwise derive it from whether the download errored.
@@ -428,6 +441,7 @@ def write_download_status_file(
     checkpoint_dir: str,
     job_download_results: Optional[dict[str, dict[str, Any]]] = None,
     task_download_results: Optional[dict[str, dict[str, dict[str, Any]]]] = None,
+    succeeded_task_ids: Optional[dict[str, set[str]]] = None,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> None:
     """
@@ -466,6 +480,7 @@ def write_download_status_file(
                     existing_jobs=existing_jobs,
                     job_download_results=job_download_results,
                     task_download_results=task_download_results,
+                    succeeded_task_ids=succeeded_task_ids,
                 )
 
                 _atomic_write_json(status_file_path, status_content)

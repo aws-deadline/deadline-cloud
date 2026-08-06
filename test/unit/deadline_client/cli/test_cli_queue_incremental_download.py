@@ -1980,6 +1980,138 @@ def test_incremental_output_download_farm_failed_task_reaches_status_file(
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
 )
+def test_incremental_output_download_stale_farm_failed_cleared_when_task_later_succeeds(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """Run 1 writes farm_failed for a task. The task is requeued and SUCCEEDS with no output
+    on run 2. The stale farm_failed entry must be cleared from the status file.
+
+    This tests the gap Phillip identified: _get_job_sessions subtracts the succeeded task from
+    farm_failed_task_ids so nothing new is written, but the prior disk entry is carried forward
+    by the merge unless succeeded_task_ids explicitly overwrites it.
+    """
+    step_id = "step-b1764261dff54214aace3932bde8ae7e"
+    task_id = "task-b1764261dff54214aace3932bde8ae7e-0"
+
+    status_file_path = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+    )
+
+    # Pre-populate the status file with a farm_failed entry from a prior run.
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    with open(status_file_path, "w") as f:
+        json.dump(
+            {
+                "schema_version": 1,
+                "sync_metadata": {
+                    "queue_id": MOCK_QUEUE_ID,
+                    "storage_profile_id": None,
+                    "last_sync_completed_at": "2025-08-06T00:00:00+00:00",
+                    "last_run_status": "success",
+                    "hostname": "worker",
+                },
+                "jobs": {
+                    MOCK_JOB_ID: {
+                        "queue_id": MOCK_QUEUE_ID,
+                        "download_status": "downloaded",
+                        "total_files": 0,
+                        "downloaded_files": 0,
+                        "failed_files": 0,
+                        "last_updated": "2025-08-06T00:00:00+00:00",
+                        "error_code": None,
+                        "error_message": None,
+                        "skip_reason": None,
+                        "tasks": {
+                            task_id: {
+                                "download_status": "farm_failed",
+                                "total_files": 0,
+                                "downloaded_files": 0,
+                                "error_code": None,
+                                "error_message": None,
+                            }
+                        },
+                    }
+                },
+            },
+            f,
+        )
+
+    # Run 2: same task now SUCCEEDS with no output manifest.
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "FAILED": 0, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_1,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {"taskRun": {"taskId": task_id, "stepId": step_id}},
+                "manifests": [{}],
+            }
+        ]
+    }
+
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+
+    with open(status_file_path) as f:
+        status = json.load(f)
+
+    tasks = status["jobs"][MOCK_JOB_ID]["tasks"]
+    # The stale farm_failed must be cleared — the task SUCCEEDED, even with no output.
+    # The entry is removed entirely (consistent with succeeded-with-no-output tasks never
+    # being recorded in the first place) rather than being rewritten as "downloaded".
+    assert task_id not in tasks, tasks
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
 def test_incremental_output_download_leftover_non_task_paths_are_downloaded(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):

@@ -721,13 +721,15 @@ def _get_job_sessions(
     download_candidate_jobs: dict[str, dict[str, Any]],
     print_function_callback: Callable[[Any], None] = lambda msg: None,
     region: Optional[str] = None,
-) -> tuple[dict[str, list], dict[str, set[str]]]:
+) -> tuple[dict[str, list], dict[str, set[str]], dict[str, set[str]]]:
     """
     This function gets all the job sessions and session actions from the completed, added, and updated jobs.
     It uses the checkpoint's session_completed_indexes to filter out older session actions that are already downloaded.
 
-    Returns a tuple of (job_sessions, farm_failed_task_ids), where farm_failed_task_ids maps
-    job_id -> set of task IDs that FAILED on the farm (produced no output to download).
+    Returns a tuple of (job_sessions, farm_failed_task_ids, succeeded_task_ids), where
+    farm_failed_task_ids maps job_id -> set of task IDs that FAILED on the farm (produced no
+    output to download), and succeeded_task_ids maps job_id -> set of task IDs that SUCCEEDED
+    (used to clear stale farm_failed entries written by a prior run).
 
     Args:
         boto3_session: The boto3.Session for accessing AWS.
@@ -895,7 +897,7 @@ def _get_job_sessions(
             if not farm_failed_task_ids[job_id]:
                 del farm_failed_task_ids[job_id]
 
-    return job_sessions, farm_failed_task_ids
+    return job_sessions, farm_failed_task_ids, succeeded_task_ids
 
 
 def _get_storage_profiles(
@@ -1216,6 +1218,7 @@ def _incremental_output_download(
     dict[str, dict[str, Any]],
     dict[str, dict[str, Any]],
     dict[str, dict[str, dict[str, Any]]],
+    dict[str, set[str]],
 ]:
     """
     This function downloads all the task run outputs from the specified queue, that have become
@@ -1369,7 +1372,7 @@ def _incremental_output_download(
 
     # All the completed, added, and updated jobs might have downloads available. Retrieve the sessions for these jobs.
     start_t = time.perf_counter_ns()
-    job_sessions, farm_failed_task_ids = _get_job_sessions(
+    job_sessions, farm_failed_task_ids, succeeded_task_ids = _get_job_sessions(
         boto3_session,
         boto3_session_for_s3,
         farm_id,
@@ -2032,4 +2035,5 @@ def _incremental_output_download(
         download_candidate_jobs,
         job_download_results,
         task_download_results,
+        succeeded_task_ids,
     )

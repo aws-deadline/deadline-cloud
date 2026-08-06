@@ -521,7 +521,7 @@ def test_cli_queue_sync_output_region(fresh_deadline_config, tmp_path):
         patch.object(
             queue_group,
             "_incremental_output_download",
-            return_value=(MagicMock(), MagicMock(), {}, {}, {}),
+            return_value=(MagicMock(), MagicMock(), {}, {}, {}, {}),
         ),
     ):
         runner = CliRunner()

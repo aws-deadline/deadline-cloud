@@ -524,6 +524,7 @@ def sync_output(
             download_candidate_jobs,
             job_download_results,
             task_download_results,
+            succeeded_task_ids,
         ) = _incremental_output_download(
             boto3_session=boto3_session,
             farm_id=farm_id,
@@ -547,6 +548,7 @@ def sync_output(
                 checkpoint_dir=checkpoint_dir,
                 job_download_results=job_download_results,
                 task_download_results=task_download_results,
+                succeeded_task_ids=succeeded_task_ids,
                 print_function_callback=logger.echo,
             )
 
