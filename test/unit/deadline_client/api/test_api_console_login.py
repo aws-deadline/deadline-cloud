@@ -12,6 +12,7 @@ Deadline Cloud monitor, which implements it; logging out is just deleting the ca
 token file, done in-process.
 """
 
+import builtins
 import os
 import subprocess
 import sys
@@ -448,3 +449,28 @@ def test_expired_console_creds_report_needs_login(console_profile):
         api._session, "_list_farms_for_auth_probe", side_effect=Exception("ExpiredToken")
     ):
         assert api.check_authentication_status() == AwsAuthenticationStatus.NEEDS_LOGIN
+
+
+def test_console_login_proceeds_when_the_awscrt_probe_is_unavailable(
+    console_profile_with_monitor, authenticated_after_login
+):
+    """
+    The pre-flight reads a private botocore symbol. If a future botocore drops it, blocking a
+    login that would have worked is worse than the hang the check exists to prevent -- so an
+    ImportError means "can't tell", not "refuse".
+    """
+    real_import = builtins.__import__
+
+    def hide_botocore_compat_ec(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "botocore.compat" and fromlist and "EC" in fromlist:
+            raise ImportError("no attribute EC")
+        return real_import(name, globals, locals, fromlist, level)
+
+    with (
+        patch.object(builtins, "__import__", side_effect=hide_botocore_compat_ec),
+        patch.object(subprocess, "Popen") as popen_mock,
+    ):
+        output = api.login(None, None)
+
+    popen_mock.assert_called_once()
+    assert PROFILE_NAME in output

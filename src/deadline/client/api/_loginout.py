@@ -42,7 +42,19 @@ def _check_console_login_dependency(profile_name: str) -> None:
     process never exits either, so the loop would spin forever: the user would sign in
     successfully in the browser and the CLI would still hang. Check before launching anything.
     """
-    from botocore.compat import EC
+    # botocore.compat.EC is `awscrt.crypto.EC`, or None when awscrt is missing or older than
+    # 0.28.4 -- it is the same symbol LoginProvider itself checks before refusing to load a
+    # login_session profile, which is what makes it the right signal here. It is private, so
+    # treat its absence as "can't tell" and let the login proceed: a spurious hang is a worse
+    # outcome than an unhelpful traceback, but blocking a login that would have worked because
+    # botocore renamed something is worse than both.
+    try:
+        from botocore.compat import EC
+    except ImportError:
+        logger.debug(
+            "botocore.compat.EC is unavailable, so the awscrt pre-flight check was skipped."
+        )
+        return
 
     if EC is None:
         raise DeadlineOperationError(
