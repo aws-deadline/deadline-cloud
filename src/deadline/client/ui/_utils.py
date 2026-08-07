@@ -38,7 +38,11 @@ def _get_translations() -> Dict[str, str]:
         locale_file = translations_dir / "en_US.json"
 
     try:
-        with open(locale_file) as f:
+        # These catalogs are UTF-8, but open() defaults to the platform encoding, which is
+        # cp1252 on Windows. Without this, the CJK catalogs raise UnicodeDecodeError and every
+        # string falls back to its key, while the en_US bullets (U+2022) decode to mojibake
+        # instead of failing outright, so the key lookup misses and the mangled text renders.
+        with open(locale_file, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {}
