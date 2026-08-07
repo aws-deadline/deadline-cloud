@@ -98,12 +98,23 @@ def _login_aws_console(
 
 def _logout_aws_console(config: Optional[ConfigParser] = None) -> str:
     """
-    Logs out of an AWS Console sign-in profile by deleting its cached token.
+    Logs out of an AWS Console sign-in profile.
 
-    botocore caches the token at ``<login cache dir>/<sha256 of the login_session
-    ARN>.json``, so removing that file is the whole logout: the next credential
-    resolution finds nothing to refresh. Done in-process to avoid depending on an
-    external tool for a file deletion.
+    Two things have to happen, and doing only the first leaves the user stuck. Deleting the
+    cached token ends the session for anything resolving credentials: botocore caches it at
+    ``<login cache dir>/<sha256 of the login_session ARN>.json``, so removing that file means
+    the next resolution finds nothing to refresh.
+
+    But Deadline Cloud monitor keeps its own idea of being signed in, and it does not watch
+    that file. Left running, it would still show the profile as logged in — and worse, a
+    later ``login`` would find the live instance, foreground it, and return without signing
+    anyone in, because the monitor short-circuits when an instance is already up for the
+    profile. So tell the monitor to log out too, the same way monitor profiles do.
+
+    The monitor clears the cached token itself, so the deletion here is deliberately
+    redundant: it is what makes logout work for a profile created by ``aws login`` on a
+    workstation with no monitor installed. Whichever runs second finds nothing to do, which
+    both paths treat as success.
     """
     from botocore.utils import generate_login_cache_key, get_login_token_cache_directory
 
@@ -134,9 +145,41 @@ def _logout_aws_console(config: Optional[ConfigParser] = None) -> str:
             f"{cache_file}: {e}"
         )
 
+    _logout_deadline_cloud_monitor_instance(profile_name, config)
+
     # Force a refresh of the cached boto3 Session
     _session.invalidate_boto3_session_cache()
     return f"Successfully logged out of AWS Console sign-in profile: {profile_name}"
+
+
+def _logout_deadline_cloud_monitor_instance(
+    profile_name: str, config: Optional[ConfigParser] = None
+) -> None:
+    """
+    Asks Deadline Cloud monitor to log out of a profile, if it is installed.
+
+    Best-effort on purpose: the cached token is already gone by this point, so the session is
+    over either way. A monitor that isn't installed, or that fails to log out, must not turn a
+    successful logout into an error — but leaving it signed in would make the *next* login a
+    silent no-op, so it is worth attempting and worth logging when it doesn't work.
+    """
+    deadline_cloud_monitor_path = get_setting("deadline-cloud-monitor.path", config=config)
+    if not deadline_cloud_monitor_path:
+        return
+
+    try:
+        subprocess.check_output(
+            [deadline_cloud_monitor_path, "logout", "--profile", profile_name],
+            stderr=subprocess.STDOUT,
+        )
+    except (OSError, subprocess.CalledProcessError) as e:
+        logger.warning(
+            "Deadline Cloud monitor could not log out of profile %s (%s). The cached "
+            "credentials were removed, but the monitor may still show the profile as signed "
+            "in; quit it before signing in again.",
+            profile_name,
+            e,
+        )
 
 
 def _get_login_session_arn(profile_name: str) -> Optional[str]:

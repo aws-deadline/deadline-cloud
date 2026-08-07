@@ -311,6 +311,56 @@ def test_console_logout_removes_cached_token(console_profile, login_cache_dir):
     assert PROFILE_NAME in output
 
 
+def test_console_logout_tells_the_monitor_to_log_out(console_profile_with_monitor, login_cache_dir):
+    """
+    Deadline Cloud monitor holds its own signed-in state and doesn't watch the token cache. If
+    it keeps running, it still shows the profile as logged in, and the next `login` finds the
+    live instance, foregrounds it, and signs nobody in. So logout has to tell it as well.
+    """
+    _cached_token_path(login_cache_dir).write_text('{"accessToken": "token"}')
+
+    with patch.object(subprocess, "check_output", return_value=b"") as check_output_mock:
+        api.logout()
+
+    assert check_output_mock.call_args[0][0][1:] == ["logout", "--profile", PROFILE_NAME]
+
+
+def test_console_logout_succeeds_when_the_monitor_logout_fails(
+    console_profile_with_monitor, login_cache_dir
+):
+    """
+    The cached token is already gone by then, so the session is over either way. A monitor that
+    can't be reached must not turn a successful logout into an error.
+    """
+    cached_token = _cached_token_path(login_cache_dir)
+    cached_token.write_text('{"accessToken": "token"}')
+
+    with patch.object(
+        subprocess,
+        "check_output",
+        side_effect=subprocess.CalledProcessError(1, "dcm", output=b"boom"),
+    ):
+        output = api.logout()
+
+    assert not cached_token.exists()
+    assert PROFILE_NAME in output
+
+
+def test_console_logout_without_a_monitor_still_clears_the_token(console_profile, login_cache_dir):
+    """
+    A profile created by `aws login` has no monitor path, so the in-process deletion is the only
+    thing that ends the session. It must not depend on the monitor being installed.
+    """
+    cached_token = _cached_token_path(login_cache_dir)
+    cached_token.write_text('{"accessToken": "token"}')
+
+    with patch.object(subprocess, "check_output") as check_output_mock:
+        api.logout()
+
+    assert not cached_token.exists()
+    check_output_mock.assert_not_called()
+
+
 def test_console_logout_succeeds_when_already_logged_out(console_profile, login_cache_dir):
     """
     No cached token means nothing to revoke, which is the state logout is trying to
