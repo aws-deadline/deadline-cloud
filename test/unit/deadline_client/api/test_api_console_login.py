@@ -86,8 +86,15 @@ def console_profile_with_monitor(console_profile):
     Deadline Cloud monitor writes its own path to `deadline-cloud-monitor.path` when it
     creates a profile, and login hands off to it. Kept separate from `console_profile` so
     tests of the "monitor not installed" path see an unset path.
+
+    The setting is read back rather than assumed. When it doesn't stick, `login` raises the
+    "monitor is not configured" error, which reads as a product bug rather than a broken
+    fixture -- so fail here instead, pointing at the actual cause.
     """
     config.set_setting("deadline-cloud-monitor.path", MONITOR_PATH)
+    assert config.get_setting("deadline-cloud-monitor.path"), (
+        "deadline-cloud-monitor.path did not persist, so this test's premise doesn't hold"
+    )
     return console_profile
 
 
