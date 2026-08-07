@@ -123,6 +123,44 @@ def _make_status_entry(
     }
 
 
+# Job statuses that assert the job is finished and nothing failed to download. An errored task
+# contradicts any of them, so these are the states _reconcile_entry_with_tasks overrides.
+# "in_progress" is excluded on purpose: it claims nothing, and the download may still be retried
+# before the job ends, so the honest report is a failed task row under a still-running job.
+_NO_DOWNLOAD_FAILURE_STATUSES = ("downloaded", "skipped")
+
+
+def _reconcile_entry_with_tasks(entry: dict[str, Any]) -> None:
+    """Forces a job entry back to "failed" while any of its tasks still carries a download error.
+
+    A job's category-derived status only says the job finished on the farm, which is not
+    evidence that its outputs reached disk. Without this, a job whose task failed in an
+    earlier run and which produced no new results this run flips to "downloaded" while its
+    task entry still reads "failed" — a green job badge over a red task, and a real failure
+    silently dropped. The same applies to "skipped": a job stopped mid-download reports
+    "skipped" once it goes inactive, which reads as "nothing to fetch" rather than "a file is
+    missing and here is why". Preferring the task evidence keeps the two levels consistent
+    without claiming a missing file is present.
+
+    Tasks that failed on the farm carry no error_code and are deliberately excluded: the
+    render failed, the download didn't, so they must not drag the job to a download failure.
+    """
+    if entry.get("download_status") not in _NO_DOWNLOAD_FAILURE_STATUSES:
+        return
+    errored = [t for t in entry.get("tasks", {}).values() if t.get("error_code")]
+    if not errored:
+        return
+    entry["download_status"] = "failed"
+    entry["error_code"] = errored[0]["error_code"]
+    entry["error_message"] = errored[0].get("error_message")
+    # A download failure is not a skip. Leaving skip_reason set would produce an entry that
+    # claims both, and the monitor keys its "why is this file missing" copy off skip_reason.
+    entry["skip_reason"] = None
+    missing = sum(t.get("total_files", 0) - t.get("downloaded_files", 0) for t in errored)
+    if missing > 0:
+        entry["failed_files"] = missing
+
+
 def _is_job_fully_complete(job: dict[str, Any]) -> bool:
     """Returns True if the job has ended with no active tasks remaining.
 
@@ -202,6 +240,7 @@ def _build_status_file_content(
     existing_jobs: Optional[dict[str, Any]] = None,
     job_download_results: Optional[dict[str, dict[str, Any]]] = None,
     task_download_results: Optional[dict[str, dict[str, dict[str, Any]]]] = None,
+    succeeded_task_ids: Optional[dict[str, set[str]]] = None,
 ) -> dict[str, Any]:
     """
     Builds the full status file JSON structure by merging existing job entries
@@ -235,19 +274,43 @@ def _build_status_file_content(
         # Merge task entries: preserve existing tasks, overwrite only tasks seen this run
         existing_tasks: dict[str, Any] = (existing_entry or {}).get("tasks", {})
         new_tasks: dict[str, Any] = (task_download_results or {}).get(job_id, {})
-        merged_tasks = {
-            **existing_tasks,
-            **{
-                task_id: {
-                    "download_status": "downloaded" if r.get("error_code") is None else "failed",
-                    "total_files": r["total_files"],
-                    "downloaded_files": r["downloaded_files"],
-                    "error_code": r.get("error_code"),
-                    "error_message": r.get("error_message"),
-                }
-                for task_id, r in new_tasks.items()
-            },
-        }
+        merged_tasks = dict(existing_tasks)
+        # A task that SUCCEEDED this run with no output must clear any stale farm_failed
+        # entry carried forward from a prior run. The farm FAILED action is reported by the
+        # API indefinitely, so _get_job_sessions subtracts succeeded IDs from
+        # farm_failed_task_ids — preventing a new entry — but the prior disk entry is
+        # preserved by the merge above unless we explicitly remove it here.
+        job_succeeded_ids: set[str] = (succeeded_task_ids or {}).get(job_id, set())
+        for task_id in job_succeeded_ids:
+            if (
+                task_id not in new_tasks
+                and merged_tasks.get(task_id, {}).get("download_status") == "farm_failed"
+            ):
+                del merged_tasks[task_id]
+        for task_id, r in new_tasks.items():
+            # Honor an explicit download_status (e.g. "farm_failed" for a task that
+            # failed on the farm); otherwise derive it from whether the download errored.
+            status = r.get(
+                "download_status",
+                "downloaded" if r.get("error_code") is None else "failed",
+            )
+            # A prior-run download success is terminal: the output is on disk. Never let a stale
+            # farm_failed action (the API reports it indefinitely) overwrite it.
+            # "failed" is intentionally not guarded here: a task may have succeeded on the farm
+            # but its download failed, so a subsequent run re-collects the FAILED action as
+            # farm_failed and should overwrite the stale download error.
+            if (
+                status == "farm_failed"
+                and existing_tasks.get(task_id, {}).get("download_status") == "downloaded"
+            ):
+                continue
+            merged_tasks[task_id] = {
+                "download_status": status,
+                "total_files": r["total_files"],
+                "downloaded_files": r["downloaded_files"],
+                "error_code": r.get("error_code"),
+                "error_message": r.get("error_message"),
+            }
         new_entry["tasks"] = merged_tasks
 
         if (
@@ -266,7 +329,9 @@ def _build_status_file_content(
                     existing_entry["error_message"] = None
                     existing_entry["failed_files"] = 0
             existing_entry["tasks"] = merged_tasks
+            _reconcile_entry_with_tasks(existing_entry)
         else:
+            _reconcile_entry_with_tasks(new_entry)
             jobs_status[job_id] = new_entry
 
     # Update inactive jobs with non-terminal status to a terminal state
@@ -280,6 +345,7 @@ def _build_status_file_content(
                 # No downloads at all — mark as skipped (job stopped before any output)
                 existing_entry["download_status"] = "skipped"
             existing_entry["last_updated"] = now
+            _reconcile_entry_with_tasks(existing_entry)
 
     # Determine run status — "failed" if any job in this run had errors
     has_failures = any(
@@ -375,6 +441,7 @@ def write_download_status_file(
     checkpoint_dir: str,
     job_download_results: Optional[dict[str, dict[str, Any]]] = None,
     task_download_results: Optional[dict[str, dict[str, dict[str, Any]]]] = None,
+    succeeded_task_ids: Optional[dict[str, set[str]]] = None,
     print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> None:
     """
@@ -413,6 +480,7 @@ def write_download_status_file(
                     existing_jobs=existing_jobs,
                     job_download_results=job_download_results,
                     task_download_results=task_download_results,
+                    succeeded_task_ids=succeeded_task_ids,
                 )
 
                 _atomic_write_json(status_file_path, status_content)
