@@ -90,7 +90,7 @@
   "Non valid inputs detected": "偵測到無效的輸入",
   "Ok": "確定",
   "Opening Deadline Cloud monitor. Please log in before returning here.": "正在開啟 Deadline Cloud 監視器。請在返回此處之前登入。",
-  "Opening the AWS Console sign-in page in your browser. Please sign in before returning here.": "正在瀏覽器中開啟 AWS 主控台登入頁面。請在返回此處之前登入。",
+  "Opening Deadline Cloud monitor to sign in with the AWS Console. Please sign in before returning here.": "正在開啟 Deadline Cloud monitor 以使用 AWS 主控台登入。請在返回此處之前登入。",
   "Please run the installer and then restart {integration_name} to use the new version.": "請執行安裝程式，然後重新啟動 {integration_name} 以使用新版本。",
   "Operating system": "作業系統",
   "Preparing files...": "正在準備檔案...",

@@ -90,7 +90,7 @@
   "Non valid inputs detected": "Ungültige Eingaben erkannt",
   "Ok": "OK",
   "Opening Deadline Cloud monitor. Please log in before returning here.": "Deadline Cloud-Monitor wird geöffnet. Bitte melden Sie sich an, bevor Sie hierher zurückkehren.",
-  "Opening the AWS Console sign-in page in your browser. Please sign in before returning here.": "Die AWS-Konsolen-Anmeldeseite wird in Ihrem Browser geöffnet. Bitte melden Sie sich an, bevor Sie hierher zurückkehren.",
+  "Opening Deadline Cloud monitor to sign in with the AWS Console. Please sign in before returning here.": "Deadline Cloud monitor wird geöffnet, um sich mit der AWS-Konsole anzumelden. Bitte melden Sie sich an, bevor Sie hierher zurückkehren.",
   "Please run the installer and then restart {integration_name} to use the new version.": "Bitte führen Sie den Installer aus und starten Sie dann {integration_name} neu, um die neue Version zu verwenden.",
   "Operating system": "Betriebssystem",
   "Preparing files...": "Dateien werden vorbereitet...",

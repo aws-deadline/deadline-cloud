@@ -90,7 +90,7 @@
   "Non valid inputs detected": "無効な入力が検出されました",
   "Ok": "OK",
   "Opening Deadline Cloud monitor. Please log in before returning here.": "Deadline Cloud モニターを開いています。ここに戻る前にログインしてください。",
-  "Opening the AWS Console sign-in page in your browser. Please sign in before returning here.": "ブラウザで AWS コンソールのサインインページを開いています。ここに戻る前にサインインしてください。",
+  "Opening Deadline Cloud monitor to sign in with the AWS Console. Please sign in before returning here.": "AWS コンソールでサインインするために Deadline Cloud monitor を開いています。ここに戻る前にサインインしてください。",
   "Please run the installer and then restart {integration_name} to use the new version.": "インストーラーを実行してから {integration_name} を再起動して、新しいバージョンをご利用ください。",
   "Operating system": "オペレーティングシステム",
   "Preparing files...": "ファイルを準備しています...",

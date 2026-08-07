@@ -90,7 +90,7 @@
   "Non valid inputs detected": "Geçersiz girişler algılandı",
   "Ok": "Tamam",
   "Opening Deadline Cloud monitor. Please log in before returning here.": "Deadline Cloud monitörü açılıyor. Buraya dönmeden önce lütfen oturum açın.",
-  "Opening the AWS Console sign-in page in your browser. Please sign in before returning here.": "AWS Konsolu oturum açma sayfası tarayıcınızda açılıyor. Buraya dönmeden önce lütfen oturum açın.",
+  "Opening Deadline Cloud monitor to sign in with the AWS Console. Please sign in before returning here.": "AWS konsolu ile oturum açmak için Deadline Cloud monitor açılıyor. Buraya dönmeden önce oturum açın.",
   "Please run the installer and then restart {integration_name} to use the new version.": "Lütfen installer'ı çalıştırın ve ardından yeni sürümü kullanmak için {integration_name} uygulamasını yeniden başlatın.",
   "Operating system": "İşletim sistemi",
   "Preparing files...": "Dosyalar hazırlanıyor...",

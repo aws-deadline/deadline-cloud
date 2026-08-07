@@ -90,7 +90,7 @@
   "Non valid inputs detected": "Non valid inputs detected",
   "Ok": "Ok",
   "Opening Deadline Cloud monitor. Please log in before returning here.": "Opening Deadline Cloud monitor. Please log in before returning here.",
-  "Opening the AWS Console sign-in page in your browser. Please sign in before returning here.": "Opening the AWS Console sign-in page in your browser. Please sign in before returning here.",
+  "Opening Deadline Cloud monitor to sign in with the AWS Console. Please sign in before returning here.": "Opening Deadline Cloud monitor to sign in with the AWS Console. Please sign in before returning here.",
   "Please run the installer and then restart {integration_name} to use the new version.": "Please run the installer and then restart {integration_name} to use the new version.",
   "Operating system": "Operating system",
   "Preparing files...": "Preparing files...",

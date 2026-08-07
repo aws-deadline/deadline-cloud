@@ -14,6 +14,7 @@ the HTTP mocks.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from typing import Iterator
 
 import boto3
 import pytest
+from botocore.utils import generate_login_cache_key
 from moto.server import ThreadedMotoServer
 
 from _common.mock_deadline_backend import MockDeadlineBackend, start_server
@@ -36,6 +38,10 @@ from _constants import ACCESS_KEY, BUCKET, REGION, ROOT_PREFIX, SECRET_KEY
 # unit tests in test/unit/.../test_api_session.py and the config round-trip
 # tests, so Windows coverage of the feature is not lost.
 collect_ignore_glob = ["test_proxy_config.py"] if sys.platform == "win32" else []
+
+# The `login_session` ARN an AWS Console sign-in profile is created with. Shared so the
+# profile writer and the token-cache seeder derive the same cache key.
+CONSOLE_LOGIN_SESSION_ARN = "arn:aws:sts::123456789012:assumed-role/Admin/someone"
 
 # `sitecustomize` shim: botocore appends a `management.` host prefix to
 # Deadline API calls. Strip it so the CLI talks directly to 127.0.0.1.
@@ -257,7 +263,7 @@ def set_console_login_profile(env: dict, *, region: str = REGION) -> str:
     aws_config.write_text(
         f"[profile {profile_name}]\n"
         f"region = {region}\n"
-        f"login_session = arn:aws:sts::123456789012:assumed-role/Admin/someone\n"
+        f"login_session = {CONSOLE_LOGIN_SESSION_ARN}\n"
     )
     aws_credentials = aws_dir / "credentials"
     aws_credentials.write_text(
@@ -274,40 +280,26 @@ def set_console_login_profile(env: dict, *, region: str = REGION) -> str:
     return profile_name
 
 
-def make_fake_aws_cli(tmp_path: Path, env: dict, *, exit_code: int = 0, output: str = "") -> Path:
+def seed_login_token_cache(
+    tmp_path: Path, env: dict, *, login_session: str = CONSOLE_LOGIN_SESSION_ARN
+) -> Path:
     """
-    Put a stub `aws` executable at the front of the subprocess PATH and return the
-    file it records its argv into.
+    Write a cached login token for a console sign-in session and point the CLI's cache
+    lookup at it. Returns the file `deadline auth logout` is expected to delete.
 
-    `deadline auth login` on a console profile shells out to `aws login`, which would
-    otherwise open a real browser. The stub lets the e2e test assert the exact command
-    line the CLI builds without any in-process patching.
+    botocore keys the cache by the sha256 of the ``login_session`` ARN and resolves the
+    directory from ``AWS_LOGIN_CACHE_DIRECTORY``, so a temp directory keeps the test off
+    the developer's real ``~/.aws/login/cache``.
     """
-    bin_dir = tmp_path / "fake-aws-bin"
-    bin_dir.mkdir(exist_ok=True)
-    argv_log = tmp_path / "aws-argv.txt"
+    cache_dir = tmp_path / "login-cache"
+    cache_dir.mkdir(exist_ok=True)
+    env["AWS_LOGIN_CACHE_DIRECTORY"] = str(cache_dir)
 
-    if sys.platform == "win32":
-        # Subprocess resolves `aws` via PATHEXT; a .bat is what actually gets found.
-        script = bin_dir / "aws.bat"
-        script.write_text(
-            "@echo off\r\n"
-            f'echo %*>>"{argv_log}"\r\n'
-            + (f"echo {output}\r\n" if output else "")
-            + f"exit /b {exit_code}\r\n"
-        )
-    else:
-        script = bin_dir / "aws"
-        script.write_text(
-            "#!/bin/sh\n"
-            f'printf "%s\\n" "$*" >> "{argv_log}"\n'
-            + (f'echo "{output}"\n' if output else "")
-            + f"exit {exit_code}\n"
-        )
-        script.chmod(0o755)
-
-    env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
-    return argv_log
+    cached_token = cache_dir / f"{generate_login_cache_key(login_session)}.json"
+    cached_token.write_text(
+        json.dumps({"accessToken": "cached-token", "expiresAt": "2999-01-01T00:00:00Z"})
+    )
+    return cached_token
 
 
 # ---- helpers exposed to tests ----------------------------------------------
@@ -363,11 +355,11 @@ def set_cli_console_login_profile():
 
 
 @pytest.fixture
-def fake_aws_cli(tmp_path: Path):
-    """Returns a `make(env, exit_code=..., output=...)` callable that installs a stub
-    `aws` executable on PATH and returns the path it logs its argv to."""
+def seed_cli_login_token_cache(tmp_path: Path):
+    """Returns a `seed(env)` callable that writes a cached console sign-in token into an
+    isolated login cache directory and returns the file's path."""
 
-    def make(env: dict, *, exit_code: int = 0, output: str = "") -> Path:
-        return make_fake_aws_cli(tmp_path, env, exit_code=exit_code, output=output)
+    def seed(env: dict, *, login_session: str = CONSOLE_LOGIN_SESSION_ARN) -> Path:
+        return seed_login_token_cache(tmp_path, env, login_session=login_session)
 
-    return make
+    return seed

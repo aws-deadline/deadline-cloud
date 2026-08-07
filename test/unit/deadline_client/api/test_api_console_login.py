@@ -5,15 +5,20 @@ Tests for logging in and out of AWS Console sign-in profiles.
 
 Console sign-in profiles are created by `aws login` or by Deadline Cloud monitor's
 console sign-in flow. They carry a `login_session` key in ~/.aws/config rather than
-the `monitor_id` a Deadline Cloud monitor profile has, and are refreshed through the
-AWS CLI rather than through Deadline Cloud monitor.
+the `monitor_id` a Deadline Cloud monitor profile has, and botocore's LoginProvider
+refreshes their cached token in-process -- no external tool is involved once a session
+exists. Starting a session needs an interactive browser handshake, so login hands off to
+Deadline Cloud monitor, which implements it; logging out is just deleting the cached
+token file, done in-process.
 """
 
+import os
 import subprocess
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.utils import generate_login_cache_key
 
 from deadline.client import api, config
 from deadline.client.api._loginout import UnsupportedProfileTypeForLoginLogout
@@ -21,17 +26,22 @@ from deadline.client.api._session import AwsAuthenticationStatus, AwsCredentials
 from deadline.client.exceptions import DeadlineOperationError
 
 PROFILE_NAME = "console-us-west-2"
-AWS_CLI_PATH = (
-    "C:/Program Files/Amazon/AWSCLIV2/aws.exe"
-    if sys.platform.startswith("win")
-    else "/usr/local/bin/aws"
-)
+LOGIN_SESSION_ARN = "arn:aws:sts::123456789012:assumed-role/Admin/someone"
+
+# Config settings marked `is_path` are stored with forward slashes and read back in the
+# native format, so what Popen is called with differs from what was written on Windows.
+if sys.platform.startswith("win"):
+    MONITOR_PATH = "C:/Programs/bin/DeadlineCloudMonitor"
+    EXPECTED_MONITOR_ARGV0 = "C:\\Programs\\bin\\DeadlineCloudMonitor"
+else:
+    MONITOR_PATH = "/bin/DeadlineCloudMonitor"
+    EXPECTED_MONITOR_ARGV0 = MONITOR_PATH
 
 # A console sign-in profile as `aws login` / Deadline Cloud monitor writes it: only
 # `region` and `login_session`, with the token cached under ~/.aws/login/cache.
 CONSOLE_SCOPED_CONFIG = {
     "region": "us-west-2",
-    "login_session": "arn:aws:sts::123456789012:assumed-role/Admin/someone",
+    "login_session": LOGIN_SESSION_ARN,
 }
 
 MONITOR_SCOPED_CONFIG = {
@@ -44,9 +54,19 @@ MONITOR_SCOPED_CONFIG = {
 
 
 @pytest.fixture
-def console_profile(fresh_deadline_config):
-    """Configures a console sign-in profile as the active AWS profile."""
+def console_profile(fresh_deadline_config, aws_config):
+    """
+    Configures a console sign-in profile as the active AWS profile.
+
+    The profile is written to the real AWS config file as well as mocked onto the boto3
+    session: `get_credentials_source` reads the mocked session, but logout resolves the
+    `login_session` ARN through a fresh `botocore.session.Session`, which parses the
+    file at AWS_CONFIG_FILE.
+    """
     config.set_setting("defaults.aws_profile_name", PROFILE_NAME)
+    aws_config.write_text(
+        f"[profile {PROFILE_NAME}]\nregion = us-west-2\nlogin_session = {LOGIN_SESSION_ARN}\n"
+    )
     with (
         patch.object(api._session, "get_boto3_session") as session_mock,
         patch.object(api, "get_boto3_session", new=session_mock),
@@ -57,12 +77,52 @@ def console_profile(fresh_deadline_config):
         yield session_mock
 
 
-def _completed_popen(returncode=0, output=b""):
-    """A Popen mock standing in for an `aws login` that has already exited."""
-    process = MagicMock()
-    process.poll.return_value = returncode
-    process.stdout.read.return_value = output
-    return process
+@pytest.fixture
+def console_profile_with_monitor(console_profile):
+    """
+    A console sign-in profile on a workstation that has Deadline Cloud monitor.
+
+    Deadline Cloud monitor writes its own path to `deadline-cloud-monitor.path` when it
+    creates a profile, and login hands off to it. Kept separate from `console_profile` so
+    tests of the "monitor not installed" path see an unset path.
+    """
+    config.set_setting("deadline-cloud-monitor.path", MONITOR_PATH)
+    return console_profile
+
+
+@pytest.fixture
+def authenticated_after_login():
+    """
+    Makes the login poll loop exit on its first iteration.
+
+    `_login_deadline_cloud_monitor_process` polls `check_authentication_status` until the
+    profile authenticates, which never happens with a mocked subprocess.
+    """
+    with patch.object(
+        api._loginout,
+        "check_authentication_status",
+        return_value=AwsAuthenticationStatus.AUTHENTICATED,
+    ) as status_mock:
+        yield status_mock
+
+
+@pytest.fixture
+def login_cache_dir(tmp_path, monkeypatch):
+    """
+    Redirects botocore's login token cache to a temp directory.
+
+    `get_login_token_cache_directory` honours AWS_LOGIN_CACHE_DIRECTORY, so logout can
+    be exercised against real files instead of a mocked `os.remove`.
+    """
+    cache_dir = tmp_path / "login-cache"
+    cache_dir.mkdir()
+    monkeypatch.setenv("AWS_LOGIN_CACHE_DIRECTORY", str(cache_dir))
+    return cache_dir
+
+
+def _cached_token_path(cache_dir, login_session=LOGIN_SESSION_ARN):
+    """The file botocore caches a login session's token in."""
+    return cache_dir / f"{generate_login_cache_key(login_session)}.json"
 
 
 def test_get_credentials_source_detects_console_profile(console_profile):
@@ -100,229 +160,200 @@ def test_get_credentials_source_plain_profile_still_host_provided(fresh_deadline
         assert api.get_credentials_source() == AwsCredentialsSource.HOST_PROVIDED
 
 
-def test_console_login_runs_aws_login(console_profile):
-    """`api.login` on a console profile shells out to `aws login --profile <name>`."""
-    with (
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(api._loginout, "_check_console_login_dependency"),
-        patch.object(subprocess, "Popen", return_value=_completed_popen()) as popen_mock,
-        patch.object(
-            api._loginout,
-            "check_authentication_status",
-            return_value=AwsAuthenticationStatus.AUTHENTICATED,
-        ),
-    ):
-        on_pending_authorization = MagicMock()
+def test_console_login_launches_deadline_cloud_monitor(
+    console_profile_with_monitor, authenticated_after_login
+):
+    """
+    Starting a console session needs an interactive browser handshake, which is not an API
+    this library can call. Deadline Cloud monitor implements it and recognises these
+    profiles by their `login_session`, so login hands off to it with the same
+    `login --profile` subcommand a monitor profile uses.
+    """
+    with patch.object(subprocess, "Popen") as popen_mock:
+        output = api.login(None, None)
 
-        message = api.login(on_pending_authorization, None)
+    popen_mock.assert_called_once()
+    assert popen_mock.call_args[0][0] == [
+        EXPECTED_MONITOR_ARGV0,
+        "login",
+        "--profile",
+        PROFILE_NAME,
+    ]
+    assert PROFILE_NAME in output
 
-    args = popen_mock.call_args[0][0]
-    assert args == [AWS_CLI_PATH, "login", "--profile", PROFILE_NAME]
-    assert PROFILE_NAME in message
-    # The UI/CLI needs the source to render the right "signing in" message.
+
+def test_console_login_reports_console_credentials_source(
+    console_profile_with_monitor, authenticated_after_login
+):
+    """
+    The one behavioral difference from the monitor path: the callback must report
+    AWS_CONSOLE_LOGIN so the UI says "sign in with the AWS Console" rather than the
+    monitor's own log-in wording.
+    """
+    on_pending_authorization = MagicMock()
+
+    with patch.object(subprocess, "Popen"):
+        api.login(on_pending_authorization, None)
+
     on_pending_authorization.assert_called_once_with(
         credentials_source=AwsCredentialsSource.AWS_CONSOLE_LOGIN
     )
 
 
-def test_console_login_does_not_invoke_deadline_cloud_monitor(console_profile):
+def test_console_login_without_monitor_path_raises_without_spawning(console_profile):
     """
-    Deadline Cloud monitor rejects console profiles by name -- they aren't in its own
-    settings -- so login must not shell out to it.
+    Deadline Cloud monitor writes its own path when it creates a profile, so an unset path
+    means it isn't installed and there is nothing to hand off to. Say so, naming the
+    `aws login` alternative, and don't shell out to a tool that isn't there.
     """
-    config.set_setting("deadline-cloud-monitor.path", "/bin/DeadlineCloudMonitor")
+    assert config.get_setting("deadline-cloud-monitor.path") == ""
 
-    with (
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(api._loginout, "_check_console_login_dependency"),
-        patch.object(subprocess, "Popen", return_value=_completed_popen()) as popen_mock,
-        patch.object(
-            api._loginout,
-            "check_authentication_status",
-            return_value=AwsAuthenticationStatus.AUTHENTICATED,
-        ),
-    ):
-        api.login(None, None)
-
-    assert "DeadlineCloudMonitor" not in popen_mock.call_args[0][0][0]
-
-
-def test_console_login_reports_aws_cli_failure(console_profile):
-    """A non-zero `aws login` exit surfaces the CLI's own output to the user."""
-    with (
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(api._loginout, "_check_console_login_dependency"),
-        patch.object(
-            subprocess,
-            "Popen",
-            return_value=_completed_popen(returncode=1, output=b"Browser handshake failed"),
-        ),
-    ):
-        with pytest.raises(DeadlineOperationError, match="Browser handshake failed"):
-            api.login(None, None)
-
-
-def test_console_login_requires_aws_cli_on_path(console_profile):
-    """Without the AWS CLI there's no way to refresh, so say so instead of failing obscurely."""
-    with (
-        patch.object(api._loginout, "_check_console_login_dependency"),
-        patch.object(api._loginout.shutil, "which", return_value=None),
-    ):
-        with pytest.raises(DeadlineOperationError, match="Could not find the AWS CLI"):
-            api.login(None, None)
-
-
-def test_console_login_requires_awscrt(console_profile):
-    """
-    Without awscrt, botocore can't load the profile at all, so the post-login probe
-    could never pass. Fail up front with install guidance rather than spinning.
-    """
-    with patch("botocore.compat.EC", None):
-        with pytest.raises(DeadlineOperationError, match=r"deadline\[console\]"):
-            api.login(None, None)
-
-
-def test_console_login_dependency_check_passes_with_awscrt():
-    """
-    The guard must not fire when awscrt is present, or it would block every console
-    login. Exercises the real check rather than the patched-out stand-in other tests use.
-    """
-    pytest.importorskip("awscrt", reason="requires the 'console' extra")
-
-    api._loginout._check_console_login_dependency()
-
-
-def test_console_login_awscrt_guard_precedes_aws_cli_launch(console_profile):
-    """
-    The dependency check runs before the browser handshake -- sending the user through
-    a sign-in whose credentials can't then be loaded wastes their time.
-    """
-    with (
-        patch("botocore.compat.EC", None),
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(subprocess, "Popen") as popen_mock,
-    ):
-        with pytest.raises(DeadlineOperationError, match=r"deadline\[console\]"):
+    with patch.object(subprocess, "Popen") as popen_mock:
+        with pytest.raises(DeadlineOperationError) as excinfo:
             api.login(None, None)
 
     popen_mock.assert_not_called()
+    message = str(excinfo.value)
+    assert PROFILE_NAME in message
+    assert "Deadline Cloud monitor" in message
+    assert f"aws login --profile {PROFILE_NAME}" in message
 
 
-def test_console_login_refreshes_session_before_probing(console_profile):
+def test_console_login_does_not_invoke_the_aws_cli(
+    console_profile_with_monitor, authenticated_after_login
+):
     """
-    `aws login` writes a new token to the login cache, so the cached boto3 session must
-    be dropped before the authentication probe -- otherwise it reuses expired creds.
+    The AWS CLI is not a dependency of this package, so console login must go through
+    Deadline Cloud monitor rather than shelling out to `aws login`.
     """
-    refresh_calls = []
-    # Wrap rather than replace: get_credentials_source resolves the profile through
-    # this same function, so it has to keep returning the console-profile session.
-    real_get_boto3_session = api._loginout._session.get_boto3_session
-
-    def recording_get_boto3_session(*args, **kwargs):
-        refresh_calls.append(kwargs)
-        return real_get_boto3_session(*args, **kwargs)
-
-    with (
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(api._loginout, "_check_console_login_dependency"),
-        patch.object(subprocess, "Popen", return_value=_completed_popen()),
-        patch.object(api._loginout._session, "get_boto3_session", new=recording_get_boto3_session),
-        patch.object(
-            api._loginout,
-            "check_authentication_status",
-            return_value=AwsAuthenticationStatus.AUTHENTICATED,
-        ),
-    ):
+    with patch.object(subprocess, "Popen") as popen_mock:
         api.login(None, None)
 
-    assert any(call.get("force_refresh") for call in refresh_calls)
+    for call in popen_mock.call_args_list:
+        argv = call[0][0]
+        assert argv[0] == EXPECTED_MONITOR_ARGV0
+        assert os.path.basename(argv[0]).split(".")[0] != "aws"
 
 
-def test_console_login_reports_still_unauthenticated(console_profile):
+def test_console_login_surfaces_monitor_failure(console_profile_with_monitor):
     """
-    A successful sign-in to an identity that can't reach Deadline Cloud is not a
-    successful login -- don't report success.
+    Deadline Cloud monitor exiting before the profile authenticates means the sign-in
+    failed. Its stdout is the only explanation the user gets, so include it.
     """
+    login_process = MagicMock()
+    login_process.poll.return_value = 1
+    login_process.stdout.read.return_value = b"Sign-in was cancelled"
+
     with (
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(api._loginout, "_check_console_login_dependency"),
-        patch.object(subprocess, "Popen", return_value=_completed_popen()),
+        patch.object(subprocess, "Popen", return_value=login_process),
         patch.object(
             api._loginout,
             "check_authentication_status",
             return_value=AwsAuthenticationStatus.NEEDS_LOGIN,
         ),
     ):
-        with pytest.raises(DeadlineOperationError, match="still not accessible"):
+        with pytest.raises(DeadlineOperationError, match="Sign-in was cancelled"):
             api.login(None, None)
 
 
-def test_console_login_cancellation_kills_aws_cli(console_profile):
-    """Cancelling from the GUI terminates the `aws login` subprocess."""
-    process = MagicMock()
-    # Still running, so the loop reaches the cancellation check.
-    process.poll.return_value = None
+def test_console_login_cancellation_kills_monitor(console_profile_with_monitor):
+    """
+    A cancel from the UI has to stop the process it started: the monitor window was opened
+    on the user's behalf, so leaving it running would strand a sign-in nobody is waiting on.
+    """
+    login_process = MagicMock()
+    login_process.poll.return_value = None
 
     with (
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(api._loginout, "_check_console_login_dependency"),
-        patch.object(subprocess, "Popen", return_value=process),
-        patch.object(api._loginout.time, "sleep"),
+        patch.object(subprocess, "Popen", return_value=login_process),
+        patch.object(
+            api._loginout,
+            "check_authentication_status",
+            return_value=AwsAuthenticationStatus.NEEDS_LOGIN,
+        ),
     ):
         with pytest.raises(Exception):
             api.login(None, lambda: True)
 
-    process.kill.assert_called_once()
+    login_process.kill.assert_called_once()
 
 
-def test_console_logout_runs_aws_logout(console_profile):
-    """`api.logout` on a console profile clears the cached token via `aws logout`."""
-    with (
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(
-            subprocess, "check_output", return_value=b"Successfully logged out"
-        ) as check_output_mock,
-        patch.object(api._session, "invalidate_boto3_session_cache") as invalidate_mock,
-    ):
-        output = api.logout()
+def test_console_logout_removes_cached_token(console_profile, login_cache_dir):
+    """
+    Logout is the deletion of botocore's cached token: the file keyed by the sha256 of
+    the `login_session` ARN. Nothing left to refresh means the session is over.
+    """
+    cached_token = _cached_token_path(login_cache_dir)
+    cached_token.write_text('{"accessToken": "token"}')
+    # A second session's token must survive -- logout is per-profile.
+    other_token = _cached_token_path(login_cache_dir, "arn:aws:sts::123456789012:user/other")
+    other_token.write_text('{"accessToken": "other"}')
 
-    assert check_output_mock.call_args[0][0] == [
-        AWS_CLI_PATH,
-        "logout",
-        "--profile",
-        PROFILE_NAME,
-    ]
-    assert "Successfully logged out" in output
-    # The cleared token must not linger in the cached session.
+    output = api.logout()
+
+    assert not cached_token.exists()
+    assert other_token.exists()
+    assert PROFILE_NAME in output
+
+
+def test_console_logout_succeeds_when_already_logged_out(console_profile, login_cache_dir):
+    """
+    No cached token means nothing to revoke, which is the state logout is trying to
+    reach -- report success rather than an error the user can't act on.
+    """
+    assert not _cached_token_path(login_cache_dir).exists()
+
+    output = api.logout()
+
+    assert PROFILE_NAME in output
+
+
+def test_console_logout_invalidates_session_cache(console_profile, login_cache_dir):
+    """The cleared token must not linger in the cached boto3 session."""
+    _cached_token_path(login_cache_dir).write_text("{}")
+
+    with patch.object(api._session, "invalidate_boto3_session_cache") as invalidate_mock:
+        api.logout()
+
     invalidate_mock.assert_called()
 
 
-def test_console_logout_does_not_require_awscrt(console_profile):
+def test_console_logout_does_not_require_awscrt(console_profile, login_cache_dir):
     """
     Clearing a cached token needs no DPoP signing, so logout must still work without
     awscrt -- otherwise a user missing the extra couldn't clear a broken profile.
     """
-    with (
-        patch("botocore.compat.EC", None),
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(subprocess, "check_output", return_value=b"Logged out") as check_output_mock,
-    ):
+    cached_token = _cached_token_path(login_cache_dir)
+    cached_token.write_text("{}")
+
+    with patch("botocore.compat.EC", None):
         api.logout()
 
-    assert check_output_mock.call_args[0][0][1] == "logout"
+    assert not cached_token.exists()
 
 
-def test_console_logout_reports_aws_cli_failure(console_profile):
-    """A failing `aws logout` is reported rather than silently treated as success."""
-    with (
-        patch.object(api._loginout.shutil, "which", return_value=AWS_CLI_PATH),
-        patch.object(
-            subprocess,
-            "check_output",
-            side_effect=subprocess.CalledProcessError(1, "aws", output=b"boom"),
-        ),
-    ):
-        with pytest.raises(DeadlineOperationError, match="unable to log out"):
+def test_console_logout_without_login_session_raises(fresh_deadline_config, login_cache_dir):
+    """
+    The cache key is derived from the `login_session` ARN, so a profile missing it gives
+    nothing to delete. Say that instead of computing a key from None.
+    """
+    config.set_setting("defaults.aws_profile_name", PROFILE_NAME)
+
+    # Called directly: `get_credentials_source` only routes profiles here when it sees
+    # a `login_session`, so this guard is unreachable through `api.logout`.
+    with pytest.raises(DeadlineOperationError, match="no login_session entry"):
+        api._loginout._logout_aws_console()
+
+
+def test_console_logout_reports_removal_failure(console_profile, login_cache_dir):
+    """
+    A cached token that can't be deleted (locked file, read-only cache dir) leaves the
+    session usable, so don't report a logout that didn't happen.
+    """
+    _cached_token_path(login_cache_dir).write_text("{}")
+
+    with patch.object(os, "remove", side_effect=PermissionError("Access is denied")):
+        with pytest.raises(DeadlineOperationError, match="Could not remove the cached credentials"):
             api.logout()
 
 
@@ -345,7 +376,8 @@ def test_host_provided_profile_still_rejected(fresh_deadline_config):
 def test_expired_console_creds_report_needs_login(console_profile):
     """
     An expired console token should offer a login, not a configuration error --
-    the widget only shows the "Log in" button in the NEEDS_LOGIN state.
+    the widget only shows the "Log in" button in the NEEDS_LOGIN state. The login it
+    offers happens outside this library, but a login is still what's needed.
     """
     with patch.object(
         api._session, "_list_farms_for_auth_probe", side_effect=Exception("ExpiredToken")

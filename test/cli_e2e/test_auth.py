@@ -3,6 +3,8 @@
 
 import json
 
+import pytest
+
 
 def test_cli_auth_status_verbose(deadline_env, run_cli, configure_cli_defaults):
     _, env = deadline_env
@@ -107,57 +109,72 @@ def test_cli_auth_status_console_profile_needs_login_when_unreachable(
     assert payload["api_availability"] is False
 
 
-def test_cli_auth_login_console_profile_invokes_aws_login(
-    seeded_farm_queue, run_cli, set_cli_console_login_profile, fake_aws_cli
+@pytest.mark.skip(
+    reason="Console sign-in hands off to Deadline Cloud monitor, which must be installed "
+    "and opens a real browser for the sign-in. Neither is available in e2e; the handoff is "
+    "covered by unit tests with a mocked subprocess."
+)
+def test_cli_auth_login_console_profile_opens_deadline_cloud_monitor():
+    """`deadline auth login` on a console profile launches Deadline Cloud monitor."""
+
+
+def test_cli_auth_login_console_profile_without_monitor_reports_both_routes(
+    seeded_farm_queue, run_cli, set_cli_console_login_profile
 ):
     """
-    `deadline auth login` on a console profile drives `aws login --profile <name>`.
-    Deadline Cloud monitor can't refresh these -- it rejects profiles absent from its
-    own settings -- so the AWS CLI owns the flow.
+    Starting a console session is an interactive browser handshake, so login hands off to
+    Deadline Cloud monitor. With no monitor configured -- which is this environment, and
+    any workstation where the profile came from `aws login` -- there is nothing to hand off
+    to, so it must fail naming both routes rather than launching anything.
     """
     _, _, _, env = seeded_farm_queue
     profile_name = set_cli_console_login_profile(env)
-    argv_log = fake_aws_cli(env)
-
-    r = run_cli(env, "auth", "login")
-
-    assert r.returncode == 0, r.stderr or r.stdout
-    assert "AWS Console sign-in page" in r.stdout
-    assert f"AWS Console sign-in profile: {profile_name}" in r.stdout
-    recorded = argv_log.read_text()
-    assert "login" in recorded
-    assert f"--profile {profile_name}" in recorded
-
-
-def test_cli_auth_login_console_profile_reports_aws_cli_failure(
-    seeded_farm_queue, run_cli, set_cli_console_login_profile, fake_aws_cli
-):
-    """A failed `aws login` surfaces the CLI's own output instead of reporting success."""
-    _, _, _, env = seeded_farm_queue
-    set_cli_console_login_profile(env)
-    fake_aws_cli(env, exit_code=1, output="Sign-in was cancelled")
 
     r = run_cli(env, "auth", "login")
 
     assert r.returncode != 0
     combined = r.stdout + r.stderr
-    assert "Sign-in was cancelled" in combined
+    assert "Deadline Cloud monitor" in combined
+    assert f"aws login --profile {profile_name}" in combined
 
 
-def test_cli_auth_logout_console_profile_invokes_aws_logout(
-    seeded_farm_queue, run_cli, set_cli_console_login_profile, fake_aws_cli
+def test_cli_auth_logout_console_profile_deletes_cached_token(
+    seeded_farm_queue, run_cli, set_cli_console_login_profile, seed_cli_login_token_cache
 ):
-    """`deadline auth logout` clears a console profile's cached token via `aws logout`."""
+    """
+    `deadline auth logout` clears a console profile's cached token by deleting the file
+    botocore caches it in. No subprocess is involved, so nothing needs to be on PATH.
+    """
     _, _, _, env = seeded_farm_queue
     profile_name = set_cli_console_login_profile(env)
-    argv_log = fake_aws_cli(env, output="Logged out")
+    cached_token = seed_cli_login_token_cache(env)
+    assert cached_token.exists()
 
     r = run_cli(env, "auth", "logout")
 
     assert r.returncode == 0, r.stderr or r.stdout
-    recorded = argv_log.read_text()
-    assert "logout" in recorded
-    assert f"--profile {profile_name}" in recorded
+    assert not cached_token.exists()
+    # The confirmation names the profile that was actually signed out. It used to
+    # hardcode the monitor wording, misreporting a console logout.
+    assert f"AWS Console sign-in profile: {profile_name}" in r.stdout
+
+
+def test_cli_auth_logout_console_profile_succeeds_when_already_logged_out(
+    seeded_farm_queue, run_cli, set_cli_console_login_profile, seed_cli_login_token_cache
+):
+    """
+    Logging out twice is not an error: an absent cached token is the state logout is
+    trying to reach.
+    """
+    _, _, _, env = seeded_farm_queue
+    set_cli_console_login_profile(env)
+    cached_token = seed_cli_login_token_cache(env)
+    cached_token.unlink()
+
+    r = run_cli(env, "auth", "logout")
+
+    assert r.returncode == 0, r.stderr or r.stdout
+    assert not cached_token.exists()
 
 
 def test_cli_auth_help(deadline_env, run_cli):

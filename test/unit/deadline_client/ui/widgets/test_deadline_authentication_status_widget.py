@@ -104,7 +104,10 @@ def test_console_profile_needs_login_shows_login_button(qtbot, mock_status):
 
 
 def test_console_profile_offers_logout(qtbot, mock_status):
-    """`aws logout` clears a console profile's cached token, so offer logging out."""
+    """
+    Logging out a console profile deletes its cached token in-process, which always
+    works, so offer it.
+    """
     mock_status.creds_source = api.AwsCredentialsSource.AWS_CONSOLE_LOGIN
     mock_status.auth_status = api.AwsAuthenticationStatus.AUTHENTICATED
 

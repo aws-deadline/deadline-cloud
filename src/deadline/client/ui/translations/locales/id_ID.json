@@ -90,7 +90,7 @@
   "Non valid inputs detected": "Input tidak valid terdeteksi",
   "Ok": "OK",
   "Opening Deadline Cloud monitor. Please log in before returning here.": "Membuka monitor Deadline Cloud. Harap masuk sebelum kembali ke sini.",
-  "Opening the AWS Console sign-in page in your browser. Please sign in before returning here.": "Membuka halaman masuk Konsol AWS di browser Anda. Harap masuk sebelum kembali ke sini.",
+  "Opening Deadline Cloud monitor to sign in with the AWS Console. Please sign in before returning here.": "Membuka Deadline Cloud monitor untuk masuk dengan konsol AWS. Silakan masuk sebelum kembali ke sini.",
   "Please run the installer and then restart {integration_name} to use the new version.": "Silakan jalankan installer lalu restart {integration_name} untuk menggunakan versi baru.",
   "Operating system": "Sistem operasi",
   "Preparing files...": "Menyiapkan file...",

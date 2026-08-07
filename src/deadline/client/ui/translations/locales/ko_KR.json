@@ -90,7 +90,7 @@
   "Non valid inputs detected": "유효하지 않은 입력이 감지되었습니다",
   "Ok": "확인",
   "Opening Deadline Cloud monitor. Please log in before returning here.": "Deadline Cloud 모니터를 여는 중입니다. 여기로 돌아오기 전에 로그인하세요.",
-  "Opening the AWS Console sign-in page in your browser. Please sign in before returning here.": "브라우저에서 AWS 콘솔 로그인 페이지를 여는 중입니다. 여기로 돌아오기 전에 로그인하세요.",
+  "Opening Deadline Cloud monitor to sign in with the AWS Console. Please sign in before returning here.": "AWS 콘솔로 로그인하기 위해 Deadline Cloud monitor를 열고 있습니다. 여기로 돌아오기 전에 로그인하세요.",
   "Please run the installer and then restart {integration_name} to use the new version.": "설치 프로그램을 실행한 후 {integration_name}을(를) 다시 시작하여 새 버전을 사용하세요.",
   "Operating system": "운영 체제",
   "Preparing files...": "파일 준비 중...",

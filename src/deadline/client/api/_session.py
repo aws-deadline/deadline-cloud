@@ -38,8 +38,10 @@ class AwsCredentialsSource(Enum):
     HOST_PROVIDED = 2
     DEADLINE_CLOUD_MONITOR_LOGIN = 3
     # An AWS Console sign-in profile, created by `aws login` or by Deadline Cloud
-    # monitor's console sign-in flow. Identified by the `login_session` key, and
-    # refreshed via `aws login` rather than Deadline Cloud monitor.
+    # monitor's console sign-in flow. Identified by the `login_session` key. botocore's
+    # LoginProvider refreshes the cached token in-process, so nothing external is needed
+    # to keep the session alive. Starting a new one needs a browser, which Deadline Cloud
+    # monitor provides.
     AWS_CONSOLE_LOGIN = 4
 
 
