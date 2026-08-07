@@ -31,6 +31,26 @@ class UnsupportedProfileTypeForLoginLogout(DeadlineOperationError):
     pass
 
 
+def _check_console_login_dependency(profile_name: str) -> None:
+    """
+    Fails fast if botocore can't use the token a console sign-in would cache.
+
+    botocore resolves ``login_session`` profiles with its LoginProvider, which needs the
+    ``awscrt`` extra to sign the DPoP proofs the cached token is bound to. Without it every
+    API call raises MissingDependencyException — including the authentication probe that the
+    post-launch poll loop waits on. Since Deadline Cloud monitor is a long-running GUI, its
+    process never exits either, so the loop would spin forever: the user would sign in
+    successfully in the browser and the CLI would still hang. Check before launching anything.
+    """
+    from botocore.compat import EC
+
+    if EC is None:
+        raise DeadlineOperationError(
+            f"Signing in to the AWS Console sign-in profile {profile_name} requires an additional "
+            'dependency. Install it with: pip install "deadline[console]"'
+        )
+
+
 def _login_aws_console(
     on_pending_authorization: Optional[Callable],
     on_cancellation_check: Optional[Callable],
@@ -51,6 +71,8 @@ def _login_aws_console(
     # A profile created by `aws login` instead won't have it, so there's nothing to hand off to.
     deadline_cloud_monitor_path = get_setting("deadline-cloud-monitor.path", config=config)
     profile_name = get_setting("defaults.aws_profile_name", config=config)
+
+    _check_console_login_dependency(profile_name)
 
     if not deadline_cloud_monitor_path:
         raise DeadlineOperationError(

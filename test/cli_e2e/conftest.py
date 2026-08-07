@@ -266,10 +266,12 @@ def set_console_login_profile(env: dict, *, region: str = REGION) -> str:
         f"login_session = {CONSOLE_LOGIN_SESSION_ARN}\n"
     )
     aws_credentials = aws_dir / "credentials"
-    aws_credentials.write_text(
+    # ACCESS_KEY/SECRET_KEY are the literal placeholder "testing" from _constants.py, written into a
+    # throwaway per-test HOME so the CLI has something to resolve. No real credential is involved.
+    aws_credentials.write_text(  # lgtm[py/clear-text-storage-sensitive-data]
         f"[{profile_name}]\n"
         f"aws_access_key_id = {ACCESS_KEY}\n"
-        f"aws_secret_access_key = {SECRET_KEY}\n"
+        f"aws_secret_access_key = {SECRET_KEY}\n"  # nosec B105
     )
     # Set both explicitly: boto3 resolves the default locations from %USERPROFILE%
     # on Windows, which the subprocess env doesn't set.

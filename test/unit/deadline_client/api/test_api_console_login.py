@@ -219,6 +219,21 @@ def test_console_login_without_monitor_path_raises_without_spawning(console_prof
     assert f"aws login --profile {PROFILE_NAME}" in message
 
 
+def test_console_login_without_awscrt_raises_without_spawning(console_profile_with_monitor):
+    """
+    Without awscrt, botocore can't sign the DPoP proof the cached token is bound to, so the
+    post-launch authentication probe can never succeed. Deadline Cloud monitor is a GUI that
+    keeps running, so `p.poll()` stays None too and the poll loop would spin forever -- the user
+    would sign in successfully in the browser and the CLI would still hang. Fail before launching.
+    """
+    with patch("botocore.compat.EC", None), patch.object(subprocess, "Popen") as popen_mock:
+        with pytest.raises(DeadlineOperationError) as excinfo:
+            api.login(None, None)
+
+    popen_mock.assert_not_called()
+    assert 'pip install "deadline[console]"' in str(excinfo.value)
+
+
 def test_console_login_does_not_invoke_the_aws_cli(
     console_profile_with_monitor, authenticated_after_login
 ):
