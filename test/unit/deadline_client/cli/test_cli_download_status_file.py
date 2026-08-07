@@ -7,7 +7,10 @@ Tests for the CLI download status file module.
 import json
 import os
 import time
+from contextlib import contextmanager
 from typing import Any, Optional
+
+import pytest
 
 from deadline.client.cli._download_status_file import (
     _atomic_write_json,
@@ -30,6 +33,21 @@ from ..shared_constants import MOCK_QUEUE_ID, MOCK_STORAGE_PROFILE_ID, MOCK_JOB_
 MOCK_JOB_ID_2 = "job-aaaabbbbccccddddeeeeffffaaaabbbb"
 MOCK_JOB_ID_3 = "job-11112222333344445555666677778888"
 MOCK_JOB_ID_4 = "job-99998888777766665555444433332222"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_default_download_dir(tmp_path_factory, monkeypatch):
+    """Redirect the well-known default status-file dir to a temp path for every test.
+
+    write_download_status_file writes a pointer at the default path whenever a job has no
+    storage profile, so without this any --ignore-storage-profiles test would leave a
+    dangling pointer under the developer's real ~/.deadline directory.
+    """
+    default_dir = tmp_path_factory.mktemp("default_download_dir")
+    monkeypatch.setattr(
+        "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+        str(default_dir),
+    )
 
 
 def _make_categorized_job_ids(**kwargs) -> CategorizedJobIds:
@@ -610,6 +628,281 @@ class TestWriteDownloadStatusFile:
         assert data["jobs"][MOCK_JOB_ID]["download_status"] == "downloaded"
         assert data["jobs"][MOCK_JOB_ID_2]["download_status"] == "in_progress"
         assert data["jobs"][MOCK_JOB_ID_3]["download_status"] == "skipped"
+
+
+class TestWritePointerIfNeeded:
+    """Tests for _write_pointer_if_needed — the default-path pointer for custom checkpoint dirs."""
+
+    def test_no_pointer_when_checkpoint_dir_is_default(self, tmp_path, monkeypatch):
+        """When checkpoint_dir equals the default, the real file IS at the default location.
+        No pointer file should be written."""
+        from deadline.client.cli._download_status_file import _write_pointer_if_needed
+
+        default_dir = str(tmp_path / "default")
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            default_dir,
+        )
+        real_path = os.path.join(
+            default_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        _write_pointer_if_needed(MOCK_QUEUE_ID, default_dir, real_path)
+
+        # No pointer should be written — the pointer path and real path are the same.
+        pointer_path = os.path.join(
+            default_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        assert not os.path.exists(pointer_path)
+
+    def test_pointer_written_when_checkpoint_dir_differs(self, tmp_path, monkeypatch):
+        """When checkpoint_dir is different from the default, a pointer JSON is written
+        at the default path so the FE can find the real file."""
+        from deadline.client.cli._download_status_file import _write_pointer_if_needed
+
+        default_dir = str(tmp_path / "default")
+        custom_dir = str(tmp_path / "custom")
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            default_dir,
+        )
+        real_path = os.path.join(
+            custom_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        _write_pointer_if_needed(MOCK_QUEUE_ID, custom_dir, real_path)
+
+        pointer_path = os.path.join(
+            default_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        assert os.path.exists(pointer_path)
+        with open(pointer_path) as f:
+            data = json.load(f)
+        assert data["status_file_path"] == real_path
+        assert data["schema_version"] == 1
+        assert "superseded_path" not in data
+
+    def test_pointer_write_holds_lock_on_pointer_path(self, tmp_path, monkeypatch):
+        """The pointer write is serialized by _status_file_lock on the pointer path, so a
+        concurrent sync writing real status data to the default path cannot race it."""
+        import deadline.client.cli._download_status_file as mod
+
+        default_dir = str(tmp_path / "default")
+        custom_dir = str(tmp_path / "custom")
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            default_dir,
+        )
+        real_path = os.path.join(
+            custom_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        pointer_path = os.path.join(
+            default_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+
+        locked_paths = []
+        real_lock = mod._status_file_lock
+
+        @contextmanager
+        def _spy_lock(path):
+            locked_paths.append(path)
+            with real_lock(path):
+                yield
+
+        monkeypatch.setattr(mod, "_status_file_lock", _spy_lock)
+        mod._write_pointer_if_needed(MOCK_QUEUE_ID, custom_dir, real_path)
+
+        assert pointer_path in locked_paths, "pointer write did not take the status-file lock"
+
+    def test_pointer_failure_is_silent(self, tmp_path, monkeypatch):
+        """A failure writing the pointer does not raise — it only logs a warning."""
+        from deadline.client.cli._download_status_file import _write_pointer_if_needed
+
+        custom_dir = str(tmp_path / "custom")
+        # Point default dir at a path that can't be created (file in the way).
+        blocker = tmp_path / "blocker"
+        blocker.write_text("not a dir")
+        bad_default = str(blocker / "subdir")
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            bad_default,
+        )
+        real_path = os.path.join(
+            custom_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        # Should not raise.
+        _write_pointer_if_needed(MOCK_QUEUE_ID, custom_dir, real_path)
+
+    def test_write_download_status_file_writes_pointer_for_custom_checkpoint_dir(
+        self, tmp_path, monkeypatch
+    ):
+        """End-to-end: write_download_status_file with a custom checkpoint_dir leaves a pointer
+        at the default path pointing to the real file."""
+        default_dir = str(tmp_path / "default")
+        custom_dir = str(tmp_path / "custom")
+        os.makedirs(custom_dir, exist_ok=True)
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            default_dir,
+        )
+
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        jobs = {MOCK_JOB_ID: _make_job(MOCK_JOB_ID)}
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            local_storage_profile_id=None,
+            local_storage_profile=None,
+            checkpoint_dir=custom_dir,
+        )
+
+        # Real file at custom_dir.
+        real_file = os.path.join(
+            custom_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        assert os.path.exists(real_file)
+        with open(real_file) as f:
+            real_data = json.load(f)
+        assert real_data["jobs"][MOCK_JOB_ID]["download_status"] == "downloaded"
+
+        # Pointer at default_dir.
+        pointer_file = os.path.join(
+            default_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        assert os.path.exists(pointer_file)
+        with open(pointer_file) as f:
+            pointer_data = json.load(f)
+        assert pointer_data["status_file_path"] == real_file
+        assert pointer_data["schema_version"] == 1
+
+    def test_no_pointer_when_status_file_write_fails(self, tmp_path, monkeypatch):
+        """If the real status-file write fails, no pointer is written — pointing the FE at a
+        file that does not exist on disk is worse than writing no pointer at all."""
+        default_dir = str(tmp_path / "default")
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            default_dir,
+        )
+        # Put a file where the custom checkpoint dir should be so the real status-file write
+        # under it fails.
+        blocker = tmp_path / "custom"
+        blocker.write_text("not a dir")
+        custom_dir = str(blocker / "subdir")
+
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        jobs = {MOCK_JOB_ID: _make_job(MOCK_JOB_ID)}
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            local_storage_profile_id=None,
+            local_storage_profile=None,
+            checkpoint_dir=custom_dir,
+        )
+
+        pointer_file = os.path.join(
+            default_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        assert not os.path.exists(pointer_file)
+
+    def test_superseded_path_recorded_and_warning_surfaced(self, tmp_path, monkeypatch):
+        """When the default path already has real status data (a 'jobs' key), the pointer
+        overwrites it, superseded_path records the prior path as a reference (no backup file
+        is created), and a user-facing warning is emitted through the callback."""
+        from deadline.client.cli._download_status_file import _write_pointer_if_needed
+
+        default_dir = str(tmp_path / "default")
+        custom_dir = str(tmp_path / "custom")
+        os.makedirs(default_dir, exist_ok=True)
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            default_dir,
+        )
+        pointer_path = os.path.join(
+            default_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        old_data = {"schema_version": 1, "jobs": {MOCK_JOB_ID: {"download_status": "downloaded"}}}
+        # Pre-populate the default path with real status data.
+        with open(pointer_path, "w") as f:
+            json.dump(old_data, f)
+
+        real_path = os.path.join(
+            custom_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        messages: list[str] = []
+        _write_pointer_if_needed(
+            MOCK_QUEUE_ID, custom_dir, real_path, print_function_callback=messages.append
+        )
+
+        # Pointer now lives at the default path, overwriting the old data.
+        with open(pointer_path) as f:
+            data = json.load(f)
+        assert data["status_file_path"] == real_path
+        assert data["schema_version"] == 1
+        assert data["superseded_path"] == pointer_path
+        assert "jobs" not in data
+        # No backup/history file is left behind — the receipt is discarded, not preserved.
+        assert not os.path.exists(pointer_path + ".superseded")
+        # The user was warned through the callback, not just the logger.
+        assert any("WARNING" in msg and pointer_path in msg for msg in messages)
+
+    def test_no_pointer_when_custom_dir_is_symlink_of_default(self, tmp_path, monkeypatch):
+        """A custom --checkpoint-dir that is a symlink of the default dir must be recognized as
+        the default (via realpath) so we never write a pointer on top of the real status file."""
+        from deadline.client.cli._download_status_file import _write_pointer_if_needed
+
+        default_dir = tmp_path / "default"
+        default_dir.mkdir()
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            str(default_dir),
+        )
+        # custom_dir is a symlink pointing at the default dir.
+        custom_dir = tmp_path / "custom_link"
+        custom_dir.symlink_to(default_dir)
+
+        real_path = os.path.join(
+            str(default_dir), f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        with open(real_path, "w") as f:
+            json.dump({"schema_version": 1, "jobs": {MOCK_JOB_ID: {}}}, f)
+
+        _write_pointer_if_needed(MOCK_QUEUE_ID, str(custom_dir), real_path)
+
+        # The real status file must be untouched — no pointer written over it.
+        with open(real_path) as f:
+            assert "jobs" in json.load(f)
+
+    def test_no_pointer_written_with_storage_profile(self, tmp_path, monkeypatch):
+        """With a storage profile the file goes to the NAS — no pointer should be written
+        at the default path since the FE discovers the location via the storage profile API."""
+        default_dir = str(tmp_path / "default")
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file.DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR",
+            default_dir,
+        )
+
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        cjids = _make_categorized_job_ids(completed={MOCK_JOB_ID})
+        jobs = {MOCK_JOB_ID: _make_job(MOCK_JOB_ID)}
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=cjids,
+            download_candidate_jobs=jobs,
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        # No pointer at default_dir — FE uses storage profile to find the NAS path.
+        pointer_file = os.path.join(
+            default_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        assert not os.path.exists(pointer_file)
 
 
 class TestStatusFileLock:

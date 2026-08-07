@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Callable, Generator, Optional
 
+from ..config.config_file import DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR
 from ._incremental_download import CategorizedJobIds
 
 logger = logging.getLogger(__name__)
@@ -410,7 +411,7 @@ def _get_status_file_paths(
     Determines all paths where the status file should be written.
 
     With storage profile: writes to {each_file_system_location}/.deadline/{queue_id}_download_status.json
-    Without storage profile: writes to ~/.deadline/incremental_download/{queue_id}_ignore-storage-profiles_download_status.json
+    Without storage profile: writes to {checkpoint_dir}/{queue_id}_ignore-storage-profiles_download_status.json
     """
     if local_storage_profile_id and local_storage_profile:
         paths = []
@@ -430,6 +431,98 @@ def _get_status_file_paths(
             checkpoint_dir, f"{queue_id}_ignore-storage-profiles_download_status.json"
         )
         return [status_file_path]
+
+
+def _get_default_pointer_path(queue_id: str) -> str:
+    """Returns the well-known default path where the FE always looks for the status file."""
+    default_dir = os.path.expanduser(DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR)
+    return os.path.join(default_dir, f"{queue_id}_ignore-storage-profiles_download_status.json")
+
+
+def _write_pointer_if_needed(
+    queue_id: str,
+    checkpoint_dir: str,
+    actual_status_file_path: str,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
+) -> None:
+    """Writes a pointer file at the default well-known path when the actual status file
+    lives elsewhere (i.e. the user passed a custom --checkpoint-dir).
+
+    The FE always checks the default path. When the file there contains a
+    "status_file_path" key instead of full status data, the FE follows it to the
+    real file. This makes the actual status discoverable regardless of what
+    --checkpoint-dir the user chose, without changing the checkpoint format.
+
+    The pointer write is best-effort: a failure here logs a warning but does not
+    abort — the real status file was written successfully by the caller.
+    """
+    # Compare canonical (symlink-resolved) paths so a custom --checkpoint-dir that is a
+    # symlink or alias of the default dir is recognized as the default — otherwise we could
+    # write a pointer on top of the real status file and destroy the user's downloads.
+    default_dir = os.path.realpath(os.path.expanduser(DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR))
+    resolved_checkpoint_dir = os.path.realpath(checkpoint_dir)
+    if resolved_checkpoint_dir == default_dir:
+        # Status file is already at the default location — no pointer needed.
+        return
+
+    pointer_path = _get_default_pointer_path(queue_id)
+    try:
+        # Take the same lock a real status-file write to this path would take. A concurrent
+        # sync of this queue that uses the *default* checkpoint dir writes real status data to
+        # this exact path under _status_file_lock; without holding it here, the pointer write
+        # would clobber that data (or vice-versa) — the last-writer-wins race the lock prevents.
+        # The lock also closes the has_real_data read → write TOCTOU window below.
+        with _status_file_lock(pointer_path):
+            # If the real status file and the pointer path resolve to the same physical file
+            # (e.g. the two dirs alias each other in a way the realpath dir check missed),
+            # writing the pointer would clobber the real data. The FE already finds it here — skip.
+            if (
+                os.path.exists(actual_status_file_path)
+                and os.path.exists(pointer_path)
+                and os.path.samefile(actual_status_file_path, pointer_path)
+            ):
+                return
+
+            # If the default path currently holds real status data (not already a pointer),
+            # overwriting it with the pointer intentionally discards that data. This file is a
+            # receipt, not durable history — per-task entries repopulate at the new location as
+            # jobs sync — and we deliberately do not copy it to a backup/history file. Failing
+            # closed (an old Monitor shows "-") beats leaving a stale status file that a Monitor
+            # would read as current. `superseded_path` records where the data was purely as a
+            # reference for the warning below, not as a recoverable location.
+            superseded_path: Optional[str] = None
+            if os.path.exists(pointer_path):
+                try:
+                    with open(pointer_path) as _f:
+                        existing = json.load(_f)
+                    has_real_data = "jobs" in existing
+                except Exception:
+                    # A corrupt or unreadable existing file only affects the warning below; let
+                    # the pointer overwrite it.
+                    has_real_data = False
+                if has_real_data:
+                    superseded_path = pointer_path
+                    warning = (
+                        f"Previous job history at {pointer_path} has been replaced by a pointer to "
+                        f"{actual_status_file_path}. Job statuses will repopulate in the Monitor as "
+                        f"future syncs run."
+                    )
+                    logger.warning(warning)
+                    print_function_callback(f"WARNING: {warning}")
+
+            pointer: dict[str, Any] = {
+                "schema_version": DOWNLOAD_STATUS_FILE_SCHEMA_VERSION,
+                "status_file_path": actual_status_file_path,
+            }
+            if superseded_path:
+                pointer["superseded_path"] = superseded_path
+            _atomic_write_json(pointer_path, pointer)
+    except Exception as e:
+        logger.warning(
+            f"Failed to write status file pointer at {pointer_path}: {e}. "
+            f"The status file was written to {actual_status_file_path} but the monitor "
+            f"may not be able to locate it automatically."
+        )
 
 
 def write_download_status_file(
@@ -467,6 +560,7 @@ def write_download_status_file(
         checkpoint_dir=checkpoint_dir,
     )
 
+    written_paths: list[str] = []
     for status_file_path in status_file_paths:
         try:
             with _status_file_lock(status_file_path):
@@ -484,9 +578,19 @@ def write_download_status_file(
                 )
 
                 _atomic_write_json(status_file_path, status_content)
+            written_paths.append(status_file_path)
             print_function_callback(f"Download status file saved: {status_file_path}")
         except Exception as e:
             logger.warning(f"Failed to write download status file to {status_file_path}: {e}")
             print_function_callback(
                 f"WARNING: Failed to write download status file to {status_file_path}: {e}"
             )
+
+    # When --ignore-storage-profiles is used, the FE has no API-derivable location for the
+    # status file. Write a pointer at the well-known default path so the FE can always find
+    # the real file even when the user passed a custom --checkpoint-dir. Only point at a file
+    # that was actually written — pointing the FE at a missing file is worse than no pointer.
+    if not local_storage_profile_id and written_paths:
+        _write_pointer_if_needed(
+            queue_id, checkpoint_dir, written_paths[0], print_function_callback
+        )
