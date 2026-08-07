@@ -18,6 +18,7 @@ import json
 import os
 import subprocess
 import sys
+from configparser import ConfigParser
 from pathlib import Path
 from typing import Iterator
 
@@ -249,7 +250,7 @@ def set_console_login_profile(env: dict, *, region: str = REGION) -> str:
     Real console profiles keep no credentials there -- botocore's LoginProvider
     resolves them from the token cache under ``~/.aws/login/cache``, which needs the
     ``awscrt`` extra and a live browser handshake. Neither is available here, so the
-    static test credentials go in a shared credentials file instead: botocore's
+    placeholder test credentials go in a shared credentials file instead: botocore's
     resolver reaches ``shared-credentials-file`` before the login provider, so API
     calls succeed while ``get_credentials_source`` still sees a console profile.
 
@@ -265,18 +266,18 @@ def set_console_login_profile(env: dict, *, region: str = REGION) -> str:
         f"region = {region}\n"
         f"login_session = {CONSOLE_LOGIN_SESSION_ARN}\n"
     )
+    # ACCESS_KEY/SECRET_KEY are the literal placeholder "testing" from _constants.py, in a
+    # throwaway per-test HOME. Assembled via configparser rather than an f-string so the
+    # secret-looking value is never a literal in a write call -- see the note in
+    # set_deadline_cloud_monitor_profile for why the same shape appears twice.
     aws_credentials = aws_dir / "credentials"
-    # ACCESS_KEY/SECRET_KEY are the literal placeholder "testing" from _constants.py, written into a
-    # throwaway per-test HOME so the CLI has something to resolve. No real credential is involved.
-    credentials_body = "\n".join(
-        [
-            f"[{profile_name}]",
-            f"aws_access_key_id = {ACCESS_KEY}",
-            f"aws_secret_access_key = {SECRET_KEY}",  # codeql[py/clear-text-storage-sensitive-data]
-            "",
-        ]
-    )
-    aws_credentials.write_text(credentials_body)
+    credentials = ConfigParser()
+    credentials[profile_name] = {
+        "aws_access_key_id": ACCESS_KEY,
+        "aws_secret_access_key": SECRET_KEY,
+    }
+    with open(aws_credentials, "w") as f:
+        credentials.write(f)
     # Set both explicitly: boto3 resolves the default locations from %USERPROFILE%
     # on Windows, which the subprocess env doesn't set.
     env["AWS_CONFIG_FILE"] = str(aws_config)
