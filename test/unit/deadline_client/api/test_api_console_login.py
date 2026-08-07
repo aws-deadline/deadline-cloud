@@ -474,3 +474,32 @@ def test_console_login_proceeds_when_the_awscrt_probe_is_unavailable(
 
     popen_mock.assert_called_once()
     assert PROFILE_NAME in output
+
+
+def test_console_logout_works_when_the_console_profile_is_the_default(
+    fresh_deadline_config, aws_config, login_cache_dir
+):
+    """
+    `defaults.aws_profile_name` ships as the sentinel "(default)", which get_boto3_session
+    normalizes away -- but `full_config["profiles"]` is keyed by the real name, "default".
+    Resolving the ARN by the sentinel would miss a console profile that *is* the default
+    profile, so logout would refuse a session get_credentials_source had just accepted.
+    """
+    config.set_setting("defaults.aws_profile_name", "(default)")
+    aws_config.write_text(f"[default]\nregion = us-west-2\nlogin_session = {LOGIN_SESSION_ARN}\n")
+
+    scoped_config = {"region": "us-west-2", "login_session": LOGIN_SESSION_ARN}
+    cached_token = _cached_token_path(login_cache_dir)
+    cached_token.write_text('{"accessToken": "token"}')
+
+    with (
+        patch.object(api._session, "get_boto3_session") as session_mock,
+        patch.object(api, "get_boto3_session", new=session_mock),
+    ):
+        session_mock()._session.get_scoped_config.return_value = scoped_config
+        session_mock()._session.full_config = {"profiles": {"default": scoped_config}}
+
+        assert api.get_credentials_source() == AwsCredentialsSource.AWS_CONSOLE_LOGIN
+        api.logout()
+
+    assert not cached_token.exists(), "logout must end the session of a default console profile"

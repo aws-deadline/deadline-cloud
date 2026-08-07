@@ -134,7 +134,7 @@ def _logout_aws_console(config: Optional[ConfigParser] = None) -> str:
 
     # The cache is keyed by the login session ARN, which is the profile's marker in
     # ~/.aws/config. Without it there is no session to end.
-    login_session = _get_login_session_arn(profile_name)
+    login_session = _get_login_session_arn(config)
     if login_session is None:
         raise DeadlineOperationError(
             f"The profile {profile_name} has no login_session entry in the AWS config "
@@ -194,17 +194,32 @@ def _logout_deadline_cloud_monitor_instance(
         )
 
 
-def _get_login_session_arn(profile_name: str) -> Optional[str]:
+def _get_login_session_arn(config: Optional[ConfigParser] = None) -> Optional[str]:
     """
-    Returns the ``login_session`` ARN configured for an AWS profile, or None.
+    Returns the ``login_session`` ARN of the configured AWS profile, or None.
 
-    Reads through botocore so that AWS_CONFIG_FILE and the shared-config parsing rules
-    are honoured the same way credential resolution honours them.
+    Resolved through the boto3 session's scoped config rather than by indexing
+    ``full_config["profiles"]`` by name. The two differ for the default profile:
+    ``defaults.aws_profile_name`` ships as the sentinel ``"(default)"`` (and ``""`` also
+    means "use the default credentials"), which `get_boto3_session` normalizes away, but
+    ``full_config["profiles"]`` is keyed by the real name — ``"default"``. Indexing by the
+    sentinel would miss a console sign-in profile that *is* the default profile, so logout
+    would refuse a session that `get_credentials_source` had just classified as a console
+    one. Going through the session, as `get_credentials_source` does, keeps the two
+    agreeing on which profile is meant.
+
+    A profile name that isn't in the AWS config at all makes botocore raise
+    ``ProfileNotFound``. That means the same thing as a profile without the key — there is
+    no session to end — so report it the same way rather than surfacing a different error
+    from the one the caller is about to raise.
     """
-    import botocore.session
+    from botocore.exceptions import ProfileNotFound
 
-    profiles = botocore.session.Session().full_config.get("profiles", {})
-    return profiles.get(profile_name, {}).get("login_session")
+    try:
+        session = _session.get_boto3_session(config=config)
+        return session._session.get_scoped_config().get("login_session")
+    except ProfileNotFound:
+        return None
 
 
 def _login_deadline_cloud_monitor(
