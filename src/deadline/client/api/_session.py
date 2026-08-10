@@ -37,6 +37,12 @@ class AwsCredentialsSource(Enum):
     NOT_VALID = 0
     HOST_PROVIDED = 2
     DEADLINE_CLOUD_MONITOR_LOGIN = 3
+    # An AWS Console sign-in profile, created by `aws login` or by Deadline Cloud
+    # monitor's console sign-in flow. Identified by the `login_session` key. botocore's
+    # LoginProvider refreshes the cached token in-process, so nothing external is needed
+    # to keep the session alive. Starting a new one needs a browser, which Deadline Cloud
+    # monitor provides.
+    AWS_CONSOLE_LOGIN = 4
 
 
 class AwsAuthenticationStatus(Enum):
@@ -394,7 +400,8 @@ def get_credentials_source(
     config: Optional[ConfigParser] = None,
 ) -> AwsCredentialsSource:
     """
-    Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud monitor wrote the credentials, HOST_PROVIDED otherwise.
+    Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud monitor wrote the credentials,
+    AWS_CONSOLE_LOGIN for an AWS Console sign-in profile, HOST_PROVIDED otherwise.
 
     Args:
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
@@ -408,6 +415,10 @@ def get_credentials_source(
     if "monitor_id" in profile_config:
         # Deadline Cloud monitor Desktop adds the "monitor_id" key
         return AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
+    elif "login_session" in profile_config:
+        # `aws login` and Deadline Cloud monitor's console sign-in flow add the
+        # "login_session" key, holding the ARN the cached token was issued for.
+        return AwsCredentialsSource.AWS_CONSOLE_LOGIN
     else:
         return AwsCredentialsSource.HOST_PROVIDED
 
@@ -558,7 +569,7 @@ def check_authentication_status(
     Returns AwsAuthenticationStatus enum value:
       - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
       - AUTHENTICATED if they are fine
-      - NEEDS_LOGIN if a Deadline Cloud monitor login is required.
+      - NEEDS_LOGIN if a login is required, for the profile types that support it.
     """
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
@@ -566,10 +577,13 @@ def check_authentication_status(
             _list_farms_for_auth_probe(config=config)
             return AwsAuthenticationStatus.AUTHENTICATED
         except Exception:
-            # We assume that the presence of a Deadline Cloud monitor profile
-            # means we will know everything necessary to start it and login.
+            # We assume that the presence of a Deadline Cloud monitor or AWS Console
+            # sign-in profile means we know everything necessary to start a login.
 
-            if get_credentials_source(config) == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
+            if get_credentials_source(config) in (
+                AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN,
+                AwsCredentialsSource.AWS_CONSOLE_LOGIN,
+            ):
                 return AwsAuthenticationStatus.NEEDS_LOGIN
             return AwsAuthenticationStatus.CONFIGURATION_ERROR
 

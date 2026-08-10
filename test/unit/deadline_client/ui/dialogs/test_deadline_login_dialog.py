@@ -10,6 +10,8 @@ import pytest
 try:
     from qtpy.QtCore import QTimer
     from qtpy.QtWidgets import QMessageBox
+    from deadline.client.api._session import AwsCredentialsSource
+    from deadline.client.ui._utils import tr
     from deadline.client.ui.dialogs.deadline_login_dialog import DeadlineLoginDialog
 except ImportError:
     pytest.importorskip("deadline.client.ui.dialogs.deadline_login_dialog")
@@ -119,3 +121,62 @@ class TestDeadlineLoginDialogReturnValue:
             QTimer.singleShot(10, close_dialog)
 
             assert dialog.exec_() is False
+
+
+class TestPendingAuthorizationMessage:
+    """
+    The dialog's text while login is in flight is the only instruction the user gets, so
+    it has to name the credentials the profile actually wants. Both profile types are
+    signed in by Deadline Cloud monitor, but a console profile signs in with AWS Console
+    credentials, so the two messages must differ.
+    """
+
+    @staticmethod
+    def _message_for(qtbot, credentials_source) -> str:
+        """
+        Runs a login that only fires `on_pending_authorization` with the given source,
+        then blocks until cancelled, and returns the text the dialog settled on.
+        """
+        notified = threading.Event()
+
+        def login(on_pending_authorization, on_cancellation_check, config=None):
+            on_pending_authorization(credentials_source=credentials_source)
+            notified.set()
+            while not on_cancellation_check():
+                pass
+            return "unused-because-canceled"
+
+        with patch(_API_LOGIN, side_effect=login):
+            dialog = DeadlineLoginDialog(parent=None, close_on_success=True)
+            qtbot.addWidget(dialog)
+
+            def click_cancel():
+                # The message is set via a queued signal, so wait for the callback to
+                # have fired before tearing the dialog down.
+                if not notified.is_set():
+                    QTimer.singleShot(10, click_cancel)
+                    return
+                dialog.button(QMessageBox.StandardButton.Cancel).click()
+
+            QTimer.singleShot(10, click_cancel)
+            dialog.exec_()
+
+            return dialog.text()
+
+    def test_console_login_names_the_aws_console(self, qtbot):
+        """
+        A console profile's sign-in happens in Deadline Cloud monitor, but with AWS Console
+        credentials -- saying only "log in" would leave the user guessing which to use.
+        """
+        message = self._message_for(qtbot, AwsCredentialsSource.AWS_CONSOLE_LOGIN)
+
+        assert message == tr(
+            "Opening Deadline Cloud monitor to sign in with the AWS Console. "
+            "Please sign in before returning here."
+        )
+
+    def test_monitor_login_keeps_its_own_message(self, qtbot):
+        """The monitor profile's wording must not pick up the console phrasing."""
+        message = self._message_for(qtbot, AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN)
+
+        assert message == tr("Opening Deadline Cloud monitor. Please log in before returning here.")

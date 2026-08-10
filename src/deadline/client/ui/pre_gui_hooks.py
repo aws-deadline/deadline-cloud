@@ -243,14 +243,21 @@ def apply_pre_gui_output(
         # CLI --parameter values take precedence over hook values.
         if param_name in cli_provided_param_names:
             continue
-        if param_name in template_param_names:
+        if param_name.startswith("deadline:"):
+            # Shared job property (priority, initialStatus, maxRetriesPerTask, …). These are
+            # NOT template parameters even though read_job_bundle_parameters keeps them in the
+            # parameters list — the dialog spinner and CreateJob read them from the shared
+            # values dict, so route them there. Checking this before the template-name test
+            # is what lets a pre-GUI hook actually override e.g. deadline:priority.
+            initial_shared_parameter_values[param_name] = param_value
+        elif param_name in template_param_names:
             # Job template parameter — update initial_settings.parameters in-place
             for p in template_parameters:
                 if p["name"] == param_name:
                     p["value"] = param_value
                     break
         else:
-            # Shared job property (deadline: keys, queue parameters, etc.)
+            # Other shared job property (queue parameters, etc.)
             initial_shared_parameter_values[param_name] = param_value
     if "name" in pre_gui_output:
         initial_settings.name = pre_gui_output["name"]

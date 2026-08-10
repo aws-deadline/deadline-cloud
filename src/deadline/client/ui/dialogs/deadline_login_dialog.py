@@ -118,6 +118,14 @@ class DeadlineLoginDialog(QMessageBox):
                 self.login_thread_message.emit(
                     tr("Opening Deadline Cloud monitor. Please log in before returning here.")
                 )
+            elif kwargs["credentials_source"] == AwsCredentialsSource.AWS_CONSOLE_LOGIN:
+                # Deadline Cloud monitor opens the browser for the console sign-in itself.
+                self.login_thread_message.emit(
+                    tr(
+                        "Opening Deadline Cloud monitor to sign in with the AWS Console. "
+                        "Please sign in before returning here."
+                    )
+                )
 
         def on_cancellation_check():
             return self.canceled

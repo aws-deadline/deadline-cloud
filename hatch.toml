@@ -1,5 +1,10 @@
 [envs.default]
-features = ["gui"]
+# "console" brings in botocore[crt], which is what an AWS Console sign-in profile
+# needs for botocore's LoginProvider to refresh its cached token. `auth login` /
+# `auth logout` don't need it, so it isn't required to run the tests -- the env
+# installs it so the test env matches a consumer who actually uses such a profile.
+# It stays an opt-in extra for consumers because awscrt is a compiled wheel.
+features = ["gui", "console"]
 pre-install-commands = ["pip install -r requirements-testing.txt"]
 
 [envs.default.scripts]

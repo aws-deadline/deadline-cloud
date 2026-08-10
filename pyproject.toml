@@ -58,6 +58,14 @@ gui = [
 mcp = [
   "mcp >= 1.13.0, < 2",
 ]
+# AWS Console sign-in profiles (the `login_session` key in ~/.aws/config) are
+# resolved by botocore's LoginProvider, which needs awscrt to sign the DPoP
+# proofs used to refresh the cached token. Kept opt-in because awscrt is a
+# compiled wheel, and this library is imported from embedded application Pythons
+# where such profiles aren't used.
+console = [
+  "botocore[crt] >= 1.42.89",
+]
 
 [project.scripts]
 deadline = "deadline.client.cli:main"

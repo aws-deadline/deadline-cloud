@@ -71,6 +71,11 @@ if you want the optional mcp dependencies:
 $ pip install "deadline[mcp]"
 ```
 
+or if you sign in with an AWS Console sign-in profile:
+```sh
+$ pip install "deadline[console]"
+```
+
 ## Usage
 
 After installation it can then be used as a command line tool:
@@ -211,7 +216,7 @@ By default, configuration of AWS Deadline Cloud is provided at `~/.deadline/conf
 
 ## Authentication
 
-In addition to the standard AWS credential mechanisms (AWS Profiles, instance profiles, and environment variables), AWS Deadline Cloud monitor credentials are also supported.
+In addition to the standard AWS credential mechanisms (AWS Profiles, instance profiles, and environment variables), AWS Deadline Cloud monitor and AWS Console sign-in credentials are also supported.
 
 To view the currently configured credentials authentication status, run:
 
@@ -233,6 +238,24 @@ and removing them by logging out:
 ```sh
 $ deadline auth logout
 ```
+
+AWS Console sign-in profiles, reported by `deadline auth status` with a source of
+`AWS_CONSOLE_LOGIN`, are supported as well. Starting a session requires an interactive
+browser sign-in, so `deadline auth login` opens AWS Deadline Cloud monitor to perform it
+and waits for the profile to authenticate — the same handoff used for monitor profiles.
+
+This requires AWS Deadline Cloud monitor to be installed and to have created the profile.
+If it isn't configured, `deadline auth login` explains how to sign in instead:
+
+* AWS Deadline Cloud monitor, using its "Login with AWS Console" option, or
+* `aws login --profile <profile-name>`, using AWS CLI v2.
+
+Once you are signed in, credentials refresh automatically until the session expires,
+with no further sign-in and without invoking any external tool. That refresh does
+require the `console` extra above (`pip install "deadline[console]"`).
+
+`deadline auth logout` deletes the profile's cached token, which ends the session on
+this workstation.
 
 ## Job Monitoring and Logs
 
