@@ -53,6 +53,13 @@ pre-install-commands = [
 test = "pytest --no-cov -vvv --numprocesses=1 -o \"testpaths=test/blender_submitter_ui\" --confcutdir=test/blender_submitter_ui {args:test/blender_submitter_ui}"
 
 [envs.installer]
+# Pinned explicitly rather than inherited from envs.default: the features here
+# decide what PyInstaller bundles into the shipped installer, so a new extra in
+# the default env must not silently enlarge the signed artifact. "console" is
+# omitted on purpose -- it pulls in awscrt, a compiled wheel that is not in
+# scripts/pyinstaller/allowlist.py. Consumers who need AWS Console sign-in
+# credential refresh install the extra themselves.
+features = ["gui"]
 pre-install-commands = ["pip install -r requirements-installer.txt"]
 
 [envs.installer.scripts]
