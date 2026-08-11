@@ -85,11 +85,11 @@ ALLOWLIST = {
         # libffi
         "_internal/libffi-*.dll",
         "_internal/libffi.*.dylib",
-        # awscrt's native extension. The auto-generated globs for a DEPENDENCIES
-        # entry don't match it: it sits at the bundle root rather than in
-        # lib-dynload, and its name is underscore-prefixed and abi3-tagged.
+        # awscrt's native extension on Linux/macOS. The .so globs generated for a
+        # DEPENDENCIES entry only cover lib-dynload/*.cpython-3*-*.so, which an
+        # abi3-tagged extension at the bundle root doesn't match. Windows needs no
+        # entry here: the generated "**/_{dep}.pyd" glob already covers it.
         "_internal/_awscrt.abi3.so",
-        "_internal/_awscrt.pyd",
         # xxsubtype (CPython internal C extension, pulled in by shiboken6/PySide6)
         "_internal/lib-dynload/xxsubtype.cpython-3*-darwin.so",
         "_internal/lib-dynload/xxsubtype.cpython-3*-x86_64-linux-gnu.so",

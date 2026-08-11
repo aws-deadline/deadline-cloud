@@ -8,12 +8,17 @@ The installer is a PyInstaller bundle with no pip, so a consumer cannot add the
 LoginProvider won't load and `deadline auth login` on a `login_session` profile
 fails pointing at a `pip install` the user has no way to run.
 
-Bundling it takes three things that are edited in separate files and are easy to
-change apart from each other:
+Bundling it takes two things edited in separate files and easy to change apart
+from each other: the `installer` Hatch env installing the extra (via
+envs.default's features), and `scripts/pyinstaller/allowlist.py` permitting
+awscrt in the signed artifact.
 
-  * the `installer` Hatch env installing the extra (via envs.default's features),
-  * `scripts/pyinstaller/allowlist.py` permitting awscrt in the signed artifact,
-  * an attributions entry, since Apache-2.0 requires shipping the license text.
+These assert on config, which cannot see whether awscrt reached the artifact --
+PyInstaller finds it only by static analysis through botocore, and the allowlist
+permits files rather than requiring them. `test/installer/test_installer.py`
+asserts on the built bundle; attributions are covered by
+`_validate_bundled_attributions`, which `attributions:check` runs over every
+DEPENDENCIES entry.
 """
 
 from pathlib import Path
@@ -65,30 +70,11 @@ def test_console_distribution_is_allowlisted() -> None:
         "allowlist.DEPENDENCIES or installer:validate_exe rejects the artifact."
     )
 
-    # DEPENDENCIES only auto-generates globs for the package directory. The native
-    # extension is underscore-prefixed at the bundle root, so it needs its own entry
-    # on every platform we ship.
+    # The .so globs generated for a DEPENDENCIES entry only cover
+    # lib-dynload/*.cpython-3*-*.so, so the abi3-tagged extension at the bundle root
+    # needs its own entry. Windows is already covered by the generated "**/_{dep}.pyd".
     globs = allowlist.ALLOWLIST["files"] + allowlist.ALLOWLIST["globs"]
-    for native_extension in ("_internal/_awscrt.abi3.so", "_internal/_awscrt.pyd"):
-        assert native_extension in globs, (
-            f"{native_extension} must be allowlisted: awscrt's native extension does "
-            "not match the globs generated for a DEPENDENCIES entry."
-        )
-
-
-def test_console_distribution_has_attribution() -> None:
-    """Apache-2.0 obliges us to ship awscrt's license text in the installer."""
-    import sys
-
-    sys.path.insert(0, str(_REPO_ROOT / "scripts" / "attributions"))
-    try:
-        from cli import _ADDITIONAL_ATTRIBUTIONS, _ATTRIBUTIONS_ALLOW_LIST
-    finally:
-        sys.path.pop(0)
-
-    attributed = set(_ATTRIBUTIONS_ALLOW_LIST) | {e["name"] for e in _ADDITIONAL_ATTRIBUTIONS}
-    assert _CONSOLE_DISTRIBUTION in attributed, (
-        f"{_CONSOLE_DISTRIBUTION!r} is bundled into the installer, so it needs an "
-        "attributions entry. Run `hatch run attributions:update_approved_text` after "
-        "adding one to refresh the golden license text."
+    assert "_internal/_awscrt.abi3.so" in globs, (
+        "_internal/_awscrt.abi3.so must be allowlisted: an abi3-tagged extension at "
+        "the bundle root matches none of the globs generated for a DEPENDENCIES entry."
     )
