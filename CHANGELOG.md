@@ -1,3 +1,13 @@
+## 0.60.4 (2026-08-11)
+
+### Features
+* Added support for login and logout with AWS Console sign-in profiles. Profiles using `login_session` in `~/.aws/config` are now recognized by `deadline auth login` and `deadline auth logout`. Sign-in is handed off to Deadline Cloud monitor, which must be installed and must have created the profile. Automatic credential refresh requires the new `console` extra (`pip install "deadline[console]"`). (#1323)
+* When using `--ignore-storage-profiles` with a custom `--checkpoint-dir`, a status file pointer is now written at the default path, making it easier to locate download progress information. If the default path already held status data from a previous run, it is replaced by the pointer and repopulates as future syncs run. (#1324)
+* The download status file written by `sync-output` now tracks progress per task as well as per job, records per-job file counts and why a job was skipped (for example, it has no attachments, or no matching storage profile was found), and reports tasks that failed on the farm distinctly from tasks whose download failed. A job whose task output failed to download is reported as `failed` at the job level, so the job and task rows no longer disagree. Errors are isolated per job, so one failed download no longer blocks other jobs, and failed jobs are retried on subsequent runs up to 5 times, after which the job is skipped with a warning. (#1223, #1258, #1313)
+
+### Bug Fixes
+* Fixed an issue where `deadline:` prefixed properties (e.g., `deadline:priority`) returned by a pre-GUI hook were silently dropped when using `deadline bundle gui-submit`. These values are now correctly applied. (#1322)
+* Constrained the MCP dependency to v1 to prevent compatibility issues with newer major versions. (#1315)
 ## 0.60.3 (2026-07-27)
 
 ### Bug Fixes
