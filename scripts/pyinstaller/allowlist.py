@@ -1,6 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 DEPENDENCIES = [
+    # botocore's LoginProvider signs the DPoP proofs that refresh an AWS Console
+    # sign-in profile's cached token, and it only loads with awscrt present. The
+    # frozen installer has no pip, so the "console" extra cannot be added after
+    # the fact -- it ships here or console sign-in is unreachable in this build.
+    "awscrt",
     "boto3",
     "botocore",
     "click",
@@ -80,6 +85,11 @@ ALLOWLIST = {
         # libffi
         "_internal/libffi-*.dll",
         "_internal/libffi.*.dylib",
+        # awscrt's native extension. The auto-generated globs for a DEPENDENCIES
+        # entry don't match it: it sits at the bundle root rather than in
+        # lib-dynload, and its name is underscore-prefixed and abi3-tagged.
+        "_internal/_awscrt.abi3.so",
+        "_internal/_awscrt.pyd",
         # xxsubtype (CPython internal C extension, pulled in by shiboken6/PySide6)
         "_internal/lib-dynload/xxsubtype.cpython-3*-darwin.so",
         "_internal/lib-dynload/xxsubtype.cpython-3*-x86_64-linux-gnu.so",
