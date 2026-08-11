@@ -1,4 +1,4 @@
-## 0.60.4 (2026-08-10)
+## 0.60.4 (2026-08-11)
 
 ### Features
 * Added support for login and logout with AWS Console sign-in profiles. Profiles using `login_session` in `~/.aws/config` are now recognized by `deadline auth login` and `deadline auth logout`. Sign-in is handed off to Deadline Cloud monitor, which must be installed and must have created the profile. Automatic credential refresh requires the new `console` extra (`pip install "deadline[console]"`). (#1323)
