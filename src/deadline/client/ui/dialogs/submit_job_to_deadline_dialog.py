@@ -545,6 +545,8 @@ class SubmitJobToDeadlineDialog(QDialog):
                 if reply != QMessageBox.Yes:
                     return
                 shutil.rmtree(dest_path)
+            # The bundle callback writes into dest_path without creating it.
+            os.makedirs(dest_path, exist_ok=True)
             if not self._generate_export_bundle(
                 dest_path, settings, queue_parameters, asset_references, requirements
             ):
