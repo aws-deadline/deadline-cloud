@@ -9,7 +9,7 @@ from qtpy.QtCore import Qt, QTimer
 from qtpy.QtGui import QColor, QStandardItem
 from qtpy.QtWidgets import QApplication, QDialog, QLabel, QProgressBar
 
-from deadline.client.job_bundle.repository import BundleInfo, S3BundleRepository
+from deadline.client.job_bundle._repository import BrowseEntry, BundleInfo, S3BundleRepository
 from deadline.client.ui.dialogs.job_bundle_browser_dialog import (
     JobBundleBrowserDialog,
     ROLE_LOADED,
@@ -55,7 +55,7 @@ class TestDownloadCancellation:
         repo.get_bundle_size.return_value = 1024 * 1000
         observed = {"count": 0, "cancelled_via_exception": False}
 
-        def _download(path, dest, progress_callback=None):
+        def _download(path, progress_callback=None):
             # Simulate a chunked transfer. Cooperative cancel raises
             # _DownloadCancelled *into* this call (so it unwinds in Python);
             # QThread.terminate() would instead kill the thread abruptly and this
@@ -114,7 +114,7 @@ class TestDownloadSizeReporting:
         big_size = 2148139290
         repo.get_bundle_size.return_value = big_size
 
-        def _download(path, dest, progress_callback=None):
+        def _download(path, progress_callback=None):
             # Emit a handful of 100 MiB chunks so the dialog stays open long
             # enough for the inspector timer to read the label/range.
             for _ in range(30):
@@ -268,6 +268,8 @@ class TestDownloadBundle:
         dialog._current_repo = repo
 
         dialog._load_preview("s3://b/p/x.ojd")
+        # Queue previews resolve on a worker thread; wait for the render.
+        qtbot.waitUntil(lambda: not dialog._preview_workers, timeout=5000)
 
         text = dialog._download_button.text()
         assert text.startswith("Download bundle")
@@ -280,11 +282,12 @@ class TestDownloadBundle:
         dialog._current_repo = repo
 
         dialog._load_preview("s3://b/p/x.ojd")
+        qtbot.waitUntil(lambda: not dialog._preview_workers, timeout=5000)
 
         assert dialog._download_button.text() == "Download bundle"
 
     def test_local_button_says_open(self, qtbot, tmp_path):
-        """Local/History bundles open in place, so the button says 'Open bundle'."""
+        """Local/History bundles reveal the folder, so the button says 'Show bundle folder'."""
         dialog = self._dialog(qtbot, tmp_path)  # local source (Queue unavailable)
         assert not dialog._radio_s3.isChecked()
         dialog._selected_is_archive = False
@@ -294,7 +297,7 @@ class TestDownloadBundle:
 
         dialog._load_preview("/b")
 
-        assert dialog._download_button.text() == "Open bundle"
+        assert dialog._download_button.text() == "Show bundle folder"
 
     def test_download_opens_resolved_local_path(self, qtbot, tmp_path):
         dialog = self._dialog(qtbot, tmp_path)
@@ -528,3 +531,73 @@ class TestPreloadFirstLevel:
         )
         assert b_item is not None
         assert not b_item.data(ROLE_LOADED)  # level 2 stays lazy
+
+
+class TestQueueWarningEscaping:
+    """`_show_queue_warning` renders into a RichText banner; the message is a
+    botocore error string that can contain markup and must be escaped."""
+
+    def test_show_queue_warning_escapes_markup(self, qtbot, tmp_path):
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+
+        dialog._show_queue_warning("<b>boom</b> & <img src=x>")
+
+        text = dialog._queue_warning.text()
+        assert "&lt;b&gt;boom&lt;/b&gt;" in text
+        assert "&amp;" in text
+        assert "<img src=x>" not in text
+
+
+class TestRelativeKeyHiding:
+    """The browser must key hidden state by the prefix-relative path so hiding one
+    bundle doesn't dim/filter a same-named bundle in a different subfolder."""
+
+    def _s3_repo(self):
+        with patch("boto3.Session"):
+            repo = S3BundleRepository("bucket", "DeadlineCloud", session=MagicMock())
+        repo._s3 = MagicMock()
+        return repo
+
+    def test_entry_hidden_is_scoped_to_the_subfolder(self, qtbot, tmp_path):
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._current_repo = self._s3_repo()
+        # Only maya/render is hidden.
+        dialog._hidden_set = {"maya/render"}
+
+        base = "s3://bucket/DeadlineCloud/job-bundles/"
+        maya = BrowseEntry(
+            name="render", path=base + "maya/render.ojd", is_bundle=True, is_archive=True
+        )
+        nuke = BrowseEntry(
+            name="render", path=base + "nuke/render.ojd", is_bundle=True, is_archive=True
+        )
+
+        assert dialog._entry_hidden(maya) is True
+        # Same leaf name, different folder — must NOT be collaterally hidden.
+        assert dialog._entry_hidden(nuke) is False
+
+    def test_root_level_entry_hidden_by_name(self, qtbot, tmp_path):
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._current_repo = self._s3_repo()
+        dialog._hidden_set = {"blender"}
+
+        base = "s3://bucket/DeadlineCloud/job-bundles/"
+        entry = BrowseEntry(
+            name="blender", path=base + "blender.ojd", is_bundle=True, is_archive=True
+        )
+        assert dialog._entry_hidden(entry) is True
+
+    def test_dot_prefixed_always_hidden(self, qtbot, tmp_path):
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._current_repo = self._s3_repo()
+        dialog._hidden_set = set()
+
+        base = "s3://bucket/DeadlineCloud/job-bundles/"
+        dotfile = BrowseEntry(
+            name=".secret", path=base + ".secret.ojd", is_bundle=True, is_archive=True
+        )
+        assert dialog._entry_hidden(dotfile) is True

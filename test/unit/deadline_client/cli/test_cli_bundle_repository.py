@@ -14,7 +14,7 @@ from click.testing import CliRunner
 from unittest.mock import MagicMock, patch
 
 from deadline.client.cli import main
-from deadline.client.job_bundle.repository import (
+from deadline.client.job_bundle._repository import (
     BrowseEntry,
     LocalBundleRepository,
     METADATA_LIMIT_NAME,
@@ -23,6 +23,109 @@ from deadline.client.job_bundle.repository import (
 )
 
 BUNDLE_GROUP = "deadline.client.cli._groups.bundle_group"
+
+
+class TestBundleDownloadOverwrite:
+    """`bundle download -o <dir>` must not silently delete an existing directory."""
+
+    def _mock_repo(self, tmp_path):
+        # A cache dir that download_full_bundle "resolves" the bundle to.
+        cache = tmp_path / "cache" / "my-bundle"
+        cache.mkdir(parents=True)
+        (cache / "template.yaml").write_text("name: Test\n")
+        repo = MagicMock()
+        repo.root_path.return_value = "s3://b/DC/job-bundles/"
+        repo.list_entries.return_value = [
+            BrowseEntry(
+                name="my-bundle", path="s3://b/my-bundle.ojd", is_bundle=True, is_archive=True
+            ),
+        ]
+        repo.get_bundle_size.return_value = 10
+        repo.download_full_bundle.return_value = str(cache)
+        return repo
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
+    def test_refuses_to_overwrite_non_bundle_even_with_yes(
+        self, mock_from_config, mock_config, tmp_path
+    ):
+        """A collision with a folder the tool does not own is never deleted."""
+        mock_from_config.return_value = self._mock_repo(tmp_path)
+        out = tmp_path / "out"
+        collision = out / "my-bundle"  # a user's project dir, NOT a bundle
+        collision.mkdir(parents=True)
+        (collision / "keep.txt").write_text("precious")
+
+        result = CliRunner().invoke(
+            main, ["bundle", "download", "my-bundle", "-o", str(out), "--yes"]
+        )
+
+        assert result.exit_code != 0
+        assert "not a job bundle" in result.output
+        assert (collision / "keep.txt").exists(), "must never delete a non-bundle folder"
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
+    def test_existing_bundle_declined_without_yes(self, mock_from_config, mock_config, tmp_path):
+        mock_from_config.return_value = self._mock_repo(tmp_path)
+        out = tmp_path / "out"
+        existing = out / "my-bundle"
+        existing.mkdir(parents=True)
+        (existing / "template.yaml").write_text("name: Old\n")  # a real bundle
+
+        # Non-interactive (no input) declines the confirm -> nothing deleted.
+        result = CliRunner().invoke(main, ["bundle", "download", "my-bundle", "-o", str(out)])
+
+        assert result.exit_code != 0
+        assert (existing / "template.yaml").read_text() == "name: Old\n"
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
+    def test_existing_bundle_overwritten_with_yes(self, mock_from_config, mock_config, tmp_path):
+        mock_from_config.return_value = self._mock_repo(tmp_path)
+        out = tmp_path / "out"
+        existing = out / "my-bundle"
+        existing.mkdir(parents=True)
+        (existing / "template.yaml").write_text("name: Old\n")
+        (existing / "stale.txt").write_text("stale")
+
+        result = CliRunner().invoke(
+            main, ["bundle", "download", "my-bundle", "-o", str(out), "--yes"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert not (existing / "stale.txt").exists()
+        assert (existing / "template.yaml").read_text() == "name: Test\n"
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
+    def test_failed_copy_preserves_existing_bundle(self, mock_from_config, mock_config, tmp_path):
+        """A copy failure (permissions/disk full) must leave the existing bundle
+        intact — the copy lands in staging and only swaps in on success."""
+        mock_from_config.return_value = self._mock_repo(tmp_path)
+        out = tmp_path / "out"
+        existing = out / "my-bundle"
+        existing.mkdir(parents=True)
+        (existing / "template.yaml").write_text("name: Old\n")
+
+        with patch(f"{BUNDLE_GROUP}.shutil.copytree", side_effect=OSError("disk full")):
+            result = CliRunner().invoke(
+                main, ["bundle", "download", "my-bundle", "-o", str(out), "--yes"]
+            )
+
+        assert result.exit_code != 0
+        # The prior bundle survives the failed copy.
+        assert (existing / "template.yaml").read_text() == "name: Old\n"
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
+    def test_invalid_bundle_name_is_clean_error(self, mock_from_config, mock_config, tmp_path):
+        mock_from_config.return_value = self._mock_repo(tmp_path)
+
+        result = CliRunner().invoke(main, ["bundle", "download", "..", "-o", str(tmp_path / "o")])
+
+        assert result.exit_code != 0
+        assert "not a valid bundle name" in result.output
 
 
 class TestBundleList:
@@ -430,12 +533,27 @@ class TestBundleUploadOverwrite:
 
 
 class TestBundleHide:
+    def _repo_with(self, mock_from_config, *, hidden=None):
+        mock_repo = MagicMock()
+        mock_repo.get_hidden_set.return_value = set(hidden or set())
+        mock_repo.root_path.return_value = "s3://bucket/prefix/job-bundles/"
+        mock_repo.list_entries.return_value = [
+            BrowseEntry(
+                name="blender-render",
+                path="s3://bucket/prefix/job-bundles/blender-render.ojd",
+                is_bundle=True,
+                is_archive=True,
+            ),
+        ]
+        # Root-level bundles key on their bare name.
+        mock_repo.visibility_key.return_value = "blender-render"
+        mock_from_config.return_value = mock_repo
+        return mock_repo
+
     @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
     @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
     def test_hide_bundle(self, mock_from_config, mock_config):
-        mock_repo = MagicMock()
-        mock_repo.get_hidden_set.return_value = set()
-        mock_from_config.return_value = mock_repo
+        mock_repo = self._repo_with(mock_from_config)
 
         runner = CliRunner()
         result = runner.invoke(main, ["bundle", "hide", "blender-render"])
@@ -447,15 +565,26 @@ class TestBundleHide:
     @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
     @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
     def test_hide_already_hidden(self, mock_from_config, mock_config):
-        mock_repo = MagicMock()
-        mock_repo.get_hidden_set.return_value = {"blender-render"}
-        mock_from_config.return_value = mock_repo
+        mock_repo = self._repo_with(mock_from_config, hidden={"blender-render"})
 
         runner = CliRunner()
         result = runner.invoke(main, ["bundle", "hide", "blender-render"])
 
         assert result.exit_code == 0, result.output
         assert "already hidden" in result.output
+        mock_repo.set_bundle_visibility.assert_not_called()
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
+    def test_hide_unknown_name_errors(self, mock_from_config, mock_config):
+        """A typo isn't silently persisted forever — it errors like download/info."""
+        mock_repo = self._repo_with(mock_from_config)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["bundle", "hide", "typo-name"])
+
+        assert result.exit_code != 0
+        assert "not found" in result.output
         mock_repo.set_bundle_visibility.assert_not_called()
 
 
@@ -589,7 +718,7 @@ class TestLocalArchiveCache:
         repo = LocalBundleRepository(root=str(tmp_path))
 
         # First extraction
-        result1 = repo.extract_bundle(str(archive), str(tmp_path / "out"))
+        result1 = repo.extract_bundle(str(archive))
         assert os.path.isfile(os.path.join(result1, "template.yaml"))
         assert os.path.isfile(os.path.join(result1, "script.sh"))
 
@@ -597,7 +726,7 @@ class TestLocalArchiveCache:
         template_mtime1 = os.path.getmtime(os.path.join(result1, "template.yaml"))
 
         # Second extraction — should reuse cache (same path returned)
-        result2 = repo.extract_bundle(str(archive), str(tmp_path / "out"))
+        result2 = repo.extract_bundle(str(archive))
         assert result2 == result1
 
         # File mtime should be unchanged (no re-extraction happened)
@@ -614,7 +743,7 @@ class TestLocalArchiveCache:
         repo = LocalBundleRepository(root=str(tmp_path))
 
         # First extraction
-        result1 = repo.extract_bundle(str(archive), str(tmp_path / "out"))
+        result1 = repo.extract_bundle(str(archive))
         with open(os.path.join(result1, "template.yaml")) as f:
             assert "V1" in f.read()
 
@@ -624,7 +753,7 @@ class TestLocalArchiveCache:
             zf.writestr("template.yaml", "name: V2\nsteps:\n- name: S2\n")
 
         # Second extraction — should detect mtime change and re-extract
-        result2 = repo.extract_bundle(str(archive), str(tmp_path / "out"))
+        result2 = repo.extract_bundle(str(archive))
         with open(os.path.join(result2, "template.yaml")) as f:
             assert "V2" in f.read()
 
@@ -635,7 +764,7 @@ class TestLocalArchiveCache:
             zf.writestr("inner/template.yaml", "name: Wrapped\nsteps:\n- name: S1\n")
 
         repo = LocalBundleRepository(root=str(tmp_path))
-        result = repo.extract_bundle(str(archive), str(tmp_path / "out"))
+        result = repo.extract_bundle(str(archive))
 
         # Should return the inner directory, not the extraction root
         assert os.path.basename(result) == "inner"
@@ -833,3 +962,91 @@ class TestDownloadProgressHeadObjectReuse:
 
         # Still only 1 head_object call total
         assert mock_s3.head_object.call_count == 1
+
+
+class TestBundleOutputFormat:
+    """The new bundle commands follow the repo-wide --output convention:
+    the choices are verbose|json (not the old 'text'), resolved via the shared
+    helper. (Auto-detection from TTY state is the helper's own contract and is
+    tested there; here we pin the explicit choices, which is deterministic.)"""
+
+    def _local_root(self, tmp_path):
+        b = tmp_path / "render-job"
+        b.mkdir()
+        (b / "template.yaml").write_text("name: Render\nsteps: []\n")
+        return tmp_path
+
+    def test_list_json_is_structured(self, tmp_path):
+        root = self._local_root(tmp_path)
+        result = CliRunner().invoke(main, ["bundle", "list", str(root), "--output", "json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data[0]["name"] == "render-job"
+
+    def test_list_verbose_is_text(self, tmp_path):
+        root = self._local_root(tmp_path)
+        result = CliRunner().invoke(main, ["bundle", "list", str(root), "--output", "verbose"])
+        assert result.exit_code == 0, result.output
+        assert result.output.strip() == "render-job"
+        assert not result.output.strip().startswith(("{", "["))
+
+    def test_list_rejects_removed_text_choice(self, tmp_path):
+        root = self._local_root(tmp_path)
+        result = CliRunner().invoke(main, ["bundle", "list", str(root), "--output", "text"])
+        # 'text' is no longer a valid choice (verbose|json).
+        assert result.exit_code != 0
+
+    def test_info_json_is_structured(self, tmp_path):
+        b = tmp_path / "render-job"
+        b.mkdir()
+        (b / "template.yaml").write_text("name: Render\nsteps: []\n")
+        result = CliRunner().invoke(main, ["bundle", "info", str(b), "--output", "json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["name"] == "Render"
+
+
+class TestBundleDownloadProgressStream:
+    """`--output json` must not interleave progress rendering with the JSON, so
+    the bars are skipped in json mode (matching `job download-output`). The MCP
+    download tool parses this output."""
+
+    def test_download_json_output_is_clean(self, tmp_path):
+        cache = tmp_path / "cache" / "my-bundle"
+        cache.mkdir(parents=True)
+        (cache / "template.yaml").write_text("name: Test\n")
+
+        called = {"progress": False}
+
+        def _dl(path, progress_callback=None, extract_callback=None, extract_size_callback=None):
+            # In json mode the CLI passes None callbacks (bars are skipped).
+            if progress_callback or extract_callback or extract_size_callback:
+                called["progress"] = True
+            return str(cache)
+
+        repo = MagicMock()
+        repo.root_path.return_value = "s3://b/DC/job-bundles/"
+        repo.list_entries.return_value = [
+            BrowseEntry(
+                name="my-bundle",
+                path="s3://b/my-bundle.ojd",
+                is_bundle=True,
+                is_archive=True,
+            ),
+        ]
+        repo.get_bundle_size.return_value = 100
+        repo.download_full_bundle.side_effect = _dl
+
+        with (
+            patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config"),
+            patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config", return_value=repo),
+        ):
+            result = CliRunner().invoke(
+                main, ["bundle", "download", "my-bundle", "--output", "json"]
+            )
+
+        assert result.exit_code == 0, result.output
+        # No progress callbacks are wired in json mode, and stdout is clean JSON.
+        assert called["progress"] is False
+        data = json.loads(result.output)
+        assert "path" in data

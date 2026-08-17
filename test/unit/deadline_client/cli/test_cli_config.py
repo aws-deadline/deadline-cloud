@@ -146,7 +146,12 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
         assert "\\known\\asset\\path" in result.output
     else:
         assert "/known/asset/path" in result.output
-    assert "/my/bundles" in result.output
+    # job_bundle_default_directory is an is_path setting: stored with forward
+    # slashes but displayed in native format.
+    if os.name == "nt":
+        assert "\\my\\bundles" in result.output
+    else:
+        assert "/my/bundles" in result.output
     # It shouldn't say anywhere that there is a default setting
     assert "(default)" not in result.output
 

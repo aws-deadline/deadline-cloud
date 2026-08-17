@@ -150,7 +150,7 @@ When `deadline bundle upload` uploads an archive, it attaches bundle metadata as
 2. **Step count** and **Param count** — always included (tiny, ~10 bytes total).
 3. **Steps** and **Params** — split the remaining budget evenly between them. If only one is present, it gets the full remainder.
 
-This means bundles with short names and descriptions get more space for steps/params, while bundles with long descriptions still get a fair split. Constants are defined in `repository.py` (`METADATA_LIMIT_NAME`, `METADATA_LIMIT_DESC`, `S3_METADATA_TOTAL_BUDGET`). See: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingMetadata.html#UserMetadata
+This means bundles with short names and descriptions get more space for steps/params, while bundles with long descriptions still get a fair split. Constants are defined in `_repository.py` (`METADATA_LIMIT_NAME`, `METADATA_LIMIT_DESC`, `S3_METADATA_TOTAL_BUDGET`). See: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingMetadata.html#UserMetadata
 
 When truncation occurs, the CLI emits a yellow warning (e.g. `Warning: Bundle metadata 'ojd-params' truncated from 899 to 520 characters`) and the truncated value ends with `...` to make it visually obvious in the preview that information was cut off. The browser dialog detects truncation and uses the count metadata to show accurate totals (e.g. "Parameters (12)" even when only 8 fit in the metadata). When count metadata is unavailable (older uploads), the count displays as "N+" to indicate more exist.
 
@@ -334,7 +334,7 @@ Bundled assets (scripts, data files) with relative paths resolve correctly again
 | `ui/widgets/job_bundle_settings_tab.py` | `on_load_bundle` opens the new browser dialog instead of `QFileDialog` |
 | `ui/job_bundle_submitter.py` | `show_job_bundle_submitter` uses the new browser dialog when `browse=True`; handles archive extraction and S3 resolution |
 | `job_bundle/loader.py` | Add `is_job_bundle_dir(path) -> bool` helper for quick detection |
-| `job_bundle/repository.py` | **New file.** `BundleRepository` protocol, `LocalBundleRepository`, `S3BundleRepository` (with `from_config()` factory), archive helpers, cache management, metadata constants, and a local per-user visibility store (`_LocalBundleVisibility`) |
+| `job_bundle/_repository.py` | **New file.** `BundleRepository` protocol, `LocalBundleRepository`, `S3BundleRepository` (with `from_config()` factory), archive helpers, cache management, metadata constants, and a local per-user visibility store (`_LocalBundleVisibility`) |
 
 ### CLI Commands
 

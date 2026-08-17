@@ -21,9 +21,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from email.header import decode_header
 from logging import getLogger
-from typing import Optional, Protocol
+from typing import Callable, Optional, Protocol
 
 import yaml
+
+from botocore.exceptions import ClientError
 
 from ..config import config_file
 from ..config.config_file import get_cache_directory
@@ -44,6 +46,9 @@ CACHE_META_FILENAME = ".bundle_cache_meta.json"
 # hidden (dot-prefixed) .visibility.json in a per-queue folder inside the bundle
 # cache — not intended for manual editing.
 VISIBILITY_FILENAME = ".visibility.json"
+# On-disk format version for the local ``.visibility.json``. Written so a future
+# format change can detect and migrate old files; kept at 1 because the format
+# has not changed in any released version.
 VISIBILITY_VERSION = 1
 
 # Max concurrent head_object calls issued when warming the preview prefetch cache.
@@ -371,6 +376,19 @@ def get_bundle_dir_size(source_dir: str) -> int:
     return total
 
 
+def _collapse_ws(s: str) -> str:
+    """Collapse runs of whitespace — including control characters like CR/LF/TAB
+    — into single spaces so a value is safe to place in an S3 ``x-amz-meta-*``
+    HTTP header.
+
+    A template field can legally contain a newline (valid YAML: ``name: "a\\nb"``).
+    Left raw it becomes a bare LF in the header value, which urllib3 rejects with
+    an opaque ``ValueError`` from inside ``upload_fileobj`` — and is the
+    header-injection shape of the same bug on older urllib3 that didn't reject it.
+    """
+    return " ".join(str(s).split())
+
+
 def build_bundle_metadata(
     source_dir: Optional[str] = None,
     bundle_name: Optional[str] = None,
@@ -412,12 +430,12 @@ def build_bundle_metadata(
     else:
         return metadata
 
-    name_value = bundle_name or info.name
+    name_value = _collapse_ws(bundle_name or info.name)
     metadata[METADATA_KEY_NAME] = _truncate_s3_value(
         name_value, METADATA_LIMIT_NAME, METADATA_KEY_NAME
     )
     if info.description:
-        desc = " ".join(info.description.split())
+        desc = _collapse_ws(info.description)
         metadata[METADATA_KEY_DESC] = _truncate_s3_value(
             desc, METADATA_LIMIT_DESC, METADATA_KEY_DESC
         )
@@ -426,10 +444,14 @@ def build_bundle_metadata(
     if info.parameters:
         metadata[METADATA_KEY_PARAM_COUNT] = str(len(info.parameters))
 
-    # Dynamically allocate remaining budget to steps and params
-    steps_str = ",".join(info.step_names) if info.step_names else ""
+    # Dynamically allocate remaining budget to steps and params. All values are
+    # whitespace-collapsed so a control character in a template name/step/param
+    # can't produce an invalid (or injectable) HTTP header value.
+    steps_str = _collapse_ws(",".join(info.step_names)) if info.step_names else ""
     param_strs = (
-        ",".join(f"{p.get('name', '?')}:{p.get('type', '?')}" for p in info.parameters)
+        _collapse_ws(
+            ",".join(f"{p.get('name', '?')}:{p.get('type', '?')}" for p in info.parameters)
+        )
         if info.parameters
         else ""
     )
@@ -669,7 +691,9 @@ def extract_bundle_info(
     pv_map: dict[str, str] = {}
     if isinstance(parameter_values, dict):
         for pv in parameter_values.get("parameterValues", []) or []:
-            if isinstance(pv, dict) and "name" in pv and "value" in pv:
+            # Only string names are usable as dict keys; a hostile file could
+            # carry a dict/list name that would raise TypeError on insert.
+            if isinstance(pv, dict) and isinstance(pv.get("name"), str) and "value" in pv:
                 pv_map[pv["name"]] = pv["value"]
 
     # Cap the number of parameters; record the true total so the preview can show
@@ -680,8 +704,12 @@ def extract_bundle_info(
         if not isinstance(p, dict):
             continue
         capped = dict(p)  # copy so we never mutate the caller's template
-        name = capped.get("name", "")
-        capped["name"] = str(name)[:PREVIEW_MAX_PARAM_NAME_LEN] if name else ""
+        # Coerce the name to a str up front: a hostile template can make it a
+        # dict/list, and using the raw value as a dict key (``name in pv_map``)
+        # would raise ``TypeError: unhashable type``. extract_bundle_info is
+        # documented to never crash on a malformed template.
+        name = str(capped.get("name", "") or "")
+        capped["name"] = name[:PREVIEW_MAX_PARAM_NAME_LEN]
         if capped.get("type"):
             capped["type"] = str(capped["type"])[:PREVIEW_MAX_PARAM_NAME_LEN]
         # Attach resolved value: parameter_values > default > (unset)
@@ -746,16 +774,20 @@ class LocalBundleRepository:
                 and entry.is_file(follow_symlinks=False)
                 and _is_archive(entry.name)
             ):
-                # Only show archives that actually contain a template
-                if read_template_from_archive(entry.path) is not None:
-                    entries.append(
-                        BrowseEntry(
-                            name=_strip_archive_ext(entry.name),
-                            path=entry.path,
-                            is_bundle=True,
-                            is_archive=True,
-                        )
+                # Trust the .ojd extension rather than opening and decompressing
+                # every archive here — this runs on the Qt main thread and the
+                # default root is the user's home directory, so parsing each file
+                # (worse on a network home) would freeze the UI. A file that is
+                # not a valid bundle simply shows an empty/error preview when
+                # selected (the preview path tolerates a missing template).
+                entries.append(
+                    BrowseEntry(
+                        name=_strip_archive_ext(entry.name),
+                        path=entry.path,
+                        is_bundle=True,
+                        is_archive=True,
                     )
+                )
         return entries
 
     def get_bundle_info(self, path: str) -> Optional[BundleInfo]:
@@ -763,10 +795,11 @@ class LocalBundleRepository:
             return self._get_archive_bundle_info(path)
         return self._get_dir_bundle_info(path)
 
-    def extract_bundle(self, path: str, dest_dir: str) -> str:
-        """Extract an archive bundle, using mtime-based cache to avoid redundant extraction.
+    def extract_bundle(self, path: str) -> str:
+        """Extract an archive bundle into the local cache, using an mtime-based
+        cache to avoid redundant extraction.
 
-        Returns path to the extracted bundle directory."""
+        Returns the path to the extracted bundle directory (inside the cache)."""
         cache_dir = os.path.join(get_bundle_cache_dir(), _local_cache_key(path))
         meta = _read_cache_meta(cache_dir)
         current_mtime = os.path.getmtime(path)
@@ -852,18 +885,32 @@ def get_bundle_cache_dir() -> str:
     return os.path.join(get_cache_directory(), "job-bundles")
 
 
+def _safe_cache_suffix(name: str) -> str:
+    """Return a traversal-free, filesystem-safe cache subdir suffix, or "".
+
+    The cache dir is always uniquely keyed by a hash; this readable suffix is
+    only for human inspection. A crafted bundle name (e.g. ``"...ojd"`` ->
+    ``".."``) must never be able to escape the per-bundle cache dir, so run it
+    through ``sanitize_bundle_name`` and drop it entirely if it is unsafe.
+    """
+    try:
+        return sanitize_bundle_name(_strip_archive_ext(name))
+    except ValueError:
+        return ""
+
+
 def _cache_key(bucket: str, s3_key: str) -> str:
     """Deterministic cache subdirectory from bucket + key."""
     h = hashlib.sha256(f"{bucket}/{s3_key}".encode()).hexdigest()[:16]
-    name = _strip_archive_ext(s3_key.rstrip("/").rsplit("/", 1)[-1])
-    return os.path.join(h, name)
+    name = _safe_cache_suffix(s3_key.rstrip("/").rsplit("/", 1)[-1])
+    return os.path.join(h, name) if name else h
 
 
 def _local_cache_key(path: str) -> str:
     """Deterministic cache subdirectory from a local file path."""
     h = hashlib.sha256(os.path.abspath(path).encode()).hexdigest()[:16]
-    name = _strip_archive_ext(os.path.basename(path))
-    return os.path.join(h, name)
+    name = _safe_cache_suffix(os.path.basename(path))
+    return os.path.join(h, name) if name else h
 
 
 def _read_cache_meta(cache_dir: str) -> Optional[dict]:
@@ -978,26 +1025,33 @@ class _LocalBundleVisibility:
         )
 
     def get_hidden_set(self) -> set[str]:
-        """Read this user's hidden bundle names for the queue (empty if none)."""
+        """Read this user's hidden bundle keys for the queue (empty if none).
+
+        Entries are keyed by the bundle's path relative to the queue's
+        job-bundles prefix (``.ojd`` stripped). The file lives in the disposable
+        bundle cache dir, so a stale/unreadable one is simply treated as nothing
+        hidden.
+        """
         try:
             with open(self._view_path(), encoding="utf-8") as f:
                 data = json.load(f)
-            return set(data.get("hidden", []))
         except (OSError, ValueError):
             # No file yet, unreadable, or malformed — treat as nothing hidden.
             return set()
+        return set(data.get("hidden", []))
 
-    def set_bundle_visibility(self, bundle_name: str, *, hidden: bool) -> None:
-        """Hide or unhide a bundle in this user's local view (no S3 calls)."""
+    def set_bundle_visibility(self, bundle_key: str, *, hidden: bool) -> None:
+        """Hide or unhide a bundle (by prefix-relative key) in this user's local
+        view (no S3 calls)."""
         hidden_set = self.get_hidden_set()
         if hidden:
-            if bundle_name in hidden_set:
+            if bundle_key in hidden_set:
                 return  # Already hidden
-            hidden_set.add(bundle_name)
+            hidden_set.add(bundle_key)
         else:
-            if bundle_name not in hidden_set:
+            if bundle_key not in hidden_set:
                 return  # Already visible
-            hidden_set.discard(bundle_name)
+            hidden_set.discard(bundle_key)
 
         path = self._view_path()
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1153,13 +1207,14 @@ class S3BundleRepository:
     def download_full_bundle(
         self,
         path: str,
-        dest_dir: str,
         progress_callback=None,
         extract_callback=None,
         extract_size_callback=None,
     ) -> str:
-        """Download a complete S3 .ojd bundle to a local directory.
-        Uses the ETag cache for repeated access."""
+        """Download and extract a complete S3 .ojd bundle into the local cache,
+        returning the local directory path. Uses the ETag cache for repeated
+        access. Callers that want the bundle at a specific location copy it from
+        the returned cache path."""
         return self._resolve_archive_bundle(
             path,
             progress_callback=progress_callback,
@@ -1167,7 +1222,7 @@ class S3BundleRepository:
             extract_size_callback=extract_size_callback,
         )
 
-    def prefetch_previews(self) -> None:
+    def prefetch_previews(self, should_cancel: Optional[Callable[[], bool]] = None) -> None:
         """Warm the preview cache by issuing ``head_object`` for every ``.ojd``
         object under the prefix, in parallel.
 
@@ -1179,6 +1234,10 @@ class S3BundleRepository:
         after the listing is displayed; it never blocks the initial listing.
         Individual HEAD failures are ignored. The cache is rebuilt from scratch,
         dropping entries for bundles that no longer exist.
+
+        ``should_cancel`` is an optional predicate polled per key so a caller
+        tearing down (e.g. the browser dialog closing) doesn't have to block on
+        every outstanding HEAD.
         """
         keys = self._list_all_bundle_keys()
         self._head_cache.clear()
@@ -1186,6 +1245,8 @@ class S3BundleRepository:
             return
 
         def _head(key: str) -> None:
+            if should_cancel is not None and should_cancel():
+                return
             try:
                 # dict setitem is atomic under the GIL, so this is safe to do
                 # from the worker threads while the UI reads the cache.
@@ -1208,31 +1269,50 @@ class S3BundleRepository:
                     keys.append(key)
         return keys
 
-    def _head_object(self, key: str) -> dict:
-        """Return the prefetched head for ``key`` if the cache warmed it, else
-        issue a ``head_object``. Raises on a genuine HEAD failure — callers that
-        tolerate failure wrap this in try/except."""
-        cached = self._head_cache.get(key)
-        if cached is not None:
-            return cached
+    def _head_object(self, key: str, use_cache: bool = True) -> dict:
+        """Return head metadata for ``key``.
+
+        ``use_cache`` controls whether the background prefetch cache
+        (``_head_cache``) may satisfy the request. The cache is warmed once when
+        the listing appears and is never invalidated, so it must only be used for
+        *preview* (where a slightly stale ETag/size is harmless). Correctness
+        paths — download resolution and size — pass ``use_cache=False`` to force a
+        live ``head_object``; otherwise a bundle overwritten on the queue while
+        the dialog is open would still match the local cache's ETag and serve the
+        old, no-longer-existing contents. Raises on a genuine HEAD failure —
+        callers that tolerate failure wrap this in try/except.
+        """
+        if use_cache:
+            cached = self._head_cache.get(key)
+            if cached is not None:
+                return cached
         return self._s3.head_object(Bucket=self._bucket, Key=key)
 
     def get_bundle_size(self, path: str) -> int:
         """Get the size in bytes of a bundle archive on S3.
         Caches the result so a subsequent download_full_bundle doesn't repeat the call."""
         key = self._to_s3_key(path)
-        head = self._head_object(key)
+        head = self._head_object(key, use_cache=False)
         self._last_head = (key, head)
         return head.get("ContentLength", 0)
 
     def bundle_exists(self, bundle_name: str) -> bool:
-        """Check if a bundle with the given name exists on S3."""
+        """Check if a bundle with the given name exists on S3.
+
+        Only a 404 means "does not exist". Any other HEAD failure (throttling,
+        network error, expired credentials, or an AccessDenied on a
+        least-privilege queue role) is re-raised rather than reported as
+        "absent" — otherwise the overwrite guard in the GUI would fail open and
+        silently clobber another user's shared bundle.
+        """
         key = f"{self._prefix}{bundle_name}.ojd"
         try:
             self._s3.head_object(Bucket=self._bucket, Key=key)
             return True
-        except Exception:
-            return False
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "404":
+                return False
+            raise
 
     def upload_archive(
         self,
@@ -1372,7 +1452,7 @@ class S3BundleRepository:
             self._last_head = None
         else:
             try:
-                head = self._head_object(key)
+                head = self._head_object(key, use_cache=False)
             except Exception:
                 pass  # head_object failure is non-fatal; proceeds without cache validation
 
@@ -1482,10 +1562,24 @@ class S3BundleRepository:
         """Per-user local view for this queue's bundles (keyed by bucket + prefix)."""
         return _LocalBundleVisibility(self._bucket, self._prefix)
 
+    def visibility_key(self, path: str) -> str:
+        """Canonical key for the hidden-view file: the bundle's path relative to
+        the queue's job-bundles prefix, with the ``.ojd`` extension stripped.
+
+        Keying by the relative path (e.g. ``maya/render``) rather than the bare
+        leaf name (``render``) keeps same-named bundles in different subfolders
+        distinct, so hiding one doesn't collaterally hide the others.
+        """
+        key = self._to_s3_key(path)
+        if key.startswith(self._prefix):
+            key = key[len(self._prefix) :]
+        return _strip_archive_ext(key)
+
     def get_hidden_set(self) -> set[str]:
-        """Fetch this user's locally hidden bundle names for the queue."""
+        """Fetch this user's locally hidden bundle keys for the queue."""
         return self._visibility().get_hidden_set()
 
-    def set_bundle_visibility(self, bundle_name: str, *, hidden: bool) -> None:
-        """Hide or unhide a bundle in this user's local view (no S3 calls)."""
-        self._visibility().set_bundle_visibility(bundle_name, hidden=hidden)
+    def set_bundle_visibility(self, bundle_key: str, *, hidden: bool) -> None:
+        """Hide or unhide a bundle (by prefix-relative key from ``visibility_key``)
+        in this user's local view (no S3 calls)."""
+        self._visibility().set_bundle_visibility(bundle_key, hidden=hidden)

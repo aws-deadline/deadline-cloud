@@ -327,6 +327,7 @@ SETTINGS: Dict[str, Dict[str, Any]] = {
     "settings.job_bundle_default_directory": {
         "default": "",
         "depend": "defaults.aws_profile_name",
+        "is_path": True,
         "description": (
             "The default local directory to open when browsing for job bundles. "
             "If empty, defaults to the user's home directory."

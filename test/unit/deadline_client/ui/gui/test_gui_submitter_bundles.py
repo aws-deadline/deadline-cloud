@@ -10,13 +10,13 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from qtpy.QtCore import QEvent, Qt, QTimer  # type: ignore[attr-defined]
 from qtpy.QtGui import QKeyEvent  # type: ignore[attr-defined]
-from qtpy.QtWidgets import QApplication, QDialog, QLabel, QProgressBar, QWidget
+from qtpy.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QProgressBar, QWidget
 
 from deadline.client.ui.dataclasses import JobBundleSettings
 from deadline.client.ui.dialogs.submit_job_to_deadline_dialog import (
     SubmitJobToDeadlineDialog,
 )
-from deadline.client.job_bundle.repository import S3BundleRepository
+from deadline.client.job_bundle._repository import S3BundleRepository
 from deadline.client.job_bundle.submission import AssetReferences
 
 
@@ -315,7 +315,7 @@ class TestGuiSubmitterBundles:
         """On success the bundle is generated into the requested dir for EXPORT."""
         from deadline.client.ui.dialogs._types import JobBundlePurpose
 
-        callback = MagicMock()
+        callback = MagicMock(return_value={})
         dialog = _create_dialog(
             qtbot,
             mock_auth_status,
@@ -335,3 +335,223 @@ class TestGuiSubmitterBundles:
         assert args[1] == "/tmp/output-bundle"
         # ...for the EXPORT purpose.
         assert kwargs["purpose"] == JobBundlePurpose.EXPORT
+
+    def test_generate_export_bundle_omits_host_requirements_for_legacy_submitter(
+        self, qtbot, mock_auth_status
+    ):
+        """Submitters without the host-requirements tab get a 5-positional-arg call.
+
+        Regression test: the export path must mirror the submit path's
+        backwards-compatibility branch. Passing ``requirements`` as a 6th
+        positional arg unconditionally raises ``TypeError`` for submitters
+        whose callback only accepts 5 positional args.
+        """
+        callback = MagicMock(return_value={})
+        dialog = _create_dialog(
+            qtbot,
+            mock_auth_status,
+            name="Simple UI with Job Attachments",
+            bundle_dir=SIMPLE_UI_WITH_JA,
+            callback=callback,
+        )
+        assert dialog.show_host_requirements_tab is False
+
+        dialog._generate_export_bundle(
+            "/tmp/output-bundle", JobBundleSettings(), [], AssetReferences(), {"amounts": []}
+        )
+
+        args, _kwargs = callback.call_args
+        # (widget, output_dir, settings, queue_parameters, asset_references) — no
+        # host_requirements positional arg for a legacy submitter.
+        assert len(args) == 5
+
+    def test_generate_export_bundle_persists_returned_job_parameters(self, qtbot, mock_auth_status):
+        """Job parameters returned by the callback are written into the export.
+
+        Regression test: dropping the callback's return value produced an
+        exported ``parameter_values.yaml`` missing any parameters the submitter
+        computed, silently diverging the export from what submission produces.
+        """
+        callback = MagicMock(return_value={"job_parameters": [{"name": "Frames", "value": "1-10"}]})
+        dialog = _create_dialog(
+            qtbot,
+            mock_auth_status,
+            name="Simple UI with Job Attachments",
+            bundle_dir=SIMPLE_UI_WITH_JA,
+            callback=callback,
+        )
+
+        with patch.object(dialog, "save_job_parameters_to_job_bundle") as mock_save:
+            proceeded = dialog._generate_export_bundle(
+                "/tmp/output-bundle", JobBundleSettings(), [], AssetReferences(), None
+            )
+
+        assert proceeded is True
+        mock_save.assert_called_once_with(
+            "/tmp/output-bundle", [{"name": "Frames", "value": "1-10"}]
+        )
+
+
+class TestExportBundleLocalOwnershipGuard:
+    """A local 'Save bundle as' must only ever delete a folder it owns (a job
+    bundle), never an arbitrary directory that collides with the bundle name."""
+
+    MODULE = "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
+
+    def _dialog(self, qtbot, mock_auth_status):
+        return _create_dialog(
+            qtbot,
+            mock_auth_status,
+            name="Simple UI with Job Attachments",
+            bundle_dir=SIMPLE_UI_WITH_JA,
+            callback=MagicMock(return_value={}),
+        )
+
+    def _patch_export_dialog(self, stack, local_directory):
+        mock_dialog_cls = stack.enter_context(patch(f"{self.MODULE}._ExportBundleDialog"))
+        mock_dialog_cls.Accepted = QDialog.DialogCode.Accepted
+        stack.enter_context(
+            patch(
+                f"{self.MODULE}._S3BundleRepository.from_config", side_effect=Exception("no queue")
+            )
+        )
+        stack.enter_context(patch(f"{self.MODULE}.get_setting", return_value=""))
+        instance = mock_dialog_cls.return_value
+        instance.exec_.return_value = QDialog.DialogCode.Accepted
+        instance.bundle_name = "my-export"
+        instance.export_to_queue = False
+        instance.local_directory = str(local_directory)
+        return instance
+
+    def test_refuses_to_overwrite_non_bundle_collision(self, qtbot, mock_auth_status, tmp_path):
+        from contextlib import ExitStack
+
+        dialog = self._dialog(qtbot, mock_auth_status)
+        collision = tmp_path / "my-export"  # a user's folder, NOT a bundle
+        collision.mkdir()
+        (collision / "keep.txt").write_text("precious")
+
+        with ExitStack() as stack:
+            self._patch_export_dialog(stack, tmp_path)
+            warn = stack.enter_context(patch(f"{self.MODULE}.QMessageBox.warning"))
+            gen = stack.enter_context(patch.object(dialog, "_generate_export_bundle"))
+            dialog.on_export_bundle()
+
+        warn.assert_called_once()
+        gen.assert_not_called()
+        assert (collision / "keep.txt").exists(), "must not delete a non-bundle folder"
+
+    def test_overwrites_existing_bundle_after_confirm(self, qtbot, mock_auth_status, tmp_path):
+        from contextlib import ExitStack
+
+        dialog = self._dialog(qtbot, mock_auth_status)
+        existing = tmp_path / "my-export"
+        existing.mkdir()
+        (existing / "template.json").write_text("{}")  # makes it a real bundle
+        (existing / "stale.txt").write_text("stale")
+
+        with ExitStack() as stack:
+            self._patch_export_dialog(stack, tmp_path)
+            stack.enter_context(
+                patch(
+                    f"{self.MODULE}.QMessageBox.question",
+                    return_value=QMessageBox.StandardButton.Yes,
+                )
+            )
+            stack.enter_context(patch(f"{self.MODULE}.QMessageBox.information"))
+            gen = stack.enter_context(
+                patch.object(dialog, "_generate_export_bundle", return_value=True)
+            )
+            dialog.on_export_bundle()
+
+        gen.assert_called_once()
+        assert not (existing / "stale.txt").exists(), "the prior bundle should be replaced"
+
+    def test_missing_location_is_rejected(self, qtbot, mock_auth_status, tmp_path):
+        from contextlib import ExitStack
+
+        dialog = self._dialog(qtbot, mock_auth_status)
+        missing = tmp_path / "does-not-exist"
+
+        with ExitStack() as stack:
+            self._patch_export_dialog(stack, missing)
+            warn = stack.enter_context(patch(f"{self.MODULE}.QMessageBox.warning"))
+            gen = stack.enter_context(patch.object(dialog, "_generate_export_bundle"))
+            dialog.on_export_bundle()
+
+        warn.assert_called_once()
+        gen.assert_not_called()
+        assert not missing.exists(), "must not create a typo directory tree"
+
+    def test_invalid_bundle_name_warns_and_aborts(self, qtbot, mock_auth_status, tmp_path):
+        """An unsafe name (e.g. '..') is reported via a warning, not a traceback."""
+        from contextlib import ExitStack
+
+        dialog = self._dialog(qtbot, mock_auth_status)
+        with ExitStack() as stack:
+            instance = self._patch_export_dialog(stack, tmp_path)
+            instance.bundle_name = ".."  # sanitize_bundle_name raises ValueError
+            warn = stack.enter_context(patch(f"{self.MODULE}.QMessageBox.warning"))
+            gen = stack.enter_context(patch.object(dialog, "_generate_export_bundle"))
+            dialog.on_export_bundle()
+
+        warn.assert_called_once()
+        gen.assert_not_called()
+
+    def test_non_bundle_submitter_settings_do_not_crash(self, qtbot, mock_auth_status, tmp_path):
+        """Submitters whose settings lack input_job_bundle_dir (CLI/DCC) must not
+        raise AttributeError; the default export name falls back to settings.name."""
+        import types
+        from contextlib import ExitStack
+
+        dialog = self._dialog(qtbot, mock_auth_status)
+        # A settings object with no input_job_bundle_dir attribute.
+        dialog.job_settings_type = lambda: types.SimpleNamespace(name="MyJob")
+
+        with ExitStack() as stack:
+            mock_dialog_cls = stack.enter_context(patch(f"{self.MODULE}._ExportBundleDialog"))
+            mock_dialog_cls.Accepted = QDialog.DialogCode.Accepted
+            # Reject so we only exercise resolved-name computation + early return.
+            mock_dialog_cls.return_value.exec_.return_value = QDialog.DialogCode.Rejected
+            stack.enter_context(
+                patch(
+                    f"{self.MODULE}._S3BundleRepository.from_config",
+                    side_effect=Exception("no queue"),
+                )
+            )
+            stack.enter_context(patch(f"{self.MODULE}.get_setting", return_value=""))
+            stack.enter_context(patch.object(dialog.shared_job_settings, "update_settings"))
+
+            dialog.on_export_bundle()  # must not raise AttributeError
+
+        _args, kwargs = mock_dialog_cls.call_args
+        assert kwargs["default_name"] == "MyJob"
+
+    def test_failed_generation_preserves_existing_bundle(self, qtbot, mock_auth_status, tmp_path):
+        """A failed export must not destroy the user's existing bundle: it is
+        generated into a staging dir and only swapped in on success."""
+        from contextlib import ExitStack
+
+        dialog = self._dialog(qtbot, mock_auth_status)
+        existing = tmp_path / "my-export"
+        existing.mkdir()
+        (existing / "template.json").write_text('{"old": true}')  # a real bundle
+
+        with ExitStack() as stack:
+            self._patch_export_dialog(stack, tmp_path)
+            stack.enter_context(
+                patch(
+                    f"{self.MODULE}.QMessageBox.question",
+                    return_value=QMessageBox.StandardButton.Yes,
+                )
+            )
+            stack.enter_context(patch(f"{self.MODULE}.QMessageBox.information"))
+            # Generation fails (submitter callbacks are allowed to fail).
+            stack.enter_context(patch.object(dialog, "_generate_export_bundle", return_value=False))
+            dialog.on_export_bundle()
+
+        # The prior bundle is untouched — not deleted, contents intact.
+        assert existing.is_dir()
+        assert (existing / "template.json").read_text() == '{"old": true}'
+        # No leftover staging directories in the parent.
+        assert [p.name for p in tmp_path.iterdir()] == ["my-export"]

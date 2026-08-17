@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import html
 import os
 from typing import Optional
 
@@ -21,7 +22,7 @@ from qtpy.QtWidgets import (  # type: ignore
 )
 
 from .._utils import tr, warning_banner_qss
-from ...job_bundle.repository import S3BundleRepository
+from ...job_bundle._repository import S3BundleRepository as _S3BundleRepository
 
 
 class ExportBundleDialog(QDialog):
@@ -31,7 +32,7 @@ class ExportBundleDialog(QDialog):
         self,
         *,
         default_name: str = "",
-        queue_repo: Optional[S3BundleRepository] = None,
+        queue_repo: Optional[_S3BundleRepository] = None,
         queue_error: str = "",
         local_dir: str = "",
         parent=None,
@@ -90,7 +91,9 @@ class ExportBundleDialog(QDialog):
         self._queue_warning.setTextFormat(Qt.RichText)
         self._queue_warning.setStyleSheet(warning_banner_qss(self))
         if not self._queue_available and self._queue_error:
-            self._queue_warning.setText(f"\u26a0 <b>Queue unavailable:</b> {self._queue_error}")
+            self._queue_warning.setText(
+                f"\u26a0 <b>Queue unavailable:</b> {html.escape(self._queue_error)}"
+            )
             self._queue_warning.setVisible(True)
         else:
             self._queue_warning.setVisible(False)

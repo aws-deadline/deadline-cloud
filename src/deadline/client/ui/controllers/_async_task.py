@@ -125,9 +125,14 @@ class AsyncTask(QRunnable):
             return
         try:
             getattr(self.signals, signal_name).emit(*args)
-        except RuntimeError:
-            # WorkerSignals was deleted while the task was still running; the
-            # results are no longer needed by anyone.
+        except RuntimeError as exc:
+            # For a DirectConnection, emit() invokes slots synchronously, so a
+            # RuntimeError may originate in a slot body rather than from a deleted
+            # signal source. Only swallow the "source deleted" case (nothing is
+            # listening anymore); re-raise anything else so genuine slot bugs and
+            # failed error/finished deliveries aren't silently lost.
+            if "has been deleted" not in str(exc):
+                raise
             logger.debug("Skipping '%s' emit; signal source has been deleted", signal_name)
 
     def run(self) -> None:

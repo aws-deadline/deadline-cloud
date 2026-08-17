@@ -41,13 +41,14 @@ from ...config import get_setting, set_setting, config_file
 from ...config.config_file import _SETTING_FARM_ID, _SETTING_QUEUE_ID
 from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
+from ...job_bundle.loader import is_job_bundle_dir as _is_job_bundle_dir
 from ...job_bundle.parameters import JobParameter
 from ...job_bundle.submission import AssetReferences
-from ...job_bundle.repository import (
-    S3BundleRepository,
-    archive_bundle_dir,
-    get_bundle_dir_size,
-    sanitize_bundle_name,
+from ...job_bundle._repository import (
+    S3BundleRepository as _S3BundleRepository,
+    archive_bundle_dir as _archive_bundle_dir,
+    get_bundle_dir_size as _get_bundle_dir_size,
+    sanitize_bundle_name as _sanitize_bundle_name,
 )
 from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
@@ -56,7 +57,7 @@ from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ._types import JobBundlePurpose
 from ._help_dialog import _HelpDialog
-from .export_bundle_dialog import ExportBundleDialog
+from .export_bundle_dialog import ExportBundleDialog as _ExportBundleDialog
 
 logger = logging.getLogger(__name__)
 
@@ -477,20 +478,25 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.shared_job_settings.update_settings(settings)
         self.job_settings.update_settings(settings)
 
-        # Default export name is the bundle directory name on disk
+        # Default export name is the bundle directory name on disk. Only
+        # JobBundleSettings carries ``input_job_bundle_dir``; other submitters
+        # (CLI, DCC) do not, so fall back to the job name for them.
+        input_job_bundle_dir = getattr(settings, "input_job_bundle_dir", "")
         resolved_name = (
-            os.path.basename(settings.input_job_bundle_dir)
-            if settings.input_job_bundle_dir
-            else settings.name
+            os.path.basename(input_job_bundle_dir) if input_job_bundle_dir else settings.name
         )
 
-        # Try to get queue repo for the dialog
+        # Try to get queue repo for the dialog. ``from_config`` makes network
+        # calls; show a wait cursor so the click doesn't look ignored.
         queue_repo = None
         queue_error = ""
+        QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            queue_repo = S3BundleRepository.from_config()
+            queue_repo = _S3BundleRepository.from_config()
         except Exception as e:
             queue_error = str(e)
+        finally:
+            QApplication.restoreOverrideCursor()
 
         # Get default local directory
         local_dir = get_setting("settings.job_bundle_default_directory")
@@ -500,17 +506,27 @@ class SubmitJobToDeadlineDialog(QDialog):
             local_dir = os.path.expanduser("~")
 
         # Show export dialog
-        dialog = ExportBundleDialog(
+        dialog = _ExportBundleDialog(
             default_name=resolved_name,
             queue_repo=queue_repo,
             queue_error=queue_error,
             local_dir=local_dir,
             parent=self,
         )
-        if dialog.exec_() != ExportBundleDialog.Accepted or not dialog.bundle_name:
+        if dialog.exec_() != _ExportBundleDialog.Accepted or not dialog.bundle_name:
             return
 
-        bundle_name = sanitize_bundle_name(dialog.bundle_name)
+        try:
+            bundle_name = _sanitize_bundle_name(dialog.bundle_name)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                tr("Save bundle as"),
+                f"The bundle name {dialog.bundle_name!r} is not valid. "
+                "Choose a name that isn't empty and doesn't contain path separators "
+                "or '..'.",
+            )
+            return
 
         # Generate the bundle with current edits applied
         import tempfile
@@ -533,8 +549,32 @@ class SubmitJobToDeadlineDialog(QDialog):
                     return
                 self._export_to_queue(queue_repo, bundle_name, export_dir)
         else:
+            # The parent directory is free-form user input (the Location field is
+            # editable in Local mode), so validate it before doing anything
+            # destructive rather than silently creating a typo directory tree.
+            if not os.path.isdir(dialog.local_directory):
+                QMessageBox.warning(
+                    self,
+                    tr("Save bundle as"),
+                    f"The location does not exist or is not a directory:\n{dialog.local_directory}",
+                )
+                return
+
             dest_path = os.path.join(dialog.local_directory, bundle_name)
             if os.path.exists(dest_path):
+                # Only ever recursively replace something that is itself a job
+                # bundle (the legitimate "overwrite a bundle of the same name"
+                # case). Refuse to touch an arbitrary folder/file that merely
+                # collides with the bundle name — otherwise a name matching an
+                # existing project folder would be destroyed on a single "Yes".
+                if not _is_job_bundle_dir(dest_path):
+                    QMessageBox.warning(
+                        self,
+                        tr("Save bundle as"),
+                        f"A file or folder that is not a job bundle already exists at:\n{dest_path}"
+                        "\n\nChoose a different name or location.",
+                    )
+                    return
                 reply = QMessageBox.question(
                     self,
                     tr("Save bundle as"),
@@ -544,13 +584,22 @@ class SubmitJobToDeadlineDialog(QDialog):
                 )
                 if reply != QMessageBox.Yes:
                     return
-                shutil.rmtree(dest_path)
-            # The bundle callback writes into dest_path without creating it.
-            os.makedirs(dest_path, exist_ok=True)
-            if not self._generate_export_bundle(
-                dest_path, settings, queue_parameters, asset_references, requirements
-            ):
-                return
+
+            # Generate into a staging directory on the same filesystem, then swap
+            # it into place only once generation succeeds. Submitter callbacks can
+            # fail (they're wrapped to return False), so generating directly into
+            # dest_path would destroy an existing good bundle and leave an empty
+            # directory behind. Staging alongside dest keeps the swap a fast rename.
+            with tempfile.TemporaryDirectory(dir=dialog.local_directory) as staging:
+                staged_bundle = os.path.join(staging, bundle_name)
+                os.makedirs(staged_bundle, exist_ok=True)
+                if not self._generate_export_bundle(
+                    staged_bundle, settings, queue_parameters, asset_references, requirements
+                ):
+                    return
+                if os.path.exists(dest_path):
+                    shutil.rmtree(dest_path)
+                shutil.move(staged_bundle, dest_path)
             QMessageBox.information(
                 self,
                 tr("Save bundle as"),
@@ -572,15 +621,32 @@ class SubmitJobToDeadlineDialog(QDialog):
         stale, un-edited, or missing bundle.
         """
         try:
-            self.on_create_job_bundle_callback(
-                self,
-                output_dir,
-                settings,
-                queue_parameters,
-                asset_references,
-                requirements,
-                purpose=JobBundlePurpose.EXPORT,
-            )
+            if self.show_host_requirements_tab:
+                parameters_from_callback = self.on_create_job_bundle_callback(
+                    self,
+                    output_dir,
+                    settings,
+                    queue_parameters,
+                    asset_references,
+                    requirements,
+                    purpose=JobBundlePurpose.EXPORT,
+                )
+            else:
+                # Maintain backward compatibility for submitters that do not
+                # support host_requirements yet (5-positional-arg callbacks).
+                parameters_from_callback = self.on_create_job_bundle_callback(
+                    self,
+                    output_dir,
+                    settings,
+                    queue_parameters,
+                    asset_references,
+                    purpose=JobBundlePurpose.EXPORT,
+                )
+            # If the callback returned job parameters, persist them so the
+            # exported bundle is equivalent to what submission would produce.
+            job_parameters = (parameters_from_callback or {}).get("job_parameters", [])
+            if job_parameters:
+                self.save_job_parameters_to_job_bundle(output_dir, job_parameters)
             return True
         except Exception as exc:
             logger.warning("Failed to generate bundle for export: %s", exc)
@@ -588,10 +654,10 @@ class SubmitJobToDeadlineDialog(QDialog):
             return False
 
     def _export_to_queue(
-        self, queue_repo: Optional[S3BundleRepository], bundle_name: str, source_dir: str
+        self, queue_repo: Optional[_S3BundleRepository], bundle_name: str, source_dir: str
     ):
         """Archive and upload the bundle to the queue's S3 job-bundles folder."""
-        from ...job_bundle.repository import build_bundle_metadata
+        from ...job_bundle._repository import build_bundle_metadata
 
         if not queue_repo:
             QMessageBox.critical(self, "Export failed", "Queue is not available.")
@@ -614,6 +680,9 @@ class SubmitJobToDeadlineDialog(QDialog):
                     return
 
             # Archive and upload on a background thread with progress
+            class _UploadCancelled(Exception):
+                """Raised inside the worker's callbacks to abort cooperatively."""
+
             class _UploadWorker(QThread):
                 progress = _Signal(int, int)  # (current_bytes, total_bytes)
                 status = _Signal(str)
@@ -628,20 +697,30 @@ class SubmitJobToDeadlineDialog(QDialog):
                     self._bundle_name = bundle_name
                     self._source_dir = source_dir
                     self._metadata = metadata
+                    self._cancelled = False
+
+                def cancel(self):
+                    # Cooperative cancel: the next archive/upload callback raises
+                    # to abort, letting zipfile/boto3 unwind cleanly (boto's
+                    # managed upload aborts the multipart transfer on exception,
+                    # so no partial object is left on the queue).
+                    self._cancelled = True
 
                 def run(self):
                     try:
                         self.status.emit("Archiving bundle...")
-                        total_size = get_bundle_dir_size(self._source_dir)
+                        total_size = _get_bundle_dir_size(self._source_dir)
                         self.progress.emit(0, max(1, total_size // 1024))
 
                         archived = [0]
 
                         def _on_archived(n):
+                            if self._cancelled:
+                                raise _UploadCancelled()
                             archived[0] += n
                             self.progress.emit(archived[0] // 1024, 0)
 
-                        buf = archive_bundle_dir(self._source_dir, progress_callback=_on_archived)
+                        buf = _archive_bundle_dir(self._source_dir, progress_callback=_on_archived)
 
                         # archive_bundle_dir() returns the buffer already rewound
                         # to position 0, so buf.tell() would be 0 here. Use the
@@ -654,6 +733,8 @@ class SubmitJobToDeadlineDialog(QDialog):
                         _sent = [0]
 
                         def _upload_cb(n):
+                            if self._cancelled:
+                                raise _UploadCancelled()
                             _sent[0] += n
                             self.progress.emit(_sent[0] // 1024, 0)
 
@@ -664,6 +745,10 @@ class SubmitJobToDeadlineDialog(QDialog):
                             progress_callback=_upload_cb,
                         )
                         self.done.emit()
+                    except _UploadCancelled:
+                        # User cancelled — nothing to report; boto3 aborts the
+                        # in-flight transfer when the callback raises.
+                        pass
                     except Exception as e:
                         self.error.emit(str(e))
 
@@ -732,7 +817,7 @@ class SubmitJobToDeadlineDialog(QDialog):
 
             def _show_complete():
                 _progress_bar.setVisible(False)
-                _progress_label.setText("\u2705 Bundle saved to queue")
+                _progress_label.setText("Bundle saved to queue")
                 _cancel_btn.setText("Close")
                 _cancel_btn.clicked.disconnect()
                 _cancel_btn.clicked.connect(progress_dialog.accept)
@@ -745,9 +830,14 @@ class SubmitJobToDeadlineDialog(QDialog):
             worker.progress.connect(_on_progress, Qt.QueuedConnection)
             worker.done.connect(_on_finished, Qt.QueuedConnection)
             worker.error.connect(_on_error, Qt.QueuedConnection)
+            # Cancelling the dialog (Cancel button or window close) flags the
+            # worker so its next archive/upload callback aborts cooperatively,
+            # instead of blocking the UI until the whole transfer finishes.
+            progress_dialog.rejected.connect(worker.cancel)
             worker.start()
 
             progress_dialog.exec_()
+            worker.cancel()
             worker.wait()
 
             if upload_error:

@@ -19,7 +19,7 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from ..dataclasses import JobBundleSettings
 from ...config import get_setting
-from ...job_bundle.repository import S3BundleRepository
+from ...job_bundle._repository import S3BundleRepository as _S3BundleRepository
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...job_bundle.submission import AssetReferences
 from ...job_bundle.loader import read_yaml_or_json_object, validate_directory_symlink_containment
@@ -111,7 +111,7 @@ class JobBundleSettingsWidget(QWidget):
                     try:
                         from concurrent.futures import ThreadPoolExecutor
 
-                        repo = S3BundleRepository.from_config()
+                        repo = _S3BundleRepository.from_config()
                         with ThreadPoolExecutor(max_workers=2) as ex:
                             entries_f = ex.submit(repo.list_entries, repo.root_path())
                             hidden_f = ex.submit(repo.get_hidden_set)
@@ -137,54 +137,61 @@ class JobBundleSettingsWidget(QWidget):
             s3_worker.done.connect(browser.set_queue_source)
             s3_worker.start()
 
-        if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
-            if s3_worker:
-                s3_worker.wait()
-            return
-
-        browser.hide()
-        input_job_bundle_dir = browser.resolve_selection()
-        while not input_job_bundle_dir:
-            browser.show()
+        # Everything from here on may return early; wrap it so the background
+        # S3 worker is always joined. Dropping the last reference to a still-
+        # running QThread makes Qt call std::terminate (SIGABRT), crashing the
+        # host application (e.g. Maya/Nuke). This is reachable by picking a
+        # Local/History bundle before the Queue tab finishes loading.
+        try:
             if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
-                if s3_worker:
-                    s3_worker.wait()
                 return
+
             browser.hide()
             input_job_bundle_dir = browser.resolve_selection()
+            while not input_job_bundle_dir:
+                browser.show()
+                if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
+                    return
+                browser.hide()
+                input_job_bundle_dir = browser.resolve_selection()
 
-        # Update job bundle directory path
-        self.input_job_bundle_dir = input_job_bundle_dir
+            # Update job bundle directory path
+            self.input_job_bundle_dir = input_job_bundle_dir
 
-        # Warn the user if the Job Bundle could not be loaded
-        try:
-            validate_directory_symlink_containment(input_job_bundle_dir)
+            # Warn the user if the Job Bundle could not be loaded
+            try:
+                validate_directory_symlink_containment(input_job_bundle_dir)
 
-            asset_references_obj = (
-                read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
-            )
-            asset_references = AssetReferences.from_dict(asset_references_obj)
+                asset_references_obj = (
+                    read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
+                )
+                asset_references = AssetReferences.from_dict(asset_references_obj)
 
-            # Load the template to get the bundle name
-            template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
-            name = template.get("name", "Job bundle submission")  # type: ignore[union-attr]
-            job_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
-            job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
+                # Load the template to get the bundle name
+                template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
+                name = template.get("name", "Job bundle submission")  # type: ignore[union-attr]
+                job_settings = JobBundleSettings(
+                    input_job_bundle_dir=input_job_bundle_dir, name=name
+                )
+                job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
 
-        except Exception as e:
-            msg = str(e)
-            QMessageBox.warning(self, "Could not load job bundle", msg)  # type: ignore[call-arg]
-            logger.warning(msg)
-            return
+            except Exception as e:
+                msg = str(e)
+                QMessageBox.warning(self, "Could not load job bundle", msg)  # type: ignore[call-arg]
+                logger.warning(msg)
+                return
 
-        dialog = self.window()
-        if dialog is not None and hasattr(dialog, "refresh"):
-            dialog.refresh(  # type: ignore[union-attr]
-                job_settings=job_settings,
-                auto_detected_attachments=asset_references,
-                attachments=None,
-                load_new_bundle=True,
-            )
+            dialog = self.window()
+            if dialog is not None and hasattr(dialog, "refresh"):
+                dialog.refresh(  # type: ignore[union-attr]
+                    job_settings=job_settings,
+                    auto_detected_attachments=asset_references,
+                    attachments=None,
+                    load_new_bundle=True,
+                )
+        finally:
+            if s3_worker:
+                s3_worker.wait()
 
     def update_settings(self, settings: JobBundleSettings):
         """

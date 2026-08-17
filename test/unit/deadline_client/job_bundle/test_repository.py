@@ -19,9 +19,10 @@ from unittest.mock import MagicMock, patch
 from botocore.exceptions import ClientError
 
 from deadline.client.exceptions import DeadlineOperationError
-from deadline.client.job_bundle.repository import (
+from deadline.client.job_bundle._repository import (
     LocalBundleRepository,
     MAX_ARCHIVE_ENTRIES,
+    METADATA_KEY_NAME,
     METADATA_LIMIT_NAME,
     PREVIEW_MAX_DESC_LEN,
     PREVIEW_MAX_NAME_LEN,
@@ -42,12 +43,15 @@ from deadline.client.job_bundle.repository import (
     _is_archive,
     _open_download_sink,
     _parse_template,
+    _cache_key,
+    _local_cache_key,
     _safe_zip_extract,
     _strip_archive_ext,
     _truncate_s3_value,
     archive_bundle_dir,
     build_bundle_metadata,
     extract_bundle_info,
+    VISIBILITY_VERSION,
     get_bundle_cache_dir,
     get_bundle_dir_size,
     read_template_from_archive,
@@ -143,6 +147,32 @@ class TestExtractBundleInfoCaps:
         assert info.step_names == []
         # Only the well-formed parameter dict survives.
         assert [p["name"] for p in info.parameters] == ["ok"]
+
+    def test_unhashable_param_name_does_not_crash(self):
+        """A hostile template can make a parameter name a dict/list; using it as a
+        dict key (name in pv_map) must not raise TypeError: unhashable type."""
+        template = {
+            "name": "J",
+            "steps": [],
+            "parameterDefinitions": [
+                {"name": {"a": 1}, "type": "STRING"},  # dict name
+                {"name": ["b"], "type": "PATH"},  # list name
+                {"name": "Frames", "type": "STRING", "default": "1-10"},
+            ],
+        }
+        parameter_values = {
+            "parameterValues": [
+                {"name": {"a": 1}, "value": "x"},  # hostile non-string pv name
+                {"name": "Frames", "value": "1-100"},
+            ]
+        }
+        info = extract_bundle_info(template, "/path/to/bundle", parameter_values)
+        # Names are coerced to strings; nothing crashes.
+        names = [p["name"] for p in info.parameters]
+        assert "Frames" in names
+        # The well-formed param still resolves its value from parameter_values.
+        frames = next(p for p in info.parameters if p["name"] == "Frames")
+        assert frames["_display_value"] == "1-100"
 
     def test_does_not_mutate_caller_template(self):
         template = {
@@ -452,15 +482,22 @@ class TestLocalBundleRepository:
         assert archive_entries[0].name == "render-job"
         assert archive_entries[0].is_bundle is True
 
-    def test_list_entries_invalid_archive_excluded(self, tmp_path):
-        """An .ojd without a template should not appear as a bundle."""
+    def test_list_entries_lists_ojd_by_extension(self, tmp_path):
+        """.ojd files are listed by extension without opening them.
+
+        Listing must not open/decompress every archive (it runs on the Qt main
+        thread with the home dir as the default root), so even an .ojd that has
+        no template is listed; it surfaces an empty/error preview on selection
+        rather than being silently hidden.
+        """
         ojd_path = tmp_path / "random.ojd"
         with zipfile.ZipFile(str(ojd_path), "w") as zf:
             zf.writestr("readme.txt", "not a bundle")
 
         repo = LocalBundleRepository(root=str(tmp_path))
         entries = repo.list_entries(str(tmp_path))
-        assert len(entries) == 0
+        assert [e.name for e in entries] == ["random"]
+        assert entries[0].is_archive and entries[0].is_bundle
 
     def test_list_entries_include_archives_false(self, tmp_path):
         """With include_archives=False, archives are skipped entirely."""
@@ -579,10 +616,8 @@ class TestLocalBundleRepository:
             zf.writestr("template.yaml", "name: Flat\nsteps: []\n")
             zf.writestr("scripts/run.sh", "#!/bin/bash\necho hello\n")
 
-        dest = tmp_path / "extracted"
-        dest.mkdir()
         repo = LocalBundleRepository()
-        result = repo.extract_bundle(str(ojd_path), str(dest))
+        result = repo.extract_bundle(str(ojd_path))
 
         assert os.path.isfile(os.path.join(result, "template.yaml"))
         assert os.path.isfile(os.path.join(result, "scripts", "run.sh"))
@@ -593,10 +628,8 @@ class TestLocalBundleRepository:
             zf.writestr("my-bundle/template.yaml", "name: Wrapped\nsteps: []\n")
             zf.writestr("my-bundle/scripts/run.sh", "#!/bin/bash\n")
 
-        dest = tmp_path / "extracted"
-        dest.mkdir()
         repo = LocalBundleRepository()
-        result = repo.extract_bundle(str(ojd_path), str(dest))
+        result = repo.extract_bundle(str(ojd_path))
 
         assert os.path.isfile(os.path.join(result, "template.yaml"))
 
@@ -718,7 +751,7 @@ class TestS3BundleVisibility:
     def _make_repo(self, tmp_path, monkeypatch, bucket="test-bucket"):
         # Point the bundle cache at a temp location so tests don't touch ~/.deadline.
         monkeypatch.setattr(
-            "deadline.client.job_bundle.repository.get_bundle_cache_dir",
+            "deadline.client.job_bundle._repository.get_bundle_cache_dir",
             lambda: str(tmp_path / "cache"),
         )
         with patch("boto3.Session"):
@@ -768,7 +801,7 @@ class TestS3BundleVisibility:
         assert len(view_files) == 1
         data = json.loads(view_files[0].read_text())
         assert data["hidden"] == ["a-bundle", "m-bundle", "z-bundle"]
-        assert data["version"] == 1
+        assert data["version"] == VISIBILITY_VERSION
 
     def test_hide_noop_when_already_hidden(self, tmp_path, monkeypatch):
         repo = self._make_repo(tmp_path, monkeypatch)
@@ -808,7 +841,7 @@ class TestMakeS3Client:
         return mock_default_config.call_args[1]["max_pool_connections"]
 
     @patch("deadline.client.api._session.get_default_client_config")
-    @patch("deadline.client.job_bundle.repository.config_file")
+    @patch("deadline.client.job_bundle._repository.config_file")
     def test_pool_uses_larger_configured_setting(self, mock_config_file, mock_default_config):
         mock_config_file.get_setting.return_value = "50"
         session = MagicMock()
@@ -817,7 +850,7 @@ class TestMakeS3Client:
         session.client.assert_called_once()
 
     @patch("deadline.client.api._session.get_default_client_config")
-    @patch("deadline.client.job_bundle.repository.config_file")
+    @patch("deadline.client.job_bundle._repository.config_file")
     def test_pool_covers_prefetch_workers_when_setting_is_small(
         self, mock_config_file, mock_default_config
     ):
@@ -826,7 +859,7 @@ class TestMakeS3Client:
         assert self._pool(mock_default_config) == PREVIEW_PREFETCH_MAX_WORKERS
 
     @patch("deadline.client.api._session.get_default_client_config")
-    @patch("deadline.client.job_bundle.repository.config_file")
+    @patch("deadline.client.job_bundle._repository.config_file")
     def test_pool_falls_back_when_setting_unparseable(self, mock_config_file, mock_default_config):
         mock_config_file.get_setting.return_value = "not-a-number"
         _make_s3_client(MagicMock())
@@ -907,12 +940,20 @@ class TestPrefetchPreviews:
         assert info.name == "Blender"
         assert info.size_bytes == 4096
 
-    def test_get_bundle_size_reuses_prefetched_head(self):
+    def test_get_bundle_size_uses_live_head_not_cache(self):
+        """Size must not trust the prefetch cache: a stale cached ContentLength
+        would size the download against an object that may have been overwritten
+        on the queue while the dialog is open."""
         repo = self._make_repo()
         key = f"{repo._prefix}blender.ojd"
         repo._head_cache[key] = {"ETag": '"e1"', "ContentLength": 9999, "Metadata": {}}
-        assert repo.get_bundle_size(f"s3://test-bucket/{key}") == 9999
-        repo._s3.head_object.assert_not_called()
+        repo._s3.head_object.return_value = {
+            "ETag": '"live"',
+            "ContentLength": 42,
+            "Metadata": {},
+        }
+        assert repo.get_bundle_size(f"s3://test-bucket/{key}") == 42
+        repo._s3.head_object.assert_called_once()
 
 
 class TestArchiveBundleDir:
@@ -1016,7 +1057,7 @@ class TestFromConfig:
     @patch("deadline.client.api.get_queue_user_boto3_session")
     @patch("deadline.client.api.get_boto3_client")
     @patch("deadline.client.api.get_boto3_session")
-    @patch("deadline.client.job_bundle.repository.config_file")
+    @patch("deadline.client.job_bundle._repository.config_file")
     def test_creates_repo_with_correct_bucket_and_prefix(
         self, mock_config_file, mock_get_session, mock_get_client, mock_get_queue_session
     ):
@@ -1049,7 +1090,7 @@ class TestFromConfig:
             farmId="farm-123", queueId="queue-456"
         )
 
-    @patch("deadline.client.job_bundle.repository.config_file")
+    @patch("deadline.client.job_bundle._repository.config_file")
     def test_raises_without_farm_or_queue(self, mock_config_file):
         """from_config raises when farm/queue IDs are not configured."""
         mock_config_file.get_setting.return_value = ""
@@ -1059,7 +1100,7 @@ class TestFromConfig:
     @patch("deadline.client.api.get_queue_user_boto3_session")
     @patch("deadline.client.api.get_boto3_client")
     @patch("deadline.client.api.get_boto3_session")
-    @patch("deadline.client.job_bundle.repository.config_file")
+    @patch("deadline.client.job_bundle._repository.config_file")
     def test_raises_without_attachment_settings(
         self, mock_config_file, mock_get_session, mock_get_client, mock_get_queue_session
     ):
@@ -1238,7 +1279,7 @@ class TestArchiveExtractionSafety:
 
     def _ample_disk(self):
         return patch(
-            "deadline.client.job_bundle.repository.shutil.disk_usage",
+            "deadline.client.job_bundle._repository.shutil.disk_usage",
             return_value=MagicMock(free=100 * 1024**3),
         )
 
@@ -1269,7 +1310,7 @@ class TestArchiveExtractionSafety:
         # Low ratio (passes bomb check) but larger than the free space available.
         zf = self._fake_zip([(100 * 1024 * 1024, 60 * 1024 * 1024)])
         with patch(
-            "deadline.client.job_bundle.repository.shutil.disk_usage",
+            "deadline.client.job_bundle._repository.shutil.disk_usage",
             return_value=MagicMock(free=1024),  # only 1 KB free
         ):
             with pytest.raises(ValueError, match="disk space"):
@@ -1283,7 +1324,7 @@ class TestArchiveExtractionSafety:
             zf.writestr("payload.bin", b"\x00" * (2 * 1024 * 1024))  # 2 MB of zeros
         dest = tmp_path / "out"
         dest.mkdir()
-        with patch("deadline.client.job_bundle.repository.MAX_ARCHIVE_UNCOMPRESSED_FLOOR", 1024):
+        with patch("deadline.client.job_bundle._repository.MAX_ARCHIVE_UNCOMPRESSED_FLOOR", 1024):
             with zipfile.ZipFile(archive, "r") as zf:
                 with pytest.raises(ValueError, match="zip bomb"):
                     _safe_zip_extract(zf, str(dest))
@@ -1296,7 +1337,7 @@ class TestTemplateReadCap:
         archive = tmp_path / "b.ojd"
         with zipfile.ZipFile(archive, "w") as zf:
             zf.writestr("template.yaml", "name: T\nsteps: []\n")
-        with patch("deadline.client.job_bundle.repository.MAX_TEMPLATE_BYTES", 5):
+        with patch("deadline.client.job_bundle._repository.MAX_TEMPLATE_BYTES", 5):
             # read_template_from_archive swallows the error and returns None.
             assert read_template_from_archive(str(archive)) is None
 
@@ -1315,7 +1356,7 @@ class TestDownloadSink:
 
     def test_small_download_stays_in_memory(self, tmp_path):
         with patch(
-            "deadline.client.job_bundle.repository.get_bundle_cache_dir",
+            "deadline.client.job_bundle._repository.get_bundle_cache_dir",
             return_value=str(tmp_path),
         ):
             sink = _open_download_sink(1024)
@@ -1327,7 +1368,7 @@ class TestDownloadSink:
     def test_large_download_spills_to_temp_file_in_cache_dir(self, tmp_path):
         cache = tmp_path / "cache"
         with patch(
-            "deadline.client.job_bundle.repository.get_bundle_cache_dir",
+            "deadline.client.job_bundle._repository.get_bundle_cache_dir",
             return_value=str(cache),
         ):
             sink = _open_download_sink(_DOWNLOAD_SPOOL_THRESHOLD + 1)
@@ -1343,7 +1384,7 @@ class TestDownloadSink:
     def test_zero_size_hint_stays_in_memory(self, tmp_path):
         # Unknown size (no ContentLength) must not force a temp file.
         with patch(
-            "deadline.client.job_bundle.repository.get_bundle_cache_dir",
+            "deadline.client.job_bundle._repository.get_bundle_cache_dir",
             return_value=str(tmp_path),
         ):
             sink = _open_download_sink(0)
@@ -1532,7 +1573,8 @@ class TestBuildBundleMetadata:
                     ],
                 },
                 allow_unicode=True,
-            )
+            ),
+            encoding="utf-8",
         )
 
         metadata = build_bundle_metadata(str(bundle))
@@ -1549,6 +1591,34 @@ class TestBuildBundleMetadata:
         assert info.step_names == ["描画ステップ"]
         assert info.parameters[0]["name"] == "出力先"
         assert info.parameters[0]["type"] == "PATH"
+
+    def test_control_chars_are_collapsed_for_header_safety(self, tmp_path):
+        """Control chars (CR/LF/TAB) in name/steps/params would otherwise land
+        verbatim in an x-amz-meta-* header and make urllib3 reject the upload
+        (or, on older urllib3, allow header injection). They must be collapsed."""
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text(
+            yaml.dump(
+                {
+                    "name": "render\njob",
+                    "description": "line1\nline2",
+                    "steps": [{"name": "step\r\none"}],
+                    "parameterDefinitions": [{"name": "pa\tram", "type": "STRING"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        metadata = build_bundle_metadata(str(bundle))
+
+        # No metadata value may contain a raw control whitespace char.
+        for key, value in metadata.items():
+            assert "\n" not in value, (key, value)
+            assert "\r" not in value, (key, value)
+            assert "\t" not in value, (key, value)
+        # The newline in the name collapses to a single space.
+        assert metadata[METADATA_KEY_NAME] == "render job"
 
     def test_large_non_ascii_bundle_stays_within_total_budget(self, tmp_path):
         """base64 encoding expands non-ASCII ~4/3 (+12B wrapper per field), so verify
@@ -1570,7 +1640,8 @@ class TestBuildBundleMetadata:
                     ],
                 },
                 allow_unicode=True,
-            )
+            ),
+            encoding="utf-8",
         )
 
         metadata = build_bundle_metadata(str(bundle))
@@ -1776,7 +1847,8 @@ class TestGetBundleCacheDir:
         bundle = tmp_path / "bundle"
         bundle.mkdir()
         (bundle / "template.yaml").write_text(
-            yaml.dump({"name": "日本語テスト" * 50, "steps": []}, allow_unicode=True)
+            yaml.dump({"name": "日本語テスト" * 50, "steps": []}, allow_unicode=True),
+            encoding="utf-8",
         )
 
         metadata = build_bundle_metadata(str(bundle))
@@ -1810,3 +1882,130 @@ class TestGetBundleCacheDir:
         assert total <= S3_METADATA_TOTAL_BUDGET
         # Name should be truncated (fixture has 300-char name)
         assert metadata["ojd-name"].endswith("...")
+
+
+class TestCacheKeyTraversal:
+    """A crafted bundle name must never let the per-bundle cache dir escape the
+    cache root (which would let extraction/rmtree hit the whole cache)."""
+
+    def _assert_under_root(self, key: str):
+        root = os.path.realpath(get_bundle_cache_dir())
+        resolved = os.path.realpath(os.path.join(get_bundle_cache_dir(), key))
+        # Must be a *strict* descendant of the cache root, never the root itself
+        # (which is what "<hash>/.." used to normalize to).
+        assert resolved != root
+        assert os.path.commonpath([resolved, root]) == root
+        assert ".." not in key.replace("\\", "/").split("/")
+
+    @pytest.mark.parametrize(
+        "s3_key",
+        [
+            "prefix/job-bundles/...ojd",  # strips to ".."
+            "prefix/job-bundles/..ojd",  # strips to "."
+            "prefix/job-bundles/../evil.ojd",
+            "prefix/job-bundles/normal.ojd",
+        ],
+    )
+    def test_cache_key_stays_under_root(self, s3_key):
+        self._assert_under_root(_cache_key("bucket", s3_key))
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/tmp/bundles/...ojd",
+            "/tmp/bundles/..ojd",
+            "/tmp/bundles/normal.ojd",
+        ],
+    )
+    def test_local_cache_key_stays_under_root(self, path):
+        self._assert_under_root(_local_cache_key(path))
+
+
+class TestBundleExists:
+    """bundle_exists must fail closed: only a 404 means "absent"."""
+
+    def _repo(self):
+        repo = MagicMock(spec=S3BundleRepository)
+        repo._s3 = MagicMock()
+        repo._bucket = "bucket"
+        repo._prefix = "prefix/job-bundles/"
+        return repo
+
+    def test_returns_true_when_present(self):
+        repo = self._repo()
+        assert S3BundleRepository.bundle_exists(repo, "render") is True
+
+    def test_returns_false_on_404(self):
+        repo = self._repo()
+        repo._s3.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        assert S3BundleRepository.bundle_exists(repo, "render") is False
+
+    def test_reraises_on_access_denied(self):
+        repo = self._repo()
+        repo._s3.head_object.side_effect = ClientError(
+            {"Error": {"Code": "AccessDenied"}}, "HeadObject"
+        )
+        with pytest.raises(ClientError):
+            S3BundleRepository.bundle_exists(repo, "render")
+
+    def test_reraises_on_throttle(self):
+        repo = self._repo()
+        repo._s3.head_object.side_effect = ClientError(
+            {"Error": {"Code": "SlowDown"}}, "HeadObject"
+        )
+        with pytest.raises(ClientError):
+            S3BundleRepository.bundle_exists(repo, "render")
+
+
+class TestHeadObjectCache:
+    """The prefetch head cache is preview-only; correctness paths must go live."""
+
+    def _repo(self):
+        repo = MagicMock(spec=S3BundleRepository)
+        repo._s3 = MagicMock()
+        repo._bucket = "bucket"
+        repo._head_cache = {"k": {"ContentLength": 999, "ETag": "stale"}}
+        repo._s3.head_object.return_value = {"ContentLength": 5, "ETag": "live"}
+        return repo
+
+    def test_preview_uses_cache(self):
+        repo = self._repo()
+        result = S3BundleRepository._head_object(repo, "k")
+        assert result["ETag"] == "stale"
+        repo._s3.head_object.assert_not_called()
+
+    def test_live_bypasses_cache(self):
+        repo = self._repo()
+        result = S3BundleRepository._head_object(repo, "k", use_cache=False)
+        assert result["ETag"] == "live"
+        repo._s3.head_object.assert_called_once_with(Bucket="bucket", Key="k")
+
+
+class TestVisibilityKeying:
+    """Hidden state is keyed by the bundle's path relative to the queue prefix,
+    so same-named bundles in different subfolders don't collide."""
+
+    def _make_repo(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "deadline.client.job_bundle._repository.get_bundle_cache_dir",
+            lambda: str(tmp_path / "cache"),
+        )
+        with patch("boto3.Session"):
+            repo = S3BundleRepository("test-bucket", "DeadlineCloud", session=MagicMock())
+        repo._s3 = MagicMock()
+        return repo
+
+    def test_visibility_key_is_prefix_relative(self, tmp_path, monkeypatch):
+        repo = self._make_repo(tmp_path, monkeypatch)
+        base = "s3://test-bucket/DeadlineCloud/job-bundles/"
+        assert repo.visibility_key(base + "blender.ojd") == "blender"
+        assert repo.visibility_key(base + "maya/render.ojd") == "maya/render"
+        assert repo.visibility_key(base + "nuke/render.ojd") == "nuke/render"
+
+    def test_same_name_different_folders_are_independent(self, tmp_path, monkeypatch):
+        repo = self._make_repo(tmp_path, monkeypatch)
+        base = "s3://test-bucket/DeadlineCloud/job-bundles/"
+        repo.set_bundle_visibility(repo.visibility_key(base + "maya/render.ojd"), hidden=True)
+        hidden = repo.get_hidden_set()
+        assert "maya/render" in hidden
+        assert "nuke/render" not in hidden

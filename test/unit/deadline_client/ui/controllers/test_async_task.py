@@ -268,6 +268,26 @@ class TestAsyncTask:
 
         signals.result.emit.assert_not_called()
 
+    def test_safe_emit_swallows_deleted_source(self):
+        """A deleted signal source is swallowed (nothing is listening)."""
+        task = AsyncTask(Mock())
+        signals = Mock()
+        signals.result.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = signals
+
+        task._safe_emit("result", "value")  # must not raise
+
+    def test_safe_emit_reraises_real_slot_error(self):
+        """A RuntimeError from a slot body (DirectConnection runs slots inside
+        emit()) must surface rather than be downgraded to a debug log."""
+        task = AsyncTask(Mock())
+        signals = Mock()
+        signals.result.emit.side_effect = RuntimeError("boom in slot")
+        task.signals = signals
+
+        with pytest.raises(RuntimeError, match="boom in slot"):
+            task._safe_emit("result", "value")
+
 
 class TestStreamingAsyncTask:
     """Tests for StreamingAsyncTask, the progressive-result variant of AsyncTask."""

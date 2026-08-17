@@ -31,7 +31,7 @@ from ..job_bundle.loader import (
     validate_directory_symlink_containment,
 )
 from ..job_bundle.saver import save_yaml_or_json_to_file
-from ..job_bundle.repository import S3BundleRepository
+from ..job_bundle._repository import S3BundleRepository as _S3BundleRepository
 from ..job_bundle.parameters import (
     JobParameter,
     apply_job_parameters,
@@ -210,7 +210,7 @@ def show_job_bundle_submitter(
                 try:
                     from concurrent.futures import ThreadPoolExecutor
 
-                    repo = S3BundleRepository.from_config()
+                    repo = _S3BundleRepository.from_config()
                     with ThreadPoolExecutor(max_workers=2) as ex:
                         entries_f = ex.submit(repo.list_entries, repo.root_path())
                         hidden_f = ex.submit(repo.get_hidden_set)

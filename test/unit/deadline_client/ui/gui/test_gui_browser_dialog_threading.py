@@ -27,7 +27,7 @@ class TestResolveSelectionThreading:
             calls["size_thread"] = threading.get_ident()
             return 4096
 
-        def _download(path, dest, progress_callback=None):
+        def _download(path, progress_callback=None):
             calls["download_thread"] = threading.get_ident()
             if progress_callback:
                 progress_callback(4096)

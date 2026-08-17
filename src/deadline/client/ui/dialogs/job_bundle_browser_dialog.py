@@ -7,6 +7,7 @@ Shows a navigable tree of directories/bundles with a preview panel.
 
 from __future__ import annotations
 
+import html
 import os
 import re
 import subprocess
@@ -44,12 +45,12 @@ from qtpy.QtWidgets import (  # type: ignore
 )
 
 from .._utils import tr, warning_banner_qss
-from ..widgets.expandable_section import ExpandableSection
-from ...job_bundle.repository import (
-    BrowseEntry,
-    BundleRepository,
-    LocalBundleRepository,
-    S3BundleRepository,
+from ..widgets.expandable_section import ExpandableSection as _ExpandableSection
+from ...job_bundle._repository import (
+    BrowseEntry as _BrowseEntry,
+    BundleRepository as _BundleRepository,
+    LocalBundleRepository as _LocalBundleRepository,
+    S3BundleRepository as _S3BundleRepository,
 )
 
 logger = getLogger(__name__)
@@ -164,7 +165,7 @@ class JobBundleBrowserDialog(QDialog):
     def __init__(
         self,
         *,
-        queue_source: Optional[S3BundleRepository] = None,
+        queue_source: Optional[_S3BundleRepository] = None,
         queue_error: str = "",
         queue_loading: bool = False,
         local_source: str = "",
@@ -176,28 +177,37 @@ class JobBundleBrowserDialog(QDialog):
         self.setMinimumSize(750, 550)
         self.resize(850, 620)
 
-        self._s3_repo: Optional[S3BundleRepository] = queue_source
+        self._s3_repo: Optional[_S3BundleRepository] = queue_source
         self._s3_error = queue_error
         self._s3_available = self._s3_repo is not None
         self._s3_loading = queue_loading
 
-        self._local_repo = LocalBundleRepository(root=local_source, include_archives=True)
+        self._local_repo = _LocalBundleRepository(root=local_source, include_archives=True)
 
-        self._history_repo: Optional[LocalBundleRepository] = None
+        self._history_repo: Optional[_LocalBundleRepository] = None
         if history_source and os.path.isdir(history_source):
-            self._history_repo = LocalBundleRepository(root=history_source, include_archives=True)
+            self._history_repo = _LocalBundleRepository(root=history_source, include_archives=True)
 
-        self._current_repo: BundleRepository = self._local_repo
+        self._current_repo: _BundleRepository = self._local_repo
         self._selected_path: Optional[str] = None
         self._selected_is_s3 = False
         self._selected_is_archive = False
-        self._cached_root_entries: list[BrowseEntry] = []
+        self._cached_root_entries: list[_BrowseEntry] = []
         self._hidden_set: set[str] = set()
         self._last_preview_path: Optional[str] = None
         self._tree_states: dict[str, set[str]] = {}  # repo root -> expanded paths
         self._tree_selections: dict[str, str] = {}  # repo root -> selected path
         self._s3_refresh_worker: Optional[QThread] = None
         self._prefetch_worker: Optional[QThread] = None
+        self._prefetch_cancelled = False
+        # Background preview loads (Queue source). Tracked so they're joined on
+        # teardown (a GC'd running QThread aborts the process) and staleness-
+        # guarded via ``_preview_request_path`` so a superseded result is ignored.
+        self._preview_workers: set = set()
+        self._preview_request_path: Optional[str] = None
+        # Background first-level preloads (Queue source): list top-level folders'
+        # children off the UI thread, then apply on the main thread.
+        self._preload_workers: set = set()
         self._ready = False
 
         self._build_ui()
@@ -223,7 +233,7 @@ class JobBundleBrowserDialog(QDialog):
         return self._selected_is_archive
 
     @property
-    def s3_repo(self) -> Optional[S3BundleRepository]:
+    def s3_repo(self) -> Optional[_S3BundleRepository]:
         return self._s3_repo
 
     def set_queue_source(self, repo, error: str, entries: list = None, hidden_set: set = None):
@@ -255,6 +265,26 @@ class JobBundleBrowserDialog(QDialog):
                 self._populate_tree_from_cache()
             else:
                 self._populate_root()
+
+    def done(self, result: int) -> None:
+        """Join background workers before the dialog is torn down.
+
+        Both accept() and reject() (including the window-close/Esc paths, which
+        QDialog routes through reject()) call ``done``. Dropping the last
+        reference to a still-running ``QThread`` makes Qt call ``std::terminate``
+        (SIGABRT), which hard-aborts the host application (e.g. Maya/Nuke). This
+        also closes the window where ``resolve_selection``'s download races the
+        preview prefetch on the repo's shared HEAD cache.
+        """
+        self._prefetch_cancelled = True
+        for worker in (self._s3_refresh_worker, self._prefetch_worker):
+            if worker is not None:
+                worker.wait()
+        for worker in list(self._preview_workers):
+            worker.wait()
+        for worker in list(self._preload_workers):
+            worker.wait()
+        super().done(result)
 
     def resolve_selection(self) -> Optional[str]:
         """Resolve the selected bundle to a local directory path.
@@ -312,9 +342,7 @@ class JobBundleBrowserDialog(QDialog):
                             self._sent += n
                             self.progress.emit(self._sent // 1024)
 
-                        result = self._repo.download_full_bundle(
-                            self._path, "", progress_callback=_cb
-                        )
+                        result = self._repo.download_full_bundle(self._path, progress_callback=_cb)
                         self.done.emit(result)
                     except _DownloadCancelled:
                         # User cancelled — nothing to report; the main thread
@@ -389,8 +417,18 @@ class JobBundleBrowserDialog(QDialog):
             worker.start()
             progress.exec_()
 
+            if download_error:
+                # A real failure (AccessDenied, corrupt/non-zip .ojd, rejected
+                # zip bomb, full disk). Surface it instead of silently returning
+                # None, which the callers treat as "user changed their mind" and
+                # would loop on forever.
+                worker.wait()
+                self._s3_repo.clear_cache_for(self._selected_path)
+                self._show_error_preview(f"Failed to download bundle:\n{download_error[0]}")
+                return None
+
             if not download_result[0]:
-                # Cancelled or error — stop the worker cooperatively (the flag is
+                # User cancelled — stop the worker cooperatively (the flag is
                 # checked in the download callback) and wait for it to unwind so
                 # the boto3 client/socket close cleanly, then remove partial cache.
                 worker.cancel()
@@ -403,7 +441,14 @@ class JobBundleBrowserDialog(QDialog):
         elif self._selected_is_archive:
             QApplication.setOverrideCursor(Qt.WaitCursor)
             try:
-                return self._local_repo.extract_bundle(self._selected_path, "")
+                return self._local_repo.extract_bundle(self._selected_path)
+            except Exception as e:
+                # extract_bundle raises ValueError for a corrupt/renamed .ojd or a
+                # rejected zip bomb; surface it rather than letting it propagate
+                # out of the Qt slot with the wait cursor still pushed.
+                logger.warning("Failed to open bundle %s: %s", self._selected_path, e)
+                self._show_error_preview(f"Failed to open bundle:\n{e}")
+                return None
             finally:
                 QApplication.restoreOverrideCursor()
         else:
@@ -446,7 +491,7 @@ class JobBundleBrowserDialog(QDialog):
         self._queue_warning.setStyleSheet(warning_banner_qss(self))
         if not self._s3_available and self._s3_error:
             self._queue_warning.setText(
-                f"\u26a0 <b>Queue browsing unavailable:</b> {self._s3_error}"
+                f"\u26a0 <b>Queue browsing unavailable:</b> {html.escape(self._s3_error)}"
             )
             self._queue_warning.setTextFormat(Qt.RichText)
             self._queue_warning.setVisible(True)
@@ -597,7 +642,7 @@ class JobBundleBrowserDialog(QDialog):
         preview_layout.addSpacing(12)
 
         # Description — expandable, default expanded.
-        self._desc_section = ExpandableSection(expanded=True, disable_content_paddings=True)
+        self._desc_section = _ExpandableSection(expanded=True, disable_content_paddings=True)
         self._desc_section.set_header_style(f"{_SECTION_LABEL_QSS} {muted_qss}")
         self._preview_desc = _WrappingLabel()
         self._preview_desc.setWordWrap(True)
@@ -616,7 +661,7 @@ class JobBundleBrowserDialog(QDialog):
         # commonly inspected detail before submitting.
         # Content paddings are disabled here; the table is indented via its own
         # stylesheet margin (see below) to avoid a double indent.
-        self._params_section = ExpandableSection(expanded=True, disable_content_paddings=True)
+        self._params_section = _ExpandableSection(expanded=True, disable_content_paddings=True)
         self._params_section.set_header_style(f"{_SECTION_LABEL_QSS} {muted_qss}")
         self._preview_params = QTableWidget()
         self._preview_params.setColumnCount(3)
@@ -665,7 +710,7 @@ class JobBundleBrowserDialog(QDialog):
         preview_layout.addWidget(self._params_section)
 
         preview_layout.addSpacing(8)
-        self._steps_section = ExpandableSection(expanded=True, disable_content_paddings=True)
+        self._steps_section = _ExpandableSection(expanded=True, disable_content_paddings=True)
         self._steps_section.set_header_style(f"{_SECTION_LABEL_QSS} {muted_qss}")
         self._preview_steps = QLabel()
         self._preview_steps.setWordWrap(True)
@@ -834,11 +879,13 @@ class JobBundleBrowserDialog(QDialog):
             prev.wait()
 
         repo = self._s3_repo
+        self._prefetch_cancelled = False
+        should_cancel = lambda: self._prefetch_cancelled  # noqa: E731
 
         class _PrefetchWorker(QThread):
             def run(self):
                 try:
-                    repo.prefetch_previews()
+                    repo.prefetch_previews(should_cancel=should_cancel)
                 except Exception:
                     # Prefetch is a pure optimization — never surface its failures;
                     # previews fall back to an on-demand HEAD.
@@ -886,7 +933,7 @@ class JobBundleBrowserDialog(QDialog):
 
         # Fetch S3 hidden set for Queue source
         self._hidden_set = set()
-        if isinstance(self._current_repo, S3BundleRepository):
+        if isinstance(self._current_repo, _S3BundleRepository):
             try:
                 self._hidden_set = self._current_repo.get_hidden_set()
             except Exception:
@@ -897,7 +944,7 @@ class JobBundleBrowserDialog(QDialog):
 
         root = self._model.invisibleRootItem()
         for entry in self._cached_root_entries:
-            is_hidden = entry.name.startswith(".") or entry.name in self._hidden_set
+            is_hidden = self._entry_hidden(entry)
             self._add_entry_item(root, entry, is_hidden=is_hidden)
 
         self._preload_first_level()
@@ -910,10 +957,26 @@ class JobBundleBrowserDialog(QDialog):
         self._path_display.setText(self._current_repo.root_path())
         root = self._model.invisibleRootItem()
         for entry in self._cached_root_entries:
-            is_hidden = entry.name.startswith(".") or entry.name in self._hidden_set
+            is_hidden = self._entry_hidden(entry)
             self._add_entry_item(root, entry, is_hidden=is_hidden)
         self._preload_first_level()
         self._update_tree_empty_state()
+
+    def _entry_hidden(self, entry) -> bool:
+        """Whether an entry should be treated as hidden (dimmed/filtered).
+
+        Dot-prefixed names are always hidden. Otherwise membership is by the
+        queue's prefix-relative visibility key (so ``maya/render`` and
+        ``nuke/render`` are distinct); the hidden set is only populated for the
+        Queue source.
+        """
+        if entry.name.startswith("."):
+            return True
+        if not self._hidden_set:
+            return False
+        if isinstance(self._current_repo, _S3BundleRepository):
+            return self._current_repo.visibility_key(entry.path) in self._hidden_set
+        return entry.name in self._hidden_set
 
     def _apply_hidden_style(self, item: QStandardItem, hidden: bool) -> None:
         """Apply (or clear) the dimmed styling that marks a hidden bundle.
@@ -928,7 +991,7 @@ class JobBundleBrowserDialog(QDialog):
             item.setData(None, Qt.ForegroundRole)
 
     def _add_entry_item(
-        self, parent_item: QStandardItem, entry: BrowseEntry, *, is_hidden: bool = False
+        self, parent_item: QStandardItem, entry: _BrowseEntry, *, is_hidden: bool = False
     ):
         item = QStandardItem(self._entry_display(entry))
         item.setData(entry.path, ROLE_PATH)
@@ -945,7 +1008,7 @@ class JobBundleBrowserDialog(QDialog):
         parent_item.appendRow(item)
 
     @staticmethod
-    def _entry_display(entry: BrowseEntry) -> str:
+    def _entry_display(entry: _BrowseEntry) -> str:
         icon = "\U0001f4e6" if entry.is_bundle else "\U0001f4c1"  # 📦 or 📁
         suffix = ".ojd" if entry.is_archive and not entry.path.startswith("s3://") else ""
         return f"{icon} {entry.name}{suffix}"
@@ -960,11 +1023,15 @@ class JobBundleBrowserDialog(QDialog):
     def _on_expanded(self, proxy_index: QModelIndex):
         self._load_children(self._source_item(proxy_index))
 
-    def _load_children(self, item) -> None:
+    def _load_children(self, item, entries=None) -> None:
         """Populate a folder item's real children, replacing its placeholder.
 
         Idempotent: a no-op for bundles or folders already loaded (so re-expanding,
         or expanding a folder whose children were preloaded, doesn't re-fetch).
+
+        ``entries`` may be supplied by a background preloader so the (potentially
+        network) listing happens off the UI thread; when ``None`` the listing is
+        done inline (cheap for local/history; a single user-driven expand for S3).
         """
         if not item or item.data(ROLE_IS_BUNDLE) or item.data(ROLE_LOADED):
             return
@@ -972,16 +1039,17 @@ class JobBundleBrowserDialog(QDialog):
         item.setData(True, ROLE_LOADED)
         item.removeRows(0, item.rowCount())
         path = item.data(ROLE_PATH)
-        try:
-            entries = self._current_repo.list_entries(path)
-        except Exception as e:
-            logger.warning("Failed to list bundles in %s: %s", path, e, exc_info=True)
-            error_item = QStandardItem(f"\u26a0 Error: {e}")
-            error_item.setEnabled(False)
-            item.appendRow(error_item)
-            return
+        if entries is None:
+            try:
+                entries = self._current_repo.list_entries(path)
+            except Exception as e:
+                logger.warning("Failed to list bundles in %s: %s", path, e, exc_info=True)
+                error_item = QStandardItem(f"\u26a0 Error: {e}")
+                error_item.setEnabled(False)
+                item.appendRow(error_item)
+                return
         for entry in _folders_first(entries):
-            is_hidden = entry.name.startswith(".") or entry.name in self._hidden_set
+            is_hidden = self._entry_hidden(entry)
             # If parent is hidden, children inherit hidden state
             if item.data(ROLE_IS_HIDDEN):
                 is_hidden = True
@@ -991,15 +1059,73 @@ class JobBundleBrowserDialog(QDialog):
         """Eagerly load the immediate children of each top-level folder.
 
         This lets the filter match one level below the root without the user first
-        expanding folders. Deeper levels stay lazy-loaded on expand. Kept to a
-        single level so the up-front cost (a directory read, or one S3 list per
-        top-level folder) stays bounded.
+        expanding folders. Deeper levels stay lazy-loaded on expand.
+
+        For Local/History the listing is a cheap disk read, done inline. For the
+        Queue source each listing is an S3 ``list_objects_v2``, so they are issued
+        in parallel on a worker thread and applied on the UI thread — never
+        blocking the event loop with N sequential round-trips (AGENTS.md: never
+        call AWS on the main Qt thread).
         """
         root = self._model.invisibleRootItem()
-        for row in range(root.rowCount()):
-            child = root.child(row)
-            if child is not None and not child.data(ROLE_IS_BUNDLE):
+        folder_items = [
+            root.child(row)
+            for row in range(root.rowCount())
+            if root.child(row) is not None and not root.child(row).data(ROLE_IS_BUNDLE)
+        ]
+        if not folder_items:
+            return
+
+        if not self._radio_s3.isChecked():
+            for child in folder_items:
                 self._load_children(child)
+            return
+
+        repo = self._current_repo
+        folder_paths = [it.data(ROLE_PATH) for it in folder_items]
+
+        class _PreloadWorker(QThread):
+            # NOTE: named ``done`` rather than ``finished`` to avoid shadowing
+            # QThread's built-in ``finished`` signal.
+            done = Signal(object)  # {folder_path: [BrowseEntry]}
+
+            def run(self):
+                from concurrent.futures import ThreadPoolExecutor
+
+                results: dict = {}
+                with ThreadPoolExecutor(max_workers=8) as ex:
+                    futs = {p: ex.submit(repo.list_entries, p) for p in folder_paths}
+                    for p, fut in futs.items():
+                        try:
+                            results[p] = fut.result()
+                        except Exception:
+                            logger.debug("Failed to preload children for %s", p, exc_info=True)
+                self.done.emit(results)
+
+        worker = _PreloadWorker()
+
+        def _on_done(children):
+            self._preload_workers.discard(worker)
+            # Ignore if the user switched away from the Queue source or the repo
+            # was swapped out while the listing was in flight.
+            if not self._radio_s3.isChecked() or self._current_repo is not repo:
+                return
+            self._apply_preloaded_children(children)
+
+        worker.done.connect(_on_done, Qt.QueuedConnection)
+        self._preload_workers.add(worker)
+        worker.start()
+
+    def _apply_preloaded_children(self, children: dict) -> None:
+        """Apply background-fetched first-level children to their folder items."""
+        root = self._model.invisibleRootItem()
+        for row in range(root.rowCount()):
+            item = root.child(row)
+            if item is None or item.data(ROLE_IS_BUNDLE):
+                continue
+            path = item.data(ROLE_PATH)
+            if path in children:
+                self._load_children(item, entries=children[path])
 
     def _on_clicked(self, proxy_index: QModelIndex):
         self._update_selection(proxy_index)
@@ -1021,7 +1147,9 @@ class JobBundleBrowserDialog(QDialog):
         surfaced instead of leaving the tree stuck on 'Loading...'.
         """
         self._s3_error = message
-        self._queue_warning.setText(f"\u26a0 <b>Queue browsing unavailable:</b> {message}")
+        self._queue_warning.setText(
+            f"\u26a0 <b>Queue browsing unavailable:</b> {html.escape(message)}"
+        )
         self._queue_warning.setTextFormat(Qt.RichText)
         self._queue_warning.setVisible(bool(message))
 
@@ -1172,7 +1300,7 @@ class JobBundleBrowserDialog(QDialog):
         self._clear_preview()
 
         # For S3, refresh in background to avoid blocking the UI
-        if isinstance(self._current_repo, S3BundleRepository):
+        if isinstance(self._current_repo, _S3BundleRepository):
             self._model.clear()
             self._model.setHorizontalHeaderLabels([tr("Name")])
             self._path_display.setText(self._current_repo.root_path())
@@ -1253,7 +1381,7 @@ class JobBundleBrowserDialog(QDialog):
 
     def _on_context_menu(self, position):
         """Show hide/unhide context menu for Queue source bundles."""
-        if not isinstance(self._current_repo, S3BundleRepository):
+        if not isinstance(self._current_repo, _S3BundleRepository):
             return
         proxy_index = self._tree.indexAt(position)
         if not proxy_index.isValid():
@@ -1264,9 +1392,9 @@ class JobBundleBrowserDialog(QDialog):
             return
 
         path = item.data(ROLE_PATH)
-        name = path.rsplit("/", 1)[-1]
-        if name.endswith(".ojd"):
-            name = name[:-4]
+        # Key by the prefix-relative path, not the bare leaf name, so hiding
+        # maya/render.ojd doesn't also hide nuke/render.ojd.
+        key = self._current_repo.visibility_key(path)
         is_hidden = bool(item.data(ROLE_IS_HIDDEN))
 
         menu = QMenu(self)
@@ -1280,13 +1408,13 @@ class JobBundleBrowserDialog(QDialog):
             return
 
         try:
-            self._current_repo.set_bundle_visibility(name, hidden=not is_hidden)
+            self._current_repo.set_bundle_visibility(key, hidden=not is_hidden)
             item.setData(not is_hidden, ROLE_IS_HIDDEN)
             self._apply_hidden_style(item, not is_hidden)
             if not is_hidden:
-                self._hidden_set.add(name)
+                self._hidden_set.add(key)
             else:
-                self._hidden_set.discard(name)
+                self._hidden_set.discard(key)
             self._proxy.invalidateFilter()
         except Exception as e:
             logger.warning("Failed to update visibility: %s", e, exc_info=True)
@@ -1298,14 +1426,55 @@ class JobBundleBrowserDialog(QDialog):
 
     def _load_preview(self, path: str, item: Optional[QStandardItem] = None):
         self._last_preview_path = path
-        try:
-            info = self._current_repo.get_bundle_info(path)
-        except Exception as e:
-            logger.warning("Failed to load bundle info for %s: %s", path, e, exc_info=True)
-            self._show_error_preview(f"Failed to load bundle info:\n{e}")
-            if item:
-                self._mark_item_error(item)
-            self._select_button.setEnabled(False)
+        self._preview_request_path = path
+        repo = self._current_repo
+
+        # Local/History previews read the template from disk — cheap, so keep the
+        # common case synchronous.
+        if not self._radio_s3.isChecked():
+            try:
+                info = repo.get_bundle_info(path)
+            except Exception as e:
+                self._on_preview_error(path, str(e), item)
+                return
+            self._on_preview_ready(path, info, item)
+            return
+
+        # Queue previews may issue a HEAD or, for objects with no ojd-* metadata,
+        # download and extract the whole archive. Never do that on the Qt main
+        # thread (AGENTS.md); run it on a worker and render from the result.
+        self._show_loading_preview()
+
+        class _PreviewWorker(QThread):
+            # NOTE: named ``done`` rather than ``finished`` to avoid shadowing
+            # QThread's built-in ``finished`` signal.
+            done = Signal(object)
+            error = Signal(str)
+
+            def run(self):
+                try:
+                    self.done.emit(repo.get_bundle_info(path))
+                except Exception as e:
+                    self.error.emit(str(e))
+
+        worker = _PreviewWorker()
+
+        def _on_done(info):
+            self._on_preview_ready(path, info, item)
+            self._preview_workers.discard(worker)
+
+        def _on_error(msg):
+            self._on_preview_error(path, msg, item)
+            self._preview_workers.discard(worker)
+
+        worker.done.connect(_on_done, Qt.QueuedConnection)
+        worker.error.connect(_on_error, Qt.QueuedConnection)
+        self._preview_workers.add(worker)
+        worker.start()
+
+    def _on_preview_ready(self, path: str, info, item: Optional[QStandardItem]):
+        # Ignore results for a selection the user has already moved past.
+        if self._preview_request_path != path:
             return
         if not info:
             self._show_error_preview(
@@ -1315,12 +1484,40 @@ class JobBundleBrowserDialog(QDialog):
                 self._mark_item_error(item)
             self._select_button.setEnabled(False)
             return
+        self._render_preview(info)
 
+    def _on_preview_error(self, path: str, message: str, item: Optional[QStandardItem]):
+        if self._preview_request_path != path:
+            return
+        logger.warning("Failed to load bundle info for %s: %s", path, message)
+        self._show_error_preview(f"Failed to load bundle info:\n{message}")
+        if item:
+            self._mark_item_error(item)
+        self._select_button.setEnabled(False)
+
+    def _show_loading_preview(self):
+        """Show a lightweight 'loading' state while a Queue preview resolves."""
         self._preview_stack.setCurrentIndex(1)  # show detail page
-        # A real bundle is previewed — offer to open it. Queue bundles are fetched
-        # over the network, so label it "Download bundle" and show the size (from
-        # the preview's head_object) so the user sees how much will transfer.
-        # Local/History bundles open in place, so label it "Open bundle" (no size).
+        self._download_button.setVisible(False)
+        self._preview_name.setText("Loading preview\u2026")
+        self._preview_name.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self._preview_name.setVisible(True)
+        self._preview_subline.setVisible(False)
+        self._desc_section.setVisible(False)
+        self._preview_desc.setVisible(False)
+        self._steps_section.setVisible(False)
+        self._preview_steps.setVisible(False)
+        self._params_section.setVisible(False)
+        self._preview_params.setVisible(False)
+
+    def _render_preview(self, info):
+        self._preview_stack.setCurrentIndex(1)  # show detail page
+        # A real bundle is previewed — offer to reveal/fetch it. Queue bundles are
+        # fetched over the network, so label it "Download bundle" and show the size
+        # (from the preview's head_object) so the user sees how much will transfer.
+        # Local/History bundles just open the containing folder in the OS file
+        # manager, so label it "Show bundle folder" (not "Open", which reads like
+        # loading the bundle into the submitter).
         self._download_button.setVisible(True)
         if self._radio_s3.isChecked():
             if info.size_bytes:
@@ -1330,7 +1527,7 @@ class JobBundleBrowserDialog(QDialog):
             else:
                 self._download_button.setText(tr("Download bundle"))
         else:
-            self._download_button.setText(tr("Open bundle"))
+            self._download_button.setText(tr("Show bundle folder"))
         # Plain text (see label setup): the name is shown literally, so crafted
         # metadata markup is inert without needing to escape it.
         self._preview_name.setText(info.name)

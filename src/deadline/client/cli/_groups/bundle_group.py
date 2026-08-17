@@ -24,7 +24,7 @@ from ...api._monitor_urls import _get_job_monitor_url
 from ...config import config_file
 from ...dataclasses import SubmitterInfo
 from ...job_bundle.loader import is_job_bundle_dir
-from ...job_bundle.repository import (
+from ...job_bundle._repository import (
     BundleRepository,
     LocalBundleRepository,
     S3BundleRepository,
@@ -628,9 +628,9 @@ def _get_queue_s3_settings(config):
 @click.option("--queue-id", help="The queue to use.")
 @click.option(
     "--output",
-    type=click.Choice(["text", "json"], case_sensitive=False),
-    default="text",
-    help="Output format. TEXT prints one name per line, JSON prints full details.",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @_handle_error
 def bundle_list(path, use_queue, show_hidden, no_archives, output, **args):
@@ -643,6 +643,7 @@ def bundle_list(path, use_queue, show_hidden, no_archives, output, **args):
     With PATH, lists bundles in that local directory.
     With --queue, lists bundles shared on the queue.
     """
+    output = _resolve_output_format(output)
 
     hidden_set: set[str] = set()
     if use_queue:
@@ -692,8 +693,13 @@ def bundle_list(path, use_queue, show_hidden, no_archives, output, **args):
     "--name",
     help="Name for the shared archive on the queue. Defaults to the bundle directory name.",
 )
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Overwrite an existing shared bundle without prompting (for non-interactive use).",
+)
 @_handle_error
-def bundle_upload(job_bundle_dir, name, **args):
+def bundle_upload(job_bundle_dir, name, yes, **args):
     """
     Upload a job bundle to share on the queue as an .ojd archive.
     """
@@ -749,7 +755,9 @@ def bundle_upload(job_bundle_dir, name, **args):
     # Check if bundle already exists
     try:
         s3.head_object(Bucket=s3_settings.s3BucketName, Key=s3_key)
-        if not click.confirm(f"Bundle '{bundle_name}' already exists on the queue. Overwrite?"):
+        if not yes and not click.confirm(
+            f"Bundle '{bundle_name}' already exists on the queue. Overwrite?"
+        ):
             click.echo("Upload canceled.")
             return
     except ClientError as e:
@@ -806,14 +814,31 @@ def bundle_upload(job_bundle_dir, name, **args):
     default=None,
     help="Local directory to copy the bundle to. If not specified, uses the local cache.",
 )
-@click.option("--output", default="text", help="Output format: text or json.")
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Overwrite the destination directory if it already exists (for non-interactive use).",
+)
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
+)
 @_handle_error
-def bundle_download(bundle_name, output_dir, output, **args):
+def bundle_download(bundle_name, output_dir, yes, output, **args):
     """
     Download a shared job bundle from the queue.
 
     BUNDLE_NAME is the name of the bundle (e.g. 'blender-render').
     """
+    output = _resolve_output_format(output)
+    # Validate the name up front so an unsafe name (e.g. "..") produces a clean
+    # error rather than a raw traceback from the local dest-path derivation.
+    try:
+        safe_bundle_name = sanitize_bundle_name(bundle_name)
+    except ValueError:
+        raise DeadlineOperationError(f"Bundle name '{bundle_name}' is not a valid bundle name.")
 
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
     repo = S3BundleRepository.from_config(config)
@@ -840,7 +865,11 @@ def bundle_download(bundle_name, output_dir, output, **args):
     # Get file size for progress bar
     file_size = repo.get_bundle_size(match.path)
 
-    # Download and extract are sequential inside download_full_bundle.
+    # Download and extract are sequential inside download_full_bundle. Show
+    # progress bars only in human (non-json) output — matching the convention in
+    # `job download-output` (`if not is_json_format:`) so machine-readable JSON on
+    # stdout is never interleaved with progress rendering.
+    show_progress = output != "json"
     _bars: dict = {}
 
     def _dl_callback(n):
@@ -865,10 +894,9 @@ def bundle_download(bundle_name, output_dir, output, **args):
 
     local_path = repo.download_full_bundle(
         match.path,
-        output_dir,
-        progress_callback=_dl_callback,
-        extract_callback=_ex_callback,
-        extract_size_callback=_ex_size_callback,
+        progress_callback=_dl_callback if show_progress else None,
+        extract_callback=_ex_callback if show_progress else None,
+        extract_size_callback=_ex_size_callback if show_progress else None,
     )
     if "dl" in _bars and "dl_closed" not in _bars:
         _bars["dl"].__exit__(None, None, None)
@@ -876,15 +904,43 @@ def bundle_download(bundle_name, output_dir, output, **args):
         _bars["ex"].__exit__(None, None, None)
     # download_full_bundle resolves to cache; copy to user's output_dir if specified
     if output_dir:
-        dest_path = os.path.join(output_dir, sanitize_bundle_name(bundle_name))
+        dest_path = os.path.join(output_dir, safe_bundle_name)
         if os.path.exists(dest_path):
-            shutil.rmtree(dest_path)
-        shutil.copytree(local_path, dest_path)
+            # Only ever recursively delete a path that is itself a job bundle
+            # (i.e. a prior download of this bundle). Refuse to clobber an
+            # arbitrary folder/file that merely collides with the bundle name,
+            # so a name matching an existing project directory can't be
+            # destroyed — even with --yes from a non-interactive caller.
+            if not is_job_bundle_dir(dest_path):
+                raise DeadlineOperationError(
+                    f"'{dest_path}' already exists and is not a job bundle. "
+                    "Choose a different name or output directory."
+                )
+            # Deleting the user's existing bundle is destructive, so require
+            # confirmation (or --yes for non-interactive callers) rather than
+            # clobbering it silently.
+            if not yes and not click.confirm(
+                f"'{dest_path}' already exists and will be overwritten. Continue?",
+                default=False,
+            ):
+                raise DeadlineOperationError(
+                    "Download canceled; pass --yes to overwrite the destination."
+                )
+        # Copy into a staging dir on the same filesystem, then swap into place
+        # only once the copy succeeds, so a failed copy (permissions, disk full)
+        # can't leave the user with neither the old nor the new bundle. The swap
+        # is a fast rename because staging lives under output_dir.
+        with tempfile.TemporaryDirectory(dir=output_dir) as staging:
+            staged = os.path.join(staging, safe_bundle_name)
+            shutil.copytree(local_path, staged)
+            if os.path.exists(dest_path):
+                shutil.rmtree(dest_path)
+            shutil.move(staged, dest_path)
         result_path = dest_path
     else:
         result_path = local_path
 
-    if output.lower() == "json":
+    if output == "json":
         click.echo(json.dumps({"path": result_path}))
     else:
         click.echo(f"Downloaded bundle to: {result_path}")
@@ -908,12 +964,24 @@ def bundle_hide(bundle_name, **args):
     config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
     repo = S3BundleRepository.from_config(config)
 
+    # Validate the name against the listing (like download/info) so a typo isn't
+    # silently persisted forever in the local visibility file.
+    entries = repo.list_entries(repo.root_path())
+    match = next((e for e in entries if e.name == bundle_name and e.is_bundle), None)
+    if not match:
+        available = [e.name for e in entries if e.is_bundle]
+        msg = f"Bundle '{bundle_name}' not found on queue."
+        if available:
+            msg += f"\nAvailable bundles: {', '.join(available)}"
+        raise DeadlineOperationError(msg)
+
+    key = repo.visibility_key(match.path)
     hidden_set = repo.get_hidden_set()
-    if bundle_name in hidden_set:
+    if key in hidden_set:
         click.echo(f"Bundle already hidden: {bundle_name}")
         return
 
-    repo.set_bundle_visibility(bundle_name, hidden=True)
+    repo.set_bundle_visibility(key, hidden=True)
     click.echo(f"Hidden bundle: {bundle_name}")
 
 
@@ -953,8 +1021,8 @@ def bundle_unhide(bundle_name, **args):
 @click.option(
     "--output",
     type=click.Choice(["verbose", "json"], case_sensitive=False),
-    default="verbose",
-    help="Output format.",
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
 )
 @click.option("--profile", help="The AWS profile to use.")
 @click.option("--farm-id", help="The farm to use.")
@@ -969,6 +1037,7 @@ def bundle_info(bundle_name, use_queue, output, **args):
     if the path doesn't exist, searches by name in the current directory and then
     the configured job bundle default directory.
     """
+    output = _resolve_output_format(output)
     if use_queue:
         config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
         repo: BundleRepository = S3BundleRepository.from_config(config)

@@ -122,10 +122,10 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
     },
     "upload_bundle": {
         "func": bundles.upload_bundle,
-        "param_names": ["job_bundle", "name", "farm_id", "queue_id"],
+        "param_names": ["job_bundle", "name", "farm_id", "queue_id", "overwrite"],
     },
     "download_bundle": {
         "func": bundles.download_bundle,
-        "param_names": ["bundle_name", "output_dir", "farm_id", "queue_id"],
+        "param_names": ["bundle_name", "output_dir", "farm_id", "queue_id", "overwrite"],
     },
 }
