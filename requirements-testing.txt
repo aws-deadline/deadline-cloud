@@ -17,7 +17,7 @@ pyinstrument == 5.*
 # MCP (Model Context Protocol) library for MCP unit tests
 mcp >= 1.13.0, < 2; python_version >= '3.10'
 # OpenJD model library for job template parsing in mock backend
-openjd-model >= 0.11.2
+openjd-model >= 0.11.3
 
 # GUI testing dependencies
 pytest-qt == 4.*
