@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from deadline.client.api._session import _ADAPTIVE_RETRIES_CLIENT_CONFIG
 from deadline.client.api._list_jobs_by_filter_expression import (
     JobFetchFailure,
     _list_jobs_by_filter_expression,
@@ -289,4 +290,9 @@ def test_list_jobs_by_filter_expression_passes_region(mock_boto3_session, region
             region=region,
         )
 
-    mock_get_session_client.assert_called_once_with(mock_boto3_session, "deadline", region=region)
+    mock_get_session_client.assert_called_once_with(
+        mock_boto3_session,
+        "deadline",
+        region=region,
+        client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG,
+    )

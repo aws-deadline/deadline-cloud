@@ -24,7 +24,11 @@ import boto3
 from botocore.client import BaseClient  # type: ignore[import]
 from botocore.exceptions import ClientError  # type: ignore[import]
 from ..api._list_jobs_by_filter_expression import _list_jobs_by_filter_expression
-from ..api._session import get_session_client, _resolve_region
+from ..api._session import (
+    get_session_client,
+    _resolve_region,
+    _ADAPTIVE_RETRIES_CLIENT_CONFIG,
+)
 from ...job_attachments.api import summarize_path_list, human_readable_file_size
 from ...job_attachments._aws.aws_clients import get_s3_client as _get_s3_client
 from ...job_attachments._incremental_downloads.incremental_download_state import (
@@ -399,7 +403,9 @@ def _categorize_jobs_in_checkpoint(
         region: The AWS region to scope the deadline client to. When None, the session's
             default region is used.
     """
-    deadline = get_session_client(boto3_session, "deadline", region=region)
+    deadline = get_session_client(
+        boto3_session, "deadline", region=region, client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG
+    )
     checkpoint_jobs = {job.job_id: job.job for job in checkpoint.jobs}
     checkpoint_job_ids = set(checkpoint_jobs.keys())
 
@@ -783,7 +789,9 @@ def _get_job_sessions(
         if job.session_ended_timestamp is not None
     }
 
-    deadline = get_session_client(boto3_session, "deadline", region=region)
+    deadline = get_session_client(
+        boto3_session, "deadline", region=region, client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG
+    )
     job_sessions: dict[str, list] = {}
 
     # Retrieve all the sessions with some parallelism
@@ -1251,7 +1259,9 @@ def _incremental_output_download(
     # farm's region. _resolve_region returns None when nothing is configured, preserving
     # the session's default-region behavior.
     region = _resolve_region(config=config, farm_id=farm_id)
-    deadline = get_session_client(boto3_session, "deadline", region=region)
+    deadline = get_session_client(
+        boto3_session, "deadline", region=region, client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG
+    )
 
     # When this function is done, we will be confident that downloads are complete up to
     # new_completed_timestamp. We subtract a duration from now() that gives a generous amount of
