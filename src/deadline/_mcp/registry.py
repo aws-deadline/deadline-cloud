@@ -5,7 +5,7 @@
 from typing import Any, Callable, List, Optional, TypedDict, Dict
 
 from ..client import api
-from .tools import job, logs
+from .tools import job, logs, bundles
 
 
 class ToolDefinition(TypedDict):
@@ -114,5 +114,18 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
             "pageSize",
             "itemOffset",
         ],
+    },
+    # Bundle sharing tools
+    "list_shared_bundles": {
+        "func": bundles.list_shared_bundles,
+        "param_names": ["farm_id", "queue_id", "show_hidden"],
+    },
+    "upload_bundle": {
+        "func": bundles.upload_bundle,
+        "param_names": ["job_bundle", "name", "farm_id", "queue_id", "overwrite"],
+    },
+    "download_bundle": {
+        "func": bundles.download_bundle,
+        "param_names": ["bundle_name", "output_dir", "farm_id", "queue_id", "overwrite"],
     },
 }

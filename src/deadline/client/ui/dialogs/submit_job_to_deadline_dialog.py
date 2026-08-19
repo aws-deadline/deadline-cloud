@@ -5,21 +5,23 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-import sys
-import json
+import shutil
 from typing import Any, Dict, Optional, Protocol
 import yaml
 
-from qtpy.QtCore import QSize, Qt  # pylint: disable=import-error
+from qtpy.QtCore import QSize, Qt, QThread, QTimer, Signal as _Signal  # pylint: disable=import-error
 from qtpy.QtGui import QKeyEvent  # pylint: disable=import-error
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QLabel,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -39,8 +41,15 @@ from ...config import get_setting, set_setting, config_file
 from ...config.config_file import _SETTING_FARM_ID, _SETTING_QUEUE_ID
 from ...exceptions import UserInitiatedCancel, NonValidInputError
 from ...job_bundle import create_job_history_bundle_dir
+from ...job_bundle.loader import is_job_bundle_dir as _is_job_bundle_dir
 from ...job_bundle.parameters import JobParameter
 from ...job_bundle.submission import AssetReferences
+from ...job_bundle._repository import (
+    S3BundleRepository as _S3BundleRepository,
+    archive_bundle_dir as _archive_bundle_dir,
+    get_bundle_dir_size as _get_bundle_dir_size,
+    sanitize_bundle_name as _sanitize_bundle_name,
+)
 from ..widgets.deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
 from ..widgets.job_attachments_tab import JobAttachmentsWidget
 from ..widgets.shared_job_settings_tab import SharedJobSettingsWidget
@@ -48,8 +57,10 @@ from ..widgets.host_requirements_tab import HostRequirementsWidget
 from . import DeadlineConfigDialog, DeadlineLoginDialog
 from ._types import JobBundlePurpose
 from ._help_dialog import _HelpDialog
+from .export_bundle_dialog import ExportBundleDialog as _ExportBundleDialog
 
 logger = logging.getLogger(__name__)
+
 
 # initialize early so once the UI opens, things are already initialized
 DeadlineAuthenticationStatus.getInstance()
@@ -254,7 +265,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             self.load_bundle_button = QPushButton(tr("Load Bundle"))
             self.load_bundle_button.clicked.connect(self._on_load_bundle)
             self.button_box.addButton(self.load_bundle_button, QDialogButtonBox.AcceptRole)
-        self.export_bundle_button = QPushButton(tr("Export bundle"))
+        self.export_bundle_button = QPushButton(tr("Save bundle as"))
         self.export_bundle_button.clicked.connect(self.on_export_bundle)
         self.button_box.addButton(self.export_bundle_button, QDialogButtonBox.AcceptRole)
 
@@ -458,86 +469,388 @@ class SubmitJobToDeadlineDialog(QDialog):
     def _on_load_bundle(self):
         """Delegates to the job_settings widget's on_load_bundle method."""
         if hasattr(self.job_settings, "on_load_bundle"):
-            self.job_settings.on_load_bundle()
+            self.job_settings.on_load_bundle(s3_repo=getattr(self, "_s3_repo", None))
 
     def on_export_bundle(self):
-        """
-        Exports a Job Bundle, but does not submit the job.
-        """
-        # Retrieve all the settings into the dataclass
+        """Export a job bundle to Queue (S3) or a local directory."""
+        # Gather settings
         settings = self.job_settings_type()
         self.shared_job_settings.update_settings(settings)
         self.job_settings.update_settings(settings)
 
-        queue_parameters = self.shared_job_settings.get_parameters()
+        # Default export name is the bundle directory name on disk. Only
+        # JobBundleSettings carries ``input_job_bundle_dir``; other submitters
+        # (CLI, DCC) do not, so fall back to the job name for them.
+        input_job_bundle_dir = getattr(settings, "input_job_bundle_dir", "")
+        resolved_name = (
+            os.path.basename(input_job_bundle_dir) if input_job_bundle_dir else settings.name
+        )
+
+        # Try to get queue repo for the dialog. ``from_config`` makes network
+        # calls; show a wait cursor so the click doesn't look ignored.
+        queue_repo = None
+        queue_error = ""
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            queue_repo = _S3BundleRepository.from_config()
+        except Exception as e:
+            queue_error = str(e)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        # Get default local directory
+        local_dir = get_setting("settings.job_bundle_default_directory")
+        if local_dir:
+            local_dir = os.path.expanduser(local_dir)
+        else:
+            local_dir = os.path.expanduser("~")
+
+        # Show export dialog
+        dialog = _ExportBundleDialog(
+            default_name=resolved_name,
+            queue_repo=queue_repo,
+            queue_error=queue_error,
+            local_dir=local_dir,
+            parent=self,
+        )
+        if dialog.exec_() != _ExportBundleDialog.Accepted or not dialog.bundle_name:
+            return
+
+        try:
+            bundle_name = _sanitize_bundle_name(dialog.bundle_name)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                tr("Save bundle as"),
+                f"The bundle name {dialog.bundle_name!r} is not valid. "
+                "Choose a name that isn't empty and doesn't contain path separators "
+                "or '..'.",
+            )
+            return
+
+        # Generate the bundle with current edits applied
+        import tempfile
 
         asset_references = self.job_attachments.get_asset_references()
+        queue_parameters = self.shared_job_settings.get_parameters()
+        requirements = (
+            self.host_requirements.get_requirements() if self.show_host_requirements_tab else None
+        )
 
-        # Save the bundle
-        try:
-            self.job_history_bundle_dir = create_job_history_bundle_dir(
-                self.submitter_info.submitter_name, settings.name
+        if dialog.export_to_queue:
+            with tempfile.TemporaryDirectory() as export_dir:
+                if not self._generate_export_bundle(
+                    export_dir, settings, queue_parameters, asset_references, requirements
+                ):
+                    # Generation failed and the user was already notified. Abort
+                    # rather than silently uploading the original, un-edited
+                    # bundle (which would discard the user's in-dialog edits) or
+                    # crashing in the upload worker with no bundle to archive.
+                    return
+                self._export_to_queue(queue_repo, bundle_name, export_dir)
+        else:
+            # The parent directory is free-form user input (the Location field is
+            # editable in Local mode), so validate it before doing anything
+            # destructive rather than silently creating a typo directory tree.
+            if not os.path.isdir(dialog.local_directory):
+                QMessageBox.warning(
+                    self,
+                    tr("Save bundle as"),
+                    f"The location does not exist or is not a directory:\n{dialog.local_directory}",
+                )
+                return
+
+            dest_path = os.path.join(dialog.local_directory, bundle_name)
+            if os.path.exists(dest_path):
+                # Only ever recursively replace something that is itself a job
+                # bundle (the legitimate "overwrite a bundle of the same name"
+                # case). Refuse to touch an arbitrary folder/file that merely
+                # collides with the bundle name — otherwise a name matching an
+                # existing project folder would be destroyed on a single "Yes".
+                if not _is_job_bundle_dir(dest_path):
+                    QMessageBox.warning(
+                        self,
+                        tr("Save bundle as"),
+                        f"A file or folder that is not a job bundle already exists at:\n{dest_path}"
+                        "\n\nChoose a different name or location.",
+                    )
+                    return
+                reply = QMessageBox.question(
+                    self,
+                    tr("Save bundle as"),
+                    f"Bundle '{bundle_name}' already exists at:\n{dest_path}\n\nOverwrite?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
+
+            # Generate into a staging directory on the same filesystem, then swap
+            # it into place only once generation succeeds. Submitter callbacks can
+            # fail (they're wrapped to return False), so generating directly into
+            # dest_path would destroy an existing good bundle and leave an empty
+            # directory behind. Staging alongside dest keeps the swap a fast rename.
+            with tempfile.TemporaryDirectory(dir=dialog.local_directory) as staging:
+                staged_bundle = os.path.join(staging, bundle_name)
+                os.makedirs(staged_bundle, exist_ok=True)
+                if not self._generate_export_bundle(
+                    staged_bundle, settings, queue_parameters, asset_references, requirements
+                ):
+                    return
+                if os.path.exists(dest_path):
+                    shutil.rmtree(dest_path)
+                shutil.move(staged_bundle, dest_path)
+            QMessageBox.information(
+                self,
+                tr("Save bundle as"),
+                f"Bundle saved to:\n{dest_path}",
             )
 
+    def _generate_export_bundle(
+        self,
+        output_dir: str,
+        settings,
+        queue_parameters: list[JobParameter],
+        asset_references: AssetReferences,
+        requirements: Optional[Dict[str, Any]],
+    ) -> bool:
+        """Generate the job bundle (with the dialog's current edits) into ``output_dir``.
+
+        Returns ``True`` on success. On failure, shows an error dialog and
+        returns ``False`` so callers can abort instead of proceeding with a
+        stale, un-edited, or missing bundle.
+        """
+        try:
             if self.show_host_requirements_tab:
-                host_requirements = self.host_requirements.get_requirements()
                 parameters_from_callback = self.on_create_job_bundle_callback(
                     self,
-                    self.job_history_bundle_dir,
+                    output_dir,
                     settings,
                     queue_parameters,
                     asset_references,
-                    host_requirements,
+                    requirements,
                     purpose=JobBundlePurpose.EXPORT,
                 )
             else:
-                # Maintaining backward compatibility for submitters that do not support host_requirements yet
+                # Maintain backward compatibility for submitters that do not
+                # support host_requirements yet (5-positional-arg callbacks).
                 parameters_from_callback = self.on_create_job_bundle_callback(
                     self,
-                    self.job_history_bundle_dir,
+                    output_dir,
                     settings,
                     queue_parameters,
                     asset_references,
                     purpose=JobBundlePurpose.EXPORT,
                 )
-            if parameters_from_callback is None:
-                parameters_from_callback = {}
-
-            # If the callback returned job parameters, update them in the job bundle as well so that
-            # submission from the job history dir is equivalent.
-            job_parameters = parameters_from_callback.get("job_parameters", [])
+            # If the callback returned job parameters, persist them so the
+            # exported bundle is equivalent to what submission would produce.
+            job_parameters = (parameters_from_callback or {}).get("job_parameters", [])
             if job_parameters:
-                self.save_job_parameters_to_job_bundle(self.job_history_bundle_dir, job_parameters)
-
-            logger.info(f"Saved the submission as a job bundle: {self.job_history_bundle_dir}")
-            if sys.platform == "win32":
-                # Open the directory in the OS's file explorer
-                os.startfile(self.job_history_bundle_dir)
-            QMessageBox.information(
-                self,
-                tr("{submitter} job submission").format(
-                    submitter=self.submitter_info.submitter_name
-                ),
-                tr("Saved the submission as a job bundle:\n{path}").format(
-                    path=self.job_history_bundle_dir
-                ),
-            )
-            # Close the submitter window to signal the submission is done
-            self.close()
-
-        except NonValidInputError as nvie:
-            QMessageBox.critical(self, tr("Non valid inputs detected"), str(nvie))
-
+                self.save_job_parameters_to_job_bundle(output_dir, job_parameters)
+            return True
         except Exception as exc:
-            logger.exception("Error saving bundle")
-            message = str(exc)
-            QMessageBox.critical(
-                self,
-                tr("{submitter} job submission").format(
-                    submitter=self.submitter_info.submitter_name
-                ),
-                message,
-            )  # type: ignore[call-arg]
+            logger.warning("Failed to generate bundle for export: %s", exc)
+            QMessageBox.critical(self, "Export failed", f"Failed to export bundle:\n{exc}")
+            return False
+
+    def _export_to_queue(
+        self, queue_repo: Optional[_S3BundleRepository], bundle_name: str, source_dir: str
+    ):
+        """Archive and upload the bundle to the queue's S3 job-bundles folder."""
+        from ...job_bundle._repository import build_bundle_metadata
+
+        if not queue_repo:
+            QMessageBox.critical(self, "Export failed", "Queue is not available.")
+            return
+
+        bundle_metadata = build_bundle_metadata(source_dir, bundle_name=bundle_name)
+
+        # Archive and upload
+        try:
+            # Check if bundle already exists
+            if queue_repo.bundle_exists(bundle_name):
+                reply = QMessageBox.question(
+                    self,
+                    "Overwrite?",
+                    f"Bundle '{bundle_name}' already exists on the queue. Overwrite?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
+
+            # Archive and upload on a background thread with progress
+            class _UploadCancelled(Exception):
+                """Raised inside the worker's callbacks to abort cooperatively."""
+
+            class _UploadWorker(QThread):
+                progress = _Signal(int, int)  # (current_bytes, total_bytes)
+                status = _Signal(str)
+                # NOTE: named ``done`` rather than ``finished`` to avoid shadowing
+                # QThread's built-in ``finished`` signal.
+                done = _Signal()
+                error = _Signal(str)
+
+                def __init__(self, repo, bundle_name, source_dir, metadata):
+                    super().__init__()
+                    self._repo = repo
+                    self._bundle_name = bundle_name
+                    self._source_dir = source_dir
+                    self._metadata = metadata
+                    self._cancelled = False
+
+                def cancel(self):
+                    # Cooperative cancel: the next archive/upload callback raises
+                    # to abort, letting zipfile/boto3 unwind cleanly (boto's
+                    # managed upload aborts the multipart transfer on exception,
+                    # so no partial object is left on the queue).
+                    self._cancelled = True
+
+                def run(self):
+                    try:
+                        self.status.emit("Archiving bundle...")
+                        total_size = _get_bundle_dir_size(self._source_dir)
+                        self.progress.emit(0, max(1, total_size // 1024))
+
+                        archived = [0]
+
+                        def _on_archived(n):
+                            if self._cancelled:
+                                raise _UploadCancelled()
+                            archived[0] += n
+                            self.progress.emit(archived[0] // 1024, 0)
+
+                        buf = _archive_bundle_dir(self._source_dir, progress_callback=_on_archived)
+
+                        # archive_bundle_dir() returns the buffer already rewound
+                        # to position 0, so buf.tell() would be 0 here. Use the
+                        # buffer's byte length for the true archive size (matches
+                        # the CLI upload path in bundle_group.py).
+                        total = buf.getbuffer().nbytes
+                        self.status.emit("Uploading bundle...")
+                        self.progress.emit(0, max(1, total // 1024))
+
+                        _sent = [0]
+
+                        def _upload_cb(n):
+                            if self._cancelled:
+                                raise _UploadCancelled()
+                            _sent[0] += n
+                            self.progress.emit(_sent[0] // 1024, 0)
+
+                        self._repo.upload_archive(
+                            buf,
+                            self._bundle_name,
+                            metadata=self._metadata,
+                            progress_callback=_upload_cb,
+                        )
+                        self.done.emit()
+                    except _UploadCancelled:
+                        # User cancelled — nothing to report; boto3 aborts the
+                        # in-flight transfer when the callback raises.
+                        pass
+                    except Exception as e:
+                        self.error.emit(str(e))
+
+            progress_dialog = QDialog(self)
+            progress_dialog.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+            progress_dialog.setWindowTitle("Save Bundle to Queue")
+            progress_dialog.setWindowModality(Qt.ApplicationModal)
+            progress_dialog.setMinimumWidth(350)
+            _dlg_layout = QVBoxLayout(progress_dialog)
+            _progress_label = QLabel("Archiving bundle...")
+            _progress_label.setAlignment(Qt.AlignCenter)
+            _progress_bar = QProgressBar()
+            _progress_bar.setRange(0, 0)
+            _cancel_btn = QPushButton("Cancel")
+            _cancel_btn.clicked.connect(progress_dialog.reject)
+            _dlg_layout.addWidget(_progress_label)
+            _dlg_layout.addWidget(_progress_bar)
+            _dlg_layout.addWidget(_cancel_btn, alignment=Qt.AlignRight)
+
+            worker = _UploadWorker(
+                queue_repo,
+                bundle_name,
+                source_dir,
+                bundle_metadata if bundle_metadata else None,
+            )
+
+            upload_error = []
+            _uploaded_bytes = [0]
+            _total_bytes = [0]
+            _phase = ["Archiving"]
+            _finished = [False]
+
+            def _format_size(b):
+                if b >= 1024 * 1024 * 1024:
+                    return f"{b / (1024**3):.1f} GB"
+                elif b >= 1024 * 1024:
+                    return f"{b / (1024**2):.1f} MB"
+                elif b >= 1024:
+                    return f"{b / 1024:.1f} KB"
+                return f"{b} B"
+
+            def _on_status(msg):
+                _progress_label.setText(msg)
+                if "Upload" in msg:
+                    _phase[0] = "Uploading"
+
+            def _on_progress(n, total):
+                if _finished[0]:
+                    return
+                if total > 0:
+                    _total_bytes[0] = total * 1024
+                    _progress_bar.setMaximum(max(1, total))
+                    _progress_bar.setValue(0)
+                    _uploaded_bytes[0] = 0
+                else:
+                    _uploaded_bytes[0] = n * 1024
+                    _progress_bar.setValue(n)
+                    _progress_label.setText(
+                        f"{_phase[0]} bundle... {_format_size(_uploaded_bytes[0])} / {_format_size(_total_bytes[0])}"
+                    )
+
+            def _on_finished():
+                _finished[0] = True
+                # Defer so queued progress signals are processed first
+                QTimer.singleShot(0, _show_complete)
+
+            def _show_complete():
+                _progress_bar.setVisible(False)
+                _progress_label.setText("Bundle saved to queue")
+                _cancel_btn.setText("Close")
+                _cancel_btn.clicked.disconnect()
+                _cancel_btn.clicked.connect(progress_dialog.accept)
+
+            def _on_error(msg):
+                upload_error.append(msg)
+                progress_dialog.close()
+
+            worker.status.connect(_on_status, Qt.QueuedConnection)
+            worker.progress.connect(_on_progress, Qt.QueuedConnection)
+            worker.done.connect(_on_finished, Qt.QueuedConnection)
+            worker.error.connect(_on_error, Qt.QueuedConnection)
+            # Cancelling the dialog (Cancel button or window close) flags the
+            # worker so its next archive/upload callback aborts cooperatively,
+            # instead of blocking the UI until the whole transfer finishes.
+            progress_dialog.rejected.connect(worker.cancel)
+            worker.start()
+
+            progress_dialog.exec_()
+            worker.cancel()
+            worker.wait()
+
+            if upload_error:
+                raise RuntimeError(upload_error[0])
+        except Exception as exc:
+            from botocore.exceptions import ClientError
+
+            logger.error("Failed to save bundle: %s", exc, exc_info=True)
+            if isinstance(exc, ClientError) and exc.response["Error"]["Code"] == "AccessDenied":
+                msg = "You don't have permission to share bundles on this queue."
+            else:
+                msg = f"Failed to upload bundle:\n{exc}"
+            QMessageBox.critical(self, "Export failed", msg)
 
     def save_job_parameters_to_job_bundle(
         self, job_bundle_dir: str, job_parameters: list[JobParameter]

@@ -6,11 +6,10 @@ import os
 from logging import getLogger
 from typing import Any, Optional, Dict
 
-from qtpy.QtCore import Qt  # pylint: disable=import-error
+from qtpy.QtCore import Qt, QThread, Signal  # pylint: disable=import-error
 from ._utils import tr
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
-    QFileDialog,
     QMainWindow,
     QMessageBox,
     QWidget,
@@ -32,6 +31,7 @@ from ..job_bundle.loader import (
     validate_directory_symlink_containment,
 )
 from ..job_bundle.saver import save_yaml_or_json_to_file
+from ..job_bundle._repository import S3BundleRepository as _S3BundleRepository
 from ..job_bundle.parameters import (
     JobParameter,
     apply_job_parameters,
@@ -48,6 +48,8 @@ from .dialogs.submit_job_to_deadline_dialog import (
 from .widgets.job_bundle_settings_tab import JobBundleSettingsWidget
 from ..job_bundle.submission import AssetReferences
 from ..api._session import session_context
+from ..config import get_setting
+from .dialogs.job_bundle_browser_dialog import JobBundleBrowserDialog
 
 logger = getLogger(__name__)
 
@@ -195,12 +197,73 @@ def show_job_bundle_submitter(
             if main_windows:
                 parent = main_windows[0]
 
+    _s3_repo_for_reuse = None
+
     if not input_job_bundle_dir:
-        input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            parent, tr("Choose job bundle directory"), input_job_bundle_dir
+        # Start S3 initialization in background immediately (before any other work)
+        class _S3InitWorker(QThread):
+            # NOTE: named ``done`` rather than ``finished`` to avoid shadowing
+            # QThread's built-in ``finished`` signal.
+            done = Signal(object, str, list, set)  # (repo, error, entries, hidden_set)
+
+            def run(self):
+                try:
+                    from concurrent.futures import ThreadPoolExecutor
+
+                    repo = _S3BundleRepository.from_config()
+                    with ThreadPoolExecutor(max_workers=2) as ex:
+                        entries_f = ex.submit(repo.list_entries, repo.root_path())
+                        hidden_f = ex.submit(repo.get_hidden_set)
+                        entries = entries_f.result()
+                        hidden = hidden_f.result()
+                    self.done.emit(repo, "", entries, hidden)
+                except Exception as e:
+                    logger.debug(
+                        "Could not retrieve queue settings for bundle browser", exc_info=True
+                    )
+                    self.done.emit(None, str(e), [], set())
+
+        # Config + dialog setup on the main thread.
+        default_dir = get_setting("settings.job_bundle_default_directory")
+        if default_dir:
+            default_dir = os.path.expanduser(default_dir)
+
+        # Get the job history directory for the current profile
+        job_history_dir = os.path.expanduser(get_setting("settings.job_history_dir"))
+
+        # Show the browser immediately — Queue source will populate when ready
+        browser = JobBundleBrowserDialog(
+            queue_source=None,
+            queue_error="",
+            queue_loading=True,
+            local_source=default_dir,
+            history_source=job_history_dir,
+            parent=parent,
         )
-        if not input_job_bundle_dir:
+        # Connect the worker's result BEFORE starting it. A fast failure (e.g. not
+        # logged in) can emit ``done`` almost immediately; a cross-thread queued
+        # signal emitted before the connection exists is dropped, which would leave
+        # the browser stuck on "Loading..." forever. The worker still runs
+        # concurrently with the dialog's event loop.
+        s3_worker = _S3InitWorker()
+        s3_worker.done.connect(browser.set_queue_source)
+        s3_worker.start()
+        if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
+            s3_worker.wait()
             return None
+
+        s3_worker.wait()
+
+        _s3_repo_for_reuse = browser.s3_repo
+
+        browser.hide()
+        input_job_bundle_dir = browser.resolve_selection()
+        while not input_job_bundle_dir:
+            browser.show()
+            if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
+                return None
+            browser.hide()
+            input_job_bundle_dir = browser.resolve_selection()
 
     def on_create_job_bundle_callback(
         widget: SubmitJobToDeadlineDialog,
@@ -409,6 +472,9 @@ def show_job_bundle_submitter(
         submitter_info=submitter_info,
         known_asset_paths=known_asset_paths,
     )
+
+    # Store S3 repo for reuse by "Load Bundle" button (avoids re-creating from scratch)
+    submitter_dialog._s3_repo = _s3_repo_for_reuse
 
     if job_parameters:
         # We want to validate the job parameters after the queue parameters are loaded.

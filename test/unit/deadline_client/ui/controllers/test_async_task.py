@@ -214,6 +214,80 @@ class TestAsyncTask:
 
         assert task.autoDelete() is True
 
+    def test_run_swallows_deleted_signal_source_on_result(self, qtbot):
+        """
+        If the signals object is deleted while the task is running, emitting the
+        result must not raise - it should be swallowed (no listeners remain).
+
+        This reproduces the "RuntimeError: Signal source has been deleted"
+        cascade that occurs when the owning runner/widget is torn down before a
+        slow task returns.
+        """
+        fn = Mock(return_value="result")
+        task = AsyncTask(fn)
+
+        # Simulate the WorkerSignals C++ object having been deleted: any access to
+        # a signal raises RuntimeError, mirroring PySide behavior.
+        deleted_signals = Mock()
+        deleted_signals.result.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.error.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.finished.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = deleted_signals
+
+        # Must not raise despite every emit failing.
+        task.run()
+
+        deleted_signals.result.emit.assert_called_once_with("result")
+        # finished is always attempted in the finally block.
+        deleted_signals.finished.emit.assert_called_once_with()
+
+    def test_run_swallows_deleted_signal_source_on_error(self, qtbot):
+        """A deleted signal source during error emission must not raise."""
+        fn = Mock(side_effect=ValueError("boom"))
+        task = AsyncTask(fn)
+
+        deleted_signals = Mock()
+        deleted_signals.error.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.finished.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = deleted_signals
+
+        # Must not raise despite the emits failing.
+        task.run()
+
+        deleted_signals.error.emit.assert_called_once()
+        deleted_signals.finished.emit.assert_called_once_with()
+
+    def test_safe_emit_does_nothing_when_canceled(self):
+        """_safe_emit is a no-op for canceled tasks and never touches the signal."""
+        task = AsyncTask(Mock())
+        signals = Mock()
+        task.signals = signals
+
+        task.cancel()
+        task._safe_emit("result", "value")
+
+        signals.result.emit.assert_not_called()
+
+    def test_safe_emit_swallows_deleted_source(self):
+        """A deleted signal source is swallowed (nothing is listening)."""
+        task = AsyncTask(Mock())
+        signals = Mock()
+        signals.result.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = signals
+
+        task._safe_emit("result", "value")  # must not raise
+
+    def test_safe_emit_reraises_real_slot_error(self):
+        """A RuntimeError from a slot body (DirectConnection runs slots inside
+        emit()) must surface rather than be downgraded to a debug log."""
+        task = AsyncTask(Mock())
+        signals = Mock()
+        signals.result.emit.side_effect = RuntimeError("boom in slot")
+        task.signals = signals
+
+        with pytest.raises(RuntimeError, match="boom in slot"):
+            task._safe_emit("result", "value")
+
 
 class TestStreamingAsyncTask:
     """Tests for StreamingAsyncTask, the progressive-result variant of AsyncTask."""
@@ -321,3 +395,23 @@ class TestStreamingAsyncTask:
 
         assert progress == ["a"]
         assert errors == [test_error]
+
+    def test_run_swallows_deleted_signal_source(self, qtbot):
+        """
+        If the signals object is deleted while the streaming task is running,
+        emitting progress/result/finished must not raise.
+        """
+        task = StreamingAsyncTask(lambda: iter(["a", "b"]))
+
+        deleted_signals = Mock()
+        deleted_signals.progress.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.result.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.finished.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = deleted_signals
+
+        # Must not raise despite every emit failing.
+        task.run()
+
+        assert deleted_signals.progress.emit.call_count == 2
+        deleted_signals.result.emit.assert_called_once_with(None)
+        deleted_signals.finished.emit.assert_called_once_with()

@@ -25,9 +25,12 @@ __all__ = [  # noqa: RUF022  grouped by category, not sorted
     "DeadlineFarmListComboBoxController",
     "DeadlineQueueListComboBoxController",
     "DeadlineStorageProfileListComboBoxController",
+    # Expandable section
+    "ExpandableSection",
 ]
 
 from .deadline_authentication_status_widget import DeadlineAuthenticationStatusWidget
+from .expandable_section import ExpandableSection
 from .host_requirements_tab import (
     CustomAmountWidget,
     CustomAttributeValueWidget,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "is_job_bundle_dir",
     "parse_yaml_or_json_content",
     "read_yaml_or_json",
     "read_yaml_or_json_object",
@@ -17,6 +18,14 @@ from typing import Any, Dict, Optional, Tuple
 import yaml
 
 from ..exceptions import DeadlineOperationError
+
+
+def is_job_bundle_dir(path: str) -> bool:
+    """Returns True if the directory contains a template.yaml or template.json file."""
+    if not os.path.isdir(path):
+        return False
+    template_prefix = os.path.join(path, "template")
+    return os.path.isfile(template_prefix + ".yaml") or os.path.isfile(template_prefix + ".json")
 
 
 def validate_directory_symlink_containment(job_bundle_dir: str) -> None:
