@@ -1,3 +1,10 @@
+## 0.60.5 (2026-08-24)
+
+### Features
+* Added job bundle browser and sharing functionality. (#1181)
+
+### Bug Fixes
+* Fixed a crash in `deadline queue sync-output` when syncing against queues with 1000+ candidate jobs. The command now uses adaptive retries for metadata API calls (GetJob, ListSessions, ListSessionActions), preventing unhandled ThrottlingExceptions that could cause a permanent bootstrap crash loop. (#1336)
 ## 0.60.4 (2026-08-11)
 
 ### Features
