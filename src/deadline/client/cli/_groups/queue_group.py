@@ -15,7 +15,11 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 from datetime import datetime, timedelta, timezone
 
 from ... import api
-from ...api._session import get_session_client, _resolve_region
+from ...api._session import (
+    get_session_client,
+    _resolve_region,
+    _ADAPTIVE_RETRIES_CLIENT_CONFIG,
+)
 from ...config import config_file
 from ...exceptions import DeadlineOperationError
 from .._common import (
@@ -373,7 +377,9 @@ def sync_output(
     # This operates within a single farm, so scope the deadline client to that farm's
     # region. _resolve_region returns None when nothing is configured.
     region = _resolve_region(config=config, farm_id=farm_id)
-    deadline = get_session_client(boto3_session, "deadline", region=region)
+    deadline = get_session_client(
+        boto3_session, "deadline", region=region, client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG
+    )
 
     if ignore_storage_profiles:
         local_storage_profile_id = None
