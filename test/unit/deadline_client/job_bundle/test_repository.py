@@ -11,6 +11,7 @@ import os
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -1266,14 +1267,19 @@ class TestArchiveExtractionSafety:
     counts, and extractions that wouldn't fit on disk — always enforced."""
 
     def _fake_zip(self, entries):
-        """entries: list of (file_size, compress_size) tuples."""
+        """entries: list of (file_size, compress_size) tuples.
+
+        Uses lightweight SimpleNamespace entries rather than MagicMock: the
+        too-many-entries test builds MAX_ARCHIVE_ENTRIES + 1 (100_001) infos,
+        and a MagicMock per entry exhausts worker memory (OOM-crashing the
+        pytest-xdist worker). _check_archive_extraction_safety only reads
+        .file_size / .compress_size, which SimpleNamespace provides.
+        """
         zf = MagicMock()
-        infos = []
-        for file_size, compress_size in entries:
-            zi = MagicMock()
-            zi.file_size = file_size
-            zi.compress_size = compress_size
-            infos.append(zi)
+        infos = [
+            SimpleNamespace(file_size=file_size, compress_size=compress_size)
+            for file_size, compress_size in entries
+        ]
         zf.infolist.return_value = infos
         return zf
 

@@ -40,10 +40,6 @@ export DEADLINE_HOOKS_DIR=/studio/pipeline/hooks/maya
 
 Requires `settings.allow_environment_hooks` to be enabled. Both sources can be active simultaneously — environment hooks run first, then bundle hooks.
 
-> **Note:** In DCC submitters, environment hooks apply to the **pre-submission** and
-> **post-submission** phases only. The pre-GUI phase is not run by in-application
-> submitters — see [Pre-GUI Hooks](#pre-gui-hooks).
-
 ## Hook Types
 
 ### Pre-GUI Hooks
@@ -54,13 +50,6 @@ Run **before** the submission dialog opens. Use these to:
 - Query a project management system for task metadata
 
 Pre-GUI hooks **block the dialog from opening** if they fail (non-zero exit code or timeout).
-
-> **Supported only by `deadline bundle gui-submit`.** Pre-GUI hooks run on the standalone
-> GUI submitter. They do **not** run in in-application (DCC) submitters such as Maya,
-> Nuke, or Blender — those build their submission dialog directly and do not invoke the
-> pre-GUI phase. Pre-submission and post-submission hooks are unaffected and work across
-> all submission methods. (CLI `deadline bundle submit` has no GUI phase, so pre-GUI hooks
-> do not apply there either.)
 
 Output JSON to stdout to modify the initial dialog state:
 
@@ -513,13 +502,11 @@ Failures are logged as warnings but don't affect the submitted job.
 ## Submission methods
 
 Hooks work with these submission methods:
-- `deadline bundle submit` (CLI) — pre-submission and post-submission hooks.
+- `deadline bundle submit` (CLI) — pre-submission and post-submission hooks (there is no pre-GUI phase).
 - `deadline bundle gui-submit` (standalone GUI) — all phases, including pre-GUI.
-- In-application (DCC) submitters — pre-submission and post-submission hooks. The pre-GUI
-  phase is not run by DCC submitters (see [Pre-GUI Hooks](#pre-gui-hooks)).
+- In-application (DCC) submitters — pre-submission and post-submission hooks, plus the pre-GUI phase in submitters that implement it (they call the client's `run_pre_gui_hooks` entry point).
 
-The standalone GUI copies `hooks.yaml` to the job history bundle and resolves script paths
-back to your original bundle directory.
+The standalone GUI copies `hooks.yaml` to the job history bundle and resolves script paths back to your original bundle directory.
 
 ## Best Practices
 
