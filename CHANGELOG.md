@@ -1,3 +1,7 @@
+## 0.60.6 (2026-08-31)
+
+### Bug Fixes
+* Fixed a type checking issue where `click.Path` prompt results were not properly coerced to `str`, which could cause type errors with mypy 2.3 and click 8.5. (#1348)
 ## 0.60.5 (2026-08-24)
 
 ### Features
