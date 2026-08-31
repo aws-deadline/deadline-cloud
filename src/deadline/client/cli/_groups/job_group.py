@@ -541,9 +541,11 @@ def _prompt_for_os_mismatch_roots(
         if PathFormat.get_host_path_format_string() != root_path_format:
             click.echo(_get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format))
             if not is_json_format:
-                new_root = click.prompt(
-                    "> Please enter a new root path",
-                    type=click.Path(exists=False),
+                new_root = str(
+                    click.prompt(
+                        "> Please enter a new root path",
+                        type=click.Path(exists=False),
+                    )
                 )
             else:
                 json_string = click.prompt("", prompt_suffix="", type=str)
@@ -583,10 +585,12 @@ def _prompt_to_confirm_roots(
                 return None
             elif user_choice != "y":
                 index_to_change = int(user_choice)
-                new_root = click.prompt(
-                    "> Please enter the new root directory path, or press Enter to keep it unchanged",
-                    type=click.Path(exists=False),
-                    default=asset_roots[index_to_change],
+                new_root = str(
+                    click.prompt(
+                        "> Please enter the new root directory path, or press Enter to keep it unchanged",
+                        type=click.Path(exists=False),
+                        default=asset_roots[index_to_change],
+                    )
                 )
                 downloader.set_root_path(asset_roots[index_to_change], str(Path(new_root)))
                 paths_by_root = downloader.get_paths_by_root()
