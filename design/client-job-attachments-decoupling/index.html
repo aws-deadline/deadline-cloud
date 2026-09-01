@@ -1,0 +1,2078 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/deadline-cloud/design/client-job-attachments-decoupling/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Decoupling Client from Job Attachments - AWS Deadline Cloud - Client Library Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#decoupling-client-from-job-attachments" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-header__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud - Client Library Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Decoupling Client from Job Attachments
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AWS Deadline Cloud - Client Library Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cli_reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_attachment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    attachment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    auth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_farm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    farm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_fleet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fleet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_handle-web-url/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    handle-web-url
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_job/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_manifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    manifest
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mcp-server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_queue/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Library Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    deadline.client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    deadline.client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    api
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cli
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_job_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job_bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ui
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../submission-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Submission Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Solution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design-approach" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design Approach
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design Approach">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ui-and-telemetry-concerns-dependency-inversion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UI and telemetry concerns → Dependency Inversion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#config-values-and-sessions-parameter-injection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config values and sessions → Parameter Injection
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changes-7-prs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changes (7 PRs)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Changes (7 PRs)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pr-1028-remove-_progressbarcallbackmanager-import-from-job-attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR #1028 — Remove _ProgressBarCallbackManager import from Job Attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr-1035-remove-client-error-types-from-job-attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR #1035 — Remove client error types from Job Attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr-1036-move-s3-client-and-config-logic-out-of-manifest-download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR #1036 — Move S3 client and config logic out of manifest download
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr-1037-move-_hash_attachments-into-job-attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR #1037 — Move _hash_attachments into Job Attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr-1038-move-path-summarization-into-job-attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR #1038 — Move path summarization into Job Attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr-1040-remove-direct-config-access-in-job-attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR #1040 — Remove direct config access in Job Attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr-1062-remove-vfs-dependencies-on-the-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR #1062 — Remove VFS dependencies on the Client
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#call-stacks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Call Stacks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Call Stacks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-deadline-bundle-submit-job-submission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. deadline bundle submit (Job Submission)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-deadline-manifest-snapshot-local-hashing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. deadline manifest snapshot (Local Hashing)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-deadline-manifest-download-s3-download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. deadline manifest download (S3 Download)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-deadline-manifest-upload-s3-upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. deadline manifest upload (S3 Upload)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-deadline-attachment-download-deadline-attachment-upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. deadline attachment download / deadline attachment upload
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-deadline-job-download-output-incremental-downloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. deadline job download-output / Incremental Downloads
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-worker-agent-vfs-mount-with-telemetry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Worker Agent — VFS Mount with Telemetry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contract-quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contract Quick Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Contract Quick Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-client-provides-to-job-attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the Client provides to Job Attachments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-job-attachments-owns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Job Attachments owns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-job-attachments-never-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Job Attachments never does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-decoupling-related-exports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key decoupling-related exports
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration-guide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration Guide
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Migration Guide">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#for-deadline-cloud-client-code-internal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For deadline-cloud Client code (internal)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#for-deadline-cloud-worker-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For deadline-cloud-worker-agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#for-external-consumers-importing-from-deadlinecommonpath_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For external consumers importing from deadline.common.path_utils
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#for-external-code-catching-nonvalidinputerror" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For external code catching NonValidInputError
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#unit-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unit Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#downstream-consumer-tests-deadline-cloud-worker-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Downstream Consumer Tests — deadline-cloud-worker-agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="decoupling-client-from-job-attachments">Decoupling Client from Job Attachments<a class="headerlink" href="#decoupling-client-from-job-attachments" title="Permanent link">&para;</a></h1>
+<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">&para;</a></h2>
+<p>The <code>deadline</code> package contains two main components: the Client (<code>deadline.client</code>) and Job Attachments (<code>deadline.job_attachments</code>). The Client is the higher-level package — it provides the CLI, GUI, configuration management, session handling, and telemetry. Job Attachments is the lower-level library responsible for hashing files, uploading/downloading assets to S3, and managing manifests.</p>
+<p>The correct dependency direction is for the Client to depend on Job Attachments, not the other way around. However, over time, Job Attachments accumulated upward imports into the Client:</p>
+<ul>
+<li>Job Attachments imported <code>_ProgressBarCallbackManager</code> from <code>client.cli._common</code> to display a progress bar during file hashing — a UI concern that doesn't belong in a library.</li>
+<li>The <code>_hash_attachments</code> function orchestrates <code>S3AssetManager.hash_assets_and_create_manifest()</code> with callbacks. Despite only calling Job Attachments code, it was defined in the Client, and Job Attachments imported it back.</li>
+<li>Several Job Attachments modules directly read the Client's <code>~/.deadline/config</code> file via <code>config_file.get_cache_directory()</code> and <code>config_file.get_setting(...)</code> to get cache directories, S3 connection pool sizes, and upload threshold multipliers.</li>
+<li><code>NonValidInputError</code> from <code>client.exceptions</code> — an exception type defined in the Client package but raised by Job Attachments functions.</li>
+<li>Path summarization utilities (<code>human_readable_file_size</code>, <code>summarize_path_list</code>, etc.) lived in a shared <code>common.path_utils</code> module with ambiguous ownership, even though they were only used in the context of Job Attachments operations.</li>
+</ul>
+<p>This coupling meant Job Attachments could not be used, tested, or released independently. Any change to Client internals (config key names, exception hierarchies, CLI utilities) could break Job Attachments. It also blocked the longer-term goal of splitting Job Attachments into its own repository.</p>
+<h2 id="solution">Solution<a class="headerlink" href="#solution" title="Permanent link">&para;</a></h2>
+<p>Enforce a strict one-way dependency: <code>client</code> → <code>job_attachments</code>, never the reverse. Every function in Job Attachments that needs a boto3 session, a config value, or a progress callback receives it as a parameter. After these changes, <code>job_attachments</code> has zero imports from <code>deadline.client</code>.</p>
+<p>Because all dependencies are now injected, Job Attachments can be used without the Client entirely:</p>
+<pre><code class="language-python">from deadline.job_attachments.api.manifest import _manifest_snapshot
+
+# No client config, no progress bar, no telemetry — just hash files
+result = _manifest_snapshot(
+    root=&quot;/path/to/files&quot;,
+    destination=&quot;/path/to/output&quot;,
+    name=&quot;my-manifest&quot;,
+)
+</code></pre>
+<p>Or with a custom session and progress callback:</p>
+<pre><code class="language-python">import boto3
+from deadline.job_attachments.api.manifest import _manifest_snapshot
+
+session = boto3.Session(profile_name=&quot;my-profile&quot;)
+result = _manifest_snapshot(
+    root=&quot;/path/to/files&quot;,
+    destination=&quot;/path/to/output&quot;,
+    name=&quot;my-manifest&quot;,
+    hashing_progress_callback=my_custom_progress_handler,
+    hash_cache_dir=&quot;/tmp/my-cache&quot;,
+)
+</code></pre>
+<h2 id="design-approach">Design Approach<a class="headerlink" href="#design-approach" title="Permanent link">&para;</a></h2>
+<p>The decoupling uses two patterns, applied consistently across all seven PRs:</p>
+<h3 id="ui-and-telemetry-concerns-dependency-inversion">UI and telemetry concerns → Dependency Inversion<a class="headerlink" href="#ui-and-telemetry-concerns-dependency-inversion" title="Permanent link">&para;</a></h3>
+<p>Job Attachments needed to report progress and record telemetry, but the concrete implementations (a CLI progress bar, a telemetry client) belong to the Client. Rather than importing those implementations, Job Attachments now defines callback interfaces (<code>Optional[Callable]</code>) and the Client provides the implementation at call time.</p>
+<p>The callback types use classes already defined within Job Attachments:</p>
+<table>
+<thead>
+<tr>
+<th>Callback</th>
+<th>Signature</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Progress reporting</td>
+<td><code>Optional[Callable[[ProgressReportMetadata], bool]]</code></td>
+<td>UI progress updates. Returns <code>True</code> to continue, <code>False</code> to cancel.</td>
+</tr>
+<tr>
+<td>Telemetry recording</td>
+<td><code>Optional[Callable[[SummaryStatistics], None]]</code></td>
+<td>Records hashing metrics.</td>
+</tr>
+<tr>
+<td>Print/logging</td>
+<td><code>Callable[[Any], None]</code></td>
+<td>Text output (CLI echo, logger, etc.).</td>
+</tr>
+</tbody>
+</table>
+<p>All callbacks default to <code>None</code> or a no-op lambda, so non-CLI callers (programmatic use, worker agent) get silent operation with no extra work.</p>
+<h3 id="config-values-and-sessions-parameter-injection">Config values and sessions → Parameter Injection<a class="headerlink" href="#config-values-and-sessions-parameter-injection" title="Permanent link">&para;</a></h3>
+<p>Job Attachments needed config values (cache directories, pool sizes) and AWS sessions, but reading config files and creating sessions are Client responsibilities. Those values are now passed in as explicit function parameters by the caller.</p>
+<p>Config values fall into two categories:</p>
+<ul>
+<li><strong>Required parameters</strong> (<code>s3_max_pool_connections</code>, <code>small_file_threshold_multiplier</code> on <code>S3AssetUploader</code>) — intentionally required because silent defaults would cause subtle performance differences that are hard to debug. Missing parameters are caught immediately by linters and type checkers.</li>
+<li><strong>Optional parameters</strong> (<code>cache_dir</code>, <code>s3_check_cache_dir</code>, <code>hash_cache_dir</code>) — default to <code>None</code>, allowing callers to omit them when the default behavior is acceptable.</li>
+</ul>
+<p>Sessions (<code>boto3.Session</code>, <code>botocore.client.BaseClient</code>) and S3 settings (<code>JobAttachmentS3Settings</code>) are always passed explicitly. Job Attachments never creates or assumes AWS sessions.</p>
+<h2 id="changes-7-prs">Changes (7 PRs)<a class="headerlink" href="#changes-7-prs" title="Permanent link">&para;</a></h2>
+<h3 id="pr-1028-remove-_progressbarcallbackmanager-import-from-job-attachments"><a href="https://github.com/aws-deadline/deadline-cloud/pull/1028">PR #1028</a> — Remove <code>_ProgressBarCallbackManager</code> import from Job Attachments<a class="headerlink" href="#pr-1028-remove-_progressbarcallbackmanager-import-from-job-attachments" title="Permanent link">&para;</a></h3>
+<p><code>_create_manifest_for_single_root</code> had three upward dependencies into the Client: the progress bar manager, <code>_hash_attachments</code>, and <code>config_file.get_cache_directory()</code>. Replaced all three with optional parameters:</p>
+<pre><code class="language-python">def _create_manifest_for_single_root(
+    *,
+    files: List[str],
+    root: str,
+    print_function_callback: Callable[[Any], None] = lambda msg: None,
+    hashing_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
+    telemetry_callback: Optional[Callable[[SummaryStatistics], None]] = None,
+    hash_cache_dir: Optional[str] = None,
+) -&gt; Optional[BaseAssetManifest]:
+</code></pre>
+<p>These parameters thread through <code>_manifest_snapshot</code> → <code>_create_manifest_for_single_root</code> → <code>_hash_attachments</code>, with each layer passing them down unchanged.</p>
+<p><strong>Files changed:</strong> <code>job_attachments/asset_manifests/_create_manifest.py</code>, <code>job_attachments/api/manifest.py</code>, <code>client/cli/_groups/manifest_group.py</code></p>
+<h3 id="pr-1035-remove-client-error-types-from-job-attachments"><a href="https://github.com/aws-deadline/deadline-cloud/pull/1035">PR #1035</a> — Remove client error types from Job Attachments<a class="headerlink" href="#pr-1035-remove-client-error-types-from-job-attachments" title="Permanent link">&para;</a></h3>
+<p>Moved <code>NonValidInputError</code> from <code>deadline.client.exceptions</code> into <code>deadline.job_attachments.exceptions</code>, where it now inherits from <code>JobAttachmentsError</code>. Several Job Attachments functions (<code>_attachment_download</code>, <code>_attachment_upload</code>, <code>_process_path_mapping</code>, glob/diff utilities) were raising this Client-owned exception. Updated the Client's <code>attachment_group.py</code> to import and catch the Job Attachments-owned exception.</p>
+<p>Technically a breaking change for external code catching <code>NonValidInputError</code> by its fully-qualified Client path, but the affected functions are underscored Beta API, so this is acceptable under the project's API conventions.</p>
+<p><strong>Files changed:</strong> <code>job_attachments/exceptions.py</code>, <code>job_attachments/_diff.py</code>, <code>job_attachments/_glob.py</code>, <code>job_attachments/api/_utils.py</code>, <code>job_attachments/api/attachment.py</code>, <code>client/cli/_groups/attachment_group.py</code></p>
+<h3 id="pr-1036-move-s3-client-and-config-logic-out-of-manifest-download"><a href="https://github.com/aws-deadline/deadline-cloud/pull/1036">PR #1036</a> — Move S3 client and config logic out of manifest download<a class="headerlink" href="#pr-1036-move-s3-client-and-config-logic-out-of-manifest-download" title="Permanent link">&para;</a></h3>
+<p><code>_manifest_download</code> internally created its own Deadline API client, assumed queue role credentials, and resolved S3 settings by importing from <code>client.api._session</code> and reading the Client's config.</p>
+<p>Pushed all session and config setup to the caller (<code>manifest_group.py</code>), which now passes three explicit parameters:</p>
+<pre><code class="language-python">def _manifest_download(
+    *,
+    deadline_client: botocore.client.BaseClient,  # for GetJob, ListStepDependencies calls
+    queue_role_session: boto3.Session,             # for S3 manifest downloads
+    queue_s3_settings: JobAttachmentS3Settings,    # bucket name and root prefix
+    ...
+)
+</code></pre>
+<p><strong>Files changed:</strong> <code>job_attachments/api/manifest.py</code>, <code>client/cli/_groups/manifest_group.py</code>, <code>client/api/_session.py</code></p>
+<h3 id="pr-1037-move-_hash_attachments-into-job-attachments"><a href="https://github.com/aws-deadline/deadline-cloud/pull/1037">PR #1037</a> — Move <code>_hash_attachments</code> into Job Attachments<a class="headerlink" href="#pr-1037-move-_hash_attachments-into-job-attachments" title="Permanent link">&para;</a></h3>
+<p><code>_hash_attachments</code> orchestrates the hashing workflow but lived in <code>client/api/_job_attachment.py</code> despite only calling Job Attachments code. Job Attachments' <code>_create_manifest_for_single_root</code> imported it back, creating a circular dependency.</p>
+<p>Moved to <code>job_attachments/api/_hashing.py</code>. The telemetry callback is the key decoupling point — previously it directly called the Client's telemetry client, now it accepts an optional callback:</p>
+<pre><code class="language-python"># In client/api/_submit_job_bundle.py — Client provides the implementation
+def hashing_telemetry_callback(hashing_summary: SummaryStatistics):
+    api.get_deadline_cloud_library_telemetry_client().record_hashing_summary(hashing_summary)
+</code></pre>
+<p><strong>Files changed:</strong> <code>client/api/_job_attachment.py</code> (function removed), <code>job_attachments/api/_hashing.py</code> (new), <code>job_attachments/asset_manifests/_create_manifest.py</code>, <code>client/api/_submit_job_bundle.py</code>, <code>client/cli/_groups/manifest_group.py</code></p>
+<h3 id="pr-1038-move-path-summarization-into-job-attachments"><a href="https://github.com/aws-deadline/deadline-cloud/pull/1038">PR #1038</a> — Move path summarization into Job Attachments<a class="headerlink" href="#pr-1038-move-path-summarization-into-job-attachments" title="Permanent link">&para;</a></h3>
+<p>Moved ~535 lines of path summarization utilities from <code>deadline.common.path_utils</code> (a shared module with ambiguous ownership) into <code>job_attachments/_path_summarization.py</code> where they logically belong.</p>
+<p>Reduced the original <code>common/path_utils.py</code> to a deprecation shim that re-exports from the new location:</p>
+<pre><code class="language-python">from ..job_attachments._path_summarization import (
+    human_readable_file_size, summarize_paths_by_nested_directory,
+    summarize_paths_by_sequence, summarize_path_list, PathSummary,
+)
+
+import warnings
+warnings.warn(
+    &quot;The deadline.common module is deprecated. Please use deadline.job_attachments.api instead.&quot;,
+    DeprecationWarning, stacklevel=2,
+)
+</code></pre>
+<p>All internal Client callers were updated to import directly from <code>job_attachments</code>.</p>
+<p><strong>Files changed:</strong> <code>common/path_utils.py</code> (gutted to shim), <code>job_attachments/_path_summarization.py</code> (new), <code>client/api/_submit_job_bundle.py</code>, <code>client/cli/_groups/job_group.py</code>, <code>client/cli/_incremental_download.py</code>, <code>job_attachments/api/__init__.py</code></p>
+<h3 id="pr-1040-remove-direct-config-access-in-job-attachments"><a href="https://github.com/aws-deadline/deadline-cloud/pull/1040">PR #1040</a> — Remove direct config access in Job Attachments<a class="headerlink" href="#pr-1040-remove-direct-config-access-in-job-attachments" title="Permanent link">&para;</a></h3>
+<p>Removed six direct imports of <code>config_file.get_cache_directory()</code> and <code>config_file.get_setting(...)</code> from <code>deadline.client.config</code> across Job Attachments:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Config Call</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_diff.py</code></td>
+<td><code>get_cache_directory()</code></td>
+</tr>
+<tr>
+<td><code>upload.py</code></td>
+<td><code>get_setting("settings.small_file_threshold_multiplier")</code></td>
+</tr>
+<tr>
+<td><code>upload.py</code></td>
+<td><code>get_setting("settings.s3_max_pool_connections")</code></td>
+</tr>
+<tr>
+<td><code>api/attachment.py</code></td>
+<td><code>get_cache_directory()</code></td>
+</tr>
+<tr>
+<td><code>api/manifest.py</code></td>
+<td><code>get_cache_directory()</code></td>
+</tr>
+<tr>
+<td><code>_aws/aws_clients.py</code></td>
+<td><code>get_setting("settings.s3_max_pool_connections")</code></td>
+</tr>
+</tbody>
+</table>
+<p>Replaced all with explicit parameters. <code>S3AssetUploader.__init__</code> now requires <code>s3_max_pool_connections</code> and <code>small_file_threshold_multiplier</code> as keyword arguments. This is an intentional breaking change — <code>S3AssetUploader</code> is a public symbol used by both the Client and Worker Agent.</p>
+<p><strong>Files changed:</strong> <code>job_attachments/upload.py</code>, <code>job_attachments/_aws/aws_clients.py</code>, <code>job_attachments/_diff.py</code>, <code>job_attachments/api/attachment.py</code>, <code>job_attachments/api/manifest.py</code>, <code>job_attachments/download.py</code>, <code>job_attachments/asset_sync.py</code>, <code>client/api/_session.py</code>, <code>client/api/_submit_job_bundle.py</code>, <code>client/cli/_groups/attachment_group.py</code>, <code>client/cli/_groups/manifest_group.py</code></p>
+<h3 id="pr-1062-remove-vfs-dependencies-on-the-client"><a href="https://github.com/aws-deadline/deadline-cloud/pull/1062">PR #1062</a> — Remove VFS dependencies on the Client<a class="headerlink" href="#pr-1062-remove-vfs-dependencies-on-the-client" title="Permanent link">&para;</a></h3>
+<p><code>VFSProcessManager</code> in <code>vfs.py</code> imported <code>get_deadline_cloud_library_telemetry_client</code> from <code>deadline.client.api</code> to call <code>record_vfs_mounting()</code> after each mount — the last remaining reverse dependency from Job Attachments into the Client.</p>
+<p>Replaced the direct telemetry call with an <code>on_mount_complete: Optional[Callable[[bool], None]]</code> callback parameter, threaded through the full VFS mount chain:</p>
+<pre><code class="language-python">AssetSync.sync_inputs(
+    ...,
+    on_vfs_mount_complete=some_telemetry_callback,   # caller provides callback
+)
+  → _launch_vfs(on_mount_complete=on_vfs_mount_complete)
+    → mount_vfs_from_manifests(on_mount_complete=on_mount_complete)
+      → VFSProcessManager(on_mount_complete=on_mount_complete)
+        → vfs_manager.start()
+          → is_mounted = wait_for_mount(...)
+          → if self._on_mount_complete is not None:
+                self._on_mount_complete(is_mounted)
+</code></pre>
+<p>All parameters default to <code>None</code>, so no existing callers need changes. If no callback is provided, the mount event is silently ignored. This is not a breaking change — all affected interfaces are underscored.</p>
+<p>With this PR, Job Attachments has zero imports from <code>deadline.client</code>.</p>
+<p><strong>Files changed:</strong> <code>job_attachments/vfs.py</code>, <code>job_attachments/download.py</code>, <code>job_attachments/asset_sync.py</code></p>
+<h2 id="call-stacks">Call Stacks<a class="headerlink" href="#call-stacks" title="Permanent link">&para;</a></h2>
+<p>These are the primary user-facing flows that exercise the decoupled interface. Each shows how the Client prepares sessions, config values, and callbacks, then passes them into Job Attachments functions.</p>
+<h3 id="1-deadline-bundle-submit-job-submission">1. <code>deadline bundle submit</code> (Job Submission)<a class="headerlink" href="#1-deadline-bundle-submit-job-submission" title="Permanent link">&para;</a></h3>
+<pre><code>client.cli.bundle_group.cli_bundle_submit()
+  └─ client.api._submit_job_bundle.create_job_from_job_bundle()
+       │
+       │  # Client reads config and creates the asset manager
+       ├─ s3_max_pool_connections = config_file.get_setting(&quot;settings.s3_max_pool_connections&quot;)
+       ├─ small_file_threshold_multiplier = config_file.get_setting(&quot;settings.small_file_threshold_multiplier&quot;)
+       ├─ S3AssetManager(session, s3_max_pool_connections, small_file_threshold_multiplier)
+       │
+       │  # Client calls into JA for hashing, passing callbacks and config
+       ├─ job_attachments.api._hashing._hash_attachments(
+       │    asset_manager=asset_manager,
+       │    hashing_progress_callback=on_preparing_to_submit,
+       │    telemetry_callback=hashing_telemetry_callback,    ← client-defined, records to telemetry
+       │    hash_cache_dir=config_file.get_cache_directory()
+       │  )
+       │    └─ S3AssetManager.hash_assets_and_create_manifest()
+       │
+       │  # Client calls into JA for upload
+       └─ _upload_attachments(
+            asset_manager=asset_manager,
+            s3_check_cache_dir=config_file.get_cache_directory()
+          )
+            └─ S3AssetManager.upload_assets()
+</code></pre>
+<h3 id="2-deadline-manifest-snapshot-local-hashing">2. <code>deadline manifest snapshot</code> (Local Hashing)<a class="headerlink" href="#2-deadline-manifest-snapshot-local-hashing" title="Permanent link">&para;</a></h3>
+<pre><code>client.cli.manifest_group.manifest_snapshot()
+  │
+  │  # Client creates UI and reads config
+  ├─ progress_manager = _ProgressBarCallbackManager(length=100, label=&quot;Hashing Attachments&quot;)
+  ├─ hash_cache_dir = config_file.get_cache_directory()
+  │
+  │  # Client calls into JA, passing callback and config
+  └─ job_attachments.api.manifest._manifest_snapshot(
+       hashing_progress_callback=progress_manager.callback,
+       telemetry_callback=hashing_telemetry_callback,
+       hash_cache_dir=hash_cache_dir
+     )
+       └─ _create_manifest_for_single_root(...)
+            └─ job_attachments.api._hashing._hash_attachments(...)
+                 └─ S3AssetManager.hash_assets_and_create_manifest()
+</code></pre>
+<h3 id="3-deadline-manifest-download-s3-download">3. <code>deadline manifest download</code> (S3 Download)<a class="headerlink" href="#3-deadline-manifest-download-s3-download" title="Permanent link">&para;</a></h3>
+<pre><code>client.cli.manifest_group.manifest_download()
+  │
+  │  # Client handles all session and config setup
+  ├─ boto3_session = api.get_boto3_session(config=config)
+  ├─ deadline_client = boto3_session.client(&quot;deadline&quot;, config=get_default_client_config())
+  ├─ queue = deadline_client.get_queue(farmId=farm_id, queueId=queue_id)
+  ├─ queue_s3_settings = JobAttachmentS3Settings(**queue[&quot;jobAttachmentSettings&quot;])
+  ├─ queue_role_session = _get_queue_user_boto3_session(deadline_client, boto3_session, ...)
+  │
+  │  # Client passes everything JA needs as parameters
+  └─ job_attachments.api.manifest._manifest_download(
+       deadline_client=deadline_client,
+       queue_role_session=queue_role_session,
+       queue_s3_settings=queue_s3_settings,
+       farm_id=farm_id, queue_id=queue_id, job_id=job_id
+     )
+       ├─ deadline_client.get_job(...)
+       ├─ get_manifest_from_s3(session=queue_role_session)
+       └─ get_output_manifests_by_asset_root(session=queue_role_session)
+</code></pre>
+<h3 id="4-deadline-manifest-upload-s3-upload">4. <code>deadline manifest upload</code> (S3 Upload)<a class="headerlink" href="#4-deadline-manifest-upload-s3-upload" title="Permanent link">&para;</a></h3>
+<pre><code>client.cli.manifest_group.manifest_upload()
+  │
+  ├─ session = api.get_boto3_session(config=config)
+  ├─ (resolves bucket_name and cas_path from queue or --s3-cas-uri)
+  ├─ session = api.get_queue_user_boto3_session(...)   ← if using farm/queue
+  │
+  └─ job_attachments.api.manifest._manifest_upload(boto_session=session)
+       └─ S3AssetUploader(session=session, s3_max_pool_connections=50, small_file_threshold_multiplier=20)
+            └─ upload_bytes_to_s3(...)
+</code></pre>
+<h3 id="5-deadline-attachment-download-deadline-attachment-upload">5. <code>deadline attachment download</code> / <code>deadline attachment upload</code><a class="headerlink" href="#5-deadline-attachment-download-deadline-attachment-upload" title="Permanent link">&para;</a></h3>
+<pre><code>client.cli.attachment_group.attachment_download()
+  ├─ boto3_session = api.get_queue_user_boto3_session(...)
+  └─ job_attachments.api.attachment._attachment_download(boto3_session=session)
+       └─ download_files_from_manifests(session=boto3_session)
+
+client.cli.attachment_group.attachment_upload()
+  │
+  ├─ boto3_session = api.get_queue_user_boto3_session(...)
+  ├─ s3_max_pool_connections = config_file.get_setting(&quot;settings.s3_max_pool_connections&quot;)
+  ├─ small_file_threshold_multiplier = config_file.get_setting(&quot;settings.small_file_threshold_multiplier&quot;)
+  │
+  └─ job_attachments.api.attachment._attachment_upload(
+       boto3_session=session,
+       s3_check_cache_dir=config_file.get_cache_directory(),
+       s3_max_pool_connections=s3_max_pool_connections,
+       small_file_threshold_multiplier=small_file_threshold_multiplier
+     )
+       └─ S3AssetUploader(session, s3_max_pool_connections, small_file_threshold_multiplier)
+            └─ upload_assets(s3_check_cache_dir=...)
+</code></pre>
+<h3 id="6-deadline-job-download-output-incremental-downloads">6. <code>deadline job download-output</code> / Incremental Downloads<a class="headerlink" href="#6-deadline-job-download-output-incremental-downloads" title="Permanent link">&para;</a></h3>
+<pre><code>client.cli.job_group.job_download_output()
+  ├─ queue_role_session = api.get_queue_user_boto3_session(...)
+  └─ job_attachments.download.OutputDownloader(session=queue_role_session)
+       └─ download_job_output()
+
+client.cli.queue_group → _incremental_output_download()
+  └─ job_attachments incremental download APIs (session injected)
+  └─ job_attachments._path_summarization.summarize_path_list()
+</code></pre>
+<h3 id="7-worker-agent-vfs-mount-with-telemetry">7. Worker Agent — VFS Mount with Telemetry<a class="headerlink" href="#7-worker-agent-vfs-mount-with-telemetry" title="Permanent link">&para;</a></h3>
+<pre><code>worker_agent → AssetSync.sync_inputs(
+    ...,
+    on_vfs_mount_complete=telemetry_callback,       ← caller provides callback
+)
+  └─ _launch_vfs(on_mount_complete=on_vfs_mount_complete)
+       └─ mount_vfs_from_manifests(on_mount_complete=on_mount_complete)
+            └─ VFSProcessManager(on_mount_complete=on_mount_complete)
+                 └─ start(session_dir=session_dir)
+                      ├─ is_mounted = wait_for_mount(...)
+                      └─ if self._on_mount_complete:
+                             self._on_mount_complete(is_mounted)
+</code></pre>
+<h2 id="contract-quick-reference">Contract Quick Reference<a class="headerlink" href="#contract-quick-reference" title="Permanent link">&para;</a></h2>
+<h3 id="what-the-client-provides-to-job-attachments">What the Client provides to Job Attachments<a class="headerlink" href="#what-the-client-provides-to-job-attachments" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Type</th>
+<th>How it's provided</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AWS credentials for S3</td>
+<td><code>boto3.Session</code></td>
+<td>Parameter on every function that makes S3 calls</td>
+</tr>
+<tr>
+<td>Deadline API client</td>
+<td><code>botocore.client.BaseClient</code></td>
+<td>Parameter on functions that call Deadline APIs</td>
+</tr>
+<tr>
+<td>Queue S3 settings</td>
+<td><code>JobAttachmentS3Settings</code></td>
+<td>Parameter (bucket name, root prefix)</td>
+</tr>
+<tr>
+<td>Hash cache directory</td>
+<td><code>Optional[str]</code></td>
+<td>Parameter, defaults to <code>None</code></td>
+</tr>
+<tr>
+<td>S3 check cache directory</td>
+<td><code>Optional[str]</code></td>
+<td>Parameter, defaults to <code>None</code></td>
+</tr>
+<tr>
+<td>S3 connection pool size</td>
+<td><code>int</code></td>
+<td>Required parameter on <code>S3AssetUploader</code></td>
+</tr>
+<tr>
+<td>Upload threshold multiplier</td>
+<td><code>int</code></td>
+<td>Required parameter on <code>S3AssetUploader</code></td>
+</tr>
+<tr>
+<td>Progress reporting</td>
+<td><code>Optional[Callable[[ProgressReportMetadata], bool]]</code></td>
+<td>Callback, defaults to <code>None</code> (silent)</td>
+</tr>
+<tr>
+<td>Telemetry recording</td>
+<td><code>Optional[Callable[[SummaryStatistics], None]]</code></td>
+<td>Callback, defaults to <code>None</code> (no telemetry)</td>
+</tr>
+<tr>
+<td>VFS mount completion</td>
+<td><code>Optional[Callable[[bool], None]]</code></td>
+<td>Callback, defaults to <code>None</code> (silent). Receives <code>True</code> if mount succeeded.</td>
+</tr>
+<tr>
+<td>Print/logging output</td>
+<td><code>Callable[[Any], None]</code></td>
+<td>Callback, defaults to no-op lambda</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-job-attachments-owns">What Job Attachments owns<a class="headerlink" href="#what-job-attachments-owns" title="Permanent link">&para;</a></h3>
+<ul>
+<li>All S3 operations (upload, download, manifest management) using the provided session</li>
+<li>File hashing and manifest creation</li>
+<li>Asset diffing and comparison</li>
+<li>Path summarization and display formatting</li>
+<li>All exception types for attachment operations</li>
+<li>Progress tracking data types and reporting interfaces</li>
+<li>Data models for S3 settings, manifests, filesystem locations, and storage profiles</li>
+</ul>
+<h3 id="what-job-attachments-never-does">What Job Attachments never does<a class="headerlink" href="#what-job-attachments-never-does" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Import from <code>deadline.client.*</code> — zero imports exist (verified by grep)</li>
+<li>Read from <code>~/.deadline/config</code> — all config values are injected as parameters</li>
+<li>Create UI components — progress bars, click loggers, etc. are provided by the Client as callbacks</li>
+<li>Access telemetry clients — telemetry recording is done via an optional callback</li>
+<li>Create or assume AWS sessions — all sessions are created by the Client and passed in</li>
+</ul>
+<h3 id="key-decoupling-related-exports">Key decoupling-related exports<a class="headerlink" href="#key-decoupling-related-exports" title="Permanent link">&para;</a></h3>
+<p>These are the symbols whose signatures changed as part of the decoupling work. For the full export surface, see the source code.</p>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Module</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_hash_attachments</code></td>
+<td><code>job_attachments.api._hashing</code></td>
+<td>Moved from <code>client.api._job_attachment</code>; added <code>telemetry_callback</code></td>
+</tr>
+<tr>
+<td><code>_manifest_snapshot</code></td>
+<td><code>job_attachments.api.manifest</code></td>
+<td>Added <code>hashing_progress_callback</code>, <code>telemetry_callback</code>, <code>hash_cache_dir</code></td>
+</tr>
+<tr>
+<td><code>_manifest_download</code></td>
+<td><code>job_attachments.api.manifest</code></td>
+<td>Now accepts <code>deadline_client</code>, <code>queue_role_session</code>, <code>queue_s3_settings</code> instead of creating its own</td>
+</tr>
+<tr>
+<td><code>_create_manifest_for_single_root</code></td>
+<td><code>job_attachments.asset_manifests._create_manifest</code></td>
+<td>Added <code>hashing_progress_callback</code>, <code>telemetry_callback</code>, <code>hash_cache_dir</code></td>
+</tr>
+<tr>
+<td><code>S3AssetUploader</code></td>
+<td><code>job_attachments.upload</code></td>
+<td><code>__init__</code> now requires <code>s3_max_pool_connections</code> and <code>small_file_threshold_multiplier</code></td>
+</tr>
+<tr>
+<td><code>S3AssetManager</code></td>
+<td><code>job_attachments.upload</code></td>
+<td><code>__init__</code> accepts <code>s3_max_pool_connections</code> (default 50) and <code>small_file_threshold_multiplier</code> (default 20)</td>
+</tr>
+<tr>
+<td><code>NonValidInputError</code></td>
+<td><code>job_attachments.exceptions</code></td>
+<td>Moved from <code>client.exceptions</code>; now inherits from <code>JobAttachmentsError</code></td>
+</tr>
+<tr>
+<td><code>summarize_path_list</code>, <code>human_readable_file_size</code>, <code>PathSummary</code></td>
+<td><code>job_attachments.api</code> (re-exported)</td>
+<td>Moved from <code>common.path_utils</code>; old location is a deprecation shim</td>
+</tr>
+<tr>
+<td><code>VFSProcessManager</code></td>
+<td><code>job_attachments.vfs</code></td>
+<td>Added <code>on_mount_complete: Optional[Callable[[bool], None]]</code>; removed <code>get_deadline_cloud_library_telemetry_client</code> import</td>
+</tr>
+<tr>
+<td><code>mount_vfs_from_manifests</code></td>
+<td><code>job_attachments.download</code></td>
+<td>Added <code>on_mount_complete: Optional[Callable[[bool], None]]</code></td>
+</tr>
+<tr>
+<td><code>AssetSync.sync_inputs</code></td>
+<td><code>job_attachments.asset_sync</code></td>
+<td>Added <code>on_vfs_mount_complete: Optional[Callable[[bool], None]]</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="migration-guide">Migration Guide<a class="headerlink" href="#migration-guide" title="Permanent link">&para;</a></h2>
+<h3 id="for-deadline-cloud-client-code-internal">For <code>deadline-cloud</code> Client code (internal)<a class="headerlink" href="#for-deadline-cloud-client-code-internal" title="Permanent link">&para;</a></h3>
+<p>No action needed — all Client callers were updated in the same PR set.</p>
+<h3 id="for-deadline-cloud-worker-agent">For <code>deadline-cloud-worker-agent</code><a class="headerlink" href="#for-deadline-cloud-worker-agent" title="Permanent link">&para;</a></h3>
+<p>The Worker Agent imports and uses <code>S3AssetUploader</code> from the <code>deadline-cloud</code> package (<code>deadline.job_attachments.upload</code>). As part of <a href="https://github.com/aws-deadline/deadline-cloud/pull/1040">PR #1040</a>, the <code>S3AssetUploader.__init__</code> signature in <code>deadline-cloud</code> was changed to require two additional keyword arguments — <code>s3_max_pool_connections</code> and <code>small_file_threshold_multiplier</code> — which were previously read internally from the Client's config. Since the Worker Agent calls this constructor directly, it must be updated to pass these values explicitly:</p>
+<pre><code class="language-python"># For Example:
+
+# Before (deadline-cloud handled config lookup internally)
+uploader = S3AssetUploader(session=my_session)
+
+# After (caller must provide the values that deadline-cloud no longer reads from config)
+uploader = S3AssetUploader(
+    session=my_session,
+    s3_max_pool_connections=50,           # or read from your own config
+    small_file_threshold_multiplier=20,   # or read from your own config
+)
+</code></pre>
+<p>The Worker Agent's <a href="https://github.com/aws-deadline/deadline-cloud-worker-agent/blob/mainline/pyproject.toml"><code>pyproject.toml</code></a> pins the <code>deadline</code> package version range in its dependencies. This pin must be updated to require the <code>deadline</code> version that includes the breaking signature changes (at minimum the <code>S3AssetUploader</code> constructor change from PR #1040 and the <code>on_vfs_mount_complete</code> callback from PR #1062). If the version range allows older <code>deadline</code> versions, the agent will fail at runtime when it calls <code>S3AssetUploader()</code> without the now-required parameters.</p>
+<p>Version compatibility must be ensured across both deployment paths:</p>
+<ul>
+<li><strong>Service-managed fleets:</strong> The worker AMI is built using exact version pins for <code>deadline-cloud-worker-agent</code>, <code>deadline</code>, and <code>openjd-sessions</code>. Both the worker agent and <code>deadline</code> version pins must be updated together to versions that include the breaking changes. Linux and Windows configurations must stay in sync.</li>
+<li><strong>Customer-managed fleets:</strong> Customers install the worker agent via <code>pip install deadline-cloud-worker-agent</code>, which resolves the <code>deadline</code> dependency from the version range in the worker agent's <code>pyproject.toml</code>. As long as the version pin is correct, pip will pull compatible versions automatically.</li>
+</ul>
+<h3 id="for-external-consumers-importing-from-deadlinecommonpath_utils">For external consumers importing from <code>deadline.common.path_utils</code><a class="headerlink" href="#for-external-consumers-importing-from-deadlinecommonpath_utils" title="Permanent link">&para;</a></h3>
+<p>The import still works but emits a <code>DeprecationWarning</code>. Update imports to use the new location:</p>
+<pre><code class="language-python"># Before
+from deadline.common.path_utils import summarize_path_list, human_readable_file_size
+
+# After
+from deadline.job_attachments.api import summarize_path_list, human_readable_file_size
+</code></pre>
+<!-- TODO: Should we set a removal timeline for the deprecation shim? e.g., "Will be removed in version X.Y" -->
+
+<h3 id="for-external-code-catching-nonvalidinputerror">For external code catching <code>NonValidInputError</code><a class="headerlink" href="#for-external-code-catching-nonvalidinputerror" title="Permanent link">&para;</a></h3>
+<p>If you catch <code>NonValidInputError</code> by its fully-qualified path from <code>deadline.client.exceptions</code> when calling a Job Attachments function, update to catch from <code>deadline.job_attachments.exceptions</code>. The affected functions (<code>_attachment_download</code>, <code>_attachment_upload</code>) are underscored Beta API.</p>
+<pre><code class="language-python"># Before
+from deadline.client.exceptions import NonValidInputError
+
+try:
+    _attachment_upload(...)
+except NonValidInputError:
+    ...
+
+# After
+from deadline.job_attachments.exceptions import NonValidInputError
+
+try:
+    _attachment_upload(...)
+except NonValidInputError:
+    ...
+</code></pre>
+<h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
+<p>Verification was performed at three levels — unit, integration, and downstream consumer — to confirm the decoupling changes do not introduce regressions.</p>
+<h3 id="unit-tests">Unit Tests<a class="headerlink" href="#unit-tests" title="Permanent link">&para;</a></h3>
+<p>Updated mocks and assertions across ~30 test files to reflect the new parameter signatures and import paths. The changes fall into these categories:</p>
+<ul>
+<li><strong>Callback threading</strong> — verify that <code>hashing_progress_callback</code>, <code>telemetry_callback</code>, and <code>hash_cache_dir</code> are correctly passed through the full call chain (<code>_manifest_snapshot</code> → <code>_create_manifest_for_single_root</code> → <code>_hash_attachments</code> → <code>S3AssetManager.hash_assets_and_create_manifest()</code>).</li>
+<li><strong>Config injection</strong> — verify that <code>S3AssetUploader</code> and <code>S3AssetManager</code> receive <code>s3_max_pool_connections</code> and <code>small_file_threshold_multiplier</code> as constructor arguments rather than reading from config. Tests confirm that invalid values (zero, negative) raise <code>AssetSyncError</code>.</li>
+<li><strong>Session injection</strong> — verify that <code>_manifest_download</code> uses the injected <code>deadline_client</code> for API calls and <code>queue_role_session</code> for S3 operations, rather than creating its own.</li>
+<li><strong>Exception types</strong> — verify that <code>NonValidInputError</code> is raised from <code>job_attachments.exceptions</code> and can be caught by the Client.</li>
+<li><strong>Deprecation shim</strong> — verify that importing from <code>deadline.common.path_utils</code> still works but emits a <code>DeprecationWarning</code>.</li>
+</ul>
+<pre><code class="language-bash"># Single Python version
+hatch run test
+
+# All supported Python versions
+hatch run all:test
+</code></pre>
+<h3 id="integration-tests">Integration Tests<a class="headerlink" href="#integration-tests" title="Permanent link">&para;</a></h3>
+<p>Ran against a live AWS Deadline Cloud environment (us-west-2) to verify end-to-end behavior across all CLI flows:</p>
+<ul>
+<li>Job submission with file attachments (<code>deadline bundle submit</code>)</li>
+<li>Manifest snapshot, diff, download, and upload (<code>deadline manifest *</code>)</li>
+<li>Attachment download and upload (<code>deadline attachment *</code>)</li>
+</ul>
+<p>This confirms that the decoupled interfaces work correctly with real AWS credentials, real S3 operations, and real Deadline Cloud API calls. The integration tests exercise the full call stacks documented above, from CLI entry point through to S3.</p>
+<pre><code class="language-bash">hatch run integ:test
+</code></pre>
+<h3 id="downstream-consumer-tests-deadline-cloud-worker-agent">Downstream Consumer Tests — deadline-cloud-worker-agent<a class="headerlink" href="#downstream-consumer-tests-deadline-cloud-worker-agent" title="Permanent link">&para;</a></h3>
+<p>The Worker Agent (<a href="https://github.com/aws-deadline/deadline-cloud-worker-agent">deadline-cloud-worker-agent</a>) is the primary downstream consumer of the <code>deadline</code> package. Running the worker agent's own tests against a wheel built from this branch catches issues that our own tests may not — specifically, import path changes, removed or renamed public symbols, and signature mismatches that only surface when a real consumer tries to use the package. This is the most direct way to validate that the decoupling doesn't break the contract between <code>deadline-cloud</code> and its dependents.</p>
+<p>Two test tiers were run:</p>
+<ul>
+<li><strong>Worker Agent unit tests</strong> — validates that the agent's code can import and call into our package without errors. Catches import path changes, removed or renamed symbols, and signature mismatches.</li>
+<li><strong>Worker Agent E2E tests</strong> — deploys real worker agents on EC2 instances against the live Deadline Cloud service with our wheel installed. Jobs are submitted with input attachments, executed on workers, and output is downloaded. E2E tests were run on both Linux and Windows to verify cross-platform path handling.</li>
+</ul>
+<pre><code class="language-bash"># Build wheel from the feat/client-decouple branch
+hatch build
+
+# In the worker agent repo, install our wheel and run unit tests
+pip install /path/to/deadline-cloud/dist/deadline-*.whl
+hatch run test
+
+# Deploy E2E testing infrastructure
+./scripts/deploy_e2e_testing_infrastructure.sh
+
+# Gather environment variables for each OS
+./scripts/get_e2e_test_ids_from_cfn.sh --os Linux &gt; .e2e_linux_infra.sh
+./scripts/get_e2e_test_ids_from_cfn.sh --os Windows &gt; .e2e_windows_infra.sh
+
+# Run E2E tests (Linux)
+source .e2e_linux_infra.sh
+hatch run integ:test
+
+# Run E2E tests (Windows)
+source .e2e_windows_infra.sh
+hatch run integ:test
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    </div>
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

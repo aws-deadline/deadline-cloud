@@ -1,0 +1,2840 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/deadline-cloud/design/storage-profile-cli-support/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Storage Profile Support in CLI Commands - AWS Deadline Cloud - Client Library Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#storage-profile-support-in-cli-commands" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-header__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud - Client Library Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Storage Profile Support in CLI Commands
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AWS Deadline Cloud - Client Library Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cli_reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_attachment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    attachment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    auth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_farm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    farm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_fleet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fleet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_handle-web-url/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    handle-web-url
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_job/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_manifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    manifest
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mcp-server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_queue/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Library Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    deadline.client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    deadline.client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    api
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cli
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_job_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job_bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ui
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../submission-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Submission Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-issue-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Issue Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-executive-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Executive Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-background" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Background
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Background">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-storage-profile-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 Storage Profile Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-cli-commands-with-storage-profile-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 CLI Commands with Storage Profile Support
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-existing-ignore-storage-profiles-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Existing --ignore-storage-profiles Implementation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-download-code-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Download Code Path
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Download Code Path">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-deadline-job-download-output-single-job" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 deadline job download-output (Single Job)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.1 deadline job download-output (Single Job)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#411-current-os-mismatch-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1.1 Current OS Mismatch Handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-deadline-queue-sync-output-reference-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 deadline queue sync-output — Reference Implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.2 deadline queue sync-output — Reference Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#421-storage-profile-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2.1 Storage Profile Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-incremental-download-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Incremental Download Implementation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-path-mapping-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Path Mapping Implementation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.4 Path Mapping Implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#441-rule-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4.1 Rule Generation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#442-rule-application-trie-based" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4.2 Rule Application (Trie-based)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-download-file-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 Download File Operations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.5 Download File Operations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#451-outputdownloader-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5.1 OutputDownloader Class
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#452-file-download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5.2 File Download
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-data-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Data Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Data Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-storageprofile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 StorageProfile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-filesystemlocation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 FileSystemLocation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-pathmappingrule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 PathMappingRule
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-identified-gaps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Identified Gaps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Identified Gaps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-deadline-job-download-output-lacks-storage-profile-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 deadline job download-output lacks storage profile support
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-outputdownloader-has-a-stale-todo-for-path-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 OutputDownloader has a stale TODO for path mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-_generate_path_mapping_rules-accepts-raw-dicts-not-storageprofile-dataclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 _generate_path_mapping_rules accepts raw dicts, not StorageProfile dataclass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64-s3assetmanager-doesnt-auto-fetch-storage-profile-future-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 S3AssetManager doesn't auto-fetch storage profile (future work)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-decision-matrix-storage-profile-combinations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Decision Matrix: Storage Profile Combinations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-proposed-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Proposed Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Proposed Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#81-stage-1-add-cli-options-and-wiring-small-reviewable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1 Stage 1: Add CLI options and wiring (small, reviewable)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8.1 Stage 1: Add CLI options and wiring (small, reviewable)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#811-add-cli-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1.1 Add CLI Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#812-update-job_download_output-entry-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1.2 Update job_download_output() entry point
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#813-add-ignore_storage_profiles-parameter-to-_download_job_output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1.3 Add ignore_storage_profiles parameter to _download_job_output()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#82-stage-2-single-responsibility-helper-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2 Stage 2: Single-responsibility helper functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8.2 Stage 2: Single-responsibility helper functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#821-_resolve_storage_profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2.1 _resolve_storage_profiles()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#822-refactor-_generate_path_mapping_rules-to-accept-storageprofile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2.2 Refactor _generate_path_mapping_rules() to accept StorageProfile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#823-_apply_path_mappings_to_roots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2.3 _apply_path_mappings_to_roots()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#83-stage-3-integrate-helpers-into-_download_job_output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3 Stage 3: Integrate helpers into _download_job_output()
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8.3 Stage 3: Integrate helpers into _download_job_output()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#831-updated-flow-in-_download_job_output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3.1 Updated flow in _download_job_output()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#832-entry-point" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3.2 Entry point
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Testing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Testing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#91-test-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.1 Test Cases
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9.1 Test Cases">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#case-1-both-profiles-exist-location-names-match-automatic-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Case 1: Both profiles exist, location names match → automatic mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#case-2-both-profiles-exist-location-names-dont-match-no-rules-no-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Case 2: Both profiles exist, location names don't match → no rules, no mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#case-3-job-has-profile-local-machine-does-not-warning-manual-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Case 3: Job has profile, local machine does not → warning, manual fallback
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#case-4-neither-submitter-nor-downloader-has-a-profile-no-mapping-direct-download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Case 4: Neither submitter nor downloader has a profile → no mapping, direct download
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#case-5-local-profile-configured-job-submitted-without-one-warning-skip-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Case 5: Local profile configured, job submitted without one → warning, skip mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#case-6-ignore-storage-profiles-flag-skip-everything" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Case 6: --ignore-storage-profiles flag → skip everything
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#case-7-same-storage-profile-on-both-sides-no-mapping-needed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Case 7: Same storage profile on both sides → no mapping needed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#92-unit-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.2 Unit Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#93-backward-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.3 Backward Compatibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-appendix-a-key-file-locations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Appendix A: Key File Locations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-appendix-b-future-refactoring-stages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Appendix B: Future Refactoring Stages
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="11. Appendix B: Future Refactoring Stages">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#111-future-stage-a-move-path-mapping-into-outputdownloader" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.1 Future Stage A: Move path mapping into OutputDownloader
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-future-stage-b-s3assetmanager-auto-fetches-storage-profile-issue-829-broader-ask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.2 Future Stage B: S3AssetManager auto-fetches storage profile (issue #829 broader ask)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-appendix-c-upload-code-path-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Appendix C: Upload Code Path (Reference)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="12. Appendix C: Upload Code Path (Reference)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121-cli-entry-point-deadline-bundle-submit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.1 CLI Entry Point: deadline bundle submit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122-api-layer-create_job_from_job_bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.2 API Layer: create_job_from_job_bundle()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123-asset-manager-s3assetmanager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.3 Asset Manager: S3AssetManager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#124-hashing-and-upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.4 Hashing and Upload
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#13-revision-absolute-path-transformation-option-e" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13. Revision: Absolute-Path Transformation (Option E)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="13. Revision: Absolute-Path Transformation (Option E)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#131-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.1 Problem
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#132-solution-option-e-dual-code-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.2 Solution: Option E — Dual Code Path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#133-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.3 Implementation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#134-test-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.4 Test Coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="storage-profile-support-in-cli-commands">Storage Profile Support in CLI Commands<a class="headerlink" href="#storage-profile-support-in-cli-commands" title="Permanent link">&para;</a></h1>
+<h2 id="1-issue-reference">1. Issue Reference<a class="headerlink" href="#1-issue-reference" title="Permanent link">&para;</a></h2>
+<p>GitHub Issue: <a href="https://github.com/aws-deadline/deadline-cloud/issues/829">#829 - Enhancement: job attachments interface does not use storage profiles by default</a></p>
+<h2 id="2-executive-summary">2. Executive Summary<a class="headerlink" href="#2-executive-summary" title="Permanent link">&para;</a></h2>
+<p>This document provides an analysis of how storage profiles are used throughout the deadline-cloud CLI, tracing code paths from CLI commands down to file hashing and S3 upload/download operations. The goal is to identify gaps in storage profile support and propose enhancements.</p>
+<hr />
+<h2 id="3-background">3. Background<a class="headerlink" href="#3-background" title="Permanent link">&para;</a></h2>
+<h3 id="31-storage-profile-configuration">3.1 Storage Profile Configuration<a class="headerlink" href="#31-storage-profile-configuration" title="Permanent link">&para;</a></h3>
+<p>Storage profiles are configured in <code>~/.deadline/config</code> under the setting <code>settings.storage_profile_id</code>. A storage profile describes the current host's file system layout (shared mount points, local scratch paths, OS family). It is scoped under <code>farm_id</code> rather than <code>queue_id</code> because the host is the same regardless of which queue it accesses within a farm. The configuration hierarchy is:</p>
+<pre><code>defaults.aws_profile_name
+  └── defaults.farm_id
+        └── settings.storage_profile_id  (depends on farm_id, not queue — host is the same across queues)
+        └── defaults.queue_id
+</code></pre>
+<p><strong>Source:</strong> <code>src/deadline/client/config/config_file.py</code></p>
+<h3 id="32-cli-commands-with-storage-profile-support">3.2 CLI Commands with Storage Profile Support<a class="headerlink" href="#32-cli-commands-with-storage-profile-support" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th style="text-align: center;"><code>--storage-profile-id</code></th>
+<th style="text-align: center;"><code>--ignore-storage-profiles</code></th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>deadline bundle submit</code></td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">N/A</td>
+<td>Reads <code>settings.storage_profile_id</code> from config or <code>--storage-profile-id</code> CLI option. Passed to <code>create_job_from_job_bundle()</code> which attaches it to the CreateJob API call and uses it for path grouping during upload. If not set, submission proceeds without a storage profile. No ignore flag needed — uploads don't require path mapping.</td>
+</tr>
+<tr>
+<td><code>deadline bundle gui-submit</code></td>
+<td style="text-align: center;">N/A</td>
+<td style="text-align: center;">N/A</td>
+<td>GUI auto-populates a storage profile dropdown by listing profiles for the selected queue, filtered to the current OS. Pre-selects from <code>settings.storage_profile_id</code> in config. User can change selection before submitting. No ignore flag needed — uploads don't require path mapping.</td>
+</tr>
+<tr>
+<td><code>deadline queue sync-output</code></td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td>Full support (reference implementation). See §4.2 for code details.</td>
+</tr>
+<tr>
+<td><code>deadline job download-output</code></td>
+<td style="text-align: center;">❌ → ✅</td>
+<td style="text-align: center;">❌ → ✅</td>
+<td><strong>Gap (proposed in this design)</strong> — currently prompts for manual path entry on OS mismatch. This design adds <code>--ignore-storage-profiles</code> and automatic path mapping via config.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33-existing-ignore-storage-profiles-implementation">3.3 Existing <code>--ignore-storage-profiles</code> Implementation<a class="headerlink" href="#33-existing-ignore-storage-profiles-implementation" title="Permanent link">&para;</a></h3>
+<p>The <code>deadline queue sync-output</code> command already implements <code>--ignore-storage-profiles</code>:</p>
+<p><strong>File:</strong> <code>src/deadline/client/cli/_groups/queue_group.py</code></p>
+<pre><code class="language-python">@click.option(
+    &quot;--ignore-storage-profiles&quot;,
+    is_flag=True,
+    help=&quot;Ignores the storage profile configuration. Only use if all jobs in the queue &quot;
+         &quot;are submitted and downloaded from the same machine. Downloads all jobs to &quot;
+         &quot;unmapped paths regardless of operating system.\n&quot;
+         &quot;Default value is False.&quot;,
+    default=False,
+)
+</code></pre>
+<p>This option is used when:
+- All submitting and downloading machines share the <strong>same OS and mount points</strong>
+- No path mapping is needed
+- Downloads go to the original unmapped paths</p>
+<p>The proposal is to extend this existing pattern to <code>deadline job download-output</code>.</p>
+<p>For a code deep dive into the upload path (job submission), see §12 (Appendix C).</p>
+<hr />
+<h2 id="4-download-code-path">4. Download Code Path<a class="headerlink" href="#4-download-code-path" title="Permanent link">&para;</a></h2>
+<h3 id="41-deadline-job-download-output-single-job">4.1 <code>deadline job download-output</code> (Single Job)<a class="headerlink" href="#41-deadline-job-download-output-single-job" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>src/deadline/client/cli/_groups/job_group.py</code></p>
+<pre><code>CLI Command (job_download_output)
+    │
+    ├── No --storage-profile-id option!
+    │
+    └── _download_job_output()
+            │
+            ├── deadline.get_job() → get attachments metadata
+            │
+            ├── OutputDownloader.__init__()
+            │       └── get_job_output_paths_by_asset_root()
+            │
+            ├── OS Mismatch Detection:
+            │       │
+            │       └── If rootPathFormat != host format:
+            │               └── PROMPT USER for new root path (manual entry)
+            │
+            └── OutputDownloader.download_job_output()
+</code></pre>
+<h4 id="411-current-os-mismatch-handling">4.1.1 Current OS Mismatch Handling<a class="headerlink" href="#411-current-os-mismatch-handling" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python"># Check if the asset roots came from different OS
+for asset_root in asset_roots:
+    root_path_format = root_path_format_mapping.get(asset_root, &quot;&quot;)
+    if PathFormat.get_host_path_format_string() != root_path_format:
+        click.echo(_get_mismatch_os_root_warning(...))
+
+        # Manual prompt - NO storage profile support!
+        new_root = click.prompt(
+            &quot;&gt; Please enter a new root path&quot;,
+            type=click.Path(exists=False),
+        )
+        job_output_downloader.set_root_path(asset_root, os.path.expanduser(new_root))
+</code></pre>
+<p><strong>This is the gap identified in issue #829</strong> - no automatic path mapping via storage profiles.</p>
+<h3 id="42-deadline-queue-sync-output-reference-implementation">4.2 <code>deadline queue sync-output</code> — Reference Implementation<a class="headerlink" href="#42-deadline-queue-sync-output-reference-implementation" title="Permanent link">&para;</a></h3>
+<p>This is the reference implementation for storage profile support in a download command. The proposed changes in §8 follow this same pattern for <code>job download-output</code>.</p>
+<p><strong>File:</strong> <code>src/deadline/client/cli/_groups/queue_group.py</code></p>
+<pre><code>CLI Command (sync_output)
+    │
+    ├── --storage-profile-id option ✅
+    ├── --ignore-storage-profiles option ✅
+    │
+    ├── Validate storage profile exists
+    │
+    └── _incremental_output_download()
+</code></pre>
+<h4 id="421-storage-profile-validation">4.2.1 Storage Profile Validation<a class="headerlink" href="#421-storage-profile-validation" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python">if ignore_storage_profiles:
+    local_storage_profile_id = None
+else:
+    local_storage_profile_id = config_file.get_setting(
+        &quot;settings.storage_profile_id&quot;, config=config
+    )
+    if not local_storage_profile_id:
+        raise DeadlineOperationError(
+            &quot;The sync-output operation requires a storage profile...&quot;
+        )
+
+    # Validate profile exists
+    local_storage_profile = deadline.get_storage_profile_for_queue(
+        farmId=farm_id,
+        queueId=queue_id,
+        storageProfileId=local_storage_profile_id,
+    )
+</code></pre>
+<h3 id="43-incremental-download-implementation">4.3 Incremental Download Implementation<a class="headerlink" href="#43-incremental-download-implementation" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>src/deadline/client/cli/_incremental_download.py</code></p>
+<pre><code>_incremental_output_download()
+    │
+    ├── _get_download_candidate_jobs()
+    │       └── SearchJobs API to find jobs with outputs
+    │
+    ├── _categorize_jobs_in_checkpoint()
+    │       └── Categorize jobs: added, updated, unchanged, completed, etc.
+    │
+    ├── _get_job_sessions()
+    │       └── ListSessions API for each job
+    │
+    ├── _get_storage_profiles()
+    │       └── GetStorageProfileForQueue for each unique profile
+    │
+    ├── _create_path_mapping_rule_appliers()
+    │       │
+    │       └── For each job's storage profile:
+    │               │
+    │               └── _generate_path_mapping_rules(
+    │                       source_storage_profile=job_profile,
+    │                       destination_storage_profile=local_profile
+    │                   )
+    │
+    └── Download with path mapping applied
+</code></pre>
+<h3 id="44-path-mapping-implementation">4.4 Path Mapping Implementation<a class="headerlink" href="#44-path-mapping-implementation" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>deadline-cloud-job-attachments/src/deadline/job_attachments/_path_mapping.py</code></p>
+<h4 id="441-rule-generation">4.4.1 Rule Generation<a class="headerlink" href="#441-rule-generation" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python">def _generate_path_mapping_rules(
+    source_storage_profile: dict[str, Any],
+    destination_storage_profile: dict[str, Any],
+) -&gt; list[PathMappingRule]:
+    # If same profile, no mapping needed
+    if source_storage_profile[&quot;storageProfileId&quot;] == \
+       destination_storage_profile[&quot;storageProfileId&quot;]:
+        return []
+
+    # Match file system locations by NAME
+    source_locations = {loc[&quot;name&quot;]: loc for loc in source_storage_profile[&quot;fileSystemLocations&quot;]}
+    dest_locations = {loc[&quot;name&quot;]: loc for loc in destination_storage_profile[&quot;fileSystemLocations&quot;]}
+
+    # Generate rules for matching names
+    for source_name, source_loc in source_locations.items():
+        if source_name in dest_locations:
+            rules.append(PathMappingRule(
+                source_path_format,
+                source_loc[&quot;path&quot;],
+                dest_locations[source_name][&quot;path&quot;],
+            ))
+</code></pre>
+<h4 id="442-rule-application-trie-based">4.4.2 Rule Application (Trie-based)<a class="headerlink" href="#442-rule-application-trie-based" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python">class _PathMappingRuleApplier:
+    &quot;&quot;&quot;
+    Uses a trie data structure for efficient path transformation.
+
+    Example rules:
+        '/mnt/Projects -&gt; X:\\Projects'
+        '/mnt/Projects/Special -&gt; Y:\\'
+
+    Path '/mnt/Projects/Special/data.txt' maps to 'Y:\\data.txt'
+    (most specific rule wins)
+    &quot;&quot;&quot;
+</code></pre>
+<h3 id="45-download-file-operations">4.5 Download File Operations<a class="headerlink" href="#45-download-file-operations" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>deadline-cloud-job-attachments/src/deadline/job_attachments/download.py</code></p>
+<h4 id="451-outputdownloader-class">4.5.1 OutputDownloader Class<a class="headerlink" href="#451-outputdownloader-class" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python">class OutputDownloader:
+    def __init__(
+        self,
+        s3_settings: JobAttachmentS3Settings,
+        farm_id: str,
+        queue_id: str,
+        job_id: str,
+        step_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        session_action_id: Optional[str] = None,
+        session: Optional[boto3.Session] = None,
+    ) -&gt; None:
+        # NOTE: No storage_profile parameter!
+        self.outputs_by_root = get_job_output_paths_by_asset_root(...)
+</code></pre>
+<h4 id="452-file-download">4.5.2 File Download<a class="headerlink" href="#452-file-download" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python">def download_files(
+    files: list[RelativeFilePath],
+    hash_algorithm: HashAlgorithm,
+    local_download_dir: str,
+    s3_settings: JobAttachmentS3Settings,
+    session: Optional[boto3.Session] = None,
+    progress_tracker: Optional[ProgressTracker] = None,
+    file_conflict_resolution: Optional[FileConflictResolution] = ...,
+) -&gt; list[str]:
+    # Parallel download using ThreadPoolExecutor
+    return _download_files_parallel(...)
+</code></pre>
+<hr />
+<h2 id="5-data-models">5. Data Models<a class="headerlink" href="#5-data-models" title="Permanent link">&para;</a></h2>
+<h3 id="51-storageprofile">5.1 StorageProfile<a class="headerlink" href="#51-storageprofile" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>deadline-cloud-job-attachments/src/deadline/job_attachments/models.py</code></p>
+<pre><code class="language-python">@dataclass
+class StorageProfile:
+    storageProfileId: str
+    displayName: str
+    osFamily: StorageProfileOperatingSystemFamily  # WINDOWS, LINUX, MACOS
+    fileSystemLocations: List[FileSystemLocation]
+</code></pre>
+<h3 id="52-filesystemlocation">5.2 FileSystemLocation<a class="headerlink" href="#52-filesystemlocation" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>deadline-cloud-job-attachments/src/deadline/job_attachments/models.py</code></p>
+<pre><code class="language-python">@dataclass
+class FileSystemLocation:
+    name: str   # Logical name (e.g., &quot;ProjectFiles&quot;)
+    path: str   # Physical path (e.g., &quot;/mnt/projects&quot; or &quot;X:\\Projects&quot;)
+    type: FileSystemLocationType  # SHARED or LOCAL
+</code></pre>
+<h3 id="53-pathmappingrule">5.3 PathMappingRule<a class="headerlink" href="#53-pathmappingrule" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">@dataclass
+class PathMappingRule:
+    source_path_format: str  # &quot;posix&quot; or &quot;windows&quot;
+    source_path: str
+    destination_path: str
+</code></pre>
+<hr />
+<h2 id="6-identified-gaps">6. Identified Gaps<a class="headerlink" href="#6-identified-gaps" title="Permanent link">&para;</a></h2>
+<h3 id="61-deadline-job-download-output-lacks-storage-profile-support">6.1 <code>deadline job download-output</code> lacks storage profile support<a class="headerlink" href="#61-deadline-job-download-output-lacks-storage-profile-support" title="Permanent link">&para;</a></h3>
+<p><strong>Current behavior:</strong>
+- Detects OS mismatch between job submission and download
+- Prompts user to manually enter a new root path
+- No automatic path mapping</p>
+<p><strong>Desired behavior:</strong>
+- Accept <code>--ignore-storage-profiles</code> option
+- Automatically read storage profile from config (<code>settings.storage_profile_id</code>)
+- Automatically generate path mapping rules when both profiles exist
+- Apply mappings without user prompts
+- Fall back to manual prompt with guidance when profiles are missing or mismatched</p>
+<h3 id="62-outputdownloader-has-a-stale-todo-for-path-mapping">6.2 <code>OutputDownloader</code> has a stale TODO for path mapping<a class="headerlink" href="#62-outputdownloader-has-a-stale-todo-for-path-mapping" title="Permanent link">&para;</a></h3>
+<p>The <code>OutputDownloader</code> class contains this TODO:</p>
+<pre><code class="language-python"># TODO: The download location is OS-specific to the *submitting machine* matching
+# the profile of the submitting machine. The OS of the *downloading machine* might be different,
+# so we need to check that and apply path mapping rules in that case.
+</code></pre>
+<p>Both download commands already handle path mapping at the CLI layer using <code>_PathMappingRuleApplier</code> (trie-based), not inside <code>OutputDownloader</code>:</p>
+<ul>
+<li><code>queue sync-output</code> transforms every individual file path (joins <code>rootPath + relativePath</code>, then calls <code>strict_transform()</code>) inside <code>_download_all_manifests_with_absolute_paths()</code>. It does not use <code>OutputDownloader</code> at all — it has its own manifest-based download pipeline.</li>
+<li><code>job download-output</code> (this proposal) transforms root paths via <code>OutputDownloader.set_root_path()</code>, then <code>OutputDownloader</code> joins root + relative internally during download.</li>
+</ul>
+<p>These are equivalent in outcome because each manifest has a single root path — transforming the root produces the same final absolute paths as transforming each <code>root + relative</code> individually. <strong>Update (§13):</strong> This equivalence only holds when all rules match exactly at the root level. With nested file system locations, a rule can match deeper than the root, and root-only transformation would miss it. The implementation now uses absolute-path transformation (joining root + relative before applying rules) when path mapping rules exist, matching <code>sync-output</code> behavior. See §13 for details.</p>
+<p>Since both download commands handle path mapping externally using the same trie, this TODO is stale and should be removed as part of Stage 3 (§8.3). <code>OutputDownloader</code> remains a download-only concern with no path mapping responsibility.</p>
+<h3 id="63-_generate_path_mapping_rules-accepts-raw-dicts-not-storageprofile-dataclass">6.3 <code>_generate_path_mapping_rules</code> accepts raw dicts, not <code>StorageProfile</code> dataclass<a class="headerlink" href="#63-_generate_path_mapping_rules-accepts-raw-dicts-not-storageprofile-dataclass" title="Permanent link">&para;</a></h3>
+<p>The existing <code>_generate_path_mapping_rules()</code> in <code>_path_mapping.py</code> accepts <code>dict[str, Any]</code> (raw boto3 response shape). The typed API helper <code>api.get_storage_profile_for_queue()</code> returns a <code>StorageProfile</code> dataclass. The <code>sync-output</code> path sidesteps this by using the raw boto3 client directly.</p>
+<p>The function is underscore-prefixed (private) and only consumed by <code>_incremental_download.py</code> and tests — so its signature can be changed freely. Rather than adding an adapter, we can refactor <code>_generate_path_mapping_rules</code> to accept <code>StorageProfile</code> directly and update the two call sites. This is a small change that eliminates the type mismatch at the source. See §8.2.3 for the updated approach.</p>
+<h3 id="64-s3assetmanager-doesnt-auto-fetch-storage-profile-future-work">6.4 <code>S3AssetManager</code> doesn't auto-fetch storage profile (future work)<a class="headerlink" href="#64-s3assetmanager-doesnt-auto-fetch-storage-profile-future-work" title="Permanent link">&para;</a></h3>
+<p><strong>Current behavior:</strong>
+- <code>S3AssetManager.__init__()</code> takes <code>farm_id</code> and <code>queue_id</code>
+- <code>prepare_paths_for_upload()</code> requires <code>storage_profile</code> as optional parameter
+- Caller must fetch and pass storage profile</p>
+<p>This is the broader ask from issue #829. It is out of scope for this proposal and tracked separately.</p>
+<hr />
+<h2 id="7-decision-matrix-storage-profile-combinations">7. Decision Matrix: Storage Profile Combinations<a class="headerlink" href="#7-decision-matrix-storage-profile-combinations" title="Permanent link">&para;</a></h2>
+<p>When downloading, the behavior depends on whether the local machine has a storage profile configured and whether the job was submitted with one:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">Local profile configured?</th>
+<th style="text-align: center;">Job has <code>storageProfileId</code>?</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">Yes</td>
+<td style="text-align: center;">Yes</td>
+<td>Generate path mapping rules, apply automatically</td>
+</tr>
+<tr>
+<td style="text-align: center;">Yes (no matching names)</td>
+<td style="text-align: center;">Yes</td>
+<td>Warn about mismatched location names, recommend aligning storage profiles, fall back to manual prompt</td>
+</tr>
+<tr>
+<td style="text-align: center;">Yes</td>
+<td style="text-align: center;">No</td>
+<td>Warn: job was submitted without a storage profile, fall back to manual prompt</td>
+</tr>
+<tr>
+<td style="text-align: center;">No</td>
+<td style="text-align: center;">Yes</td>
+<td>Warn: recommend configuring a storage profile, fall back to manual prompt</td>
+</tr>
+<tr>
+<td style="text-align: center;">No</td>
+<td style="text-align: center;">No</td>
+<td>No mapping needed, proceed as-is (same-machine case)</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>--ignore-storage-profiles</code></td>
+<td style="text-align: center;">Any</td>
+<td>Skip all mapping, download to original paths</td>
+</tr>
+</tbody>
+</table>
+<p>All mismatch/missing cases now fall back to the existing manual prompt rather than erroring, with a log message recommending storage profile setup.</p>
+<hr />
+<h2 id="8-proposed-changes">8. Proposed Changes<a class="headerlink" href="#8-proposed-changes" title="Permanent link">&para;</a></h2>
+<h3 id="81-stage-1-add-cli-options-and-wiring-small-reviewable">8.1 Stage 1: Add CLI options and wiring (small, reviewable)<a class="headerlink" href="#81-stage-1-add-cli-options-and-wiring-small-reviewable" title="Permanent link">&para;</a></h3>
+<p>Add <code>--ignore-storage-profiles</code> to <code>job download-output</code>, wire it through to <code>_download_job_output()</code>.</p>
+<h4 id="811-add-cli-options">8.1.1 Add CLI Options<a class="headerlink" href="#811-add-cli-options" title="Permanent link">&para;</a></h4>
+<p><strong>File:</strong> <code>src/deadline/client/cli/_groups/job_group.py</code></p>
+<p>Add one new option to the existing <code>job_download_output</code> click command:</p>
+<pre><code class="language-python">@click.option(
+    &quot;--ignore-storage-profiles&quot;,
+    is_flag=True,
+    help=&quot;Ignores the storage profile configuration. Only use if the job was &quot;
+         &quot;submitted and downloaded from the same machine. Downloads to &quot;
+         &quot;unmapped paths regardless of operating system.\n&quot;
+         &quot;Default value is False.&quot;,
+    default=False,
+)
+</code></pre>
+<p>The local storage profile is read from <code>settings.storage_profile_id</code> in the config (set via <code>deadline config</code>). No explicit <code>--storage-profile-id</code> override is needed for <code>download-output</code> — the config setting is sufficient.</p>
+<h4 id="812-update-job_download_output-entry-point">8.1.2 Update <code>job_download_output()</code> entry point<a class="headerlink" href="#812-update-job_download_output-entry-point" title="Permanent link">&para;</a></h4>
+<p>Pass <code>ignore_storage_profiles</code> through to <code>_download_job_output()</code>:</p>
+<pre><code class="language-python">def job_download_output(step_id, task_id, output, ignore_storage_profiles, **args):
+    # ... existing validation ...
+    config = _apply_cli_options_to_config(
+        required_options={&quot;farm_id&quot;, &quot;queue_id&quot;, &quot;job_id&quot;}, **args
+    )
+    # ... existing config reads ...
+    try:
+        _download_job_output(
+            config, farm_id, queue_id, job_id, step_id, task_id,
+            is_json_format,
+            ignore_storage_profiles=ignore_storage_profiles,
+        )
+</code></pre>
+<h4 id="813-add-ignore_storage_profiles-parameter-to-_download_job_output">8.1.3 Add <code>ignore_storage_profiles</code> parameter to <code>_download_job_output()</code><a class="headerlink" href="#813-add-ignore_storage_profiles-parameter-to-_download_job_output" title="Permanent link">&para;</a></h4>
+<pre><code class="language-python">def _download_job_output(
+    config: Optional[ConfigParser],
+    farm_id: str,
+    queue_id: str,
+    job_id: str,
+    step_id: Optional[str],
+    task_id: Optional[str],
+    is_json_format: bool = False,
+    ignore_storage_profiles: bool = False,  # NEW
+):
+</code></pre>
+<p>At this stage, the parameter is accepted but not yet used — the existing manual prompt behavior is preserved. This makes the CLI change independently reviewable.</p>
+<hr />
+<h3 id="82-stage-2-single-responsibility-helper-functions">8.2 Stage 2: Single-responsibility helper functions<a class="headerlink" href="#82-stage-2-single-responsibility-helper-functions" title="Permanent link">&para;</a></h3>
+<p>Add the core logic as small, testable functions. Each function has a single job and stays under 100 lines.</p>
+<p><strong>File:</strong> <code>src/deadline/client/cli/_groups/_job_download_helpers.py</code> (new file)</p>
+<h4 id="821-_resolve_storage_profiles">8.2.1 <code>_resolve_storage_profiles()</code><a class="headerlink" href="#821-_resolve_storage_profiles" title="Permanent link">&para;</a></h4>
+<p>Fetches the local and job storage profiles. Returns <code>(None, None)</code> when ignoring profiles. Handles all error cases from the decision matrix.</p>
+<pre><code class="language-python">@dataclass
+class ResolvedStorageProfiles:
+    &quot;&quot;&quot;The result of resolving storage profiles for a download operation.&quot;&quot;&quot;
+    job_profile: StorageProfile       # profile the job was submitted with (source paths)
+    local_profile: StorageProfile     # profile on this machine (destination paths)
+
+
+def _resolve_storage_profiles(
+    config: Optional[ConfigParser],
+    deadline: &quot;DeadlineClient&quot;,
+    farm_id: str,
+    queue_id: str,
+    job: dict[str, Any],
+    ignore_storage_profiles: bool,
+) -&gt; Optional[ResolvedStorageProfiles]:
+    &quot;&quot;&quot;Resolve the storage profiles needed to map a job's output paths to local paths.
+
+    The job_profile is where paths came from (the submitting machine).
+    The local_profile is where paths should go (this machine).
+
+    Returns:
+        ResolvedStorageProfiles if path mapping is needed, None otherwise.
+    &quot;&quot;&quot;
+    if ignore_storage_profiles:
+        return None
+
+    local_storage_profile_id = config_file.get_setting(
+        &quot;settings.storage_profile_id&quot;, config=config
+    )
+    job_storage_profile_id = job.get(&quot;storageProfileId&quot;)
+
+    if not local_storage_profile_id and not job_storage_profile_id:
+        # Same-machine case: no profiles on either side
+        return None
+
+    if not local_storage_profile_id and job_storage_profile_id:
+        # Consistent with queue sync-output which always requires a local storage profile.
+        click.echo(
+            &quot;Warning: The job was submitted with a storage profile but no local storage &quot;
+            &quot;profile is configured. Path mapping will be skipped.\n\n&quot;
+            &quot;Options:\n&quot;
+            &quot;  1. Configure a storage profile: deadline config set &quot;
+            &quot;settings.storage_profile_id &lt;id&gt;\n&quot;
+            &quot;  2. Skip path mapping (same-machine only): --ignore-storage-profiles\n\n&quot;
+            &quot;See https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/&quot;
+            &quot;modeling-your-shared-filesystem-locations-with-storage-profiles.html&quot;
+        )
+        return None
+
+    if local_storage_profile_id and not job_storage_profile_id:
+        click.echo(
+            &quot;Warning: A local storage profile is configured but the job was submitted &quot;
+            &quot;without one. Path mapping will be skipped.&quot;
+        )
+        return None
+
+    # Both profiles exist — fetch them
+    local_profile = api.get_storage_profile_for_queue(
+        farm_id, queue_id, local_storage_profile_id, deadline, config=config
+    )
+    job_profile = api.get_storage_profile_for_queue(
+        farm_id, queue_id, job_storage_profile_id, deadline, config=config
+    )
+
+    return ResolvedStorageProfiles(job_profile=job_profile, local_profile=local_profile)
+</code></pre>
+<p>Note: Both profiles are fetched via the typed API (<code>api.get_storage_profile_for_queue</code>) which returns <code>StorageProfile</code> dataclass, since <code>_generate_path_mapping_rules()</code> is refactored to accept <code>StorageProfile</code> directly (see §6.3).</p>
+<h4 id="822-refactor-_generate_path_mapping_rules-to-accept-storageprofile">8.2.2 Refactor <code>_generate_path_mapping_rules()</code> to accept <code>StorageProfile</code><a class="headerlink" href="#822-refactor-_generate_path_mapping_rules-to-accept-storageprofile" title="Permanent link">&para;</a></h4>
+<p>Since the function is private (underscore-prefixed) with only two call sites (<code>_incremental_download.py</code> and the new <code>_job_download_helpers.py</code>), we refactor it directly instead of adding an adapter.</p>
+<p><strong>File:</strong> <code>deadline-cloud-job-attachments/src/deadline/job_attachments/_path_mapping.py</code></p>
+<pre><code class="language-python">def _generate_path_mapping_rules(
+    source_storage_profile: StorageProfile,
+    destination_storage_profile: StorageProfile,
+) -&gt; list[PathMappingRule]:
+    &quot;&quot;&quot;
+    Given a pair of storage profiles, generate all the path mapping rules to
+    transform paths from the source to the destination.
+    &quot;&quot;&quot;
+    if source_storage_profile.storageProfileId == destination_storage_profile.storageProfileId:
+        return []
+
+    source_locations = {
+        loc.name: loc for loc in source_storage_profile.fileSystemLocations
+    }
+    destination_locations = {
+        loc.name: loc for loc in destination_storage_profile.fileSystemLocations
+    }
+
+    if source_storage_profile.osFamily == StorageProfileOperatingSystemFamily.WINDOWS:
+        source_path_format = PathFormat.WINDOWS.value
+    else:
+        source_path_format = PathFormat.POSIX.value
+
+    path_mapping_rules: list[PathMappingRule] = []
+    for source_name, source_location in source_locations.items():
+        if source_name in destination_locations:
+            path_mapping_rules.append(
+                PathMappingRule(
+                    source_path_format,
+                    source_location.path,
+                    destination_locations[source_name].path,
+                )
+            )
+
+    return path_mapping_rules
+</code></pre>
+<p><strong>Call site updates required:</strong></p>
+<ol>
+<li><code>_incremental_download.py</code> — update <code>_get_storage_profiles()</code> to use the typed API (<code>api.get_storage_profile_for_queue</code>) instead of raw boto3, and pass <code>StorageProfile</code> objects to <code>_generate_path_mapping_rules()</code>.</li>
+<li><code>test_path_mapping.py</code> — update test fixtures to use <code>StorageProfile</code> dataclass instead of raw dicts.</li>
+</ol>
+<h4 id="823-_apply_path_mappings_to_roots">8.2.3 <code>_apply_path_mappings_to_roots()</code><a class="headerlink" href="#823-_apply_path_mappings_to_roots" title="Permanent link">&para;</a></h4>
+<p>Applies generated path mapping rules to the output downloader's root paths.</p>
+<pre><code class="language-python">def _apply_path_mappings_to_roots(
+    job_output_downloader: OutputDownloader,
+    output_paths_by_root: dict[str, list[str]],
+    rules: list[PathMappingRule],
+) -&gt; None:
+    &quot;&quot;&quot;Apply path mapping rules to remap output root directories.
+
+    Modifies the downloader in-place via set_root_path().
+    &quot;&quot;&quot;
+    if not rules:
+        return
+
+    applier = _PathMappingRuleApplier(rules)
+    for original_root in list(output_paths_by_root.keys()):
+        mapped_root = applier.transform(original_root)
+        if str(mapped_root) != original_root:
+            click.echo(f&quot;  Mapping root: {original_root} -&gt; {mapped_root}&quot;)
+            job_output_downloader.set_root_path(original_root, str(mapped_root))
+</code></pre>
+<hr />
+<h3 id="83-stage-3-integrate-helpers-into-_download_job_output">8.3 Stage 3: Integrate helpers into <code>_download_job_output()</code><a class="headerlink" href="#83-stage-3-integrate-helpers-into-_download_job_output" title="Permanent link">&para;</a></h3>
+<p>Wire the helper functions into the existing download flow. The key change is replacing the manual OS-mismatch prompt block with automatic path mapping when storage profiles are available.</p>
+<h4 id="831-updated-flow-in-_download_job_output">8.3.1 Updated flow in <code>_download_job_output()</code><a class="headerlink" href="#831-updated-flow-in-_download_job_output" title="Permanent link">&para;</a></h4>
+<p>Insert after <code>OutputDownloader</code> construction and <code>output_paths_by_root</code> retrieval, replacing the existing OS mismatch block:</p>
+<pre><code class="language-python">    # --- Storage profile path mapping (replaces manual OS mismatch prompt) ---
+    resolved = _resolve_storage_profiles(
+        config, deadline, farm_id, queue_id, job, ignore_storage_profiles
+    )
+
+    if resolved:
+        # Automatic path mapping via storage profiles
+        rules = _generate_path_mapping_rules(resolved.job_profile, resolved.local_profile)
+        click.echo(f&quot;Using storage profile: {resolved.local_profile.displayName}&quot;)
+        _apply_path_mappings_to_roots(job_output_downloader, output_paths_by_root, rules)
+        output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+    else:
+        # No storage profiles — fall back to manual prompt on OS mismatch
+        # (existing behavior, unchanged)
+        asset_roots = list(output_paths_by_root.keys())
+        for asset_root in asset_roots:
+            root_path_format = root_path_format_mapping.get(asset_root, &quot;&quot;)
+            if root_path_format == &quot;&quot;:
+                raise DeadlineOperationError(
+                    f&quot;No root path format found for {asset_root}.&quot;
+                )
+            if PathFormat.get_host_path_format_string() != root_path_format:
+                click.echo(
+                    _get_mismatch_os_root_warning(
+                        asset_root, root_path_format, is_json_format
+                    )
+                )
+                # ... existing manual prompt code (unchanged) ...
+</code></pre>
+<p>The rest of <code>_download_job_output()</code> (conflict resolution, progress bar, download) remains unchanged.</p>
+<h4 id="832-entry-point">8.3.2 Entry point<a class="headerlink" href="#832-entry-point" title="Permanent link">&para;</a></h4>
+<p>The <code>job_download_output()</code> function passes <code>ignore_storage_profiles</code> through to <code>_download_job_output()</code>. No validation needed since <code>--storage-profile-id</code> is not an option on this command.</p>
+<hr />
+<h2 id="9-testing">9. Testing<a class="headerlink" href="#9-testing" title="Permanent link">&para;</a></h2>
+<h3 id="91-test-cases">9.1 Test Cases<a class="headerlink" href="#91-test-cases" title="Permanent link">&para;</a></h3>
+<p>Each case traces the full code path from CLI entry through to download. All cases are implemented in <code>test/unit/deadline_client/cli/test_cli_job_download_storage_profiles.py</code>.</p>
+<h4 id="case-1-both-profiles-exist-location-names-match-automatic-mapping">Case 1: Both profiles exist, location names match → automatic mapping<a class="headerlink" href="#case-1-both-profiles-exist-location-names-match-automatic-mapping" title="Permanent link">&para;</a></h4>
+<p>Local machine has <code>sp-local-111</code> (Linux, locations: <code>shared=/mnt/shared</code>, <code>temp=/tmp/render</code>).
+Job was submitted with <code>sp-job-222</code> (Windows, locations: <code>shared=Z:\shared</code>, <code>temp=C:\temp\render</code>).</p>
+<pre><code>job_download_output()
+  _validate_storage_profile_options(None, False)           → passes
+  _download_job_output(..., ignore_storage_profiles=False)
+    _resolve_storage_profiles(config, deadline, farm, queue, job, False)
+      config_file.get_setting(&quot;settings.storage_profile_id&quot;) → &quot;sp-local-111&quot;
+      job.get(&quot;storageProfileId&quot;)                            → &quot;sp-job-222&quot;
+      Both truthy → fetch both via api.get_storage_profile_for_queue()
+      → ResolvedStorageProfiles(job_profile=sp-job-222, local_profile=sp-local-111)
+    resolved is not None → enters `if resolved:` branch
+    _generate_path_mapping_rules(sp-job-222, sp-local-111)
+      _normalize_storage_profile() on each
+      IDs differ → match locations by name
+      &quot;shared&quot; matches → PathMappingRule(WINDOWS, &quot;Z:\shared&quot;, &quot;/mnt/shared&quot;)
+      &quot;temp&quot; matches   → PathMappingRule(WINDOWS, &quot;C:\temp\render&quot;, &quot;/tmp/render&quot;)
+      → [rule1, rule2]
+    _apply_path_mappings_to_roots(downloader, roots, [rule1, rule2])
+      _PathMappingRuleApplier([rule1, rule2])  → builds trie
+      transform(&quot;C:\temp\render&quot;) → &quot;/tmp/render&quot; → set_root_path()
+      transform(&quot;Z:\shared&quot;)      → &quot;/mnt/shared&quot; → set_root_path()
+    download proceeds to mapped local paths
+</code></pre>
+<p>Expected: roots are remapped, user sees "Using storage profile: Local Linux Profile" and "Mapping root: ..." messages. Download goes to <code>/mnt/shared</code> and <code>/tmp/render</code>.</p>
+<h4 id="case-2-both-profiles-exist-location-names-dont-match-no-rules-no-mapping">Case 2: Both profiles exist, location names don't match → no rules, no mapping<a class="headerlink" href="#case-2-both-profiles-exist-location-names-dont-match-no-rules-no-mapping" title="Permanent link">&para;</a></h4>
+<p>Local machine has <code>sp-local-111</code> (locations: <code>shared</code>, <code>temp</code>).
+Job was submitted with <code>sp-job-333</code> (locations: <code>ProjectFiles</code>, <code>OutputDir</code>).</p>
+<pre><code>job_download_output()
+  _download_job_output(..., ignore_storage_profiles=False)
+    _resolve_storage_profiles(...)
+      Both IDs present → fetch both → ResolvedStorageProfiles
+    resolved is not None → enters `if resolved:` branch
+    _generate_path_mapping_rules(sp-job-333, sp-local-111)
+      IDs differ → match locations by name
+      &quot;ProjectFiles&quot; not in {&quot;shared&quot;, &quot;temp&quot;}, &quot;OutputDir&quot; not in {&quot;shared&quot;, &quot;temp&quot;}
+      → []  (empty)
+    _apply_path_mappings_to_roots(downloader, roots, [])
+      `if not rules:` → prints warning about mismatched location names → return
+    output_paths_by_root re-read (unchanged)
+    user sees root confirmation prompt (if not auto_accept)
+    download proceeds to original unmapped paths
+</code></pre>
+<p>Expected: no mapping applied. User sees "Using storage profile: ..." and a warning about mismatched location names recommending alignment. If OS mismatch exists, the manual root editing prompt appears as before.</p>
+<h4 id="case-3-job-has-profile-local-machine-does-not-warning-manual-fallback">Case 3: Job has profile, local machine does not → warning, manual fallback<a class="headerlink" href="#case-3-job-has-profile-local-machine-does-not-warning-manual-fallback" title="Permanent link">&para;</a></h4>
+<p>Local machine has no storage profile configured.
+Job was submitted with <code>sp-job-222</code>.</p>
+<pre><code>job_download_output()
+  _download_job_output(..., ignore_storage_profiles=False)
+    _resolve_storage_profiles(...)
+      config_file.get_setting(&quot;settings.storage_profile_id&quot;) → &quot;&quot;
+      job.get(&quot;storageProfileId&quot;)                            → &quot;sp-job-222&quot;
+      Hits: `if not local_storage_profile_id and job_storage_profile_id:`
+      → click.echo(&quot;Warning: ...no local storage profile is configured...&quot;)
+      → None
+    resolved is None → enters `else:` branch
+    if OS mismatch → manual prompt fallback
+    if same OS → download to original paths
+</code></pre>
+<p>Expected: warning printed recommending storage profile setup, then falls back to manual prompt if OS mismatch exists. No error thrown.</p>
+<h4 id="case-4-neither-submitter-nor-downloader-has-a-profile-no-mapping-direct-download">Case 4: Neither submitter nor downloader has a profile → no mapping, direct download<a class="headerlink" href="#case-4-neither-submitter-nor-downloader-has-a-profile-no-mapping-direct-download" title="Permanent link">&para;</a></h4>
+<p>Local machine has no storage profile. Job was submitted without one.</p>
+<pre><code>job_download_output()
+  _download_job_output(..., ignore_storage_profiles=False)
+    _resolve_storage_profiles(...)
+      config_file.get_setting(&quot;settings.storage_profile_id&quot;) → &quot;&quot;
+      job.get(&quot;storageProfileId&quot;)                            → None
+      Hits: `if not local_storage_profile_id and not job_storage_profile_id:`
+      → None
+    resolved is None → enters `else:` branch
+    for each asset_root:
+      root_path_format matches host format (same OS)
+      no OS mismatch → no prompt
+    download proceeds to original paths
+</code></pre>
+<p>Expected: same-machine case. No storage profiles, no path mapping, no prompts. Identical to pre-change behavior.</p>
+<h4 id="case-5-local-profile-configured-job-submitted-without-one-warning-skip-mapping">Case 5: Local profile configured, job submitted without one → warning, skip mapping<a class="headerlink" href="#case-5-local-profile-configured-job-submitted-without-one-warning-skip-mapping" title="Permanent link">&para;</a></h4>
+<p>Local machine has <code>sp-local-111</code>. Job was submitted without a storage profile (e.g., older job or tool that didn't set one).</p>
+<pre><code>job_download_output()
+  _download_job_output(..., ignore_storage_profiles=False)
+    _resolve_storage_profiles(...)
+      config_file.get_setting(&quot;settings.storage_profile_id&quot;) → &quot;sp-local-111&quot;
+      job.get(&quot;storageProfileId&quot;)                            → None
+      Hits: `if local_storage_profile_id and not job_storage_profile_id:`
+      → click.echo(&quot;Warning: ...job was submitted without one. Path mapping will be skipped.&quot;)
+      → None
+    resolved is None → enters `else:` branch
+    if OS mismatch → manual prompt fallback
+    if same OS → download to original paths
+</code></pre>
+<p>Expected: warning printed, no mapping. Falls back to existing behavior. If cross-OS, user gets the manual root path prompt.</p>
+<h4 id="case-6-ignore-storage-profiles-flag-skip-everything">Case 6: <code>--ignore-storage-profiles</code> flag → skip everything<a class="headerlink" href="#case-6-ignore-storage-profiles-flag-skip-everything" title="Permanent link">&para;</a></h4>
+<p>Both profiles may exist, but user explicitly opts out.</p>
+<pre><code>job_download_output(..., ignore_storage_profiles=True)
+  _validate_storage_profile_options(None, True) → passes
+  _download_job_output(..., ignore_storage_profiles=True)
+    _resolve_storage_profiles(..., ignore_storage_profiles=True)
+      → return None immediately (first line of function)
+    resolved is None → enters `else:` branch
+    if OS mismatch → manual prompt fallback
+    download to original unmapped paths
+</code></pre>
+<p>Expected: all storage profile logic bypassed. Same behavior as pre-change code. Use when submitting and downloading machines share the same OS and mount points.</p>
+<h4 id="case-7-same-storage-profile-on-both-sides-no-mapping-needed">Case 7: Same storage profile on both sides → no mapping needed<a class="headerlink" href="#case-7-same-storage-profile-on-both-sides-no-mapping-needed" title="Permanent link">&para;</a></h4>
+<p>Job was submitted with <code>sp-local-111</code>. Local machine also has <code>sp-local-111</code>.</p>
+<pre><code>job_download_output()
+  _download_job_output(..., ignore_storage_profiles=False)
+    _resolve_storage_profiles(...)
+      Both IDs present, both &quot;sp-local-111&quot; → fetch both → ResolvedStorageProfiles
+    resolved is not None → enters `if resolved:` branch
+    _generate_path_mapping_rules(sp-local-111, sp-local-111)
+      storageProfileId matches → return []
+    _apply_path_mappings_to_roots(downloader, roots, [])
+      `if not rules: return` → no-op
+    download proceeds to original paths
+</code></pre>
+<p>Expected: same profile means same paths. No mapping, no prompts. Download to original locations.</p>
+<h3 id="92-unit-tests">9.2 Unit Tests<a class="headerlink" href="#92-unit-tests" title="Permanent link">&para;</a></h3>
+<p>Each helper function is independently testable in <code>test/unit/deadline_client/cli/test_job_download_helpers.py</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Test cases</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_resolve_storage_profiles</code></td>
+<td>All rows of the decision matrix; API error handling (<code>ClientError</code>)</td>
+</tr>
+<tr>
+<td><code>_generate_path_mapping_rules</code></td>
+<td>Update existing tests to use <code>StorageProfile</code> dataclass; matching location names; no matching names; same profile id (empty rules)</td>
+</tr>
+<tr>
+<td><code>_apply_path_mappings_to_roots</code></td>
+<td>Empty rules (no-op); single mapping; multiple mappings; root already matches</td>
+</tr>
+</tbody>
+</table>
+<h3 id="93-backward-compatibility">9.3 Backward Compatibility<a class="headerlink" href="#93-backward-compatibility" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Existing behavior (manual prompt on OS mismatch) is preserved when no storage profiles are configured</li>
+<li><code>--ignore-storage-profiles</code> explicitly opts out of all mapping</li>
+<li>No changes to <code>OutputDownloader</code> or <code>_incremental_download.py</code></li>
+</ul>
+<hr />
+<h2 id="10-appendix-a-key-file-locations">10. Appendix A: Key File Locations<a class="headerlink" href="#10-appendix-a-key-file-locations" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>File Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CLI bundle commands</td>
+<td><code>src/deadline/client/cli/_groups/bundle_group.py</code></td>
+</tr>
+<tr>
+<td>CLI job commands</td>
+<td><code>src/deadline/client/cli/_groups/job_group.py</code></td>
+</tr>
+<tr>
+<td>CLI queue commands</td>
+<td><code>src/deadline/client/cli/_groups/queue_group.py</code></td>
+</tr>
+<tr>
+<td>CLI common utilities</td>
+<td><code>src/deadline/client/cli/_common.py</code></td>
+</tr>
+<tr>
+<td>Job download helpers (new)</td>
+<td><code>src/deadline/client/cli/_groups/_job_download_helpers.py</code></td>
+</tr>
+<tr>
+<td>Incremental download</td>
+<td><code>src/deadline/client/cli/_incremental_download.py</code></td>
+</tr>
+<tr>
+<td>Job submission API</td>
+<td><code>src/deadline/client/api/_submit_job_bundle.py</code></td>
+</tr>
+<tr>
+<td>Storage profile API</td>
+<td><code>src/deadline/client/api/_get_storage_profile_for_queue.py</code></td>
+</tr>
+<tr>
+<td>S3AssetManager</td>
+<td><code>deadline-cloud-job-attachments/src/deadline/job_attachments/upload.py</code></td>
+</tr>
+<tr>
+<td>OutputDownloader</td>
+<td><code>deadline-cloud-job-attachments/src/deadline/job_attachments/download.py</code></td>
+</tr>
+<tr>
+<td>Path mapping</td>
+<td><code>deadline-cloud-job-attachments/src/deadline/job_attachments/_path_mapping.py</code></td>
+</tr>
+<tr>
+<td>Hash algorithms</td>
+<td><code>deadline-cloud-job-attachments/src/deadline/job_attachments/asset_manifests/hash_algorithms.py</code></td>
+</tr>
+<tr>
+<td>Hash cache</td>
+<td><code>deadline-cloud-job-attachments/src/deadline/job_attachments/caches/hash_cache.py</code></td>
+</tr>
+<tr>
+<td>Models</td>
+<td><code>deadline-cloud-job-attachments/src/deadline/job_attachments/models.py</code></td>
+</tr>
+<tr>
+<td>Config file</td>
+<td><code>src/deadline/client/config/config_file.py</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-appendix-b-future-refactoring-stages">11. Appendix B: Future Refactoring Stages<a class="headerlink" href="#11-appendix-b-future-refactoring-stages" title="Permanent link">&para;</a></h2>
+<p>These are follow-up improvements that build on the Stage 1-3 work above. Each is independently reviewable.</p>
+<h3 id="111-future-stage-a-move-path-mapping-into-outputdownloader">11.1 Future Stage A: Move path mapping into <code>OutputDownloader</code><a class="headerlink" href="#111-future-stage-a-move-path-mapping-into-outputdownloader" title="Permanent link">&para;</a></h3>
+<p>The <code>OutputDownloader</code> class has a TODO acknowledging it should handle path mapping internally. Once Stage A is done:</p>
+<ol>
+<li>Add an optional <code>path_mapping_rules: Optional[list[PathMappingRule]]</code> parameter to <code>OutputDownloader.__init__()</code></li>
+<li>Apply rules automatically in <code>get_output_paths_by_root()</code> instead of requiring external <code>set_root_path()</code> calls</li>
+<li>Simplify both <code>_download_job_output()</code> and <code>_incremental_output_download()</code> to pass rules at construction time</li>
+</ol>
+<p>This is a larger refactor that changes the <code>OutputDownloader</code> public interface, so it warrants its own review.</p>
+<h3 id="112-future-stage-b-s3assetmanager-auto-fetches-storage-profile-issue-829-broader-ask">11.2 Future Stage B: <code>S3AssetManager</code> auto-fetches storage profile (issue #829 broader ask)<a class="headerlink" href="#112-future-stage-b-s3assetmanager-auto-fetches-storage-profile-issue-829-broader-ask" title="Permanent link">&para;</a></h3>
+<p>The original issue requests that <code>S3AssetManager</code> automatically resolve the storage profile from the queue. Options:</p>
+<ol>
+<li>A <code>StorageProfileResolver</code> class that takes <code>farm_id</code>, <code>queue_id</code>, <code>session</code> and lazily fetches/caches the profile. Inject into both <code>S3AssetManager</code> and <code>OutputDownloader</code>.</li>
+<li>A higher-level <code>create_job()</code> function that wraps job inputs and job attachments together, so consumers don't need to understand storage profiles at all.</li>
+</ol>
+<p>This is a larger API design effort and should be scoped separately.</p>
+<hr />
+<h2 id="12-appendix-c-upload-code-path-reference">12. Appendix C: Upload Code Path (Reference)<a class="headerlink" href="#12-appendix-c-upload-code-path-reference" title="Permanent link">&para;</a></h2>
+<p>This section documents the upload (job submission) code path for reference. It is not changed by this proposal.</p>
+<h3 id="121-cli-entry-point-deadline-bundle-submit">12.1 CLI Entry Point: <code>deadline bundle submit</code><a class="headerlink" href="#121-cli-entry-point-deadline-bundle-submit" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>src/deadline/client/cli/_groups/bundle_group.py</code></p>
+<pre><code>CLI Command
+    │
+    ▼
+bundle_submit()
+    │
+    ├── _apply_cli_options_to_config()  ─── Applies --storage-profile-id to config
+    │
+    └── api.create_job_from_job_bundle()
+</code></pre>
+<p>The <code>--storage-profile-id</code> option is processed in <code>_apply_cli_options_to_config()</code>.</p>
+<h3 id="122-api-layer-create_job_from_job_bundle">12.2 API Layer: <code>create_job_from_job_bundle()</code><a class="headerlink" href="#122-api-layer-create_job_from_job_bundle" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>src/deadline/client/api/_submit_job_bundle.py</code></p>
+<pre><code class="language-python"># Storage profile retrieval
+storage_profile_id = get_setting(&quot;settings.storage_profile_id&quot;, config=config)
+storage_profile = None
+if storage_profile_id:
+    create_job_args[&quot;storageProfileId&quot;] = storage_profile_id
+    storage_profile = api.get_storage_profile_for_queue(
+        farm_id, queue_id, storage_profile_id, deadline
+    )
+</code></pre>
+<p>Key operations:
+1. Retrieves <code>storage_profile_id</code> from config
+2. If set, adds to <code>create_job_args</code> for the CreateJob API call
+3. Fetches full <code>StorageProfile</code> object for path grouping</p>
+<h3 id="123-asset-manager-s3assetmanager">12.3 Asset Manager: <code>S3AssetManager</code><a class="headerlink" href="#123-asset-manager-s3assetmanager" title="Permanent link">&para;</a></h3>
+<p><strong>File:</strong> <code>deadline-cloud-job-attachments/src/deadline/job_attachments/upload.py</code></p>
+<pre><code>S3AssetManager.__init__()
+    │
+    ├── farm_id, queue_id, job_attachment_settings
+    │
+    └── Does NOT take storage_profile (passed to methods instead)
+</code></pre>
+<p>Storage profile affects path grouping during upload:
+- <strong>SHARED locations</strong>: Paths are SKIPPED (not uploaded) — they're on shared storage
+- <strong>LOCAL locations</strong>: Paths are GROUPED together under the location's root</p>
+<h3 id="124-hashing-and-upload">12.4 Hashing and Upload<a class="headerlink" href="#124-hashing-and-upload" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>hash_assets_and_create_manifest()</code> hashes files using xxHash XXH128 with a SQLite-backed cache</li>
+<li><code>upload_assets()</code> uploads to S3 using Content-Addressable Storage (CAS), with an S3CheckCache to prevent redundant uploads</li>
+</ul>
+<hr />
+<h2 id="13-revision-absolute-path-transformation-option-e">13. Revision: Absolute-Path Transformation (Option E)<a class="headerlink" href="#13-revision-absolute-path-transformation-option-e" title="Permanent link">&para;</a></h2>
+<h3 id="131-problem">13.1 Problem<a class="headerlink" href="#131-problem" title="Permanent link">&para;</a></h3>
+<p>During code review, @mwiebe identified that transforming only root paths via <code>set_root_path()</code> is not equivalent to transforming full absolute paths (<code>root + relative</code>). A path mapping rule can match at a depth deeper than the asset root. For example, with nested file system locations:</p>
+<p><strong>Source profile (Windows):</strong>
+- "Projects": <code>C:\Projects</code>
+- "SpecialProjects": <code>C:\Projects\Special</code></p>
+<p><strong>Destination profile (Linux):</strong>
+- "Projects": <code>/mnt/projects</code>
+- "SpecialProjects": <code>/opt/special</code></p>
+<p>Asset root: <code>C:\Projects</code>, relative path: <code>Special\data.txt</code>.</p>
+<ul>
+<li>Root-only: transforms <code>C:\Projects</code> → <code>/mnt/projects</code>. Final: <code>/mnt/projects/Special/data.txt</code>. <strong>Wrong.</strong></li>
+<li>Absolute-path: transforms <code>C:\Projects\Special\data.txt</code> → <code>/opt/special/data.txt</code>. <strong>Correct</strong> (more specific rule wins).</li>
+</ul>
+<p>The Deadline Cloud API does not prevent nested file system locations in storage profiles, so this is a real scenario.</p>
+<h3 id="132-solution-option-e-dual-code-path">13.2 Solution: Option E — Dual Code Path<a class="headerlink" href="#132-solution-option-e-dual-code-path" title="Permanent link">&para;</a></h3>
+<p>When path mapping rules exist (both profiles resolved, rules generated), bypass <code>OutputDownloader</code> and use the manifest-based download pipeline directly — the same approach <code>queue sync-output</code> uses:</p>
+<ol>
+<li>Call <code>get_output_manifests_by_asset_root()</code> to fetch manifests from S3 (same data <code>OutputDownloader.__init__</code> fetches internally)</li>
+<li>For each manifest path, join <code>root + relative</code> using the source OS path module (<code>ntpath</code> or <code>posixpath</code>)</li>
+<li>Call <code>strict_transform()</code> on the full absolute path (trie picks the most specific matching rule)</li>
+<li>Download via <code>download_files_from_manifests()</code> with the transformed absolute paths</li>
+</ol>
+<p>When no path mapping rules exist (no profiles, ignore flag, same profile, mismatch warnings), the existing <code>OutputDownloader</code> code path is completely unchanged.</p>
+<h3 id="133-implementation">13.3 Implementation<a class="headerlink" href="#133-implementation" title="Permanent link">&para;</a></h3>
+<p><strong>New function:</strong> <code>_transform_manifests_to_absolute_paths()</code> in <code>_job_download_helpers.py</code></p>
+<pre><code class="language-python">def _transform_manifests_to_absolute_paths(
+    manifests_by_root: dict[str, list[Any]],
+    rules: list[PathMappingRule],
+    source_os_family: StorageProfileOperatingSystemFamily,
+) -&gt; dict[str, Any]:
+</code></pre>
+<ul>
+<li>Joins root + relative using <code>ntpath</code> (Windows source) or <code>posixpath</code> (POSIX source)</li>
+<li>Applies <code>strict_transform()</code> on each absolute path</li>
+<li>Merges all manifests into a single result keyed by <code>""</code> (empty string)</li>
+<li><code>download_files_from_manifests()</code> with key <code>""</code> works because <code>Path("").joinpath("/abs/path")</code> == <code>Path("/abs/path")</code></li>
+</ul>
+<p><strong>Updated flow in <code>_download_job_output()</code>:</strong></p>
+<pre><code>resolved = _resolve_storage_profiles(...)
+if resolved:
+    rules = _generate_path_mapping_rules(...)
+    if rules:
+        manifests = get_output_manifests_by_asset_root(...)  # same S3 data
+        mapped = _transform_manifests_to_absolute_paths(manifests, rules, ...)
+        download_files_from_manifests(mapped)                # absolute-path download
+        return  # early return, skip OutputDownloader path
+    elif different profiles:
+        warn about no matching location names
+else:
+    # existing OutputDownloader path (manual prompt, etc.) — unchanged
+</code></pre>
+<h3 id="134-test-coverage">13.4 Test Coverage<a class="headerlink" href="#134-test-coverage" title="Permanent link">&para;</a></h3>
+<p>New unit tests in <code>test_job_download_helpers.py</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_basic_windows_to_posix_mapping</code></td>
+<td>Standard cross-OS mapping via absolute paths</td>
+</tr>
+<tr>
+<td><code>test_nested_location_picks_most_specific_rule</code></td>
+<td>Key case: nested locations, most specific rule wins</td>
+</tr>
+<tr>
+<td><code>test_unmapped_paths_are_skipped</code></td>
+<td>Paths without matching rules are excluded</td>
+</tr>
+<tr>
+<td><code>test_multiple_roots_merged</code></td>
+<td>Multiple asset roots merged into single download</td>
+</tr>
+<tr>
+<td><code>test_empty_manifests_returns_empty</code></td>
+<td>Edge case: no paths to map</td>
+</tr>
+</tbody>
+</table>
+<p>Updated CLI test <code>test_case1_both_profiles_match_auto_mapping</code> to verify the new code path calls <code>get_output_manifests_by_asset_root</code> instead of <code>set_root_path</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    </div>
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
