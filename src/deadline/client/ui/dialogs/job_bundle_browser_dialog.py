@@ -46,11 +46,13 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from .._utils import tr, warning_banner_qss
 from ..widgets.expandable_section import ExpandableSection as _ExpandableSection
+from ... import api
 from ...job_bundle._repository import (
     BrowseEntry as _BrowseEntry,
     BundleRepository as _BundleRepository,
     LocalBundleRepository as _LocalBundleRepository,
     S3BundleRepository as _S3BundleRepository,
+    classify_bundle_error as _classify_bundle_error,
 )
 
 logger = getLogger(__name__)
@@ -286,14 +288,23 @@ class JobBundleBrowserDialog(QDialog):
             worker.wait()
         super().done(result)
 
-    def resolve_selection(self) -> Optional[str]:
+    def resolve_selection(self, record_load: bool = True) -> Optional[str]:
         """Resolve the selected bundle to a local directory path.
 
         Handles S3 download/cache, archive extraction, and direct directory paths.
         Returns None if no selection.
+
+        :param record_load: Whether to emit a ``bundle_load`` telemetry event for this
+            resolution. True for an actual load-for-use (the Select flow); False for the
+            preview "Open bundle" button, which merely opens the bundle in the file
+            explorer and would otherwise inflate the load metric.
         """
         if not self._selected_path:
             return None
+
+        # A History-source bundle resolves identically to a Local one (both use
+        # LocalBundleRepository); only the recorded telemetry source differs.
+        local_source = "HISTORY" if self._current_repo is self._history_repo else "LOCAL"
 
         if self._selected_is_s3 and self._s3_repo:
 
@@ -317,6 +328,12 @@ class JobBundleBrowserDialog(QDialog):
                     self._path = path
                     self._sent = 0
                     self._cancelled = False
+                    # Exception class name of a failed download (never the
+                    # message), read back for telemetry after the worker unwinds.
+                    self.error_type: Optional[str] = None
+                    # The failing exception itself, kept so the caller can record a
+                    # sanitized stack trace for an unexpected (UNKNOWN) failure.
+                    self.error_exc: Optional[BaseException] = None
 
                 def cancel(self):
                     # Cooperative cancel: the next progress callback aborts the
@@ -349,6 +366,8 @@ class JobBundleBrowserDialog(QDialog):
                         # clears any partial cache after the worker unwinds.
                         pass
                     except Exception as e:
+                        self.error_type = _classify_bundle_error(e)
+                        self.error_exc = e
                         self.error.emit(str(e))
 
             progress = QDialog(self)
@@ -424,6 +443,18 @@ class JobBundleBrowserDialog(QDialog):
                 # would loop on forever.
                 worker.wait()
                 self._s3_repo.clear_cache_for(self._selected_path)
+                if record_load:
+                    client = api.get_deadline_cloud_library_telemetry_client()
+                    client.record_bundle_load(
+                        source="QUEUE",
+                        is_success=False,
+                        error_type=worker.error_type,
+                        from_gui=True,
+                    )
+                    if worker.error_type == "UNKNOWN" and worker.error_exc is not None:
+                        client.record_error_with_trace(
+                            worker.error_exc, "bundle_load", from_gui=True
+                        )
                 self._show_error_preview(f"Failed to download bundle:\n{download_error[0]}")
                 return None
 
@@ -437,21 +468,45 @@ class JobBundleBrowserDialog(QDialog):
                 return None
 
             worker.wait()
+            if record_load:
+                api.get_deadline_cloud_library_telemetry_client().record_bundle_load(
+                    source="QUEUE", is_success=True, from_gui=True
+                )
             return download_result[0]
         elif self._selected_is_archive:
             QApplication.setOverrideCursor(Qt.WaitCursor)
             try:
-                return self._local_repo.extract_bundle(self._selected_path)
+                extracted = self._local_repo.extract_bundle(self._selected_path)
+                if record_load:
+                    api.get_deadline_cloud_library_telemetry_client().record_bundle_load(
+                        source=local_source, is_success=True, from_gui=True
+                    )
+                return extracted
             except Exception as e:
                 # extract_bundle raises ValueError for a corrupt/renamed .ojd or a
                 # rejected zip bomb; surface it rather than letting it propagate
                 # out of the Qt slot with the wait cursor still pushed.
                 logger.warning("Failed to open bundle %s: %s", self._selected_path, e)
+                if record_load:
+                    error_type = _classify_bundle_error(e)
+                    client = api.get_deadline_cloud_library_telemetry_client()
+                    client.record_bundle_load(
+                        source=local_source,
+                        is_success=False,
+                        error_type=error_type,
+                        from_gui=True,
+                    )
+                    if error_type == "UNKNOWN":
+                        client.record_error_with_trace(e, "bundle_load", from_gui=True)
                 self._show_error_preview(f"Failed to open bundle:\n{e}")
                 return None
             finally:
                 QApplication.restoreOverrideCursor()
         else:
+            if record_load:
+                api.get_deadline_cloud_library_telemetry_client().record_bundle_load(
+                    source=local_source, is_success=True, from_gui=True
+                )
             return self._selected_path
 
     # ── UI Construction ──────────────────────────────────────────
@@ -1165,7 +1220,9 @@ class JobBundleBrowserDialog(QDialog):
         if not self._selected_path:
             return
         try:
-            local_path = self.resolve_selection()
+            # Opening the bundle in the file explorer is a preview action, not a
+            # load-for-use, so it must not emit a bundle_load event.
+            local_path = self.resolve_selection(record_load=False)
         except Exception as e:
             logger.warning("Failed to resolve bundle for download: %s", e, exc_info=True)
             self._show_error_preview(f"\u26a0 Could not open bundle: {e}")

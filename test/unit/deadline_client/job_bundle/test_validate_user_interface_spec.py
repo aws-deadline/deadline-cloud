@@ -145,7 +145,7 @@ def test_validate_user_interface_spec_nonvalid_control_type(
     control: Any,
     parameter_name: str,
 ) -> None:
-    """Tests that passing a value with an nonvalid "control" value raises an exception"""
+    """Tests that passing a value with a nonvalid "control" value raises an exception"""
     # GIVEN
     user_interface_spec: dict = {"control": control}
 
@@ -179,7 +179,7 @@ def test_validate_user_interface_spec_nonvalid_label_type(
     label: Any,
     parameter_name: str,
 ) -> None:
-    """Tests that passing a value with an nonvalid "label" value raises an exception"""
+    """Tests that passing a value with a nonvalid "label" value raises an exception"""
     # GIVEN
     user_interface_spec: dict = {"label": label}
 
@@ -214,7 +214,7 @@ def test_validate_user_interface_spec_nonvalid_group_label_type(
     group_label: Any,
     parameter_name: str,
 ) -> None:
-    """Tests that passing a value with an nonvalid "groupLabel" value raises an exception"""
+    """Tests that passing a value with a nonvalid "groupLabel" value raises an exception"""
     # GIVEN
     user_interface_spec: dict = {"groupLabel": group_label}
 
@@ -249,7 +249,7 @@ def test_validate_user_interface_spec_nonvalid_decimals_type(
     decimals: Any,
     parameter_name: str,
 ) -> None:
-    """Tests that passing a value with an nonvalid "decimals" value raises an exception"""
+    """Tests that passing a value with a nonvalid "decimals" value raises an exception"""
     # GIVEN
     user_interface_spec: dict = {"decimals": decimals}
 
@@ -307,7 +307,7 @@ def test_validate_user_interface_spec_nonvalid_single_step_delta_type(
     single_step_delta: Any,
     parameter_name: str,
 ) -> None:
-    """Tests that passing a value with an nonvalid "singleStepDelta" value raises an exception"""
+    """Tests that passing a value with a nonvalid "singleStepDelta" value raises an exception"""
     # GIVEN
     user_interface_spec: dict = {"singleStepDelta": single_step_delta}
 

@@ -31,7 +31,9 @@ from ...job_bundle._repository import (
     S3_JOB_BUNDLES_PREFIX,
     _parse_template,
     archive_bundle_dir,
+    archive_uncompressed_size,
     build_bundle_metadata,
+    classify_bundle_error,
     extract_bundle_info,
     get_bundle_dir_size,
     read_template_from_archive,
@@ -772,35 +774,63 @@ def bundle_upload(job_bundle_dir, name, yes, **args):
     extra_args: dict = {"ContentType": "application/zip"}
     if bundle_metadata:
         extra_args["Metadata"] = bundle_metadata
-    if is_archive_input:
-        # Already an .ojd — upload directly
-        file_size = os.path.getsize(job_bundle_dir)
-        with (
-            open(job_bundle_dir, "rb") as f,
-            click.progressbar(length=file_size, label="Uploading") as bar,  # type: ignore[var-annotated]
-        ):
-            s3.upload_fileobj(
-                f,
-                s3_settings.s3BucketName,
-                s3_key,
-                ExtraArgs=extra_args,
-                Callback=lambda bytes_sent: bar.update(bytes_sent),
-            )
-    else:
-        total_size = get_bundle_dir_size(job_bundle_dir)
-        with click.progressbar(length=total_size, label="Archiving") as bar:  # type: ignore[var-annotated]
-            buf = archive_bundle_dir(job_bundle_dir, progress_callback=lambda n: bar.update(n))
+    # Only the upload attempt itself is tracked — the input validation and the
+    # overwrite decline above are expected outcomes and are left untracked. The
+    # sizes may be unset if archiving fails, so seed them and omit when unknown.
+    file_size: Optional[int] = None
+    total_size: Optional[int] = None
+    is_success = True
+    error_type: Optional[str] = None
+    try:
+        if is_archive_input:
+            # Already an .ojd — upload directly. Its uncompressed size is readable
+            # from the zip central directory (no unpacking), so report it too.
+            file_size = os.path.getsize(job_bundle_dir)
+            total_size = archive_uncompressed_size(job_bundle_dir)
+            with (
+                open(job_bundle_dir, "rb") as f,
+                click.progressbar(length=file_size, label="Uploading") as bar,  # type: ignore[var-annotated]
+            ):
+                s3.upload_fileobj(
+                    f,
+                    s3_settings.s3BucketName,
+                    s3_key,
+                    ExtraArgs=extra_args,
+                    Callback=lambda bytes_sent: bar.update(bytes_sent),
+                )
+        else:
+            total_size = get_bundle_dir_size(job_bundle_dir)
+            with click.progressbar(length=total_size, label="Archiving") as bar:  # type: ignore[var-annotated]
+                buf = archive_bundle_dir(job_bundle_dir, progress_callback=lambda n: bar.update(n))
 
-        file_size = buf.getbuffer().nbytes
-        with click.progressbar(length=file_size, label="Uploading") as bar:  # type: ignore[var-annotated]
-            s3.upload_fileobj(
-                buf,
-                s3_settings.s3BucketName,
-                s3_key,
-                ExtraArgs=extra_args,
-                Callback=lambda bytes_sent: bar.update(bytes_sent),
+            file_size = buf.getbuffer().nbytes
+            with click.progressbar(length=file_size, label="Uploading") as bar:  # type: ignore[var-annotated]
+                s3.upload_fileobj(
+                    buf,
+                    s3_settings.s3BucketName,
+                    s3_key,
+                    ExtraArgs=extra_args,
+                    Callback=lambda bytes_sent: bar.update(bytes_sent),
+                )
+        click.echo(f"Uploaded bundle to s3://{s3_settings.s3BucketName}/{s3_key}")
+    except Exception as exc:
+        is_success = False
+        error_type = classify_bundle_error(exc)
+        if error_type == "UNKNOWN":
+            # Unexpected (catch-all) failure — also emit a sanitized stack trace so
+            # the defect is diagnosable, matching the job-submission flow.
+            api.get_deadline_cloud_library_telemetry_client(config=config).record_error_with_trace(
+                exc, "bundle_upload"
             )
-    click.echo(f"Uploaded bundle to s3://{s3_settings.s3BucketName}/{s3_key}")
+        raise
+    finally:
+        api.get_deadline_cloud_library_telemetry_client(config=config).record_bundle_upload(
+            compressed_size_bytes=file_size,
+            uncompressed_size_bytes=total_size,
+            is_success=is_success,
+            error_type=error_type,
+            from_gui=False,
+        )
 
 
 @cli_bundle.command(name="download")
@@ -862,46 +892,63 @@ def bundle_download(bundle_name, output_dir, yes, output, **args):
             msg += f"\nAvailable bundles: {', '.join(available)}"
         raise DeadlineOperationError(msg)
 
-    # Get file size for progress bar
-    file_size = repo.get_bundle_size(match.path)
+    # Get file size for progress bar. Only the queue download itself is tracked
+    # here — an unknown bundle name (handled above) is an expected user error and
+    # is left untracked, matching the outcome-event pattern used elsewhere.
+    is_success = True
+    error_type: Optional[str] = None
+    try:
+        file_size = repo.get_bundle_size(match.path)
 
-    # Download and extract are sequential inside download_full_bundle. Show
-    # progress bars only in human (non-json) output — matching the convention in
-    # `job download-output` (`if not is_json_format:`) so machine-readable JSON on
-    # stdout is never interleaved with progress rendering.
-    show_progress = output != "json"
-    _bars: dict = {}
+        # Download and extract are sequential inside download_full_bundle. Show
+        # progress bars only in human (non-json) output — matching the convention in
+        # `job download-output` (`if not is_json_format:`) so machine-readable JSON on
+        # stdout is never interleaved with progress rendering.
+        show_progress = output != "json"
+        _bars: dict = {}
 
-    def _dl_callback(n):
-        if "dl" not in _bars:
-            _bars["dl"] = click.progressbar(length=file_size, label="Downloading")
-            _bars["dl_ctx"] = _bars["dl"].__enter__()
-        _bars["dl_ctx"].update(n)
+        def _dl_callback(n):
+            if "dl" not in _bars:
+                _bars["dl"] = click.progressbar(length=file_size, label="Downloading")
+                _bars["dl_ctx"] = _bars["dl"].__enter__()
+            _bars["dl_ctx"].update(n)
 
-    def _ex_callback(n):
+        def _ex_callback(n):
+            if "dl" in _bars and "dl_closed" not in _bars:
+                _bars["dl_closed"] = True
+                _bars["dl"].__exit__(None, None, None)
+            if "ex" not in _bars:
+                _bars["ex"] = click.progressbar(
+                    length=_bars.get("ex_size", file_size), label="Extracting"
+                )
+                _bars["ex_ctx"] = _bars["ex"].__enter__()
+            _bars["ex_ctx"].update(n)
+
+        def _ex_size_callback(total):
+            _bars["ex_size"] = total
+
+        local_path = repo.download_full_bundle(
+            match.path,
+            progress_callback=_dl_callback if show_progress else None,
+            extract_callback=_ex_callback if show_progress else None,
+            extract_size_callback=_ex_size_callback if show_progress else None,
+        )
         if "dl" in _bars and "dl_closed" not in _bars:
-            _bars["dl_closed"] = True
             _bars["dl"].__exit__(None, None, None)
-        if "ex" not in _bars:
-            _bars["ex"] = click.progressbar(
-                length=_bars.get("ex_size", file_size), label="Extracting"
+        if "ex" in _bars:
+            _bars["ex"].__exit__(None, None, None)
+    except Exception as exc:
+        is_success = False
+        error_type = classify_bundle_error(exc)
+        if error_type == "UNKNOWN":
+            api.get_deadline_cloud_library_telemetry_client(config=config).record_error_with_trace(
+                exc, "bundle_load"
             )
-            _bars["ex_ctx"] = _bars["ex"].__enter__()
-        _bars["ex_ctx"].update(n)
-
-    def _ex_size_callback(total):
-        _bars["ex_size"] = total
-
-    local_path = repo.download_full_bundle(
-        match.path,
-        progress_callback=_dl_callback if show_progress else None,
-        extract_callback=_ex_callback if show_progress else None,
-        extract_size_callback=_ex_size_callback if show_progress else None,
-    )
-    if "dl" in _bars and "dl_closed" not in _bars:
-        _bars["dl"].__exit__(None, None, None)
-    if "ex" in _bars:
-        _bars["ex"].__exit__(None, None, None)
+        raise
+    finally:
+        api.get_deadline_cloud_library_telemetry_client(config=config).record_bundle_load(
+            source="QUEUE", is_success=is_success, error_type=error_type, from_gui=False
+        )
     # download_full_bundle resolves to cache; copy to user's output_dir if specified
     if output_dir:
         dest_path = os.path.join(output_dir, safe_bundle_name)

@@ -47,6 +47,7 @@ from ...job_bundle.submission import AssetReferences
 from ...job_bundle._repository import (
     S3BundleRepository as _S3BundleRepository,
     archive_bundle_dir as _archive_bundle_dir,
+    classify_bundle_error as _classify_bundle_error,
     get_bundle_dir_size as _get_bundle_dir_size,
     sanitize_bundle_name as _sanitize_bundle_name,
 )
@@ -707,6 +708,12 @@ class SubmitJobToDeadlineDialog(QDialog):
                     self._cancelled = True
 
                 def run(self):
+                    # Seed sizes so a failure that happens after archiving still
+                    # reports what's known: uncompressed_size_bytes once the dir is
+                    # measured and compressed_size_bytes once the archive is built.
+                    # Both stay None if the failure happens before they're computed.
+                    total_size: Optional[int] = None
+                    total: Optional[int] = None
                     try:
                         self.status.emit("Archiving bundle...")
                         total_size = _get_bundle_dir_size(self._source_dir)
@@ -744,12 +751,30 @@ class SubmitJobToDeadlineDialog(QDialog):
                             metadata=self._metadata,
                             progress_callback=_upload_cb,
                         )
+                        api.get_deadline_cloud_library_telemetry_client().record_bundle_upload(
+                            compressed_size_bytes=total,
+                            uncompressed_size_bytes=total_size,
+                            is_success=True,
+                            from_gui=True,
+                        )
                         self.done.emit()
                     except _UploadCancelled:
-                        # User cancelled — nothing to report; boto3 aborts the
-                        # in-flight transfer when the callback raises.
+                        # User cancelled — an expected outcome, not a failure, so
+                        # nothing is recorded; boto3 aborts the in-flight transfer
+                        # when the callback raises.
                         pass
                     except Exception as e:
+                        error_type = _classify_bundle_error(e)
+                        client = api.get_deadline_cloud_library_telemetry_client()
+                        client.record_bundle_upload(
+                            compressed_size_bytes=total,
+                            uncompressed_size_bytes=total_size,
+                            is_success=False,
+                            error_type=error_type,
+                            from_gui=True,
+                        )
+                        if error_type == "UNKNOWN":
+                            client.record_error_with_trace(e, "bundle_upload", from_gui=True)
                         self.error.emit(str(e))
 
             progress_dialog = QDialog(self)

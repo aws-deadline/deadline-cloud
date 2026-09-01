@@ -137,10 +137,13 @@ class TelemetryClient:
         # downstream metrics can distinguish agent-driven from human usage.
         # Recorded in _common_details (not metadata) so it is queryable as an
         # event_details field in RUM event patterns.
-        agent_name = detect_invoking_agent()
-        self._common_details["invoked_by"] = "AGENT" if agent_name else "HUMAN"
-        if agent_name:
-            self._common_details["agent_name"] = agent_name
+        try:
+            agent_name = detect_invoking_agent()
+            self._common_details["invoked_by"] = "AGENT" if agent_name else "HUMAN"
+            if agent_name:
+                self._common_details["agent_name"] = agent_name
+        except Exception:
+            logger.debug("Swallowed exception in telemetry __init__", exc_info=True)
         try:
             self._system_metadata = self._get_system_metadata(config=config)
         except Exception:
@@ -206,6 +209,7 @@ class TelemetryClient:
         self._initialized = True
         self._start_threads()
 
+    @_swallow_exceptions
     def record_error_with_trace(
         self,
         exc: BaseException,
@@ -422,6 +426,87 @@ class TelemetryClient:
     def record_upload_summary(self, summary: SummaryStatistics, *, from_gui: bool = False):
         self._record_summary_statistics(
             "com.amazon.rum.deadline.job_attachments.upload_summary", summary, from_gui
+        )
+
+    def record_bundle_upload(
+        self,
+        *,
+        compressed_size_bytes: Optional[int] = None,
+        uncompressed_size_bytes: Optional[int] = None,
+        is_success: bool = True,
+        error_type: Optional[str] = None,
+        from_gui: bool = False,
+    ):
+        """Records the outcome of uploading (sharing) a job bundle to a queue.
+
+        Used to understand adoption of the bundle-sharing feature (how often bundles
+        are uploaded), the sizes of the bundles being shared, and the failure rate
+        and failure types of the upload itself.
+
+        Only records the outcome of the upload attempt — expected up-front input
+        errors (an invalid bundle, a bad or too-long name) are surfaced to the user
+        and left untracked, matching the ``queue export-credentials`` pattern.
+
+        :param compressed_size_bytes: Size of the uploaded ``.ojd`` archive (the
+            compressed bytes stored in S3). Omitted when the size isn't known (e.g.
+            the upload failed before archiving completed).
+        :param uncompressed_size_bytes: Uncompressed size of the bundle — the directory on
+            disk, or, for an ``.ojd`` archive input, the sum of the archive's
+            uncompressed entry sizes read from the zip central directory (no
+            unpacking). Omitted only when it can't be determined.
+        :param is_success: Whether the upload succeeded.
+        :param error_type: On failure, a stable classification code (e.g.
+            ``NONVALID_ARCHIVE``, ``DISK_FULL``, ``UNKNOWN``) as produced by
+            ``classify_bundle_error`` — never a raw message or stack trace.
+        """
+        event_details: Dict[str, Any] = {"is_success": is_success}
+        if compressed_size_bytes is not None:
+            event_details["compressed_size_bytes"] = compressed_size_bytes
+        if uncompressed_size_bytes is not None:
+            event_details["uncompressed_size_bytes"] = uncompressed_size_bytes
+        if error_type is not None:
+            event_details["error_type"] = error_type
+        self.record_event(
+            event_type="com.amazon.rum.deadline.bundle_upload",
+            event_details=event_details,
+            from_gui=from_gui,
+        )
+
+    def record_bundle_load(
+        self,
+        *,
+        source: str,
+        is_success: bool = True,
+        error_type: Optional[str] = None,
+        from_gui: bool = False,
+    ):
+        """Records the outcome of loading a job bundle for use, and where it came
+        from — a queue (a shared bundle) or local disk.
+
+        Unlike an upload (a one-time setup step), loads recur with normal usage,
+        so the queue-vs-local split shows how the bundle-sharing feature is
+        adopted over time. The outcome fields additionally surface the failure
+        rate and failure types of the load itself (e.g. a failed queue download).
+
+        Only records once a load is actually attempted — expected outcomes such as
+        the user cancelling the download or picking a non-existent bundle are left
+        untracked.
+
+        :param source: Where the bundle was loaded from: ``"QUEUE"`` (a shared queue
+            bundle), ``"LOCAL"`` (a local directory or archive), or ``"HISTORY"`` (a
+            previously-submitted bundle from the local job-history directory).
+        :param is_success: Whether the load succeeded.
+        :param error_type: On failure, a stable classification code (e.g.
+            ``NONVALID_ARCHIVE``, ``DISK_FULL``, ``UNKNOWN``) as produced by
+            ``classify_bundle_error`` — never a raw message or stack trace.
+        """
+        event_details: Dict[str, Any] = {"source": source, "is_success": is_success}
+        if error_type is not None:
+            event_details["error_type"] = error_type
+        self.record_event(
+            event_type="com.amazon.rum.deadline.bundle_load",
+            event_details=event_details,
+            from_gui=from_gui,
         )
 
     def record_error(

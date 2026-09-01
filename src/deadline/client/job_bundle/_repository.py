@@ -8,6 +8,7 @@ Supports both directory-based bundles and .ojd archive bundles (zip format).
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import io
 import json
@@ -32,6 +33,42 @@ from ..config.config_file import get_cache_directory
 from ..exceptions import DeadlineOperationError
 
 logger = getLogger(__name__)
+
+
+class NonValidBundleArchiveError(ValueError):
+    """A job bundle ``.ojd`` archive is malformed or unsafe to extract.
+
+    Raised for a corrupt/non-zip file, a path-traversal entry, a rejected zip-bomb,
+    or an over-large template. Subclasses ``ValueError`` so existing callers that
+    catch ``ValueError`` keep working, while giving telemetry a way to classify a
+    bad *input* (a ``NONVALID_ARCHIVE``) distinctly from an unexpected software bug.
+    """
+
+
+def classify_bundle_error(exc: BaseException) -> str:
+    """Classify a bundle upload/load failure into a stable, non-identifying code.
+
+    Returns ``"NONVALID_ARCHIVE"`` for a malformed/unsafe archive, otherwise delegates
+    to the shared classifier (``DISK_FULL``, ``NETWORK_ERROR``, ``PERMISSION_DENIED``,
+    ``PATH_NOT_FOUND``, or ``UNKNOWN``). The classified codes are user-side conditions
+    (environment, credentials, or input); ``UNKNOWN`` is the signal most likely
+    attributable to the service (a client-software defect).
+
+    Never raises — this is telemetry-support work on an already-failing path, so it
+    must not mask the real error; any unexpected problem falls back to ``UNKNOWN``.
+    """
+    try:
+        if isinstance(exc, NonValidBundleArchiveError):
+            return "NONVALID_ARCHIVE"
+        # Imported lazily: this module imports ``deadline.client.api`` lazily elsewhere
+        # (see S3BundleRepository.from_config) to avoid an import cycle, so do the same.
+        from ..api._error_classification import classify_error
+
+        return classify_error(exc)
+    except Exception:
+        logger.debug("Failed to classify bundle error", exc_info=True)
+        return "UNKNOWN"
+
 
 TEMPLATE_FILENAMES = ("template.yaml", "template.json")
 S3_JOB_BUNDLES_PREFIX = "job-bundles"
@@ -160,15 +197,19 @@ def _safe_zip_extract(
         # leading-slash path that has no drive letter, so check separators explicitly
         # to classify such entries consistently across platforms.
         if os.path.isabs(member) or member.startswith(("/", "\\")):
-            raise ValueError(f"Archive contains absolute path: {member}")
+            raise NonValidBundleArchiveError(f"Archive contains absolute path: {member}")
         target = os.path.realpath(os.path.join(dest, member))
         try:
             common = os.path.commonpath([dest, target])
         except ValueError:
             # On Windows, different drives have no common path
-            raise ValueError(f"Archive entry would extract outside target directory: {member}")
+            raise NonValidBundleArchiveError(
+                f"Archive entry would extract outside target directory: {member}"
+            )
         if common != dest:
-            raise ValueError(f"Archive entry would extract outside target directory: {member}")
+            raise NonValidBundleArchiveError(
+                f"Archive entry would extract outside target directory: {member}"
+            )
 
     _check_archive_extraction_safety(zf, dest)
 
@@ -192,7 +233,7 @@ def _check_archive_extraction_safety(zf: zipfile.ZipFile, dest: str) -> None:
     """
     infos = zf.infolist()
     if len(infos) > MAX_ARCHIVE_ENTRIES:
-        raise ValueError(
+        raise NonValidBundleArchiveError(
             f"Archive has too many entries ({len(infos)} > {MAX_ARCHIVE_ENTRIES}); "
             "refusing to extract"
         )
@@ -204,21 +245,24 @@ def _check_archive_extraction_safety(zf: zipfile.ZipFile, dest: str) -> None:
         total_compressed * MAX_ARCHIVE_COMPRESSION_RATIO,
     )
     if total_uncompressed > max_uncompressed:
-        raise ValueError(
+        raise NonValidBundleArchiveError(
             f"Archive expands to {total_uncompressed} bytes from {total_compressed} "
             f"compressed, exceeding the safe limit of {max_uncompressed} bytes "
             "(possible zip bomb); refusing to extract"
         )
 
-    # Refuse if the extracted payload wouldn't fit on the target filesystem.
+    # Refuse if the extracted payload wouldn't fit on the target filesystem. This is a
+    # client-side capacity condition (the user's disk), not a bad archive — raise it as
+    # OSError(ENOSPC) so it classifies as DISK_FULL rather than NONVALID_ARCHIVE.
     try:
         free = shutil.disk_usage(dest if os.path.exists(dest) else os.path.dirname(dest)).free
     except OSError:
         free = None
     if free is not None and total_uncompressed > free:
-        raise ValueError(
+        raise OSError(
+            errno.ENOSPC,
             f"Not enough free disk space to extract archive: needs {total_uncompressed} "
-            f"bytes, {free} available"
+            f"bytes, {free} available",
         )
 
 
@@ -233,9 +277,30 @@ def _extract_archive(archive_path: str, dest_dir: str) -> None:
         with zipfile.ZipFile(archive_path, "r") as zf:
             _safe_zip_extract(zf, dest_dir)
     except zipfile.BadZipFile as e:
-        raise ValueError(
+        raise NonValidBundleArchiveError(
             f"{os.path.basename(archive_path)!r} is not a valid .ojd archive (expected a zip file)"
         ) from e
+
+
+def archive_uncompressed_size(archive_path: str) -> Optional[int]:
+    """Total uncompressed size (bytes) of an .ojd archive's entries.
+
+    Read from the zip central directory (``infolist()``) — a cheap seek+read at the end
+    of the file, with no decompression; ``zipfile`` transparently handles ZIP64 for large
+    archives. Returns ``None`` if the central directory can't be read.
+
+    The per-entry sizes are self-reported by the archive, so this is a best-effort figure
+    suitable for telemetry sizing, not a security boundary (see
+    ``_check_archive_extraction_safety``, which treats the same sum as an upper bound).
+    """
+    try:
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            return sum(info.file_size for info in zf.infolist())
+    except Exception:
+        logger.debug(
+            "Could not read uncompressed size from archive %s", archive_path, exc_info=True
+        )
+        return None
 
 
 def read_template_from_archive(archive_path: str) -> Optional[tuple[str, str]]:
@@ -260,7 +325,7 @@ def _read_template_from_zip(zf: zipfile.ZipFile) -> Optional[tuple[str, str]]:
             # file_size, so this check on the central-directory value is sound.
             info = zf.getinfo(matches[0])
             if info.file_size > MAX_TEMPLATE_BYTES:
-                raise ValueError(
+                raise NonValidBundleArchiveError(
                     f"Template '{matches[0]}' is too large to read "
                     f"({info.file_size} > {MAX_TEMPLATE_BYTES} bytes)"
                 )

@@ -72,6 +72,8 @@ def test_opt_out_config(fresh_deadline_config):
     # Ensure nothing blows up if we try recording telemetry after we've opted out
     client.record_hashing_summary(SummaryStatistics(), from_gui=True)
     client.record_upload_summary(SummaryStatistics(), from_gui=False)
+    client.record_bundle_upload(compressed_size_bytes=1, uncompressed_size_bytes=2, from_gui=False)
+    client.record_bundle_load(source="LOCAL", from_gui=False)
     client.record_error({}, str(type(Exception)))
     client.record_error_with_trace(RuntimeError("opt-out test"), "test")
 
@@ -105,6 +107,8 @@ def test_opt_out_env_var(fresh_deadline_config, monkeypatch, env_var_value):
     # Ensure nothing blows up if we try recording telemetry after we've opted out
     client.record_hashing_summary(SummaryStatistics(), from_gui=True)
     client.record_upload_summary(SummaryStatistics(), from_gui=False)
+    client.record_bundle_upload(compressed_size_bytes=1, uncompressed_size_bytes=2, from_gui=False)
+    client.record_bundle_load(source="LOCAL", from_gui=False)
     client.record_error({}, str(type(Exception)))
     client.record_error_with_trace(RuntimeError("opt-out test"), "test")
 
@@ -271,6 +275,150 @@ def test_record_upload_summary(fresh_deadline_config, mock_telemetry_client):
 
     # WHEN
     mock_telemetry_client.record_upload_summary(test_summary, from_gui=True)
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_bundle_upload(fresh_deadline_config, mock_telemetry_client):
+    """Tests that recording a bundle upload sends the expected TelemetryEvent to the thread queue"""
+    # GIVEN
+    queue_mock = MagicMock()
+    expected_event = TelemetryEvent(
+        event_type="com.amazon.rum.deadline.bundle_upload",
+        event_details={
+            "is_success": True,
+            "compressed_size_bytes": 4096,
+            "uncompressed_size_bytes": 8192,
+            "usage_mode": "CLI",
+        },
+    )
+    mock_telemetry_client.event_queue = queue_mock
+
+    # WHEN
+    mock_telemetry_client.record_bundle_upload(
+        compressed_size_bytes=4096, uncompressed_size_bytes=8192, from_gui=False
+    )
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_bundle_upload_omits_uncompressed_size_when_unknown(
+    fresh_deadline_config, mock_telemetry_client
+):
+    """When the uncompressed size isn't known (archive input), it is omitted."""
+    # GIVEN
+    queue_mock = MagicMock()
+    expected_event = TelemetryEvent(
+        event_type="com.amazon.rum.deadline.bundle_upload",
+        event_details={"is_success": True, "compressed_size_bytes": 4096, "usage_mode": "CLI"},
+    )
+    mock_telemetry_client.event_queue = queue_mock
+
+    # WHEN
+    mock_telemetry_client.record_bundle_upload(compressed_size_bytes=4096, from_gui=False)
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_bundle_upload_failure(fresh_deadline_config, mock_telemetry_client):
+    """A failed upload records is_success=False with the error class name and no sizes."""
+    # GIVEN
+    queue_mock = MagicMock()
+    expected_event = TelemetryEvent(
+        event_type="com.amazon.rum.deadline.bundle_upload",
+        event_details={"is_success": False, "error_type": "ClientError", "usage_mode": "CLI"},
+    )
+    mock_telemetry_client.event_queue = queue_mock
+
+    # WHEN
+    mock_telemetry_client.record_bundle_upload(
+        is_success=False, error_type="ClientError", from_gui=False
+    )
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_bundle_upload_from_gui(fresh_deadline_config, mock_telemetry_client):
+    """Bundle upload telemetry from the GUI is tagged with usage_mode GUI."""
+    # GIVEN
+    queue_mock = MagicMock()
+    expected_event = TelemetryEvent(
+        event_type="com.amazon.rum.deadline.bundle_upload",
+        event_details={
+            "is_success": True,
+            "compressed_size_bytes": 123,
+            "uncompressed_size_bytes": 456,
+            "usage_mode": "GUI",
+        },
+    )
+    mock_telemetry_client.event_queue = queue_mock
+
+    # WHEN
+    mock_telemetry_client.record_bundle_upload(
+        compressed_size_bytes=123, uncompressed_size_bytes=456, from_gui=True
+    )
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_bundle_load_from_queue(fresh_deadline_config, mock_telemetry_client):
+    """Loading a shared bundle from the queue records source=QUEUE."""
+    # GIVEN
+    queue_mock = MagicMock()
+    expected_event = TelemetryEvent(
+        event_type="com.amazon.rum.deadline.bundle_load",
+        event_details={"source": "QUEUE", "is_success": True, "usage_mode": "CLI"},
+    )
+    mock_telemetry_client.event_queue = queue_mock
+
+    # WHEN
+    mock_telemetry_client.record_bundle_load(source="QUEUE", from_gui=False)
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_bundle_load_failure(fresh_deadline_config, mock_telemetry_client):
+    """A failed queue load records is_success=False with the error class name."""
+    # GIVEN
+    queue_mock = MagicMock()
+    expected_event = TelemetryEvent(
+        event_type="com.amazon.rum.deadline.bundle_load",
+        event_details={
+            "source": "QUEUE",
+            "is_success": False,
+            "error_type": "ClientError",
+            "usage_mode": "CLI",
+        },
+    )
+    mock_telemetry_client.event_queue = queue_mock
+
+    # WHEN
+    mock_telemetry_client.record_bundle_load(
+        source="QUEUE", is_success=False, error_type="ClientError", from_gui=False
+    )
+
+    # THEN
+    queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_record_bundle_load_from_local(fresh_deadline_config, mock_telemetry_client):
+    """Loading a local bundle records source=LOCAL, tagged with the GUI usage mode."""
+    # GIVEN
+    queue_mock = MagicMock()
+    expected_event = TelemetryEvent(
+        event_type="com.amazon.rum.deadline.bundle_load",
+        event_details={"source": "LOCAL", "is_success": True, "usage_mode": "GUI"},
+    )
+    mock_telemetry_client.event_queue = queue_mock
+
+    # WHEN
+    mock_telemetry_client.record_bundle_load(source="LOCAL", from_gui=True)
 
     # THEN
     queue_mock.put_nowait.assert_called_once_with(expected_event)

@@ -183,7 +183,7 @@ def test_validate_job_parameter_nonvalid_root_type(
 def test_validate_job_parameter_nonvalid_name(
     name: Any,
 ) -> None:
-    """Tests that when calling validate_job_parameter with an nonvalid values for "name"
+    """Tests that when calling validate_job_parameter with a nonvalid value for "name"
     that an exception is raised."""
     # GIVEN
     job_parameter = {"name": name}
@@ -262,7 +262,7 @@ def test_validate_job_parameter_valid_no_type() -> None:
 def test_validate_job_parameter_nonvalid_type(
     typ: Any,
 ) -> None:
-    """Tests that when calling validate_job_parameter with an nonvalid values for "type"
+    """Tests that when calling validate_job_parameter with a nonvalid value for "type"
     that an exception is raised."""
     # GIVEN
     job_parameter: parameters.JobParameter = {
@@ -297,7 +297,7 @@ def test_validate_job_parameter_nonvalid_type(
 def test_validate_job_parameter_nonvalid_description(
     description: Any,
 ) -> None:
-    """Tests that when calling validate_job_parameter with an nonvalid values for "description"
+    """Tests that when calling validate_job_parameter with a nonvalid value for "description"
     that an exception is raised."""
     # GIVEN
     job_parameter = {
@@ -425,7 +425,7 @@ def test_validate_job_parameter_valid_no_data_flow(
 def test_validate_job_parameter_nonvalid_data_flow(
     data_flow: Any,
 ) -> None:
-    """Tests that when calling validate_job_parameter with an nonvalid values for "dataFlow"
+    """Tests that when calling validate_job_parameter with a nonvalid value for "dataFlow"
     that an exception is raised."""
     # GIVEN
     job_parameter: parameters.JobParameter = {
@@ -461,7 +461,7 @@ def test_validate_job_parameter_nonvalid_data_flow(
 def test_validate_job_parameter_nonvalid_min_length_type(
     min_length: Any,
 ) -> None:
-    """Tests that passing a value with an nonvalid "minLength" value raises an exception"""
+    """Tests that passing a value with a nonvalid "minLength" value raises an exception"""
     # GIVEN
     job_parameter: dict = {
         "name": "a",
@@ -482,7 +482,7 @@ def test_validate_job_parameter_nonvalid_min_length_type(
 
 
 def test_validate_job_parameter_nonvalid_min_length_negative() -> None:
-    """Tests that passing a value with an nonvalid "minLength" value raises an exception"""
+    """Tests that passing a value with a nonvalid "minLength" value raises an exception"""
     # GIVEN
     min_length = -1
     job_parameter: dict = {
@@ -517,7 +517,7 @@ def test_validate_job_parameter_nonvalid_min_length_negative() -> None:
 def test_validate_job_parameter_nonvalid_max_length_type(
     max_length: Any,
 ) -> None:
-    """Tests that passing a value with an nonvalid "maxLength" value raises an exception"""
+    """Tests that passing a value with a nonvalid "maxLength" value raises an exception"""
     # GIVEN
     job_parameter: dict = {
         "name": "a",
@@ -538,7 +538,7 @@ def test_validate_job_parameter_nonvalid_max_length_type(
 
 
 def test_validate_job_parameter_nonvalid_max_length_negative() -> None:
-    """Tests that passing a value with an nonvalid "maxLength" value raises an exception"""
+    """Tests that passing a value with a nonvalid "maxLength" value raises an exception"""
     # GIVEN
     max_length = -1
     job_parameter: dict = {
@@ -571,7 +571,7 @@ def test_validate_job_parameter_nonvalid_max_length_negative() -> None:
 def test_validate_job_parameter_nonvalid_min_value_type(
     min_value: Any,
 ) -> None:
-    """Tests that passing a value with an nonvalid "minValue" value raises an exception"""
+    """Tests that passing a value with a nonvalid "minValue" value raises an exception"""
     # GIVEN
     job_parameter: dict = {
         "name": "a",
@@ -628,7 +628,7 @@ def test_validate_job_parameter_nonvalid_min_value_str(min_value: str) -> None:
 def test_validate_job_parameter_nonvalid_max_value_type(
     max_value: Any,
 ) -> None:
-    """Tests that passing a value with an nonvalid "maxValue" value raises an exception"""
+    """Tests that passing a value with a nonvalid "maxValue" value raises an exception"""
     # GIVEN
     job_parameter: dict = {
         "name": "a",
@@ -688,7 +688,7 @@ def test_validate_job_parameter_nonvalid_max_value_str(max_value: str) -> None:
 def test_validate_job_parameter_nonvalid_object_type(
     object_type: Any,
 ) -> None:
-    """Tests that when calling validate_job_parameter with an nonvalid values for "objectType"
+    """Tests that when calling validate_job_parameter with a nonvalid value for "objectType"
     that an exception is raised."""
     # GIVEN
     job_parameter: parameters.JobParameter = {
@@ -733,7 +733,7 @@ def test_validate_job_parameter_valid_no_user_interface(
 def test_validate_job_parameter_nonvalid_userinterface(
     valid_type: str,
 ) -> None:
-    """Tests that an nonvalid user interface raises an exception. This is simply testing that
+    """Tests that a nonvalid user interface raises an exception. This is simply testing that
     an exception raised by validate_user_interface_spec is not caught and ignored"""
     # GIVEN
     job_parameter: parameters.JobParameter = {

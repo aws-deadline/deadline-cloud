@@ -10,6 +10,7 @@ from moto import mock_aws
 import deadline.client.api
 from deadline.client.api import _submit_job_bundle
 from deadline.client.api._telemetry import TelemetryClient
+import deadline.client.api._telemetry as _telemetry_module
 import tempfile
 import os
 import re
@@ -20,6 +21,21 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from .shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID, MOCK_BUCKET_NAME
+
+
+@pytest.fixture(autouse=True)
+def _reset_telemetry_client_cache():
+    """Isolate the module-global telemetry client cache across tests.
+
+    ``get_telemetry_client`` memoizes clients in a module-level dict. Without a
+    reset, a client created by one test (e.g. an unpatched CLI command that records
+    telemetry) would be reused by a later test that asserts on a freshly-created
+    client — making outcomes order-dependent when tests share a process (``-n1`` or
+    when xdist co-locates the files on one worker).
+    """
+    _telemetry_module.__cached_telemetry_clients = {}
+    yield
+    _telemetry_module.__cached_telemetry_clients = {}
 
 
 @pytest.fixture(scope="function")

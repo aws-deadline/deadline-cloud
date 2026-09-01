@@ -165,6 +165,198 @@ class TestDownloadSizeReporting:
         assert "1 KB" not in captured_label[0]
 
 
+_TELEMETRY_CLIENT = (
+    "deadline.client.ui.dialogs.job_bundle_browser_dialog.api"
+    ".get_deadline_cloud_library_telemetry_client"
+)
+
+
+class TestBundleLoadTelemetry:
+    """resolve_selection() records a bundle_load event tagged with the source
+    (QUEUE vs LOCAL) so the recurring queue-vs-local usage split is visible."""
+
+    def test_local_selection_records_local_load(self, qtbot, tmp_path):
+        bundle = tmp_path / "b"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text("name: X\nsteps: []\n")
+
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._selected_is_s3 = False
+        dialog._selected_is_archive = False
+        dialog._selected_path = str(bundle)
+
+        with patch(_TELEMETRY_CLIENT) as mock_client:
+            result = dialog.resolve_selection()
+
+        assert result == str(bundle)
+        mock_client.return_value.record_bundle_load.assert_called_once_with(
+            source="LOCAL", is_success=True, from_gui=True
+        )
+
+    def test_history_selection_records_history_load(self, qtbot, tmp_path):
+        """A bundle picked from the History source records source=HISTORY, not LOCAL."""
+        history_dir = tmp_path / "history"
+        history_dir.mkdir()
+        bundle = history_dir / "b"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text("name: X\nsteps: []\n")
+
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path), history_source=str(history_dir))
+        qtbot.addWidget(dialog)
+        # Simulate the History source being active for the current selection.
+        assert dialog._history_repo is not None
+        dialog._current_repo = dialog._history_repo
+        dialog._selected_is_s3 = False
+        dialog._selected_is_archive = False
+        dialog._selected_path = str(bundle)
+
+        with patch(_TELEMETRY_CLIENT) as mock_client:
+            result = dialog.resolve_selection()
+
+        assert result == str(bundle)
+        mock_client.return_value.record_bundle_load.assert_called_once_with(
+            source="HISTORY", is_success=True, from_gui=True
+        )
+
+    def test_queue_selection_records_queue_load(self, qtbot, tmp_path):
+        repo = MagicMock()
+        repo.get_bundle_size.return_value = 1024
+
+        def _download(path, progress_callback=None):
+            if progress_callback:
+                progress_callback(1024)
+            return "/tmp/full-download"
+
+        repo.download_full_bundle.side_effect = _download
+
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._s3_repo = repo
+        dialog._selected_is_s3 = True
+        dialog._selected_path = "s3://bucket/prefix/bundle.ojd"
+
+        with patch(_TELEMETRY_CLIENT) as mock_client:
+            result = dialog.resolve_selection()
+
+        assert result == "/tmp/full-download"
+        mock_client.return_value.record_bundle_load.assert_called_once_with(
+            source="QUEUE", is_success=True, from_gui=True
+        )
+
+    def test_queue_download_failure_records_failure(self, qtbot, tmp_path):
+        """A failed queue download records source=QUEUE, is_success=False, with a
+        classified error code (a disk-full condition classifies as DISK_FULL)."""
+        import errno
+
+        repo = MagicMock()
+        repo.get_bundle_size.return_value = 1024
+        repo.download_full_bundle.side_effect = OSError(errno.ENOSPC, "No space left")
+
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._s3_repo = repo
+        dialog._selected_is_s3 = True
+        dialog._selected_path = "s3://bucket/prefix/bundle.ojd"
+
+        with patch(_TELEMETRY_CLIENT) as mock_client:
+            result = dialog.resolve_selection()
+
+        assert result is None
+        mock_client.return_value.record_bundle_load.assert_called_once_with(
+            source="QUEUE", is_success=False, error_type="DISK_FULL", from_gui=True
+        )
+        mock_client.return_value.record_error_with_trace.assert_not_called()
+        repo.clear_cache_for.assert_called_once_with("s3://bucket/prefix/bundle.ojd")
+
+    def test_queue_download_unknown_failure_records_trace(self, qtbot, tmp_path):
+        """An unexpected (UNKNOWN) queue-download failure also emits a sanitized trace."""
+        repo = MagicMock()
+        repo.get_bundle_size.return_value = 1024
+        repo.download_full_bundle.side_effect = RuntimeError("boom")
+
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._s3_repo = repo
+        dialog._selected_is_s3 = True
+        dialog._selected_path = "s3://bucket/prefix/bundle.ojd"
+
+        with patch(_TELEMETRY_CLIENT) as mock_client:
+            result = dialog.resolve_selection()
+
+        assert result is None
+        mock_client.return_value.record_bundle_load.assert_called_once_with(
+            source="QUEUE", is_success=False, error_type="UNKNOWN", from_gui=True
+        )
+        mock_client.return_value.record_error_with_trace.assert_called_once()
+        assert mock_client.return_value.record_error_with_trace.call_args.args[1] == "bundle_load"
+
+    def test_archive_extract_failure_records_failure(self, qtbot, tmp_path):
+        """A malformed local archive records source=LOCAL, is_success=False, NONVALID_ARCHIVE."""
+        from deadline.client.job_bundle._repository import NonValidBundleArchiveError
+
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._local_repo = MagicMock()
+        dialog._local_repo.extract_bundle.side_effect = NonValidBundleArchiveError(
+            "corrupt archive"
+        )
+        dialog._selected_is_s3 = False
+        dialog._selected_is_archive = True
+        dialog._selected_path = str(tmp_path / "broken.ojd")
+
+        with patch(_TELEMETRY_CLIENT) as mock_client:
+            result = dialog.resolve_selection()
+
+        assert result is None
+        mock_client.return_value.record_bundle_load.assert_called_once_with(
+            source="LOCAL", is_success=False, error_type="NONVALID_ARCHIVE", from_gui=True
+        )
+        # NONVALID_ARCHIVE is a classified (bad-input) code, not a defect — no trace.
+        mock_client.return_value.record_error_with_trace.assert_not_called()
+
+    def test_archive_extract_unknown_failure_records_trace(self, qtbot, tmp_path):
+        """An unexpected (UNKNOWN) extract failure records source=LOCAL and a trace."""
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._local_repo = MagicMock()
+        dialog._local_repo.extract_bundle.side_effect = RuntimeError("boom")
+        dialog._selected_is_s3 = False
+        dialog._selected_is_archive = True
+        dialog._selected_path = str(tmp_path / "broken.ojd")
+
+        with patch(_TELEMETRY_CLIENT) as mock_client:
+            result = dialog.resolve_selection()
+
+        assert result is None
+        mock_client.return_value.record_bundle_load.assert_called_once_with(
+            source="LOCAL", is_success=False, error_type="UNKNOWN", from_gui=True
+        )
+        mock_client.return_value.record_error_with_trace.assert_called_once()
+        assert mock_client.return_value.record_error_with_trace.call_args.args[1] == "bundle_load"
+
+    def test_preview_open_does_not_record_load(self, qtbot, tmp_path):
+        """The preview "Open bundle" button resolves the selection to open it in the
+        file explorer — a preview action, not a load-for-use — so it records nothing."""
+        bundle = tmp_path / "b"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text("name: X\nsteps: []\n")
+
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+        dialog._selected_is_s3 = False
+        dialog._selected_is_archive = False
+        dialog._selected_path = str(bundle)
+
+        with (
+            patch(_TELEMETRY_CLIENT) as mock_client,
+            patch.object(dialog, "_open_in_file_explorer"),
+        ):
+            dialog._on_download()
+
+        mock_client.return_value.record_bundle_load.assert_not_called()
+
+
 class TestPreviewInjectionHardening:
     """Bundle-derived preview values (name/description/steps) come from a template
     or S3 metadata that a queue-writer can control. The preview renders them

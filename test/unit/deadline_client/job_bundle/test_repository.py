@@ -50,8 +50,11 @@ from deadline.client.job_bundle._repository import (
     _strip_archive_ext,
     _truncate_s3_value,
     archive_bundle_dir,
+    archive_uncompressed_size,
     build_bundle_metadata,
+    classify_bundle_error,
     extract_bundle_info,
+    NonValidBundleArchiveError,
     VISIBILITY_VERSION,
     get_bundle_cache_dir,
     get_bundle_dir_size,
@@ -1319,8 +1322,13 @@ class TestArchiveExtractionSafety:
             "deadline.client.job_bundle._repository.shutil.disk_usage",
             return_value=MagicMock(free=1024),  # only 1 KB free
         ):
-            with pytest.raises(ValueError, match="disk space"):
+            # A capacity condition (the user's disk), raised as OSError(ENOSPC) so it
+            # classifies as DISK_FULL rather than a bad archive.
+            with pytest.raises(OSError, match="disk space") as excinfo:
                 _check_archive_extraction_safety(zf, str(tmp_path))
+        import errno
+
+        assert excinfo.value.errno == errno.ENOSPC
 
     def test_safe_zip_extract_rejects_bomb_end_to_end(self, tmp_path):
         # A real, highly compressible archive; lower the floor so it trips the
@@ -2015,3 +2023,91 @@ class TestVisibilityKeying:
         hidden = repo.get_hidden_set()
         assert "maya/render" in hidden
         assert "nuke/render" not in hidden
+
+
+class TestClassifyBundleError:
+    """classify_bundle_error separates bad *input* (NONVALID_ARCHIVE) and client-side
+    environment issues (DISK_FULL, etc.) from unexpected software defects (UNKNOWN)."""
+
+    def test_invalid_archive_error_classifies_as_invalid_archive(self):
+        assert classify_bundle_error(NonValidBundleArchiveError("corrupt")) == "NONVALID_ARCHIVE"
+
+    def test_disk_full_classifies_as_disk_full(self):
+        import errno
+
+        assert classify_bundle_error(OSError(errno.ENOSPC, "No space left")) == "DISK_FULL"
+
+    def test_permission_error_classifies_as_permission_denied(self):
+        assert classify_bundle_error(PermissionError("nope")) == "PERMISSION_DENIED"
+
+    def test_access_denied_client_error_classifies_as_permission_denied(self):
+        exc = ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject")
+        assert classify_bundle_error(exc) == "PERMISSION_DENIED"
+
+    def test_unexpected_exception_classifies_as_unknown(self):
+        assert classify_bundle_error(RuntimeError("boom")) == "UNKNOWN"
+
+    def test_never_raises_even_if_classifier_fails(self):
+        """Telemetry-support work on a failing path must not mask the real error."""
+        with patch(
+            "deadline.client.api._error_classification.classify_error",
+            side_effect=RuntimeError("classifier boom"),
+        ):
+            assert classify_bundle_error(RuntimeError("x")) == "UNKNOWN"
+
+
+class TestArchiveValidationErrorTypes:
+    """Archive-validation failures raise NonValidBundleArchiveError (a ValueError subclass,
+    so existing `except ValueError` callers still work); a genuine out-of-space condition
+    raises OSError(ENOSPC) so it classifies as DISK_FULL rather than a bad archive."""
+
+    def test_bad_zip_raises_invalid_archive_error(self, tmp_path):
+        not_a_zip = tmp_path / "bad.ojd"
+        not_a_zip.write_text("not a zip")
+        with pytest.raises(NonValidBundleArchiveError, match="not a valid .ojd archive"):
+            _extract_archive(str(not_a_zip), str(tmp_path / "out"))
+        # Still a ValueError for backwards-compatible callers.
+        assert issubclass(NonValidBundleArchiveError, ValueError)
+
+    def test_insufficient_disk_space_raises_enospc(self, tmp_path):
+        import errno
+
+        # A zip whose declared uncompressed size exceeds the (patched) free space.
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("template.yaml", "name: T\nsteps: []\n")
+        buf.seek(0)
+        with zipfile.ZipFile(buf, "r") as zf:
+            with patch("deadline.client.job_bundle._repository.shutil.disk_usage") as usage:
+                usage.return_value = SimpleNamespace(total=1, used=1, free=0)
+                with pytest.raises(OSError) as excinfo:
+                    _check_archive_extraction_safety(zf, str(tmp_path))
+        assert excinfo.value.errno == errno.ENOSPC
+
+
+class TestArchiveUncompressedSize:
+    """archive_uncompressed_size reads the uncompressed total from the zip central
+    directory without decompressing, and is best-effort (None on a bad file)."""
+
+    def test_sums_entry_uncompressed_sizes(self, tmp_path):
+        archive = tmp_path / "b.ojd"
+        payload_a = b"a" * 4096
+        payload_b = b"b" * 2048
+        with zipfile.ZipFile(str(archive), "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("template.yaml", "name: T\nsteps: []\n")
+            zf.writestr("data_a.bin", payload_a)
+            zf.writestr("data_b.bin", payload_b)
+
+        size = archive_uncompressed_size(str(archive))
+        # Sum of uncompressed entry sizes (template + both payloads), independent of
+        # the on-disk compressed size.
+        template_len = len(b"name: T\nsteps: []\n")
+        assert size == template_len + len(payload_a) + len(payload_b)
+
+    def test_returns_none_for_non_zip(self, tmp_path):
+        not_a_zip = tmp_path / "bad.ojd"
+        not_a_zip.write_text("not a zip")
+        assert archive_uncompressed_size(str(not_a_zip)) is None
+
+    def test_returns_none_for_missing_file(self, tmp_path):
+        assert archive_uncompressed_size(str(tmp_path / "nope.ojd")) is None

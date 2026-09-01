@@ -335,6 +335,7 @@ Bundled assets (scripts, data files) with relative paths resolve correctly again
 | `ui/job_bundle_submitter.py` | `show_job_bundle_submitter` uses the new browser dialog when `browse=True`; handles archive extraction and S3 resolution |
 | `job_bundle/loader.py` | Add `is_job_bundle_dir(path) -> bool` helper for quick detection |
 | `job_bundle/_repository.py` | **New file.** `BundleRepository` protocol, `LocalBundleRepository`, `S3BundleRepository` (with `from_config()` factory), archive helpers, cache management, metadata constants, and a local per-user visibility store (`_LocalBundleVisibility`) |
+| `api/_telemetry.py` | Add `record_bundle_upload` and `record_bundle_load` methods to `TelemetryClient` (see [Telemetry](#telemetry)) |
 
 ### CLI Commands
 
@@ -615,6 +616,100 @@ This means the S3 key preserves the original name as-is (all characters are vali
 - **Performance**: Listing is a single paginated `list_objects_v2` call with delimiter. Archive preview with S3 metadata is 1 `head_object` (no download). Cached archive selection is 1 `head_object`.
 - **S3 object metadata**: `deadline bundle upload` attaches bundle name, description, steps, and parameters as S3 user metadata. This enables zero-download preview via `head_object`. Archives uploaded by other means fall back to downloading the archive for preview.
 - **Bundled assets**: Scripts, data files, and other assets within the bundle are included in the archive. Relative PATH parameters resolve against the extracted copy.
+
+### Telemetry
+
+To understand how the bundle-sharing feature is used, two telemetry events are
+emitted. They follow the existing pattern in `api/_telemetry.py` (dedicated
+`record_*` methods on `TelemetryClient` that funnel through `record_event`), so
+they inherit the common, non-identifying fields automatically added to every
+event — `usage_mode` (`CLI` vs `GUI`, from `from_gui`), `accountId`,
+`invoked_by`/`agent_name` (human vs AI agent), and package versions. Both are
+best-effort: failures are swallowed and never affect the upload/load flow, and
+nothing is sent when telemetry is opted out (`telemetry.opt_out` /
+`DEADLINE_CLOUD_TELEMETRY_OPT_OUT`).
+
+The two events answer complementary questions. An **upload** is a one-time setup
+step (someone publishes a bundle to the queue), while a **load** recurs with
+normal usage — so the load event, split by source, is the signal for adoption
+over time.
+
+Both events are **outcome events** (matching the `queue export-credentials`
+pattern): each carries `is_success`, and on failure an `error_type`. Consistent
+with how errors are recorded elsewhere, only the upload/load *operation* is
+tracked: expected up-front conditions (an invalid bundle, a bad/too-long name, an
+unknown bundle name, a user-declined overwrite, or a cancelled download) are
+surfaced to the user and left untracked, so they don't inflate the failure rate.
+
+`error_type` is a **stable classification code**, never a raw message or stack
+trace, produced by the shared `classify_error()`/`classify_bundle_error()` helpers
+from structured signals (exception type, `errno`, S3 status/boto codes):
+
+| Code | Meaning | User or service? |
+|---|---|---|
+| `NONVALID_ARCHIVE` | Corrupt/non-zip `.ojd`, path-traversal entry, rejected zip-bomb, or over-large template | User (bad input) |
+| `DISK_FULL` | Out of local disk space (`OSError`/`ENOSPC`), incl. the pre-extraction free-space check | User (environment) |
+| `PERMISSION_DENIED` | S3 `AccessDenied`/403 or local `PermissionError` | User (credentials/setup) |
+| `NETWORK_ERROR` | Connectivity/timeout, botocore transport failure | User (environment) |
+| `PATH_NOT_FOUND` | Object/key or local path missing | User (input/state) |
+| `UNKNOWN` | No structured signal — most likely a defect in the client software | Service |
+
+This separation is deliberate: the classified codes are user-side environment,
+credentials, or input conditions (not client defects), so a "software health"
+dashboard filters to `UNKNOWN`, while the classified codes stay available as
+product/ops signal — e.g. a `DISK_FULL` spike would indicate the (currently
+unbounded) local bundle cache is outgrowing users' disks and that cache eviction is
+worth building. `NONVALID_ARCHIVE` is a `ValueError` subclass
+(`NonValidBundleArchiveError`) so existing `except ValueError` callers are
+unaffected; the free-space check raises `OSError(ENOSPC)` so it classifies as
+`DISK_FULL` rather than a bad archive.
+
+Because a bare `error_type=UNKNOWN` isn't diagnosable on its own, an `UNKNOWN`
+(catch-all) failure **additionally** emits a `com.amazon.rum.deadline.error` event
+via `record_error_with_trace`, carrying the exception's class name and a **sanitized**
+stack trace (file paths stripped, message and source lines omitted). This is the same
+mechanism the job-submission flow uses for its unexpected failures, and it is what
+lets an `UNKNOWN` be traced back to an actual defect. The classified user/environment
+codes do not emit a trace (they aren't defects and would only add noise).
+
+#### `com.amazon.rum.deadline.bundle_upload`
+
+Recorded after an upload attempt, capturing the outcome and — whenever they are
+known — both sizes, so compression can be reasoned about. The sizes are reported
+independently of `is_success`: because archiving happens before the S3 transfer, a
+failed *transfer* still knows and reports the compressed size (and the on-disk
+size). A size is omitted only when the failure happened before it was computed.
+
+| Field | Description |
+|---|---|
+| `is_success` | Whether the upload succeeded. |
+| `error_type` | On failure, the classification code (see table above). Omitted on success. |
+| `compressed_size_bytes` | Size of the uploaded `.ojd` archive (compressed — the bytes stored in S3). Known once archiving completes; omitted only if the failure occurred before then. |
+| `uncompressed_size_bytes` | Uncompressed size of the bundle — the directory on disk, or, for an `.ojd` archive input, the sum of the archive's uncompressed entry sizes read from the zip central directory (no unpacking). Omitted only when it can't be determined (e.g. the failure occurred before it was computed). |
+
+Emitted from:
+- `deadline bundle upload` (CLI) — `usage_mode=CLI`. Reports both sizes for a directory input; for an `.ojd` archive input it still reports `uncompressed_size_bytes` by summing the archive's uncompressed entry sizes from the zip central directory (self-reported, so best-effort). The outcome is recorded in a `finally` around the upload, so a failed transfer still reports the compressed (and on-disk) size.
+- "Save to Queue" in the submitter dialog (GUI) — `usage_mode=GUI`. Reports both sizes, on success and on a post-archive failure alike. A user cancel is treated as an expected outcome and not recorded.
+
+#### `com.amazon.rum.deadline.bundle_load`
+
+Recorded when a bundle is loaded for use, tagged with where it came from and its
+outcome. This is the recurring queue-vs-local usage signal:
+
+| Field | Description |
+|---|---|
+| `source` | `QUEUE` (a shared bundle pulled from the queue), `LOCAL` (a local directory or `.ojd` archive), or `HISTORY` (a previously-submitted bundle from the local job-history directory). |
+| `is_success` | Whether the load succeeded. |
+| `error_type` | On failure, the classification code (see table above). Omitted on success. |
+
+Emitted from:
+- `deadline bundle download` (CLI) — always `source=QUEUE`, since the command only loads shared bundles. The download is wrapped in a `finally` so both success and failure are recorded; an unknown bundle name (an expected user error) is left untracked.
+- The browser dialog's `resolve_selection()` (GUI), the single chokepoint used by both `gui-submit --browse` and the submitter's "Load a different job bundle" button. It records `source=QUEUE` for a queue download, `source=HISTORY` when the active source is the job-history directory, and `source=LOCAL` for other local directories and archives, with `is_success`/`error_type` on the download/extract outcome. A cancelled download is left untracked. The preview panel's "Open bundle" button also resolves the selection (to open it in the file explorer) but passes `record_load=False`, so previewing/opening is not counted as a load — only an actual load-for-use is.
+
+Note that `LOCAL` and `HISTORY` both resolve via the same `LocalBundleRepository`
+(they only differ in root directory); the source label is derived from the active
+browser source at resolve time, so re-submitting a past job (History) is
+distinguishable from opening an arbitrary local bundle.
 
 ### MCP Server Integration
 

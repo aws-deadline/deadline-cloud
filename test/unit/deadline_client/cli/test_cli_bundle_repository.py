@@ -2,6 +2,7 @@
 
 """Tests for the bundle CLI commands (list, upload, download, cache)."""
 
+import errno
 import io
 import json
 import os
@@ -214,6 +215,148 @@ class TestBundleUpload:
         assert result.exit_code == 0, result.output
         assert "Uploaded bundle to" in result.output
         mock_s3.upload_fileobj.assert_called_once()
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}._get_queue_s3_settings")
+    @patch("boto3.client")
+    def test_upload_records_telemetry(
+        self, mock_boto3_client, mock_s3_settings, mock_config, tmp_path
+    ):
+        """A successful upload records a bundle_upload telemetry event with the archive size."""
+        bundle = tmp_path / "my-bundle"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text(
+            yaml.dump(
+                {
+                    "specificationVersion": "jobtemplate-2023-09",
+                    "name": "Test Bundle",
+                    "steps": [{"name": "Run"}],
+                }
+            )
+        )
+
+        mock_session = MagicMock()
+        mock_s3 = MagicMock()
+        mock_s3.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        mock_session.client.return_value = mock_s3
+        mock_s3_settings.return_value = (
+            MagicMock(s3BucketName="test-bucket", rootPrefix="DeadlineCloud"),
+            mock_session,
+        )
+
+        with patch(
+            f"{BUNDLE_GROUP}.api.get_deadline_cloud_library_telemetry_client"
+        ) as mock_get_client:
+            result = CliRunner().invoke(main, ["bundle", "upload", str(bundle)])
+
+        assert result.exit_code == 0, result.output
+        mock_get_client.return_value.record_bundle_upload.assert_called_once()
+        kwargs = mock_get_client.return_value.record_bundle_upload.call_args.kwargs
+        assert kwargs["from_gui"] is False
+        assert kwargs["is_success"] is True
+        # A directory input reports both the uploaded archive size and the
+        # uncompressed on-disk size.
+        assert kwargs["compressed_size_bytes"] > 0
+        assert kwargs["uncompressed_size_bytes"] > 0
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}._get_queue_s3_settings")
+    @patch("boto3.client")
+    def test_upload_archive_input_reports_uncompressed_size(
+        self, mock_boto3_client, mock_s3_settings, mock_config, tmp_path
+    ):
+        """Uploading an existing .ojd reports the S3 size and the uncompressed disk size,
+        the latter read from the archive's central directory (no unpacking)."""
+        payload = b"x" * 4096
+        ojd_path = tmp_path / "archive-bundle.ojd"
+        with zipfile.ZipFile(str(ojd_path), "w") as zf:
+            zf.writestr(
+                "template.yaml",
+                yaml.dump(
+                    {
+                        "specificationVersion": "jobtemplate-2023-09",
+                        "name": "Zipped",
+                        "steps": [{"name": "Run"}],
+                    }
+                ),
+            )
+            zf.writestr("data.bin", payload)
+
+        mock_session = MagicMock()
+        mock_s3 = MagicMock()
+        mock_s3.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        mock_session.client.return_value = mock_s3
+        mock_s3_settings.return_value = (
+            MagicMock(s3BucketName="test-bucket", rootPrefix="DeadlineCloud"),
+            mock_session,
+        )
+
+        with patch(
+            f"{BUNDLE_GROUP}.api.get_deadline_cloud_library_telemetry_client"
+        ) as mock_get_client:
+            result = CliRunner().invoke(main, ["bundle", "upload", str(ojd_path)])
+
+        assert result.exit_code == 0, result.output
+        kwargs = mock_get_client.return_value.record_bundle_upload.call_args.kwargs
+        assert kwargs["compressed_size_bytes"] > 0
+        # Uncompressed size is the sum of entry file_sizes, so at least the data payload.
+        assert kwargs["uncompressed_size_bytes"] >= len(payload)
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}._get_queue_s3_settings")
+    @patch("boto3.client")
+    def test_upload_failure_records_failure_telemetry(
+        self, mock_boto3_client, mock_s3_settings, mock_config, tmp_path
+    ):
+        """A failed upload records is_success=False with a classified error code.
+
+        An unexpected exception with no structured signal classifies as UNKNOWN — the
+        service-attributable bucket, versus the user-attributable codes. The transfer
+        fails *after* archiving, so the compressed (.ojd) size and the on-disk size are
+        already known and are still reported.
+        """
+        bundle = tmp_path / "my-bundle"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text(
+            yaml.dump(
+                {
+                    "specificationVersion": "jobtemplate-2023-09",
+                    "name": "Test Bundle",
+                    "steps": [{"name": "Run"}],
+                }
+            )
+        )
+
+        mock_session = MagicMock()
+        mock_s3 = MagicMock()
+        mock_s3.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+        # The upload itself fails after validation and the exists-check pass.
+        mock_s3.upload_fileobj.side_effect = RuntimeError("network down")
+        mock_session.client.return_value = mock_s3
+        mock_s3_settings.return_value = (
+            MagicMock(s3BucketName="test-bucket", rootPrefix="DeadlineCloud"),
+            mock_session,
+        )
+
+        with patch(
+            f"{BUNDLE_GROUP}.api.get_deadline_cloud_library_telemetry_client"
+        ) as mock_get_client:
+            result = CliRunner().invoke(main, ["bundle", "upload", str(bundle)])
+
+        assert result.exit_code != 0
+        mock_get_client.return_value.record_bundle_upload.assert_called_once()
+        kwargs = mock_get_client.return_value.record_bundle_upload.call_args.kwargs
+        assert kwargs["is_success"] is False
+        assert kwargs["error_type"] == "UNKNOWN"
+        # Archiving completed before the transfer failed, so both sizes are known.
+        assert kwargs["compressed_size_bytes"] > 0
+        assert kwargs["uncompressed_size_bytes"] > 0
+        # An UNKNOWN (catch-all) failure also emits a sanitized stack trace.
+        mock_get_client.return_value.record_error_with_trace.assert_called_once()
+        assert (
+            mock_get_client.return_value.record_error_with_trace.call_args.args[1]
+            == "bundle_upload"
+        )
 
     @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
     @patch(f"{BUNDLE_GROUP}._get_queue_s3_settings")
@@ -816,6 +959,72 @@ class TestBundleDownload:
         assert result.exit_code == 0, result.output
         assert "Downloaded bundle to:" in result.output
         assert os.path.isfile(str(output_dir / "test-bundle" / "template.yaml"))
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
+    def test_download_records_queue_load_telemetry(
+        self, mock_from_config, mock_config, tmp_path, fresh_deadline_config
+    ):
+        """A successful queue download records a bundle_load event with source=QUEUE."""
+        mock_repo = MagicMock()
+        mock_repo.root_path.return_value = "s3://bucket/DC/job-bundles/"
+        mock_repo.list_entries.return_value = [
+            BrowseEntry(
+                name="my-bundle",
+                path="s3://bucket/DC/job-bundles/my-bundle.ojd",
+                is_bundle=True,
+                is_archive=True,
+            ),
+        ]
+        mock_repo.get_bundle_size.return_value = 1024
+        mock_repo.download_full_bundle.return_value = str(tmp_path / "cached-bundle")
+        mock_from_config.return_value = mock_repo
+
+        with patch(
+            f"{BUNDLE_GROUP}.api.get_deadline_cloud_library_telemetry_client"
+        ) as mock_get_client:
+            result = CliRunner().invoke(main, ["bundle", "download", "my-bundle"])
+
+        assert result.exit_code == 0, result.output
+        mock_get_client.return_value.record_bundle_load.assert_called_once_with(
+            source="QUEUE", is_success=True, error_type=None, from_gui=False
+        )
+
+    @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
+    @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
+    def test_download_failure_records_queue_load_failure(
+        self, mock_from_config, mock_config, tmp_path, fresh_deadline_config
+    ):
+        """A failed queue download records a classified bundle_load failure.
+
+        A disk-full condition is a client-side/environmental issue, so it classifies
+        as DISK_FULL rather than being lumped in with software defects.
+        """
+        mock_repo = MagicMock()
+        mock_repo.root_path.return_value = "s3://bucket/DC/job-bundles/"
+        mock_repo.list_entries.return_value = [
+            BrowseEntry(
+                name="my-bundle",
+                path="s3://bucket/DC/job-bundles/my-bundle.ojd",
+                is_bundle=True,
+                is_archive=True,
+            ),
+        ]
+        mock_repo.get_bundle_size.return_value = 1024
+        mock_repo.download_full_bundle.side_effect = OSError(errno.ENOSPC, "No space left")
+        mock_from_config.return_value = mock_repo
+
+        with patch(
+            f"{BUNDLE_GROUP}.api.get_deadline_cloud_library_telemetry_client"
+        ) as mock_get_client:
+            result = CliRunner().invoke(main, ["bundle", "download", "my-bundle"])
+
+        assert result.exit_code != 0
+        mock_get_client.return_value.record_bundle_load.assert_called_once_with(
+            source="QUEUE", is_success=False, error_type="DISK_FULL", from_gui=False
+        )
+        # A classified (user/environment) failure is not a defect, so no trace is sent.
+        mock_get_client.return_value.record_error_with_trace.assert_not_called()
 
     @patch(f"{BUNDLE_GROUP}._apply_cli_options_to_config")
     @patch(f"{BUNDLE_GROUP}.S3BundleRepository.from_config")
