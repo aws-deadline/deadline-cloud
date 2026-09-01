@@ -137,11 +137,9 @@ class TestPendingAuthorizationMessage:
         Runs a login that only fires `on_pending_authorization` with the given source,
         then blocks until cancelled, and returns the text the dialog settled on.
         """
-        notified = threading.Event()
 
         def login(on_pending_authorization, on_cancellation_check, config=None):
             on_pending_authorization(credentials_source=credentials_source)
-            notified.set()
             while not on_cancellation_check():
                 pass
             return "unused-because-canceled"
@@ -149,12 +147,16 @@ class TestPendingAuthorizationMessage:
         with patch(_API_LOGIN, side_effect=login):
             dialog = DeadlineLoginDialog(parent=None, close_on_success=True)
             qtbot.addWidget(dialog)
+            initial_text = dialog.text()
 
-            def click_cancel():
-                # The message is set via a queued signal, so wait for the callback to
-                # have fired before tearing the dialog down.
-                if not notified.is_set():
-                    QTimer.singleShot(10, click_cancel)
+            def click_cancel(attempts: int = 0):
+                # Wait for the text itself, not for the callback to have fired: the message
+                # crosses to this thread on a queued signal, so the background thread having
+                # called on_pending_authorization does not mean the dialog has applied it.
+                # Bounded, so a message that never arrives fails the assertion below rather
+                # than hanging the test.
+                if dialog.text() == initial_text and attempts < 200:
+                    QTimer.singleShot(10, lambda: click_cancel(attempts + 1))
                     return
                 dialog.button(QMessageBox.StandardButton.Cancel).click()
 

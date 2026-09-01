@@ -3,7 +3,7 @@
 __all__ = ["DirectoryPickerWidget", "InputFilePickerWidget", "OutputFilePickerWidget"]
 
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from qtpy.QtCore import Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -14,7 +14,29 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
+from ..._path_utils import is_path_contained
 from .._utils import block_signals, tr
+
+
+def _collapse_user_dir(path: str, *, path_module: Any = None) -> str:
+    """Rewrite a path inside the user's home directory to the ``~`` spelling.
+
+    Containment is by component, not by string prefix: with a home directory of
+    ``C:\\Users\\bob``, ``C:\\Users\\bobby\\scene.ma`` is not inside it. Slicing by the home
+    directory's length kept such a path and ate the first character of what followed, and
+    where the remainder then started with a separator ``join("~", ...)`` discarded the
+    ``~`` and returned an unrelated absolute path. The config dialog writes this text
+    straight into ``job_history_dir`` and ``job_bundle_default_directory``, so a wrong
+    answer here is persisted.
+    """
+    path_module = path_module or os.path
+    home_dir = path_module.expanduser("~")
+    if not is_path_contained(path, home_dir, path_module=path_module):
+        return path
+    relative = path_module.relpath(path, home_dir)
+    if relative == path_module.curdir:
+        return "~"
+    return path_module.join("~", relative)
 
 
 class _FileWidget(QWidget):
@@ -62,10 +84,7 @@ class _FileWidget(QWidget):
         if filename:
             filename = os.path.normpath(filename)
             if self.collapse_user_dir:
-                # If it's in the home directory, change to the ~ syntax
-                home_dir = os.path.expanduser("~")
-                if filename.startswith(home_dir):
-                    filename = os.path.join("~", filename[len(home_dir) + 1 :])
+                filename = _collapse_user_dir(filename, path_module=os.path)
 
         with block_signals(self.filename_edit):
             self.filename_edit.setText(filename)
@@ -236,10 +255,7 @@ class DirectoryPickerWidget(QWidget):
         if directory:
             directory = os.path.normpath(directory)
             if self.collapse_user_dir:
-                # If it's in the home directory, collapse to the ~ syntax
-                home_dir = os.path.expanduser("~")
-                if directory.startswith(home_dir):
-                    directory = os.path.join("~", directory[len(home_dir) + 1 :])
+                directory = _collapse_user_dir(directory, path_module=os.path)
 
         with block_signals(self.directory_edit):
             self.directory_edit.setText(directory)

@@ -27,6 +27,7 @@ import yaml
 
 from botocore.exceptions import ClientError
 
+from .._path_utils import is_path_contained
 from ..config import config_file
 from ..config.config_file import get_cache_directory
 from ..exceptions import DeadlineOperationError
@@ -162,12 +163,11 @@ def _safe_zip_extract(
         if os.path.isabs(member) or member.startswith(("/", "\\")):
             raise ValueError(f"Archive contains absolute path: {member}")
         target = os.path.realpath(os.path.join(dest, member))
-        try:
-            common = os.path.commonpath([dest, target])
-        except ValueError:
-            # On Windows, different drives have no common path
-            raise ValueError(f"Archive entry would extract outside target directory: {member}")
-        if common != dest:
+        # Unrelated path spaces -- a different drive, a different UNC host -- are not
+        # contained, so they are rejected here rather than raising from the comparison.
+        # path_module is passed explicitly, and read at call time, so tests can patch it
+        # for another platform.
+        if not is_path_contained(target, dest, path_module=os.path):
             raise ValueError(f"Archive entry would extract outside target directory: {member}")
 
     _check_archive_extraction_safety(zf, dest)

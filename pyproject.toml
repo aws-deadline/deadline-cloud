@@ -131,8 +131,30 @@ line-length = 100
 # E402 (imports must be at the top of the file) is pinned explicitly here so it
 # can't silently regress if a future ruff drops it from the defaults; it is
 # build-failing via `hatch run lint`.
-extend-select = ["RUF022", "E402"]
+# TID251 bans path helpers that raise on Windows UNC paths; see banned-api below.
+extend-select = ["RUF022", "E402", "TID251"]
 ignore = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# commonpath raises ValueError on Windows UNC paths (issue #1321): callers that catch it
+# silently reject valid paths, callers that don't crash. ntpath/posixpath are banned too
+# because this codebase passes explicit path modules around.
+"os.path.commonpath".msg = "Use deadline.client._path_utils.is_path_contained for containment checks, or deadline.client._path_summary.common_ancestor for a displayed summary; commonpath raises ValueError on Windows UNC paths. See issue #1321."
+"ntpath.commonpath".msg = "Use deadline.client._path_utils.is_path_contained for containment checks, or deadline.client._path_summary.common_ancestor for a displayed summary; commonpath raises ValueError on Windows UNC paths. See issue #1321."
+"posixpath.commonpath".msg = "Use deadline.client._path_utils.is_path_contained for containment checks, or deadline.client._path_summary.common_ancestor for a displayed summary; commonpath raises ValueError on Windows UNC paths. See issue #1321."
+# commonprefix compares strings, not path components, so it reports '\\host\share2' as
+# sharing a prefix with '\\host\share'. It is never the right containment primitive.
+"os.path.commonprefix".msg = "Use deadline.client._path_utils.is_path_contained or deadline.client._path_summary.common_ancestor; commonprefix is a string-prefix match, not a path-component match."
+"ntpath.commonprefix".msg = "Use deadline.client._path_utils.is_path_contained or deadline.client._path_summary.common_ancestor; commonprefix is a string-prefix match, not a path-component match."
+"posixpath.commonprefix".msg = "Use deadline.client._path_utils.is_path_contained or deadline.client._path_summary.common_ancestor; commonprefix is a string-prefix match, not a path-component match."
+# The rule resolves names statically, so it cannot see `path_module.commonpath(...)` -- the
+# spelling this codebase actually uses. It catches the direct calls; the helpers are what
+# keep the indirect ones honest.
+
+[tool.ruff.lint.per-file-ignores]
+# Mirrors the root-path grouping done inside deadline.job_attachments, which is a separate
+# package and not ours to change, so the expected value has to be built the same way.
+"test/unit/deadline_client/api/test_job_bundle_submission_asset_refs.py" = ["TID251"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["deadline"]

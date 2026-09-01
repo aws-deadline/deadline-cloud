@@ -1,0 +1,82 @@
+name: Windows SMB Path Test
+
+# Validates UNC path containment against a real SMB share, which lexical ntpath modeling
+# cannot do. Regression coverage for issue #1321.
+#
+# Not part of Code Quality, which runs the reusable Python build: that invokes
+# `hatch run test`, whose script hard-codes test/unit and test/cli_e2e, so no job it runs
+# can reach test/integ. This workflow owns these tests, and it has to gate pull requests
+# to be worth anything -- a wrong assertion here is invisible to every other check, so
+# post-merge-only means it lands green and fails on mainline. GitHub-hosted windows
+# runners are already elevated, so `net share` works.
+#
+# It runs on every pull request with no paths filter, so the check always reports and can
+# be made a required one: GitHub leaves a filtered-out required check pending forever, so
+# the filter would have to go first. It is not in mainline's required checks yet -- adding
+# it there before this workflow reaches mainline would block every open pull request, since
+# their merge refs would not contain it. The cost is the Windows env install, about two
+# minutes per run. It also runs before a release publishes, since a tag nobody validated
+# against a real redirector is how broken UNC handling would ship.
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [mainline]
+  workflow_call:
+    inputs:
+      tag:
+        description: Git ref (tag/branch/SHA) to test. Defaults to the triggering ref.
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  test:
+    name: UNC Containment (real SMB)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Confirm SMB prerequisites
+        # Fail with a clear message here rather than leaving the tests to diagnose the
+        # runner for us.
+        shell: pwsh
+        run: |
+          $admin = ([Security.Principal.WindowsPrincipal] `
+            [Security.Principal.WindowsIdentity]::GetCurrent()
+          ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+          if (-not $admin) { throw "Administrator rights are required to create an SMB share." }
+          Get-Service LanmanServer, LanmanWorkstation | Format-Table -AutoSize
+          Start-Service LanmanServer
+          Start-Service LanmanWorkstation
+          # The symlink the escape test needs comes from the runner being elevated:
+          # CreateSymbolicLinkW needs SeCreateSymbolicLinkPrivilege, and CPython does not
+          # pass the flag that would let Developer Mode substitute for it. The test fails
+          # loudly (not skips) if the privilege is ever missing.
+          # Remote-to-local symlink evaluation must be on, or realpath leaves the link
+          # unresolved and the escape reads as contained.
+          fsutil behavior set SymlinkEvaluation R2L:1 R2R:1
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip hatch
+
+      - name: Run the SMB path tests
+        shell: pwsh
+        env:
+          # Turn the fixtures' environment skips into failures. pytest exits 0 when every
+          # test skips, so without this a runner that could not build the share reports a
+          # green job that asserted nothing about SMB -- and this workflow is the only
+          # place these tests run.
+          DEADLINE_SMB_TESTS_REQUIRED: '1'
+        run: |
+          # numprocesses=0 overrides the auto in addopts: each xdist worker would build
+          # its own share and they would race for the one free drive letter.
+          hatch run pytest test/integ/windows_smb -v -rs --no-cov --numprocesses=0 -p no:randomly

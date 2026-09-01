@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
+from .._path_utils import is_path_contained
 from ..exceptions import DeadlineOperationError
 
 
@@ -43,8 +44,7 @@ def validate_directory_symlink_containment(job_bundle_dir: str) -> None:
         for path in chain(dir_names, file_names):
             norm_path = os.path.normpath(os.path.join(root_dir, path))
             resolved_path = os.path.realpath(norm_path)
-            common_path = os.path.commonpath([resolved_root, resolved_path])
-            if common_path != resolved_root:
+            if not is_path_contained(resolved_path, resolved_root, path_module=os.path):
                 raise DeadlineOperationError(
                     f"Job bundle cannot contain a path that resolves outside of the resolved bundle directory:\n{resolved_root}\n\nPath in bundle:\n{norm_path}\nResolves to:\n{resolved_path}"
                 )

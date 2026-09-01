@@ -23,6 +23,7 @@ else:
     NotRequired = object
     TypedDict = object
 
+from .._path_utils import is_absolute_path, is_path_contained
 from ..exceptions import DeadlineOperationError
 from .loader import read_yaml_or_json_object
 
@@ -793,14 +794,16 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
         ):
             default = parameter.get("default")
             if default:
-                if os.path.isabs(default):
+                # Not os.path.isabs, which before Python 3.11 reads a UNC path naming a
+                # share as relative -- such a default reached the containment check below
+                # and failed there, reporting the wrong reason.
+                if is_absolute_path(default, path_module=os.path):
                     raise DeadlineOperationError(
                         f"Job Template for job bundle {bundle_dir}:\nDefault PATH '{default}' for parameter '{name}' is absolute.\nPATH values must be relative, and must resolve within the Job Bundle directory."
                     )
                 bundle_real_path = os.path.realpath(bundle_dir)
                 default_real_path = os.path.realpath(os.path.join(bundle_real_path, default))
-                common_path = os.path.commonpath([bundle_real_path, default_real_path])
-                if common_path != bundle_real_path:
+                if not is_path_contained(default_real_path, bundle_real_path, path_module=os.path):
                     raise DeadlineOperationError(
                         f"Job Template for job bundle {bundle_dir}:\nDefault PATH '{default_real_path}' for parameter '{name}' specifies files outside of Job Bundle directory '{bundle_real_path}'.\nPATH values must be relative, and must resolve within the Job Bundle directory."
                     )
