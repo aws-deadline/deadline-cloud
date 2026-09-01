@@ -21,4 +21,4 @@ openjd-model >= 0.11.3
 
 # GUI testing dependencies
 pytest-qt == 4.*
-PySide6-essentials >= 6.6,< 6.11
+PySide6-essentials >= 6.6,< 6.12
