@@ -93,6 +93,15 @@ class _AuthStatusStub:
             sig.connect = MagicMock()
             setattr(self, signal_name, sig)
 
+    # The auth-status widget subscribes/unsubscribes to polling over its
+    # lifetime; these are no-ops for the auto-select tests, which don't exercise
+    # polling.
+    def _start_polling(self):
+        pass
+
+    def _stop_polling(self):
+        pass
+
 
 def _build_dialog(qtbot, auth_status):
     """Construct a SubmitJobToDeadlineDialog wired to the mock auth status.
