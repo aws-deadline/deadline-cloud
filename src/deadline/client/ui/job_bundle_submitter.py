@@ -477,20 +477,51 @@ def show_job_bundle_submitter(
     submitter_dialog._s3_repo = _s3_repo_for_reuse
 
     if job_parameters:
-        # We want to validate the job parameters after the queue parameters are loaded.
-        # Connect a parameter validation function to the queue parameter loading completion
-        def validate_parameters_after_queue_load(refresh_id: int, queue_parameters: list):
+        # The controller is a global singleton that outlives this dialog, and its
+        # queue_parameters_updated signal also fires with [] to clear stale state
+        # (farm/queue switch, fetch error, nothing selected) — indistinguishable
+        # from a queue that genuinely has zero queue parameters. Connect to the
+        # success-only queue_parameters_load_succeeded signal instead, so we only
+        # validate against a real, successful load (which may legitimately be
+        # empty) and keep waiting through clears and transient fetch errors.
+        # Validate single-shot, then disconnect so the closure over
+        # submitter_dialog can't fire against a closed dialog later.
+        controller = submitter_dialog.shared_job_settings._controller
+        # Mutable cell so both closures below share the connection state. Guards
+        # the double-disconnect (validation ran, then the dialog is destroyed),
+        # which PySide6 reports with a RuntimeWarning rather than an exception.
+        connected = [False]
+
+        def disconnect_validation_callback():
+            if not connected[0]:
+                return
+            connected[0] = False
+            try:
+                controller.queue_parameters_load_succeeded.disconnect(
+                    validate_parameters_after_queue_load
+                )
+            except (TypeError, RuntimeError):
+                # Some bindings raise instead of warn when already disconnected.
+                pass
+
+        def validate_parameters_after_queue_load(queue_parameters: list):
             """Validate CLI parameters against loaded queue parameters and set parameter values"""
+            disconnect_validation_callback()
             if not _validate_and_warn_about_parameters(
                 job_parameters, initial_settings.parameters, queue_parameters, submitter_dialog
             ):
-                # User chose to cancel, close the dialog
+                # User cancelled at the validation warning.
                 submitter_dialog.close()
 
-        # Connect to the queue parameters update signal
-        submitter_dialog.shared_job_settings._queue_parameters_update.connect(
-            validate_parameters_after_queue_load
-        )
+        # Validate CLI params once the controller successfully loads queue params.
+        controller.queue_parameters_load_succeeded.connect(validate_parameters_after_queue_load)
+        connected[0] = True
+        # If the dialog goes away before any load succeeds, tear the connection down.
+        # The dialog does not set WA_DeleteOnClose, so an ordinary close never emits
+        # destroyed — hook finished (emitted on accept/reject/close of a visible
+        # dialog) for the close path, and destroyed for deletion without done().
+        submitter_dialog.finished.connect(lambda _result: disconnect_validation_callback())
+        submitter_dialog.destroyed.connect(disconnect_validation_callback)
 
     submitter_dialog.show()
     return submitter_dialog
