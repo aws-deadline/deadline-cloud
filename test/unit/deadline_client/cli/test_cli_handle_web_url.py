@@ -6,6 +6,7 @@ Tests for the CLI handle-web-url command.
 
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -1004,6 +1005,320 @@ def test_linux_install_generates_valid_desktop_file(fresh_deadline_config, tmp_p
         "Terminal=true\n"
         "MimeType=x-scheme-handler/deadline\n"
     )
+
+
+def test_linux_install_preserves_existing_mimeapps_entries(fresh_deadline_config, tmp_path):
+    """
+    Regression test: installing the web URL handler on Linux must NOT wipe out
+    unrelated default-application associations already present in mimeapps.list.
+
+    Previously the install opened mimeapps.list in "w" mode, truncating the whole
+    file and destroying every other association (browser, PDF, mailto, etc.).
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    # Pre-populate with unrelated default-application associations.
+    mimeapps_path.write_text(
+        "[Default Applications]\n"
+        "text/html=firefox.desktop\n"
+        "x-scheme-handler/http=firefox.desktop\n"
+        "x-scheme-handler/mailto=thunderbird.desktop\n"
+        "application/pdf=okular.desktop\n"
+    )
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    contents = mimeapps_path.read_text()
+
+    # The pre-existing associations must survive.
+    assert "text/html=firefox.desktop" in contents
+    assert "x-scheme-handler/http=firefox.desktop" in contents
+    assert "x-scheme-handler/mailto=thunderbird.desktop" in contents
+    assert "application/pdf=okular.desktop" in contents
+
+    # And the deadline handler must be added.
+    assert "x-scheme-handler/deadline=deadline.desktop" in contents
+
+
+def test_linux_install_preserves_mimeapps_when_write_fails(fresh_deadline_config, tmp_path):
+    """
+    Regression test: the mimeapps.list rewrite must be atomic. If writing the new
+    content fails partway through (crash, disk-full, exception inside write()),
+    the original file must be left intact rather than truncated/emptied -- losing
+    the unrelated associations this change exists to protect.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    original = (
+        "[Default Applications]\n"
+        "text/html=firefox.desktop\n"
+        "x-scheme-handler/http=firefox.desktop\n"
+        "application/pdf=okular.desktop\n"
+    )
+    mimeapps_path.write_text(original)
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+        # Simulate a failure while rendering the new content to the temp file.
+        patch(
+            "configparser.ConfigParser.write",
+            side_effect=OSError("No space left on device"),
+        ),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        with pytest.raises(OSError, match="No space left on device"):
+            install_deadline_web_url_handler(all_users=False)
+
+    # The original file must be untouched, and no temp files left behind.
+    assert mimeapps_path.read_text() == original
+    leftover = [p.name for p in config_dir.iterdir() if p.name != "mimeapps.list"]
+    assert leftover == [], f"temp files not cleaned up: {leftover}"
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes are not meaningful on Windows"
+)
+def test_linux_install_preserves_mimeapps_permissions(fresh_deadline_config, tmp_path):
+    """
+    Regression test: the atomic temp-file rewrite must not change the permissions
+    of an existing mimeapps.list. tempfile.mkstemp() creates the temp file with
+    mode 0600 and os.replace() would keep that mode -- e.g. turning a
+    world-readable system-wide /usr/share/applications/mimeapps.list into a
+    root-only file that other users' desktop environments cannot read.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    mimeapps_path.write_text("[Default Applications]\ntext/html=firefox.desktop\n")
+    mimeapps_path.chmod(0o644)
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    assert stat.S_IMODE(mimeapps_path.stat().st_mode) == 0o644
+    # Sanity check that the rewrite happened.
+    assert "x-scheme-handler/deadline=deadline.desktop" in mimeapps_path.read_text()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes are not meaningful on Windows"
+)
+def test_linux_install_creates_mimeapps_with_default_permissions(fresh_deadline_config, tmp_path):
+    """
+    When mimeapps.list does not exist yet, the new file must get a standard
+    world-readable config file mode (0644), not mkstemp's private 0600.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    assert not mimeapps_path.exists()
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    assert stat.S_IMODE(mimeapps_path.stat().st_mode) == 0o644
+
+
+def test_linux_install_creates_mimeapps_when_missing(fresh_deadline_config, tmp_path):
+    """
+    Tests that when mimeapps.list does not exist yet, installing creates it
+    with the deadline handler entry.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    assert not mimeapps_path.exists()
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    contents = mimeapps_path.read_text()
+    assert "[Default Applications]" in contents
+    assert "x-scheme-handler/deadline=deadline.desktop" in contents
+
+
+def test_linux_install_raises_on_malformed_mimeapps(fresh_deadline_config, tmp_path):
+    """
+    A pre-existing mimeapps.list that is not valid INI (here, a stray key before
+    any section header) must surface as a DeadlineOperationError rather than
+    crashing the CLI with a raw configparser traceback.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    # Not valid INI: a key/value pair before any [section] header.
+    mimeapps_path.write_text("this-is=not-valid-ini\n")
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+        from deadline.client.exceptions import DeadlineOperationError
+
+        with pytest.raises(DeadlineOperationError, match="could not parse existing"):
+            install_deadline_web_url_handler(all_users=False)
+
+
+def test_linux_install_tolerates_duplicate_mimeapps_entries(fresh_deadline_config, tmp_path):
+    """
+    Regression test: real-world mimeapps.list files written by other desktop
+    tools have historically contained duplicate keys/sections. The default
+    configparser strict=True would raise DuplicateOptionError/DuplicateSectionError
+    on these, turning a previously always-succeeding install into a hard failure.
+
+    With strict=False the install must succeed (last value wins) while still
+    preserving unrelated associations and adding the deadline handler.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    # Duplicate key (x-scheme-handler/http appears twice) AND a duplicate section
+    # ([Default Applications] appears twice) — both illegal under strict=True.
+    mimeapps_path.write_text(
+        "[Default Applications]\n"
+        "x-scheme-handler/http=firefox.desktop\n"
+        "x-scheme-handler/http=chrome.desktop\n"
+        "application/pdf=okular.desktop\n"
+        "[Default Applications]\n"
+        "x-scheme-handler/mailto=thunderbird.desktop\n"
+    )
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        # Must NOT raise despite the duplicate key/section.
+        install_deadline_web_url_handler(all_users=False)
+
+    contents = mimeapps_path.read_text()
+
+    # Unrelated associations survive; duplicate key resolves last-value-wins.
+    assert "x-scheme-handler/http=chrome.desktop" in contents
+    assert "x-scheme-handler/http=firefox.desktop" not in contents
+    assert "application/pdf=okular.desktop" in contents
+    assert "x-scheme-handler/mailto=thunderbird.desktop" in contents
+
+    # And the deadline handler is added.
+    assert "x-scheme-handler/deadline=deadline.desktop" in contents
 
 
 def test_linux_install_resolves_bare_command_via_shutil_which(fresh_deadline_config, tmp_path):
