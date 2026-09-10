@@ -10,7 +10,7 @@ import socket
 import tempfile
 import time
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Generator, Optional
 
 from ..config.config_file import DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR
@@ -18,7 +18,13 @@ from ._incremental_download import CategorizedJobIds
 
 logger = logging.getLogger(__name__)
 
+# Still 1: trimming only empties a job's tasks dict, which readers already tolerate.
 DOWNLOAD_STATUS_FILE_SCHEMA_VERSION = 1
+
+# Sized against the Monitor parsing this file whole on its 60s poll (~2.4ms/MB); task records at
+# ~230 bytes each dominate the size.
+_TARGET_RETAINED_TASK_RECORDS = 100_000
+
 _STATUS_FILE_LOCK_TTL_SECONDS = 60
 _STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS = 1
 # MAX_WAIT must be >= TTL so a waiter is willing to wait at least as long as a lock
@@ -128,6 +134,7 @@ def _make_status_entry(
 # contradicts any of them, so these are the states _reconcile_entry_with_tasks overrides.
 # "in_progress" is excluded on purpose: it claims nothing, and the download may still be retried
 # before the job ends, so the honest report is a failed task row under a still-running job.
+# Also gates trimming via _is_history_trimmable: adding a status widens what records get dropped.
 _NO_DOWNLOAD_FAILURE_STATUSES = ("downloaded", "skipped")
 
 
@@ -231,6 +238,112 @@ def _determine_job_download_status(
         return _make_status_entry("in_progress", total_files, downloaded_files)
 
     return _make_status_entry("in_progress", total_files, downloaded_files)
+
+
+_OLDEST_SORT_KEY = datetime.min.replace(tzinfo=timezone.utc)
+# Beyond this, a timestamp is a clock error rather than a newer entry. Affects order only.
+_CLOCK_SKEW_ALLOWANCE = timedelta(minutes=5)
+
+
+def _is_history_trimmable(entry: Any) -> bool:
+    """True if this job's task records may be dropped.
+
+    A "downloaded" job can still hold failed tasks, and the farm_failed guard in
+    _build_status_file_content needs those records on disk to suppress a stale failure.
+    """
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("download_status") not in _NO_DOWNLOAD_FAILURE_STATUSES:
+        return False
+    if entry.get("error_code") is not None or entry.get("failed_files"):
+        return False
+    tasks = entry.get("tasks")
+    if tasks is None:
+        return True
+    if not isinstance(tasks, dict):
+        return False
+    for task in tasks.values():
+        if not isinstance(task, dict):
+            return False
+        if task.get("download_status") != "downloaded" or task.get("error_code") is not None:
+            return False
+    return True
+
+
+def _last_updated_sort_key(entry: Any) -> datetime:
+    """Retention order key, newest first. Undatable entries sort oldest.
+
+    last_updated moves on a status change, not on every sync. Future timestamps are clamped, not
+    demoted, so one fast clock does not make every other writer drop that machine's records first.
+    """
+    if not isinstance(entry, dict):
+        return _OLDEST_SORT_KEY
+    raw = entry.get("last_updated")
+    if not isinstance(raw, str):
+        return _OLDEST_SORT_KEY
+    try:
+        # fromisoformat only accepts a trailing "Z" from 3.11, and this file is written by
+        # whatever client reached it first.
+        parsed = datetime.fromisoformat(raw[:-1] + "+00:00" if raw.endswith("Z") else raw)
+    except ValueError:
+        return _OLDEST_SORT_KEY
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    return min(parsed, now) if parsed > now + _CLOCK_SKEW_ALLOWANCE else parsed
+
+
+def _trim_retained_history(jobs_status: dict[str, Any], candidate_job_ids: set[str]) -> None:
+    """Reclaims task records in place, keeping those of the most recently updated jobs.
+
+    The target is a reclaim budget, not a ceiling: ineligible jobs and this run's candidates keep
+    their records without spending it. Entries are emptied, never removed, because the
+    preserve-counts branch in _build_status_file_content needs the entry. A reclaimed job that is
+    later requeued can report an already-downloaded frame as a farm failure.
+    """
+    ordered = sorted(
+        (
+            (_last_updated_sort_key(entry), position, job_id, entry)
+            for position, (job_id, entry) in enumerate(jobs_status.items())
+        ),
+        key=lambda item: (item[0], item[1]),
+        reverse=True,
+    )
+
+    budget = _TARGET_RETAINED_TASK_RECORDS
+    retained_records = 0
+    dropped_records = 0
+    untrimmable_records = 0
+    live_records = 0
+    for _, _, job_id, entry in ordered:
+        tasks = entry.get("tasks") if isinstance(entry, dict) else None
+        record_count = len(tasks) if isinstance(tasks, dict) else 0
+        if not record_count:
+            continue
+        if not _is_history_trimmable(entry):
+            untrimmable_records += record_count
+            retained_records += record_count
+        elif job_id in candidate_job_ids:
+            live_records += record_count
+            retained_records += record_count
+        elif budget > 0:
+            budget = max(0, budget - record_count)
+            retained_records += record_count
+        else:
+            entry["tasks"] = {}
+            dropped_records += record_count
+
+    if dropped_records:
+        logger.debug(
+            f"Trimmed download status history: dropped {dropped_records} task records, "
+            f"retaining {retained_records}."
+        )
+    if retained_records > _TARGET_RETAINED_TASK_RECORDS:
+        logger.info(
+            f"Download status file retains {retained_records} task records, above the "
+            f"{_TARGET_RETAINED_TASK_RECORDS} target: {untrimmable_records} belong to jobs that "
+            f"are not eligible to be trimmed and {live_records} to jobs this run is still tracking."
+        )
 
 
 def _build_status_file_content(
@@ -347,6 +460,9 @@ def _build_status_file_content(
                 existing_entry["download_status"] = "skipped"
             existing_entry["last_updated"] = now
             _reconcile_entry_with_tasks(existing_entry)
+
+    # Ordered after reconciliation, which reads entry["tasks"].
+    _trim_retained_history(jobs_status, all_job_ids)
 
     # Determine run status — "failed" if any job in this run had errors
     has_failures = any(
