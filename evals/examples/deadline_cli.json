@@ -1,0 +1,23 @@
+[
+  {
+    "id": "discover_submit_workflow",
+    "prompt": "Using only `deadline --help` and its subcommand help pages (do not run any other deadline commands), explain the full workflow to submit a job bundle, wait for it to finish, and download its output. Name the exact commands and flags you would use.",
+    "tools": ["Bash"],
+    "rubric": "The answer names `deadline bundle submit` for submission and identifies real commands/flags for waiting on completion and downloading output (for example `deadline job download-output`). It must not invent flags that do not appear in the help text.",
+    "max_turns": 15
+  },
+  {
+    "id": "explain_farm_queue_defaults",
+    "prompt": "Using only `deadline config --help` and `deadline job get --help`, explain whether --farm-id and --queue-id are required on `deadline job get`, and where their values come from when omitted.",
+    "tools": ["Bash"],
+    "rubric": "The answer states that the id options are optional and fall back to configured defaults (deadline config / defaults.farm_id and defaults.queue_id).",
+    "max_turns": 10
+  },
+  {
+    "id": "what_is_openjd",
+    "prompt": "Using only `deadline bundle --help`, `deadline bundle submit --help`, and any references to Open Job Description you find in the CLI help text, explain what Open Job Description is and what kinds of workloads it supports.",
+    "tools": ["Bash"],
+    "rubric": "The answer describes Open Job Description as a general-purpose compute job template specification (or words to that effect) — not as something limited to rendering, visual effects, or visual compute specifically. It may mention rendering as one example use case, but must not frame OpenJD as exclusively or primarily for visual/render workloads.",
+    "max_turns": 10
+  }
+]

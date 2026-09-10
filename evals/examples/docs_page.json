@@ -1,0 +1,12 @@
+[
+  {
+    "id": "follow_bundle_guide",
+    "prompt": "Using ONLY the reference material provided (do not run deadline or aws commands), write out the exact sequence of commands a user should run to create and submit the job bundle the guide describes. If the guide is missing a step or prerequisite a user would need, say so explicitly.",
+    "tools": ["Read"],
+    "rubric": "The answer reproduces a correct command sequence from the guide, and explicitly calls out any step the guide leaves ambiguous or missing rather than inventing details the guide does not contain.",
+    "materials": {
+      "guide.md": "# Submitting your first job bundle\n\nA job bundle pairs an Open Job Description template with the files your job needs.\n\n1. Create a directory named `my_bundle` containing a `template.yaml`.\n2. Submit it with `deadline bundle submit my_bundle`.\n3. Watch progress in the Deadline Cloud monitor.\n"
+    },
+    "max_turns": 8
+  }
+]
