@@ -1,3 +1,7 @@
+## 0.60.7 (2026-09-07)
+
+### Bug Fixes
+* Fixed path containment checks failing for Windows host-level UNC paths (e.g., `\\server`). Previously, comparing UNC roots with paths under their shares could incorrectly report paths as not contained, causing unexpected errors. This is now handled correctly. (#1327)
 ## 0.60.6 (2026-08-31)
 
 ### Bug Fixes
