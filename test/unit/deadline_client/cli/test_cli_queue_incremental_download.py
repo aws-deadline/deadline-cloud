@@ -278,8 +278,11 @@ def test_incremental_output_download_quiet_when_nothing_new(
         second = runner.invoke(main, _sync_output_args(checkpoint_dir))
 
     assert second.exit_code == 0, second.output
+    checked_at = (
+        datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_3MIN).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    )
     assert second.output.splitlines() == [
-        "OK  Mock Queue: nothing new (window 3m, checked 2025-05-26 05:03:00)"
+        f"OK  Mock Queue: nothing new (window 3m, checked {checked_at})"
     ], second.output
 
 

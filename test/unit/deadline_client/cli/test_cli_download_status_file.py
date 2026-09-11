@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 import pytest
 
+from deadline.client.cli._sync_output_format import _format_path
 from deadline.client.cli._download_status_file import (
     _atomic_write_json,
     _build_status_file_content,
@@ -513,7 +514,8 @@ class TestWriteDownloadStatusFile:
         with open(status_file) as f:
             data = json.load(f)
         assert data["jobs"][MOCK_JOB_ID]["download_status"] == "downloaded"
-        assert any("status file" in msg and str(renders_dir) in msg for msg in messages)
+        shown = _format_path(str(renders_dir))
+        assert any("status file" in msg and shown in msg for msg in messages)
 
     def test_writes_to_ignore_storage_profiles_path(self, tmp_path):
         checkpoint_dir = tmp_path / "checkpoint"
