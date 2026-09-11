@@ -16,6 +16,7 @@ from freezegun import freeze_time
 import click
 from click.testing import CliRunner
 from deadline.client.cli import main
+from deadline.client.cli._groups import queue_group
 import psutil
 
 from ..shared_constants import (
@@ -284,6 +285,59 @@ def test_incremental_output_download_quiet_when_nothing_new(
     assert second.output.splitlines() == [
         f"OK  Mock Queue: nothing new (window 3m, checked {checked_at})"
     ], second.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_failure_releases_the_held_back_report(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """A quiet run holds its report back. On failure that report is the only record of what
+    the run had done, so it must be released rather than dropped for the traceback alone."""
+    _mock_unchanged_job(deadline_mock)
+    runner = CliRunner()
+
+    with patch.object(
+        queue_group, "_incremental_output_download", side_effect=RuntimeError("boom")
+    ):
+        with freeze_time(ISO_FREEZE_TIME):
+            result = runner.invoke(main, _sync_output_args(checkpoint_dir))
+
+    assert result.exit_code != 0, result.output
+    # The header was buffered before the failure and has to survive it.
+    assert "Queue sync: Mock Queue" in result.output, result.output
+    assert "checkpoint" in result.output, result.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_quiet_result_line_comes_last(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """The one-line result has to be the last line, so a warning raised while writing the
+    checkpoint or status file cannot appear below a line already claiming success."""
+    _mock_unchanged_job(deadline_mock)
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        runner.invoke(main, _sync_output_args(checkpoint_dir))
+
+    def _warn(*args, **kwargs):
+        kwargs["print_function_callback"]("  WARNING: status file trouble")
+
+    with patch.object(queue_group, "write_download_status_file", side_effect=_warn):
+        with freeze_time(ISO_FREEZE_TIME_PLUS_3MIN):
+            result = runner.invoke(main, _sync_output_args(checkpoint_dir))
+
+    assert result.exit_code == 0, result.output
+    lines = [click.unstyle(line) for line in result.output.strip().splitlines()]
+    assert any("status file trouble" in line for line in lines), lines
+    assert lines[-1].startswith("OK  Mock Queue: nothing new"), lines
 
 
 @pytest.mark.skipif(
@@ -1812,6 +1866,13 @@ def test_incremental_output_download_fallback_failure_marks_run_failed(
     with open(status_path) as f:
         status = json.load(f)
     assert status["sync_metadata"]["last_run_status"] == "failed", status
+
+    # The failure is recorded only under the synthetic "" bucket, which is not a job. The
+    # closing line still has to report the run as failed: it is the sole record that the whole
+    # window was lost, and a green line is what a scheduled job's log gets grepped for.
+    result_line = click.unstyle(result.output.strip().splitlines()[-1])
+    assert result_line.startswith("FAILED  "), result_line
+    assert "no job could be identified" in result_line, result_line
     # The synthetic "" bucket never leaks into the per-job entries.
     assert "" not in status["jobs"], status["jobs"]
 

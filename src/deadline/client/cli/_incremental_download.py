@@ -16,6 +16,7 @@ from typing import Optional
 from configparser import ConfigParser
 from typing import Any, Callable
 import time
+import textwrap
 import concurrent.futures
 
 from .. import api
@@ -69,6 +70,7 @@ from ._common import _cli_object_repr, sigint_handler
 from ._sync_output_format import (
     _ENTRY_DETAIL_INDENT,
     _SyncOutputFormatter,
+    _SyncOutputWriter,
     _format_duration,
     _format_interval,
     _format_path,
@@ -335,6 +337,7 @@ def _get_download_candidate_jobs(
         if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     }
     active_job_count = len(download_candidate_jobs)
+    active_job_ids = set(download_candidate_jobs)
 
     # - Any recently ended job (job went from active to terminal with a taskRunStatus
     #   in SUSPENDED, CANCELED, FAILED, SUCCEEDED, NOT_COMPATIBLE), that has at least
@@ -367,9 +370,10 @@ def _get_download_candidate_jobs(
 
     duration = datetime.now(tz=timezone.utc) - start_time
     if download_candidate_jobs:
+        newly_ended_count = len({job["jobId"] for job in recently_ended_jobs} - active_job_ids)
         fmt.line(
             f"{_plural(len(download_candidate_jobs), 'candidate job')}"
-            f" ({active_job_count} active, {len(recently_ended_jobs)} recently ended)",
+            f" ({active_job_count} active, {newly_ended_count} recently ended)",
             duration,
         )
     else:
@@ -447,7 +451,8 @@ def _categorize_jobs_in_checkpoint(
     # Per-job lines are buffered so the summary step (which needs the elapsed time) can be
     # printed above the jobs it describes.
     buffered_lines: list[Any] = []
-    entries = _SyncOutputFormatter(buffered_lines.append)
+    entries_writer = _SyncOutputWriter(buffered_lines.append)
+    entries = _SyncOutputFormatter(entries_writer)
     start_time = datetime.now(tz=timezone.utc)
 
     finished_tracking_job_ids = checkpoint_job_ids.difference(download_candidate_job_ids)
@@ -646,6 +651,8 @@ def _categorize_jobs_in_checkpoint(
     )
     for line in buffered_lines:
         print_function_callback(line)
+    if entries_writer.had_problem:
+        fmt.mark_problem()
 
     return result
 
@@ -919,13 +926,7 @@ def _get_job_sessions(
         for future in concurrent.futures.as_completed(futures):
             future.result()
 
-    duration = datetime.now(tz=timezone.utc) - start_time
-    session_action_count = sum(
-        len(session.get("sessionActions", []))
-        for session_list in job_sessions.values()
-        for session in session_list
-    )
-    fmt.line(_plural(session_action_count, "succeeded task run"), duration)
+    retrieval_duration = datetime.now(tz=timezone.utc) - start_time
 
     start_time = datetime.now(tz=timezone.utc)
 
@@ -937,6 +938,21 @@ def _get_job_sessions(
         job_sessions,
         download_candidate_jobs,
         print_function_callback,
+    )
+
+    # Counted after the prune so this agrees with the summary's task-runs row, which is
+    # derived from the same session actions once the ones with no output are gone.
+    fmt.line(
+        _plural(
+            sum(
+                len(session.get("sessionActions", []))
+                for session_list in job_sessions.values()
+                for session in session_list
+            ),
+            "task run with output",
+            "task runs with output",
+        ),
+        retrieval_duration,
     )
 
     duration = datetime.now(tz=timezone.utc) - start_time
@@ -1470,15 +1486,6 @@ def _incremental_output_download(
     )
     durations._update_checkpoint_jobs_list = time.perf_counter_ns() - start_t
 
-    # Build per-job file mapping by correlating downloaded manifests with their job IDs.
-    # Resolved before the download so the manifest count can be reported with its timing.
-    manifests_to_download = _get_manifests_to_download(
-        queue["jobAttachmentSettings"]["rootPrefix"],
-        download_candidate_jobs,
-        job_sessions,
-        path_mapping_rule_appliers,
-    )
-
     fmt.section("Download")
     start_t = time.perf_counter_ns()
     unmapped_paths: dict[str, list[str]] = {}
@@ -1496,9 +1503,9 @@ def _incremental_output_download(
         )
     )
     durations._download_all_manifests_with_absolute_paths = time.perf_counter_ns() - start_t
-    if manifests_to_download:
+    if downloaded_manifests:
         fmt.line(
-            _plural(len(manifests_to_download), "asset manifest"),
+            _plural(len(downloaded_manifests), "asset manifest"),
             durations._download_all_manifests_with_absolute_paths / 1_000_000_000,
         )
 
@@ -1527,8 +1534,15 @@ def _incremental_output_download(
                 unmapped_path_list, max_entries=30, path_format=path_format
             )
             for summary_line in paths_summary.splitlines():
-                fmt.entry_detail(summary_line.strip())
+                fmt.entry_detail(summary_line)
 
+    # Build per-job file mapping by correlating downloaded manifests with their job IDs.
+    manifests_to_download = _get_manifests_to_download(
+        queue["jobAttachmentSettings"]["rootPrefix"],
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+    )
     # Correlate manifests_to_download with downloaded_manifests by position to attribute each
     # downloaded manifest to its job (and task). Both lists come from _get_manifests_to_download
     # with identical inputs, so their lengths match in practice. If they ever diverge we skip only
@@ -1626,8 +1640,8 @@ def _incremental_output_download(
         paths_summary = summarize_path_list(
             local_path_list, total_size_by_path=file_size_by_path, max_entries=30
         )
-        for summary_line in paths_summary.splitlines():
-            fmt.detail(summary_line.strip())
+        for summary_line in textwrap.indent(paths_summary, " " * 4).splitlines():
+            fmt.detail(summary_line, indent=0)
     else:
         fmt.line("nothing new to download")
 
@@ -1649,11 +1663,6 @@ def _incremental_output_download(
         fmt.flush()
     else:
         fmt.discard()
-        fmt.result(
-            f"{queue['displayName']}: nothing new"
-            f" (window {_format_duration(update_length)},"
-            f" checked {_format_timestamp(current_timestamp)})"
-        )
 
     # Download per-job with error isolation, running jobs in parallel to restore throughput.
     job_download_results: dict[str, dict[str, Any]] = {}
@@ -1732,6 +1741,8 @@ def _incremental_output_download(
                             boto3_session_for_s3,
                             file_conflict_resolution,
                             on_downloading_files=_make_progress_callback(),
+                            # Suppressed: this helper's only output is a worker-thread count.
+                            # Suppressed: this helper's only output is a worker-thread count.
                             print_function_callback=lambda msg: None,
                         )
                         if not sigint_handler.continue_operation:
@@ -1780,6 +1791,8 @@ def _incremental_output_download(
                             boto3_session_for_s3,
                             file_conflict_resolution,
                             on_downloading_files=_make_progress_callback(),
+                            # Suppressed: this helper's only output is a worker-thread count.
+                            # Suppressed: this helper's only output is a worker-thread count.
                             print_function_callback=lambda msg: None,
                         )
                         if not sigint_handler.continue_operation:
@@ -1809,6 +1822,7 @@ def _incremental_output_download(
                         boto3_session_for_s3,
                         file_conflict_resolution,
                         on_downloading_files=_make_progress_callback(),
+                        # Suppressed: this helper's only output is a worker-thread count.
                         print_function_callback=lambda msg: None,
                     )
                     if not sigint_handler.continue_operation:
@@ -2109,6 +2123,11 @@ def _incremental_output_download(
             **stats,
         },
     )
+
+    # Values the caller needs for its closing result line, added after the telemetry event so
+    # they stay out of the metric payload.
+    stats["window_summary"] = f"window {_format_duration(update_length)}"
+    stats["checked_at"] = _format_timestamp(current_timestamp)
 
     if not fmt.suppressed:
         _print_summary(

@@ -8,6 +8,8 @@ import click
 import json
 import time
 import os
+from contextlib import contextmanager
+from typing import Iterator
 from configparser import ConfigParser
 from typing import Optional
 import boto3
@@ -52,6 +54,21 @@ from ....job_attachments._incremental_downloads.incremental_download_state impor
 DOWNLOAD_CHECKPOINT_FILE_NAME = "download_checkpoint.json"
 
 
+@contextmanager
+def _report_on_failure(writer: _SyncOutputWriter) -> Iterator[None]:
+    """Releases a held-back report when the body raises.
+
+    A quiet run buffers its progress lines and normally drops them. On failure they are the
+    only record of what the run had done so far, so an operator reading a scheduled job's log
+    gets the context leading up to the error instead of the traceback alone.
+    """
+    try:
+        yield
+    except BaseException:
+        writer.flush()
+        raise
+
+
 def _echo_result_line(
     fmt: _SyncOutputFormatter,
     stats: dict,
@@ -61,8 +78,12 @@ def _echo_result_line(
 ) -> None:
     """Prints the closing one-line result, so a tail or grep of the log tells the outcome."""
     elapsed = _format_duration(time.monotonic() - command_start)
-    # The synthetic "" bucket holds paths that could not be attributed to a job, so it is
-    # excluded from the job counts while still contributing to the file and byte totals.
+    # The synthetic "" bucket holds paths that could not be attributed to a job. It is not a
+    # job, so it stays out of the job counts, but a failure recorded only there still means
+    # the run failed: it is the sole record of a lost window when attribution was skipped.
+    any_failure = any(
+        result.get("error_code") is not None for result in job_download_results.values()
+    )
     failed = [
         job_id
         for job_id, result in job_download_results.items()
@@ -75,6 +96,12 @@ def _echo_result_line(
     if failed:
         fmt.result(
             f"{len(failed)} of {len(attempted)} jobs failed after {elapsed}"
+            f" ({files} files, {size} downloaded)",
+            failed=True,
+        )
+    elif any_failure:
+        fmt.result(
+            f"download failed after {elapsed}, no job could be identified"
             f" ({files} files, {size} downloaded)",
             failed=True,
         )
@@ -526,9 +553,12 @@ def sync_output(
 
     pid_lock_file_path: str = os.path.join(checkpoint_dir, f"{download_checkpoint_file_name}.pid")
 
-    with PidFileLock(
-        pid_lock_file_path,
-        operation_name="incremental output download",
+    with (
+        PidFileLock(
+            pid_lock_file_path,
+            operation_name="incremental output download",
+        ),
+        _report_on_failure(writer),
     ):
         checkpoint: IncrementalDownloadState
 
@@ -626,8 +656,14 @@ def sync_output(
 
             updated_download_state.save_file(checkpoint_file_path)
 
-        # A run with nothing to report has already printed its own one-line result.
         if not fmt.suppressed:
             fmt.summary_row("checkpoint", "not saved (dry run)" if dry_run else "saved")
             fmt.summary_row("elapsed", _format_duration(time.monotonic() - command_start))
             _echo_result_line(fmt, stats, job_download_results, dry_run, command_start)
+        else:
+            # Quiet run: one line, emitted here so it lands after the checkpoint and status
+            # file are written and therefore below any warning either of them raised.
+            fmt.result(
+                f"{queue['displayName']}: nothing new"
+                f" ({stats['window_summary']}, checked {stats['checked_at']})"
+            )

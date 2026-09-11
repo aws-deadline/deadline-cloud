@@ -189,6 +189,10 @@ class _SyncOutputFormatter:
     def _emit(self, line: Any) -> None:
         self._echo(line)
 
+    def mark_problem(self) -> None:
+        """Records that a problem happened, for a warning reported through another sink."""
+        self._mark_problem()
+
     def _mark_problem(self) -> None:
         writer = self._writer
         if writer is not None:
