@@ -25,7 +25,11 @@ from deadline.client.cli._incremental_download import (
     _FailedJobsTracker,
     _MAX_FAILED_JOB_RETRIES,
 )
-from deadline.client.cli._download_status_file import _is_job_fully_complete
+from deadline.client.cli import _download_status_file as status_file_module
+from deadline.client.cli._download_status_file import (
+    _is_history_trimmable,
+    _is_job_fully_complete,
+)
 
 from ..shared_constants import MOCK_QUEUE_ID, MOCK_STORAGE_PROFILE_ID, MOCK_JOB_ID
 
@@ -2363,3 +2367,399 @@ class TestRetrieveSessionActionsFarmFailures:
 
         # No sessionActions populated (nothing succeeded), no crash.
         assert "sessionActions" not in output_session
+
+
+def _make_history_entry(
+    *,
+    day: int,
+    task_count: int = 0,
+    status: str = "downloaded",
+    task_status: str = "downloaded",
+    task_error_code: Optional[str] = None,
+    failed_files: int = 0,
+    error_code: Optional[str] = None,
+    total_files: Optional[int] = None,
+) -> dict[str, Any]:
+    """Builds a job entry as it would already exist on disk from an earlier run."""
+    counted = task_count if total_files is None else total_files
+    return {
+        "download_status": status,
+        "total_files": counted,
+        "downloaded_files": counted,
+        "failed_files": failed_files,
+        "last_updated": f"2026-01-{day:02d}T00:00:00+00:00",
+        "error_code": error_code,
+        "error_message": None,
+        "skip_reason": None,
+        "tasks": {
+            f"task-{day}-{i}": {
+                "download_status": task_status,
+                "total_files": 1,
+                "downloaded_files": 1 if task_status == "downloaded" else 0,
+                "error_code": task_error_code,
+                "error_message": None,
+            }
+            for i in range(task_count)
+        },
+    }
+
+
+def _build_from_history(existing_jobs: dict[str, Any], **kwargs) -> dict[str, Any]:
+    """Runs the builder over prior state, with no jobs in the current run unless given."""
+    return _build_status_file_content(
+        queue_id=MOCK_QUEUE_ID,
+        storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+        categorized_job_ids=kwargs.pop("categorized_job_ids", _make_categorized_job_ids()),
+        download_candidate_jobs=kwargs.pop("download_candidate_jobs", {}),
+        existing_jobs=existing_jobs,
+        **kwargs,
+    )
+
+
+class TestRetentionTargetValues:
+    """The shipped target, asserted outside the fixture that shrinks it."""
+
+    def test_shipped_target_is_the_intended_value(self):
+        # A dropped digit in the Monitor's size budget would otherwise ship silently.
+        assert status_file_module._TARGET_RETAINED_TASK_RECORDS == 100_000
+
+
+class TestHistoryTrimming:
+    @pytest.fixture(autouse=True)
+    def _small_targets(self, monkeypatch):
+        """Shrink the target so the behaviour is testable without building 100k records."""
+        monkeypatch.setattr(status_file_module, "_TARGET_RETAINED_TASK_RECORDS", 10)
+
+    def test_history_within_targets_is_untouched(self):
+        existing = {
+            "job-a": _make_history_entry(day=3, task_count=4),
+            "job-b": _make_history_entry(day=2, task_count=4),
+        }
+        result = _build_from_history(existing)
+        assert len(result["jobs"]) == 2
+        assert len(result["jobs"]["job-a"]["tasks"]) == 4
+        assert len(result["jobs"]["job-b"]["tasks"]) == 4
+
+    def test_records_are_dropped_once_the_budget_is_spent(self):
+        existing = {
+            "job-new": _make_history_entry(day=9, task_count=6),
+            "job-mid": _make_history_entry(day=5, task_count=4),
+            "job-old": _make_history_entry(day=1, task_count=6),
+        }
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-new"]["tasks"]) == 6
+        assert len(result["jobs"]["job-mid"]["tasks"]) == 4
+        assert result["jobs"]["job-old"]["tasks"] == {}
+        assert result["jobs"]["job-old"]["download_status"] == "downloaded"
+        assert result["jobs"]["job-old"]["downloaded_files"] == 6
+
+    def test_newest_job_keeps_its_records_even_when_it_alone_exceeds_the_budget(self):
+        existing = {"job-huge": _make_history_entry(day=9, task_count=14)}
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-huge"]["tasks"]) == 14
+
+    def test_an_untrimmable_job_does_not_spend_the_budget(self):
+        existing = {
+            "job-stuck": _make_history_entry(day=9, task_count=14, status="in_progress"),
+            "job-clean": _make_history_entry(day=5, task_count=4),
+        }
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-stuck"]["tasks"]) == 14
+        assert len(result["jobs"]["job-clean"]["tasks"]) == 4
+
+    @pytest.mark.parametrize(
+        "task_status,task_error_code",
+        [
+            ("failed", "PERMISSION_DENIED"),
+            ("farm_failed", None),
+            ("in_progress", None),
+            # A record whose status and error fields disagree is still evidence of a failure.
+            ("downloaded", "DISK_FULL"),
+        ],
+    )
+    def test_job_holding_a_non_success_record_is_never_trimmed(self, task_status, task_error_code):
+        existing = {
+            "job-new": _make_history_entry(day=9, task_count=10),
+            "job-old": _make_history_entry(
+                day=1, task_count=4, task_status=task_status, task_error_code=task_error_code
+            ),
+        }
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-old"]["tasks"]) == 4
+
+    def test_job_with_failure_counts_is_never_trimmed(self):
+        existing = {
+            "job-new": _make_history_entry(day=9, task_count=10),
+            "job-old": _make_history_entry(day=1, task_count=4, failed_files=2),
+        }
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-old"]["tasks"]) == 4
+
+    def test_unfinished_job_is_never_trimmed(self):
+        existing = {
+            "job-new": _make_history_entry(day=9, task_count=10),
+            "job-running": _make_history_entry(day=1, task_count=4, status="in_progress"),
+        }
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-running"]["tasks"]) == 4
+
+    def test_no_job_row_is_ever_removed(self):
+        existing = {f"job-{day}": _make_history_entry(day=day, task_count=6) for day in range(1, 9)}
+        existing["job-undated"] = _make_history_entry(day=1, task_count=6)
+        del existing["job-undated"]["last_updated"]
+        result = _build_from_history(existing)
+        assert set(result["jobs"]) == set(existing)
+        # Records were reclaimed, so this is not the trimmer failing to run at all.
+        assert any(e["tasks"] == {} for e in result["jobs"].values())
+
+    def test_ties_in_last_updated_are_broken_by_file_position(self):
+        existing = {
+            "job-first": _make_history_entry(day=4, task_count=10),
+            "job-second": _make_history_entry(day=4, task_count=10),
+        }
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-second"]["tasks"]) == 10
+        assert result["jobs"]["job-first"]["tasks"] == {}
+
+    @pytest.mark.parametrize(
+        "last_updated",
+        [
+            pytest.param("__missing__", id="missing"),
+            pytest.param(None, id="null"),
+            pytest.param("not-a-timestamp", id="unparseable"),
+            pytest.param(12345, id="not-a-string"),
+        ],
+    )
+    def test_entry_without_a_usable_timestamp_is_treated_as_oldest(self, last_updated):
+        existing = {
+            "job-dated": _make_history_entry(day=5, task_count=10),
+            "job-undated": _make_history_entry(day=1, task_count=6),
+        }
+        if last_updated == "__missing__":
+            del existing["job-undated"]["last_updated"]
+        else:
+            existing["job-undated"]["last_updated"] = last_updated
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-dated"]["tasks"]) == 10
+        assert result["jobs"]["job-undated"]["tasks"] == {}
+
+    def test_naive_timestamp_sorts_by_its_date_not_to_the_bottom(self):
+        existing = {
+            "job-naive": _make_history_entry(day=9, task_count=10),
+            "job-aware": _make_history_entry(day=1, task_count=6),
+        }
+        existing["job-naive"]["last_updated"] = "2026-01-09T00:00:00"
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-naive"]["tasks"]) == 10
+        assert result["jobs"]["job-aware"]["tasks"] == {}
+
+    def test_z_suffixed_timestamp_is_understood(self):
+        existing = {
+            "job-zulu": _make_history_entry(day=9, task_count=10),
+            "job-offset": _make_history_entry(day=1, task_count=6),
+        }
+        existing["job-zulu"]["last_updated"] = "2026-01-09T00:00:00Z"
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-zulu"]["tasks"]) == 10
+        assert result["jobs"]["job-offset"]["tasks"] == {}
+
+    def test_future_dated_entry_is_clamped_not_treated_as_oldest(self):
+        existing = {
+            "job-skewed": _make_history_entry(day=1, task_count=10),
+            "job-genuinely-old": _make_history_entry(day=2, task_count=6),
+        }
+        existing["job-skewed"]["last_updated"] = "9999-12-31T00:00:00+00:00"
+        result = _build_from_history(existing)
+        assert len(result["jobs"]["job-skewed"]["tasks"]) == 10
+        assert result["jobs"]["job-genuinely-old"]["tasks"] == {}
+
+    def test_records_of_an_inactive_job_are_reclaimed(self):
+        existing = {
+            "job-new": _make_history_entry(day=9, task_count=10),
+            "job-done": _make_history_entry(day=1, task_count=6),
+        }
+        result = _build_from_history(
+            existing, categorized_job_ids=_make_categorized_job_ids(inactive={"job-done"})
+        )
+        assert result["jobs"]["job-done"]["tasks"] == {}
+
+    def test_records_of_a_download_candidate_are_never_emptied(self):
+        existing = {
+            "job-new": _make_history_entry(day=9, task_count=10),
+            "job-live": _make_history_entry(day=1, task_count=4),
+        }
+        current = _make_categorized_job_ids(unchanged={"job-live"})
+        candidates = {"job-live": _make_job("job-live", succeeded=2, total=2, ended=True)}
+        result = _build_from_history(
+            existing, categorized_job_ids=current, download_candidate_jobs=candidates
+        )
+        assert len(result["jobs"]["job-live"]["tasks"]) == 4
+
+    def test_trimmed_records_repopulate_from_a_later_download(self):
+        existing = {
+            "job-new": _make_history_entry(day=9, task_count=10),
+            MOCK_JOB_ID: _make_history_entry(day=1, task_count=6),
+        }
+        first = _build_from_history(existing)
+        assert first["jobs"][MOCK_JOB_ID]["tasks"] == {}
+
+        second = _build_from_history(
+            {MOCK_JOB_ID: first["jobs"][MOCK_JOB_ID]},
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID, succeeded=1, total=1)},
+            task_download_results={
+                MOCK_JOB_ID: {
+                    "task-fresh-0": {
+                        "total_files": 2,
+                        "downloaded_files": 2,
+                        "error_code": None,
+                        "error_message": None,
+                    }
+                }
+            },
+        )
+        tasks = second["jobs"][MOCK_JOB_ID]["tasks"]
+        assert set(tasks) == {"task-fresh-0"}
+        assert tasks["task-fresh-0"]["download_status"] == "downloaded"
+
+    def test_records_kept_on_an_untrimmable_job_still_suppress_a_stale_farm_failure(self):
+        existing = {
+            "job-new": _make_history_entry(day=9, task_count=10),
+            MOCK_JOB_ID: _make_history_entry(
+                day=1, task_count=1, task_status="failed", task_error_code="DISK_FULL"
+            ),
+        }
+        existing[MOCK_JOB_ID]["tasks"]["task-safe-0"] = {
+            "download_status": "downloaded",
+            "total_files": 2,
+            "downloaded_files": 2,
+            "error_code": None,
+            "error_message": None,
+        }
+        result = _build_from_history(
+            existing,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID, succeeded=1, total=1)},
+            task_download_results={
+                MOCK_JOB_ID: {
+                    "task-safe-0": {
+                        "download_status": "farm_failed",
+                        "total_files": 0,
+                        "downloaded_files": 0,
+                        "error_code": None,
+                        "error_message": None,
+                    }
+                }
+            },
+        )
+        assert (
+            result["jobs"][MOCK_JOB_ID]["tasks"]["task-safe-0"]["download_status"] == "downloaded"
+        )
+
+    @pytest.mark.parametrize(
+        "bad_entry",
+        [
+            pytest.param("not-an-object", id="entry-is-a-string"),
+            pytest.param(
+                {
+                    "download_status": "downloaded",
+                    "last_updated": "2026-01-01T00:00:00+00:00",
+                    "tasks": [],
+                },
+                id="tasks-is-a-list",
+            ),
+            pytest.param(
+                {
+                    "download_status": "downloaded",
+                    "last_updated": "2026-01-01T00:00:00+00:00",
+                    "tasks": {"task-x": "nope"},
+                },
+                id="task-is-a-string",
+            ),
+        ],
+    )
+    def test_malformed_entry_from_another_writer_does_not_stop_the_write(self, tmp_path, bad_entry):
+        """write_download_status_file swallows every exception and only logs, so a shape error in
+        the trim pass would leave the file frozen at its old content forever."""
+        renders_dir = tmp_path / "renders"
+        (renders_dir / ".deadline").mkdir(parents=True)
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        with open(status_file, "w") as f:
+            json.dump(
+                {
+                    "schema_version": 1,
+                    "sync_metadata": {},
+                    "jobs": {
+                        "job-bad": bad_entry,
+                        # Enough good rows that the budget runs out before job-bad, where a
+                        # shape assumption would blow up.
+                        **{f"job-ok-{day}": _make_history_entry(day=day) for day in (2, 3, 4, 5)},
+                    },
+                },
+                f,
+            )
+
+        messages: list[str] = []
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile={"fileSystemLocations": [{"path": str(renders_dir)}]},
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+            print_function_callback=messages.append,
+        )
+
+        with open(status_file) as f:
+            data = json.load(f)
+        assert MOCK_JOB_ID in data["jobs"], "the write was abandoned"
+        assert not any("WARNING" in msg for msg in messages)
+
+    def test_write_download_status_file_bounds_the_file_on_disk(self, tmp_path):
+        """Goes through the public entry point and a real read/write cycle."""
+        renders_dir = tmp_path / "renders"
+        (renders_dir / ".deadline").mkdir(parents=True)
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        with open(status_file, "w") as f:
+            json.dump(
+                {
+                    "schema_version": 1,
+                    "sync_metadata": {},
+                    "jobs": {
+                        f"job-{day}": _make_history_entry(day=day, task_count=6)
+                        for day in (1, 2, 3, 4, 5)
+                    },
+                },
+                f,
+            )
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile={"fileSystemLocations": [{"path": str(renders_dir)}]},
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        with open(status_file) as f:
+            data = json.load(f)
+        assert MOCK_JOB_ID in data["jobs"]
+        retained = sum(len(e["tasks"]) for e in data["jobs"].values())
+        assert retained <= 12, retained
+
+    def test_is_history_trimmable_requires_a_finished_all_clean_job(self):
+        assert _is_history_trimmable(_make_history_entry(day=1, task_count=2)) is True
+        assert _is_history_trimmable(_make_history_entry(day=1, status="skipped")) is True
+        assert _is_history_trimmable(_make_history_entry(day=1, status="in_progress")) is False
+        assert _is_history_trimmable(_make_history_entry(day=1, error_code="DISK_FULL")) is False
+        assert _is_history_trimmable("not-an-object") is False
+        assert _is_history_trimmable({"download_status": "downloaded", "tasks": []}) is False
+        # An older client may have written a row before the tasks field existed.
+        no_tasks = _make_history_entry(day=1)
+        del no_tasks["tasks"]
+        assert _is_history_trimmable(no_tasks) is True
+        # A record from a client that predates download_status cannot be shown to be a success.
+        entry = _make_history_entry(day=1, task_count=1)
+        del entry["tasks"]["task-1-0"]["download_status"]
+        assert _is_history_trimmable(entry) is False
