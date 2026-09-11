@@ -17,7 +17,6 @@ from configparser import ConfigParser
 from typing import Any, Callable
 import time
 import concurrent.futures
-import textwrap
 
 from .. import api
 import boto3
@@ -67,6 +66,15 @@ from ...job_attachments.progress_tracker import (
     ProgressReportMetadata,
 )
 from ._common import _cli_object_repr, sigint_handler
+from ._sync_output_format import (
+    _ENTRY_DETAIL_INDENT,
+    _SyncOutputFormatter,
+    _format_duration,
+    _format_interval,
+    _format_path,
+    _format_timestamp,
+    _plural,
+)
 
 SESSIONS_API_MAX_CONCURRENCY = 3
 
@@ -139,6 +147,30 @@ def _classify_error(e: BaseException) -> str:
     return "UNKNOWN"
 
 
+# Paths that carry no step-/task- segment are collected under a synthetic "" job id, which
+# has neither a display name nor an id worth printing.
+_UNATTRIBUTED_LABEL = "(unattributed paths)"
+
+
+def _job_label(
+    job_id: str,
+    download_candidate_jobs: dict[str, dict[str, Any]],
+    *,
+    with_id: bool = True,
+) -> str:
+    """Names a job for display, including the synthetic bucket that belongs to no job.
+
+    The id is worth repeating on a warning or error, which may be read on its own. Progress
+    lines leave it out, since the job entry above them already carries it.
+    """
+    if not job_id:
+        return _UNATTRIBUTED_LABEL
+    name = download_candidate_jobs.get(job_id, {}).get("name")
+    if not name:
+        return job_id
+    return f"{name} ({job_id})" if with_id else name
+
+
 _MAX_FAILED_JOB_RETRIES = 5
 
 
@@ -197,9 +229,9 @@ class _FailedJobsTracker:
         for job_id in failed_job_ids:
             self._counts[job_id] = self._counts.get(job_id, 0) + 1
             if self._counts[job_id] >= _MAX_FAILED_JOB_RETRIES:
-                print_function_callback(
-                    f"WARNING: Job {job_id} has failed to download {_MAX_FAILED_JOB_RETRIES} "
-                    f"times and will no longer be retried automatically."
+                _SyncOutputFormatter(print_function_callback).warning(
+                    f"job {job_id} failed to download {_MAX_FAILED_JOB_RETRIES} times and will"
+                    " no longer be retried automatically"
                 )
                 # Keep in _counts at the cap value so subsequent timestamp-window rediscoveries
                 # are suppressed — do NOT delete here.
@@ -263,7 +295,7 @@ def _get_download_candidate_jobs(
     Returns:
         A dictionary mapping job id to the job as returned by the deadline.search_jobs API.
     """
-    print_function_callback("Retrieving updated data from Deadline Cloud...")
+    fmt = _SyncOutputFormatter(print_function_callback)
     start_time = datetime.now(tz=timezone.utc)
 
     # Construct the full set of jobs that may have new available downloads.
@@ -297,15 +329,12 @@ def _get_download_candidate_jobs(
             region=region,
         )
     }
-    print(f"DEBUG: Got {len(download_candidate_jobs)} active jobs")
     download_candidate_jobs = {
         job_id: _datetimes_to_str(job)
         for job_id, job in download_candidate_jobs.items()
         if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     }
-    print(
-        f"DEBUG: Filtered down to {len(download_candidate_jobs)} active jobs based on SUCCEEDED task filter"
-    )
+    active_job_count = len(download_candidate_jobs)
 
     # - Any recently ended job (job went from active to terminal with a taskRunStatus
     #   in SUSPENDED, CANCELED, FAILED, SUCCEEDED, NOT_COMPATIBLE), that has at least
@@ -328,20 +357,23 @@ def _get_download_candidate_jobs(
         },
         region=region,
     )
-    print(
-        f"DEBUG: Got {len(recently_ended_jobs)} jobs with job[endedAt] >= {starting_timestamp.astimezone().isoformat()}"
-    )
     # Filter to jobs where the count of SUCCEEDED tasks is positive.
     recently_ended_jobs = [
         job for job in recently_ended_jobs if job["taskRunStatusCounts"]["SUCCEEDED"] > 0
     ]
-    print(f"DEBUG: Filtered down to {len(recently_ended_jobs)} jobs based on SUCCEEDED task filter")
     download_candidate_jobs.update(
         {job["jobId"]: _datetimes_to_str(job) for job in recently_ended_jobs}
     )
 
     duration = datetime.now(tz=timezone.utc) - start_time
-    print_function_callback(f"...retrieval completed in {duration}")
+    if download_candidate_jobs:
+        fmt.line(
+            f"{_plural(len(download_candidate_jobs), 'candidate job')}"
+            f" ({active_job_count} active, {len(recently_ended_jobs)} recently ended)",
+            duration,
+        )
+    else:
+        fmt.line("no candidate jobs", duration)
 
     return download_candidate_jobs
 
@@ -411,9 +443,11 @@ def _categorize_jobs_in_checkpoint(
 
     download_candidate_job_ids = set(download_candidate_jobs.keys())
 
-    print_function_callback(
-        f"Categorizing {len(checkpoint_jobs)} checkpoint jobs against {len(download_candidate_jobs)} download candidate jobs..."
-    )
+    fmt = _SyncOutputFormatter(print_function_callback)
+    # Per-job lines are buffered so the summary step (which needs the elapsed time) can be
+    # printed above the jobs it describes.
+    buffered_lines: list[Any] = []
+    entries = _SyncOutputFormatter(buffered_lines.append)
     start_time = datetime.now(tz=timezone.utc)
 
     finished_tracking_job_ids = checkpoint_job_ids.difference(download_candidate_job_ids)
@@ -469,7 +503,8 @@ def _categorize_jobs_in_checkpoint(
         if ip_job["taskRunStatusCounts"]["SUCCEEDED"] == dc_job["taskRunStatusCounts"][
             "SUCCEEDED"
         ] and ip_job.get("endedAt") == dc_job.get("endedAt"):
-            print_function_callback(f"UNCHANGED Job: {dc_job['name']} ({job_id})")
+            entries.entry("UNCHANGED", dc_job["name"])
+            entries.entry_detail(job_id)
             unchanged_job_ids.add(job_id)
     updated_job_ids.difference_update(unchanged_job_ids)
 
@@ -485,15 +520,15 @@ def _categorize_jobs_in_checkpoint(
 
         # Print something only if the job is more than a minimal "jobId" tracker
         if set(ip_job.keys()) != {"jobId"}:
-            print_function_callback(f"FINISHED TRACKING Job: {ip_job['name']} ({job_id})")
             if ip_job["attachments"] is None:
-                print_function_callback("  Job without job attachments is no longer active")
+                reason = "no job attachments, no longer active"
             elif ip_succeeded_task_count == ip_total_task_count:
-                print_function_callback("   Job succeeded")
+                reason = "job succeeded"
             else:
-                print_function_callback(
-                    "   Job is not a download candidate anymore (likely suspended, canceled or failed)"
-                )
+                reason = "no longer a download candidate (likely suspended, canceled or failed)"
+            entries.entry("RETIRED", ip_job["name"])
+            entries.entry_detail(job_id)
+            entries.entry_detail(reason)
 
     # Process all the jobs that have updates
     for job_id in updated_job_ids:
@@ -504,13 +539,13 @@ def _categorize_jobs_in_checkpoint(
         dc_succeeded_task_count = dc_job["taskRunStatusCounts"]["SUCCEEDED"]
         dc_total_task_count = sum(value for _, value in dc_job["taskRunStatusCounts"].items())
 
-        print_function_callback(f"EXISTING Job: {ip_job['name']} ({job_id})")
-        print_function_callback(
-            f"  Succeeded tasks (before): {ip_succeeded_task_count} / {ip_total_task_count}"
+        entries.entry(
+            "UPDATED",
+            ip_job["name"],
+            f"({ip_succeeded_task_count} -> {dc_succeeded_task_count}"
+            f"/{dc_total_task_count} tasks succeeded)",
         )
-        print_function_callback(
-            f"  Succeeded tasks (now)   : {dc_succeeded_task_count} / {dc_total_task_count}"
-        )
+        entries.entry_detail(job_id)
 
         # Use the CLI output format to produce a diff of the changes
         ip_job_repr: list[str] = _cli_object_repr(ip_job).splitlines()
@@ -523,7 +558,7 @@ def _categorize_jobs_in_checkpoint(
             tofile="Current update",
             lineterm="",
         ):
-            print_function_callback(f"  {line}")
+            entries.entry_detail(line)
 
         if (
             dc_succeeded_task_count == dc_total_task_count
@@ -547,22 +582,26 @@ def _categorize_jobs_in_checkpoint(
         dc_succeeded_task_count = dc_job["taskRunStatusCounts"]["SUCCEEDED"]
         dc_total_task_count = sum(value for _, value in dc_job["taskRunStatusCounts"].items())
 
-        print_function_callback(f"NEW Job: {dc_job['name']} ({job_id})")
-
         if (
             dc_job["attachments"] is not None
             and dc_job["storageProfileId"] is None
             and checkpoint.local_storage_profile_id is not None
         ):
-            print_function_callback(
-                "  WARNING: THE JOB OUTPUT WILL NOT BE DOWNLOADED, IT HAS NO STORAGE PROFILE."
+            entries.entry("NEW", dc_job["name"])
+            entries.entry_detail(job_id)
+            entries.warning(
+                "no storage profile, this job's output will not be downloaded",
+                indent=_ENTRY_DETAIL_INDENT,
             )
             missing_storage_profile.add(job_id)
             continue
 
-        print_function_callback(
-            f"  Succeeded tasks: {dc_succeeded_task_count} / {dc_total_task_count}"
+        entries.entry(
+            "NEW",
+            dc_job["name"],
+            f"({dc_succeeded_task_count}/{dc_total_task_count} tasks succeeded)",
         )
+        entries.entry_detail(job_id)
         if dc_job["attachments"] is None:
             # If the job does not use job attachments, save a minimal placeholder to avoid
             # repeatedly calling deadline:GetJob.
@@ -572,12 +611,12 @@ def _categorize_jobs_in_checkpoint(
                 "attachments": None,
             }
             attachments_free_job_ids.add(job_id)
-            print_function_callback("  Job does not use job attachments.")
+            entries.entry_detail("does not use job attachments")
         else:
-            print_function_callback("  Manifest file system paths:")
             for manifest in dc_job["attachments"]["manifests"]:
-                print_function_callback(
-                    f"    - {manifest['rootPath']} ({manifest['rootPathFormat']})"
+                entries.entry_detail(
+                    "output root:"
+                    f" {_format_path(manifest['rootPath'])} ({manifest['rootPathFormat']})"
                 )
 
         if (
@@ -600,7 +639,13 @@ def _categorize_jobs_in_checkpoint(
     result.updated = updated_job_ids
 
     duration = datetime.now(tz=timezone.utc) - start_time
-    print_function_callback(f"...categorization completed in {duration}")
+    fmt.line(
+        f"categorized {_plural(len(download_candidate_jobs), 'job')}"
+        f" ({len(checkpoint_jobs)} in checkpoint)",
+        duration,
+    )
+    for line in buffered_lines:
+        print_function_callback(line)
 
     return result
 
@@ -775,10 +820,10 @@ def _get_job_sessions(
             ...
         }
     """
+    fmt = _SyncOutputFormatter(print_function_callback)
     job_ids = categorized_job_ids.completed.union(categorized_job_ids.added).union(
         categorized_job_ids.updated
     )
-    print_function_callback(f"Retrieving sessions for {len(job_ids)} jobs...")
     start_time = datetime.now(tz=timezone.utc)
 
     # The max timestamp of a downloaded session's endedAt provides a lower bound to filter sessions by.
@@ -796,7 +841,6 @@ def _get_job_sessions(
 
     # Retrieve all the sessions with some parallelism
     max_workers = SESSIONS_API_MAX_CONCURRENCY
-    print_function_callback(f"Using {max_workers} threads")
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         for job_id in job_ids:
@@ -830,17 +874,16 @@ def _get_job_sessions(
             future.result()
 
     duration = datetime.now(tz=timezone.utc) - start_time
-    print_function_callback(f"...retrieval completed in {duration}")
-
-    print_function_callback("")
-    print_function_callback(
-        f"Retrieving session actions for {sum(len(session_list) for session_list in job_sessions.values())} sessions..."
+    session_count = sum(len(session_list) for session_list in job_sessions.values())
+    fmt.line(
+        f"{_plural(session_count, 'session')} across {_plural(len(job_ids), 'job')}",
+        duration,
     )
+
     start_time = datetime.now(tz=timezone.utc)
 
     # Retrieve all the session actions with some parallelism
     max_workers = SESSIONS_API_MAX_CONCURRENCY
-    print_function_callback(f"Using {max_workers} threads")
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         # Collect farm-failed task IDs per job across threads. Each worker collects into a
@@ -877,10 +920,13 @@ def _get_job_sessions(
             future.result()
 
     duration = datetime.now(tz=timezone.utc) - start_time
-    print_function_callback(f"...retrieval completed in {duration}")
+    session_action_count = sum(
+        len(session.get("sessionActions", []))
+        for session_list in job_sessions.values()
+        for session in session_list
+    )
+    fmt.line(_plural(session_action_count, "succeeded task run"), duration)
 
-    print_function_callback("")
-    print_function_callback("Populating missing manifest S3 keys...")
     start_time = datetime.now(tz=timezone.utc)
 
     _add_missing_output_manifests_to_job_sessions(
@@ -894,7 +940,7 @@ def _get_job_sessions(
     )
 
     duration = datetime.now(tz=timezone.utc) - start_time
-    print_function_callback(f"...populated in {duration}")
+    fmt.line("manifest S3 keys populated", duration)
 
     # A FAILED taskRun action is reported by the API indefinitely — even after the task is
     # requeued and SUCCEEDED. Remove any task that has a SUCCEEDED action in this same run so
@@ -975,15 +1021,22 @@ def _create_path_mapping_rule_appliers(
 
     path_mapping_rule_appliers: dict[str, Optional[_PathMappingRuleApplier]] = {}
 
+    fmt = _SyncOutputFormatter(print_function_callback)
+
     # Create a path mapping rule applier for each storage profile
     local_storage_profile = storage_profiles[checkpoint.local_storage_profile_id]
     local_storage_profile_name = local_storage_profile["displayName"]
-    print_function_callback("")
-    print_function_callback(
-        f"Local storage profile is {local_storage_profile_name} ({checkpoint.local_storage_profile_id})"
+    unmapped_job_count = len(
+        [
+            job
+            for job in download_candidate_jobs.values()
+            if job.get("storageProfileId") == checkpoint.local_storage_profile_id
+        ]
     )
-    print_function_callback(
-        f"  {len([job for job in download_candidate_jobs.values() if job.get('storageProfileId') == checkpoint.local_storage_profile_id])} download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
+    fmt.section("Path mapping")
+    fmt.line(
+        f"{_plural(unmapped_job_count, 'job')} on the local storage profile"
+        f" {local_storage_profile_name}, downloading to their original paths"
     )
     for storage_profile_id, storage_profile in storage_profiles.items():
         storage_profile_name = storage_profile["displayName"]
@@ -994,7 +1047,6 @@ def _create_path_mapping_rule_appliers(
             path_mapping_rule_appliers[storage_profile_id] = _PathMappingRuleApplier(rules)
 
             # Print the path mapping rules for each source storage profile
-            print_function_callback("")
             job_count = len(
                 [
                     job
@@ -1002,22 +1054,20 @@ def _create_path_mapping_rule_appliers(
                     if job.get("storageProfileId") == storage_profile_id
                 ]
             )
-            print_function_callback(
-                f"Path mapping rules for {job_count} download candidate jobs with storage profile {storage_profile_name} ({storage_profile_id})"
-            )
-            print_function_callback(
-                f"  job storage profile: {storage_profile_name} ({storage_profile['osFamily']})"
-            )
-            print_function_callback(
-                f"  local storage profile: {local_storage_profile_name} ({local_storage_profile['osFamily']})"
-            )
             if rules:
+                fmt.line(
+                    f"{_plural(job_count, 'job')} on {storage_profile_name}"
+                    f" ({storage_profile['osFamily']}) -> {local_storage_profile_name}"
+                    f" ({local_storage_profile['osFamily']})"
+                )
                 for rule in rules:
-                    print_function_callback(f"  - from: {rule.source_path}")
-                    print_function_callback(f"    to:   {rule.destination_path}")
+                    fmt.detail(
+                        f"{_format_path(rule.source_path)} -> {_format_path(rule.destination_path)}"
+                    )
             else:
-                print_function_callback(
-                    f"   No rules generated. Storage profiles {local_storage_profile_name} and {storage_profile_name} share no file system location names."
+                fmt.warning(
+                    f"{_plural(job_count, 'job')} on {storage_profile_name} have no mapping:"
+                    f" it shares no file system location names with {local_storage_profile_name}"
                 )
     return path_mapping_rule_appliers
 
@@ -1083,11 +1133,14 @@ def _filter_session_actions_without_manifests_from_job_sessions(
             if total_count != filtered_count:
                 session["sessionActions"] = filtered_session_action_list
         if total_count != filtered_count:
-            print_function_callback(
-                f"WARNING: Job {job['name']} ({job_id}) ran {total_count - filtered_count} / {total_count} session actions with no output."
+            fmt = _SyncOutputFormatter(print_function_callback)
+            fmt.warning(
+                f"{job['name']} ({job_id}) ran {total_count - filtered_count}/{total_count}"
+                " task runs with no output"
             )
-            print_function_callback(
-                "         This may indicate steps in the job that strictly perform validation or save results elsewhere like a shared file system or S3."
+            fmt.detail(
+                "these steps may only validate, or save results elsewhere such as a shared"
+                " file system or S3",
             )
 
 
@@ -1227,6 +1280,7 @@ def _incremental_output_download(
     dict[str, dict[str, Any]],
     dict[str, dict[str, dict[str, Any]]],
     dict[str, set[str]],
+    dict[str, Any],
 ]:
     """
     This function downloads all the task run outputs from the specified queue, that have become
@@ -1252,9 +1306,11 @@ def _incremental_output_download(
 
     Returns:
         A tuple of (updated checkpoint, categorized job IDs, download candidate jobs dict,
-        per-job download results, per-task download results).
+        per-job download results, per-task download results, per-job succeeded task IDs,
+        run statistics).
     """
     durations = IncrementalOutputDownloadLatencies()
+    fmt = _SyncOutputFormatter(print_function_callback)
     # Operations here are within a single farm, so scope the deadline client to that
     # farm's region. _resolve_region returns None when nothing is configured, preserving
     # the session's default-region behavior.
@@ -1281,21 +1337,21 @@ def _incremental_output_download(
         queue_display_name=queue["displayName"],
     )
 
-    print_function_callback("Updating download state across time interval:")
-    print_function_callback(
-        f"    From: {checkpoint.downloads_completed_timestamp.astimezone().isoformat()}"
-    )
-    print_function_callback(f"      To: {current_timestamp.astimezone().isoformat()}")
     update_length = current_timestamp - checkpoint.downloads_completed_timestamp
     eventual_consistency_delta = timedelta(seconds=checkpoint.eventual_consistency_max_seconds)
     if update_length > eventual_consistency_delta:
-        print_function_callback(
-            f"  Length: {update_length - eventual_consistency_delta} + {eventual_consistency_delta} (eventual consistency allowance)"
+        length = (
+            f"{_format_duration(update_length - eventual_consistency_delta)}"
+            f" + {_format_duration(eventual_consistency_delta)} eventual consistency allowance"
         )
     else:
         # Immediately after bootstrapping, this length will be shorter than the eventual consistency window
-        print_function_callback(f"  Length: {update_length}")
-    print_function_callback("")
+        length = _format_duration(update_length)
+    fmt.field(
+        "window",
+        f"{_format_interval(checkpoint.downloads_completed_timestamp, current_timestamp)}"
+        f" ({length})",
+    )
 
     # Save all the jobs' session action indexes from the checkpoint, before we update the checkpoint's jobs list
     checkpoint_job_session_completed_indexes: dict[str, dict[str, int]] = {
@@ -1312,6 +1368,7 @@ def _incremental_output_download(
     failed_jobs_tracker = _FailedJobsTracker(failed_jobs_file)
 
     # Call deadline:SearchJobs to get a set of jobs that includes every job with downloads available.
+    fmt.section("Deadline Cloud")
     start_t = time.perf_counter_ns()
     download_candidate_jobs: dict[str, dict[str, Any]] = _get_download_candidate_jobs(
         boto3_session,
@@ -1326,9 +1383,7 @@ def _incremental_output_download(
     # Inject previously failed jobs that fell outside the timestamp window
     previously_failed_job_ids = failed_jobs_tracker.get_tracked_job_ids()
     if previously_failed_job_ids:
-        print_function_callback(
-            f"Retrying {len(previously_failed_job_ids)} previously failed job(s)..."
-        )
+        fmt.line(f"retrying {_plural(len(previously_failed_job_ids), 'previously failed job')}")
         jobs_not_found: set[str] = set()
         for job_id in previously_failed_job_ids:
             if job_id not in download_candidate_jobs:
@@ -1362,8 +1417,6 @@ def _incremental_output_download(
     for job_id in abandoned_job_ids:
         del download_candidate_jobs[job_id]
 
-    print_function_callback("")
-
     # Compare the download candidates with the previously saved checkpoint state to categorize the jobs
     start_t = time.perf_counter_ns()
     categorized_job_ids: CategorizedJobIds = _categorize_jobs_in_checkpoint(
@@ -1377,8 +1430,6 @@ def _incremental_output_download(
         region=region,
     )
     durations._categorize_jobs_in_checkpoint = time.perf_counter_ns() - start_t
-
-    print_function_callback("")
 
     # All the completed, added, and updated jobs might have downloads available. Retrieve the sessions for these jobs.
     start_t = time.perf_counter_ns()
@@ -1419,8 +1470,20 @@ def _incremental_output_download(
     )
     durations._update_checkpoint_jobs_list = time.perf_counter_ns() - start_t
 
+    # Build per-job file mapping by correlating downloaded manifests with their job IDs.
+    # Resolved before the download so the manifest count can be reported with its timing.
+    manifests_to_download = _get_manifests_to_download(
+        queue["jobAttachmentSettings"]["rootPrefix"],
+        download_candidate_jobs,
+        job_sessions,
+        path_mapping_rule_appliers,
+    )
+
+    fmt.section("Download")
     start_t = time.perf_counter_ns()
     unmapped_paths: dict[str, list[str]] = {}
+    # The callback is suppressed because this helper's only output is a thread count and a
+    # raw timedelta; the equivalent step line is emitted below in this command's own format.
     downloaded_manifests: list[tuple[datetime, BaseAssetManifest]] = (
         _download_all_manifests_with_absolute_paths(
             queue,
@@ -1429,27 +1492,31 @@ def _incremental_output_download(
             path_mapping_rule_appliers,
             unmapped_paths,
             boto3_session_for_s3,
-            print_function_callback,
+            lambda msg: None,
         )
     )
     durations._download_all_manifests_with_absolute_paths = time.perf_counter_ns() - start_t
+    if manifests_to_download:
+        fmt.line(
+            _plural(len(manifests_to_download), "asset manifest"),
+            durations._download_all_manifests_with_absolute_paths / 1_000_000_000,
+        )
 
     # Print warning messages about all the output paths that will not be downloaded due to lack of path mapping.
     if unmapped_paths:
-        print_function_callback("")
-        print_function_callback("WARNING: THE FOLLOWING FILES WILL NOT BE DOWNLOADED")
+        fmt.warning("unmapped output paths, these files will not be downloaded")
         for job_id, unmapped_path_list in unmapped_paths.items():
-            print_function_callback(
-                f"    Job {download_candidate_jobs[job_id]['name']} ({job_id}) has outputs with unmapped paths that will not be downloaded"
-            )
             storage_profile = storage_profiles.get(
                 download_candidate_jobs[job_id].get("storageProfileId", "")
             )
-            if storage_profile is not None:
-                print_function_callback(
-                    f"      Job storage profile is {storage_profile['displayName']} ({storage_profile['storageProfileId']})"
-                )
-            print_function_callback("      Summary of unmapped paths:")
+            note = (
+                f"storage profile {storage_profile['displayName']}"
+                f" ({storage_profile['storageProfileId']})"
+                if storage_profile is not None
+                else None
+            )
+            fmt.entry("UNMAPPED", download_candidate_jobs[job_id]["name"], note=note)
+            fmt.entry_detail(job_id)
             path_format = (
                 PathFormat.WINDOWS
                 if storage_profile is not None
@@ -1459,15 +1526,9 @@ def _incremental_output_download(
             paths_summary = summarize_path_list(
                 unmapped_path_list, max_entries=30, path_format=path_format
             )
-            print_function_callback(textwrap.indent(paths_summary, "      "))
+            for summary_line in paths_summary.splitlines():
+                fmt.entry_detail(summary_line.strip())
 
-    # Build per-job file mapping by correlating downloaded manifests with their job IDs
-    manifests_to_download = _get_manifests_to_download(
-        queue["jobAttachmentSettings"]["rootPrefix"],
-        download_candidate_jobs,
-        job_sessions,
-        path_mapping_rule_appliers,
-    )
     # Correlate manifests_to_download with downloaded_manifests by position to attribute each
     # downloaded manifest to its job (and task). Both lists come from _get_manifests_to_download
     # with identical inputs, so their lengths match in practice. If they ever diverge we skip only
@@ -1477,11 +1538,11 @@ def _incremental_output_download(
     # attribution is best-effort layered on top.)
     skip_attribution = len(manifests_to_download) != len(downloaded_manifests)
     if skip_attribution:
-        print_function_callback(
-            f"WARNING: Manifest list length mismatch ({len(manifests_to_download)} vs "
-            f"{len(downloaded_manifests)}) — per-job and per-task download tracking will not "
-            f"be populated for this run; files will still be downloaded."
+        fmt.warning(
+            f"manifest list length mismatch ({len(manifests_to_download)} vs "
+            f"{len(downloaded_manifests)}), so per-job and per-task tracking is skipped this run"
         )
+        fmt.detail("all files are still downloaded")
     job_manifest_paths: dict[str, list[BaseManifestPath]] = {}
     # job_id -> task_id -> [files]: used for per-task download tracking
     job_task_manifest_paths: dict[str, dict[str, list[BaseManifestPath]]] = {}
@@ -1556,12 +1617,43 @@ def _incremental_output_download(
     file_size_by_path = {
         manifest_path.path: manifest_path.size for manifest_path in all_manifest_paths
     }
-    print_function_callback("")
-    print_function_callback("Summary of paths to download:")
-    print_function_callback(
-        summarize_path_list(local_path_list, total_size_by_path=file_size_by_path, max_entries=30)
-    )
-    print_function_callback("")
+    total_bytes = sum(manifest_path.size for manifest_path in all_manifest_paths)
+    if local_path_list:
+        fmt.line(
+            f"{_plural(len(local_path_list), 'file')},"
+            f" {human_readable_file_size(total_bytes)} to download"
+        )
+        paths_summary = summarize_path_list(
+            local_path_list, total_size_by_path=file_size_by_path, max_entries=30
+        )
+        for summary_line in paths_summary.splitlines():
+            fmt.detail(summary_line.strip())
+    else:
+        fmt.line("nothing new to download")
+
+    # Everything above is buffered when the caller asked for a quiet run. This is the first
+    # point where the outcome is known, so decide here whether the report is worth printing:
+    # a scheduled downloader polls on a timer and most polls find nothing at all. Jobs that
+    # were merely re-seen unchanged do not count as news; a problem always does.
+    if (
+        job_manifest_paths
+        or categorized_job_ids.completed
+        or categorized_job_ids.added
+        or categorized_job_ids.updated
+        or categorized_job_ids.inactive
+        or categorized_job_ids.missing_storage_profile
+        or categorized_job_ids.attachments_free
+        or previously_failed_job_ids
+        or fmt.had_problem
+    ):
+        fmt.flush()
+    else:
+        fmt.discard()
+        fmt.result(
+            f"{queue['displayName']}: nothing new"
+            f" (window {_format_duration(update_length)},"
+            f" checked {_format_timestamp(current_timestamp)})"
+        )
 
     # Download per-job with error isolation, running jobs in parallel to restore throughput.
     job_download_results: dict[str, dict[str, Any]] = {}
@@ -1574,10 +1666,6 @@ def _incremental_output_download(
     fallback_download_failed = False
 
     if not dry_run:
-        total_files = sum(len(paths) for paths in job_manifest_paths.values())
-        print_function_callback(
-            f"Downloading {total_files} files from S3 across {len(job_manifest_paths)} jobs..."
-        )
         start_t = time.perf_counter_ns()
         start_time = datetime.now(tz=timezone.utc)
 
@@ -1588,9 +1676,12 @@ def _incremental_output_download(
         print_lock = threading.Lock()
 
         def _download_job(job_id: str, job_files: list) -> dict[str, Any]:
-            job_name = download_candidate_jobs.get(job_id, {}).get("name", job_id)
+            job_label = _job_label(job_id, download_candidate_jobs)
             with print_lock:
-                print_function_callback(f"  Downloading {len(job_files)} files for job: {job_name}")
+                fmt.detail(
+                    f"{_job_label(job_id, download_candidate_jobs, with_id=False)}:"
+                    f" downloading {_plural(len(job_files), 'file')}"
+                )
 
             MIN_DELAY_BETWEEN_PRINTOUTS = 20
 
@@ -1607,7 +1698,7 @@ def _incremental_output_download(
                     nonlocal last_call_time, printed_100_percent
                     if not printed_100_percent and download_metadata.progress == 100:
                         with print_lock:
-                            print_function_callback(f"    {download_metadata.progressMessage}")
+                            fmt.detail(download_metadata.progressMessage, indent=6)
                         last_call_time = time.time()
                         printed_100_percent = True
                     elif (
@@ -1615,7 +1706,7 @@ def _incremental_output_download(
                         and time.time() - last_call_time > MIN_DELAY_BETWEEN_PRINTOUTS
                     ):
                         with print_lock:
-                            print_function_callback(f"    {download_metadata.progressMessage}")
+                            fmt.detail(download_metadata.progressMessage, indent=6)
                         last_call_time = time.time()
                     return sigint_handler.continue_operation
 
@@ -1641,7 +1732,7 @@ def _incremental_output_download(
                             boto3_session_for_s3,
                             file_conflict_resolution,
                             on_downloading_files=_make_progress_callback(),
-                            print_function_callback=print_function_callback,
+                            print_function_callback=lambda msg: None,
                         )
                         if not sigint_handler.continue_operation:
                             raise AssetSyncCancelledError("File download cancelled.")
@@ -1656,9 +1747,7 @@ def _incremental_output_download(
                     except Exception as e:
                         error_code = _classify_error(e)
                         with print_lock:
-                            print_function_callback(
-                                f"  ERROR downloading task {task_id} for job {job_name}: {e}"
-                            )
+                            fmt.error(f"task {task_id} of job {job_label}: {e}", indent=4)
                         job_task_results[task_id] = {
                             "total_files": len(task_files),
                             "downloaded_files": sum(
@@ -1691,7 +1780,7 @@ def _incremental_output_download(
                             boto3_session_for_s3,
                             file_conflict_resolution,
                             on_downloading_files=_make_progress_callback(),
-                            print_function_callback=print_function_callback,
+                            print_function_callback=lambda msg: None,
                         )
                         if not sigint_handler.continue_operation:
                             raise AssetSyncCancelledError("File download cancelled.")
@@ -1701,9 +1790,7 @@ def _incremental_output_download(
                     except Exception as e:
                         error_code = _classify_error(e)
                         with print_lock:
-                            print_function_callback(
-                                f"  ERROR downloading unattributed files for job {job_name} ({job_id}): {e}"
-                            )
+                            fmt.error(f"unattributed files for {job_label}: {e}", indent=4)
                         leftover_downloaded = sum(
                             1 for f in leftover_files if os.path.exists(f.path)
                         )
@@ -1722,7 +1809,7 @@ def _incremental_output_download(
                         boto3_session_for_s3,
                         file_conflict_resolution,
                         on_downloading_files=_make_progress_callback(),
-                        print_function_callback=print_function_callback,
+                        print_function_callback=lambda msg: None,
                     )
                     if not sigint_handler.continue_operation:
                         raise AssetSyncCancelledError("File download cancelled.")
@@ -1733,9 +1820,7 @@ def _incremental_output_download(
                     job_error_code = _classify_error(e)
                     job_error_message = str(e)
                     with print_lock:
-                        print_function_callback(
-                            f"  ERROR downloading job {job_name} ({job_id}): {e}"
-                        )
+                        fmt.error(f"{job_label}: {e}", indent=4)
 
             if job_task_results:
                 # Per-task path: derive counts from task results directly to avoid
@@ -1823,9 +1908,21 @@ def _incremental_output_download(
 
         durations.download = time.perf_counter_ns() - start_t
         duration = datetime.now(tz=timezone.utc) - start_time
-        print_function_callback(f"...downloaded in {duration}")
-    else:
-        print_function_callback("Skipping downloads due to DRY RUN")
+        downloaded_file_count = sum(
+            r.get("downloaded_files", 0) for r in job_download_results.values()
+        )
+        failed_file_count = sum(r.get("failed_files", 0) for r in job_download_results.values())
+        if not job_manifest_paths:
+            pass  # "nothing new to download" was already reported above
+        elif failed_file_count:
+            fmt.line(
+                f"downloaded {_plural(downloaded_file_count, 'file')}, {failed_file_count} failed",
+                duration,
+            )
+        else:
+            fmt.line(f"downloaded {_plural(downloaded_file_count, 'file')}", duration)
+    elif job_manifest_paths:
+        fmt.line("dry run, no files downloaded")
 
     # For jobs whose paths were entirely claimed by a newer job (cross-job dedup),
     # generate task results based on what's actually on disk. The winning job may have
@@ -2013,31 +2110,10 @@ def _incremental_output_download(
         },
     )
 
-    print_function_callback("")
-    if dry_run:
-        print_function_callback(
-            "Summary of DRY RUN for incremental output download (no files were downloaded to the file system):"
+    if not fmt.suppressed:
+        _print_summary(
+            fmt, stats, dry_run, job_download_results, download_candidate_jobs, unmapped_paths
         )
-    else:
-        print_function_callback("Summary of incremental output download:")
-    print_function_callback(f"  Downloaded session actions: {stats['downloaded_session_actions']}")
-    print_function_callback(f"  Downloaded files: {stats['downloaded_files']}")
-    print_function_callback(
-        f"  Downloaded bytes: {human_readable_file_size(stats['downloaded_bytes'])}"
-    )
-    print_function_callback("  Jobs with downloads:")
-    print_function_callback(f"    completed: {stats['jobs_with_downloads']['completed']}")
-    print_function_callback(f"    added: {stats['jobs_with_downloads']['added']}")
-    print_function_callback(f"    updated: {stats['jobs_with_downloads']['updated']}")
-    print_function_callback("  Jobs without downloads:")
-    print_function_callback(
-        f"    not using job attachments: {stats['jobs_without_downloads']['not_using_job_attachments']}"
-    )
-    print_function_callback(
-        f"    missing storage profile: {stats['jobs_without_downloads']['missing_storage_profile']}"
-    )
-    print_function_callback(f"    unchanged: {stats['jobs_without_downloads']['unchanged']}")
-    print_function_callback(f"    inactive: {stats['jobs_without_downloads']['inactive']}")
 
     return (
         checkpoint,
@@ -2046,4 +2122,65 @@ def _incremental_output_download(
         job_download_results,
         task_download_results,
         succeeded_task_ids,
+        stats,
     )
+
+
+# Job wording follows the download status file's vocabulary (downloaded / in_progress /
+# skipped / failed) so the terminal and the JSON report describe a job the same way.
+_SKIP_REASON_LABELS = {
+    "not_using_job_attachments": "no attachments",
+    "missing_storage_profile": "missing storage profile",
+    "unchanged": "unchanged",
+}
+
+
+def _print_summary(
+    fmt: _SyncOutputFormatter,
+    stats: dict[str, Any],
+    dry_run: bool,
+    job_download_results: dict[str, dict[str, Any]],
+    download_candidate_jobs: dict[str, dict[str, Any]],
+    unmapped_paths: dict[str, list[str]],
+) -> None:
+    """Prints the closing summary block, including every job that failed this run."""
+    fmt.section("Summary (dry run, nothing written to disk)" if dry_run else "Summary")
+    fmt.summary_row(
+        "files",
+        f"{stats['downloaded_files']} downloaded"
+        f", {human_readable_file_size(stats['downloaded_bytes'])}",
+    )
+
+    failures = {
+        job_id: result
+        for job_id, result in job_download_results.items()
+        if result.get("error_code") is not None
+    }
+    in_progress = stats["jobs_with_downloads"]["added"] + stats["jobs_with_downloads"]["updated"]
+    job_parts = [f"{stats['jobs_with_downloads']['completed']} downloaded"]
+    if in_progress:
+        job_parts.append(f"{in_progress} in progress")
+    if stats["jobs_without_downloads"]["inactive"]:
+        job_parts.append(f"{stats['jobs_without_downloads']['inactive']} retired")
+    if failures:
+        job_parts.append(f"{len(failures)} failed")
+    fmt.summary_row("jobs", ", ".join(job_parts))
+
+    fmt.summary_row("task runs", str(stats["downloaded_session_actions"]))
+
+    skipped = ", ".join(
+        f"{count} {label}"
+        for name, label in _SKIP_REASON_LABELS.items()
+        if (count := stats["jobs_without_downloads"][name])
+    )
+    fmt.summary_row("skipped", skipped or "none")
+
+    if unmapped_paths:
+        fmt.summary_row("unmapped", f"{_plural(len(unmapped_paths), 'job')} with unmapped paths")
+
+    # Repeat each failure here so an unattended run does not bury them mid-download.
+    if failures:
+        fmt.summary_row("problems", _plural(len(failures), "job") + " failed")
+        for job_id, result in sorted(failures.items()):
+            label = _job_label(job_id, download_candidate_jobs)
+            fmt.summary_continuation(f"{result['error_code']:<18} {label}")

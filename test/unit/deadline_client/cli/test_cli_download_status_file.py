@@ -513,7 +513,7 @@ class TestWriteDownloadStatusFile:
         with open(status_file) as f:
             data = json.load(f)
         assert data["jobs"][MOCK_JOB_ID]["download_status"] == "downloaded"
-        assert any("saved" in msg for msg in messages)
+        assert any("status file" in msg and str(renders_dir) in msg for msg in messages)
 
     def test_writes_to_ignore_storage_profiles_path(self, tmp_path):
         checkpoint_dir = tmp_path / "checkpoint"
@@ -592,7 +592,7 @@ class TestWriteDownloadStatusFile:
             print_function_callback=messages.append,
         )
 
-        assert any("WARNING" in msg for msg in messages)
+        assert any("failed to write status file" in msg for msg in messages)
 
     def test_json_is_valid_and_parseable(self, tmp_path):
         checkpoint_dir = tmp_path / "checkpoint"

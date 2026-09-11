@@ -15,6 +15,7 @@ from typing import Any, Callable, Generator, Optional
 
 from ..config.config_file import DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR
 from ._incremental_download import CategorizedJobIds
+from ._sync_output_format import _SyncOutputFormatter, _format_path
 
 logger = logging.getLogger(__name__)
 
@@ -508,7 +509,7 @@ def _write_pointer_if_needed(
                         f"future syncs run."
                     )
                     logger.warning(warning)
-                    print_function_callback(f"WARNING: {warning}")
+                    _SyncOutputFormatter(print_function_callback).warning(warning)
 
             pointer: dict[str, Any] = {
                 "schema_version": DOWNLOAD_STATUS_FILE_SCHEMA_VERSION,
@@ -553,6 +554,7 @@ def write_download_status_file(
         job_download_results: Per-job download results with file counts and error info.
         print_function_callback: Callback for printing output.
     """
+    fmt = _SyncOutputFormatter(print_function_callback)
     status_file_paths = _get_status_file_paths(
         queue_id=queue_id,
         local_storage_profile_id=local_storage_profile_id,
@@ -579,12 +581,11 @@ def write_download_status_file(
 
                 _atomic_write_json(status_file_path, status_content)
             written_paths.append(status_file_path)
-            print_function_callback(f"Download status file saved: {status_file_path}")
+            if not fmt.suppressed:
+                fmt.summary_row("status file", _format_path(status_file_path))
         except Exception as e:
             logger.warning(f"Failed to write download status file to {status_file_path}: {e}")
-            print_function_callback(
-                f"WARNING: Failed to write download status file to {status_file_path}: {e}"
-            )
+            fmt.warning(f"failed to write status file to {_format_path(status_file_path)}: {e}")
 
     # When --ignore-storage-profiles is used, the FE has no API-derivable location for the
     # status file. Write a pointer at the well-known default path so the FE can always find
