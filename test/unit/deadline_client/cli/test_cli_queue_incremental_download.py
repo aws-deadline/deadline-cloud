@@ -13,8 +13,10 @@ from datetime import datetime, timedelta
 from typing import Callable, NamedTuple
 
 from freezegun import freeze_time
+import click
 from click.testing import CliRunner
 from deadline.client.cli import main
+from deadline.client.cli._groups import queue_group
 import psutil
 
 from ..shared_constants import (
@@ -112,6 +114,7 @@ def test_incremental_output_download_requires_queue_with_job_attachments(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -156,6 +159,7 @@ def test_incremental_output_download_pid_lock_already_held_error(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -197,6 +201,7 @@ def test_incremental_output_download_storage_profile_options_mutually_exclusive(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--storage-profile-id",
                 MOCK_STORAGE_PROFILE_ID,
@@ -214,6 +219,243 @@ def test_incremental_output_download_storage_profile_options_mutually_exclusive(
         "Options '--storage-profile-id' and '--ignore-storage-profiles' cannot be provided together"
         in result.output
     ), result.output
+
+
+def _sync_output_args(checkpoint_dir, *extra):
+    return [
+        "queue",
+        "sync-output",
+        "--ignore-storage-profiles",
+        "--farm-id",
+        MOCK_FARM_ID,
+        "--queue-id",
+        MOCK_QUEUE_ID,
+        "--checkpoint-dir",
+        checkpoint_dir,
+        *extra,
+    ]
+
+
+def _mock_unchanged_job(deadline_mock):
+    """Sets up a single job that is already in the checkpoint and has not changed."""
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "READY"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 1}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "VIRTUAL",
+    }
+    del mock_jobs[0]["endedAt"]
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    return mock_jobs
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_quiet_when_nothing_new(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """A run that finds nothing new collapses to one line, so polling on a schedule
+    does not fill the log with a full report every interval."""
+    _mock_unchanged_job(deadline_mock)
+    runner = CliRunner()
+
+    # First run discovers the job, so it has news and prints the full report.
+    with freeze_time(ISO_FREEZE_TIME):
+        first = runner.invoke(main, _sync_output_args(checkpoint_dir))
+    assert first.exit_code == 0, first.output
+    assert "Queue sync: Mock Queue" in first.output, first.output
+
+    # Second run sees the same unchanged job, which is not news.
+    with freeze_time(ISO_FREEZE_TIME_PLUS_3MIN):
+        second = runner.invoke(main, _sync_output_args(checkpoint_dir))
+
+    assert second.exit_code == 0, second.output
+    checked_at = (
+        datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_3MIN).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    assert second.output.splitlines() == [
+        f"OK  Mock Queue: nothing new (window 3m, checked {checked_at})"
+    ], second.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_failure_releases_the_held_back_report(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """A quiet run holds its report back. On failure that report is the only record of what
+    the run had done, so it must be released rather than dropped for the traceback alone."""
+    _mock_unchanged_job(deadline_mock)
+    runner = CliRunner()
+
+    with patch.object(
+        queue_group, "_incremental_output_download", side_effect=RuntimeError("boom")
+    ):
+        with freeze_time(ISO_FREEZE_TIME):
+            result = runner.invoke(main, _sync_output_args(checkpoint_dir))
+
+    assert result.exit_code != 0, result.output
+    # The header was buffered before the failure and has to survive it.
+    assert "Queue sync: Mock Queue" in result.output, result.output
+    assert "checkpoint" in result.output, result.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_quiet_result_line_comes_last(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """The one-line result has to be the last line, so a warning raised while writing the
+    checkpoint or status file cannot appear below a line already claiming success."""
+    _mock_unchanged_job(deadline_mock)
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        runner.invoke(main, _sync_output_args(checkpoint_dir))
+
+    def _warn(*args, **kwargs):
+        kwargs["print_function_callback"]("  WARNING: status file trouble")
+
+    with patch.object(queue_group, "write_download_status_file", side_effect=_warn):
+        with freeze_time(ISO_FREEZE_TIME_PLUS_3MIN):
+            result = runner.invoke(main, _sync_output_args(checkpoint_dir))
+
+    assert result.exit_code == 0, result.output
+    lines = [click.unstyle(line) for line in result.output.strip().splitlines()]
+    assert any("status file trouble" in line for line in lines), lines
+    assert lines[-1].startswith("OK  Mock Queue: nothing new"), lines
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_verbose_reports_a_run_with_nothing_new(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """--verbose prints the full report even when the run has nothing new to say."""
+    _mock_unchanged_job(deadline_mock)
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        runner.invoke(main, _sync_output_args(checkpoint_dir))
+
+    with freeze_time(ISO_FREEZE_TIME_PLUS_3MIN):
+        result = runner.invoke(main, _sync_output_args(checkpoint_dir, "--verbose"))
+
+    assert result.exit_code == 0, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
+    assert "UNCHANGED Mock Job" in result.output, result.output
+    assert "skipped     1 unchanged" in result.output, result.output
+    assert "nothing to download" in result.output, result.output
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_output_is_ascii_only(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """No unicode in the report: redirecting under a legacy Windows codepage must not fail."""
+    _mock_unchanged_job(deadline_mock)
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(main, _sync_output_args(checkpoint_dir, "--verbose"))
+
+    assert result.exit_code == 0, result.output
+    offenders = [line for line in result.output.splitlines() if not line.isascii()]
+    assert not offenders, offenders
+    result.output.encode("cp1252")
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_hides_sub_second_timings(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """Sub-second step timings are suppressed so a genuinely slow step stands out."""
+    _mock_unchanged_job(deadline_mock)
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(main, _sync_output_args(checkpoint_dir, "--verbose"))
+
+    assert result.exit_code == 0, result.output
+    # Every step in a mocked run is instant, so no step line carries a duration. The
+    # "window" and "elapsed" rows are exempt: a duration is their value, not a timing
+    # annotation, so they always report however small it is.
+    step_lines = [
+        line
+        for line in result.output.splitlines()
+        if line.startswith("  ")
+        and "<0.1s" in line
+        and not line.startswith(("  window", "  elapsed"))
+    ]
+    assert not step_lines, step_lines
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_json_mode_writes_nothing_to_stdout(
+    fresh_deadline_config,
+    deadline_mock,
+    checkpoint_dir,
+):
+    """--json must keep stdout free of progress text so the output stays machine-parseable."""
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "READY"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 1}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "VIRTUAL",
+    }
+    del mock_jobs[0]["endedAt"]
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--json",
+                "--ignore-storage-profiles",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert result.output == "", result.output
 
 
 @pytest.mark.skipif(
@@ -259,6 +501,7 @@ def test_incremental_output_download_bootstrap_and_completion(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
             ]
             + storage_profile_options
             + [
@@ -281,33 +524,27 @@ def test_incremental_output_download_bootstrap_and_completion(
 
     # Assert that information is or isn't printed about the storage profile.
     if storage_profile_id is None:
-        assert "Local storage profile is" not in result.output, result.output
-        assert (
-            "download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
-            not in result.output
-        ), result.output
+        assert "on the local storage profile" not in result.output, result.output
+        assert "on the local storage profile" not in result.output, result.output
     else:
-        assert "Local storage profile is" in result.output, result.output
+        assert "on the local storage profile" in result.output, result.output
         assert f"({storage_profile_id})" in result.output, result.output
-        assert (
-            "1 download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
-            in result.output
-        ), result.output
+        assert "1 job on the local storage profile" in result.output, result.output
     # Assert that the output contained information about the bootstrapping and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_' + storage_profile_in_message + '_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_' + storage_profile_in_message + '_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint not found, lookback is 0.0 minutes" in result.output, result.output
+    assert "(0.0 minute lookback, no checkpoint found)" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Initializing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"bootstrapping from {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Succeeded tasks: 1 / 2" in result.output, result.output
-    assert "added: 1" in result.output, result.output
+    assert "NEW       Mock Job" in result.output, result.output
+    assert "(1/2 tasks succeeded)" in result.output, result.output
+    assert "jobs        0 downloaded, 1 in progress" in result.output, result.output
 
     # Edit the mock job to complete the task
     mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
@@ -326,6 +563,7 @@ def test_incremental_output_download_bootstrap_and_completion(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
             ]
             + storage_profile_options
             + [
@@ -342,21 +580,21 @@ def test_incremental_output_download_bootstrap_and_completion(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_' + storage_profile_in_message + '_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_' + storage_profile_in_message + '_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"resumed from checkpoint at {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"EXISTING Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Succeeded tasks (before): 1 / 2" in result.output, result.output
-    assert "Succeeded tasks (now)   : 2 / 2" in result.output, result.output
-    assert "completed: 1" in result.output, result.output
+    assert "UPDATED   Mock Job" in result.output, result.output
+    assert MOCK_JOB_ID in result.output, result.output
+    assert "2/2 tasks succeeded)" in result.output, result.output
+    assert "jobs        1 downloaded" in result.output, result.output
 
     # RUN 3: Run the CLI command again with a later timestamp to retire the job from the checkpoint
     # 5 minutes later is outside the eventual consistency window.
@@ -366,6 +604,7 @@ def test_incremental_output_download_bootstrap_and_completion(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
             ]
             + storage_profile_options
             + [
@@ -382,20 +621,20 @@ def test_incremental_output_download_bootstrap_and_completion(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_' + storage_profile_in_message + '_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_' + storage_profile_in_message + '_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_3MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().isoformat()}"
+        f"resumed from checkpoint at {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_3MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"FINISHED TRACKING Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Job succeeded" in result.output, result.output
-    assert "inactive: 1" in result.output, result.output
+    assert "RETIRED   Mock Job" in result.output, result.output
+    assert "job succeeded" in result.output, result.output
+    assert "1 retired" in result.output, result.output
 
     # RUN 4: Run the CLI command again with a later timestamp to see the job stay inactive
     with freeze_time(ISO_FREEZE_TIME_PLUS_7MIN):
@@ -404,6 +643,7 @@ def test_incremental_output_download_bootstrap_and_completion(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
             ]
             + storage_profile_options
             + [
@@ -420,20 +660,20 @@ def test_incremental_output_download_bootstrap_and_completion(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_' + storage_profile_in_message + '_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_' + storage_profile_in_message + '_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_5MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().isoformat()}"
+        f"resumed from checkpoint at {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_5MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
     # Because this test didn't model any sessions and session actions, there is no session endedAt
     # timestamp, so no job needs to be further tracked as inactive in this case.
-    assert "inactive: 0" in result.output, result.output
+    assert "skipped     none" in result.output, result.output
 
 
 @pytest.mark.skipif(
@@ -548,6 +788,7 @@ def test_incremental_output_download_storage_profile_path_mapping(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--storage-profile-id",
                 MOCK_STORAGE_PROFILE_ID_LOCAL,
                 "--farm-id",
@@ -563,37 +804,27 @@ def test_incremental_output_download_storage_profile_path_mapping(
     assert result.exit_code == 0, result.output
 
     # Assert that both storage profiles were retrieved for local and the job
+    assert "on the local storage profile Mock-Storage-Profile-For-Local" in result.output, (
+        result.output
+    )
+    assert "0 jobs on the local storage profile" in result.output, result.output
+    assert "1 job on Mock-Storage-Profile-For-Job (MACOS)" in result.output, result.output
+    assert "on Mock-Storage-Profile-For-Job (MACOS)" in result.output, result.output
     assert (
-        f"Local storage profile is Mock-Storage-Profile-For-Local ({MOCK_STORAGE_PROFILE_ID_LOCAL})"
+        f"Mock-Storage-Profile-For-Local ({StorageProfileOperatingSystemFamily.get_host_os_family().value.upper()})"
         in result.output
     ), result.output
-    assert (
-        "0 download candidate jobs have the same storage profile and will be downloaded to their original specified paths"
-        in result.output
-    ), result.output
-    assert (
-        f"Path mapping rules for 1 download candidate jobs with storage profile Mock-Storage-Profile-For-Job ({MOCK_STORAGE_PROFILE_ID})"
-        in result.output
-    ), result.output
-    assert "job storage profile: Mock-Storage-Profile-For-Job (MACOS)" in result.output, (
+    assert "/Volumes/loc1 " in result.output, result.output
+    assert f"{tmp_path / 'Location1'}" in result.output, result.output
+    assert "/Home/user " in result.output, result.output
+    assert f"{tmp_path / 'Location2'}" in result.output, result.output
+
+    # Assert that it warned about the lack of outputs
+    assert f"Mock Job ({MOCK_JOB_ID}) ran 1/1 task runs with no output" in result.output, (
         result.output
     )
     assert (
-        f"local storage profile: Mock-Storage-Profile-For-Local ({StorageProfileOperatingSystemFamily.get_host_os_family().value.upper()})"
-        in result.output
-    ), result.output
-    assert "- from: /Volumes/loc1" in result.output, result.output
-    assert f" to:   {tmp_path / 'Location1'}" in result.output, result.output
-    assert "- from: /Home/user" in result.output, result.output
-    assert f"to:   {tmp_path / 'Location2'}" in result.output, result.output
-
-    # Assert that it warned about the lack of outputs
-    assert (
-        f"WARNING: Job Mock Job ({MOCK_JOB_ID}) ran 1 / 1 session actions with no output."
-        in result.output
-    ), result.output
-    assert (
-        "This may indicate steps in the job that strictly perform validation or save results elsewhere like a shared file system or S3."
+        "these steps may only validate, or save results elsewhere such as a shared file system or S3"
         in result.output
     ), result.output
 
@@ -625,6 +856,7 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -639,20 +871,20 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about the bootstrapping and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint not found, lookback is 0.0 minutes" in result.output, result.output
+    assert "(0.0 minute lookback, no checkpoint found)" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Initializing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"bootstrapping from {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Succeeded tasks: 1 / 2" in result.output, result.output
-    assert "not using job attachments: 1" in result.output, result.output
+    assert "NEW       Mock Job" in result.output, result.output
+    assert "(1/2 tasks succeeded)" in result.output, result.output
+    assert "skipped     1 no attachments" in result.output, result.output
 
     # Edit the mock job to complete the task
     mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
@@ -671,6 +903,7 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -685,18 +918,18 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"resumed from checkpoint at {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert "not using job attachments: 1" in result.output, result.output
+    assert "skipped     1 no attachments" in result.output, result.output
 
     # RUN 3: Run the CLI command again with a later timestamp to retire the job from the checkpoint
     # 5 minutes later is outside the eventual consistency window.
@@ -706,6 +939,7 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -720,18 +954,18 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_3MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().isoformat()}"
+        f"resumed from checkpoint at {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_3MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert "inactive: 1" in result.output, result.output
+    assert "1 retired" in result.output, result.output
 
 
 @pytest.mark.skipif(
@@ -767,6 +1001,7 @@ def test_incremental_output_download_job_unchanged(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -781,20 +1016,20 @@ def test_incremental_output_download_job_unchanged(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about the bootstrapping and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint not found, lookback is 0.0 minutes" in result.output, result.output
+    assert "(0.0 minute lookback, no checkpoint found)" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Initializing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"bootstrapping from {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Succeeded tasks: 1 / 2" in result.output, result.output
-    assert "added: 1" in result.output, result.output
+    assert "NEW       Mock Job" in result.output, result.output
+    assert "(1/2 tasks succeeded)" in result.output, result.output
+    assert "jobs        0 downloaded, 1 in progress" in result.output, result.output
 
     # RUN 2: Run the CLI command again to see that the job is unchanged
     with freeze_time(ISO_FREEZE_TIME_PLUS_3MIN):
@@ -803,6 +1038,7 @@ def test_incremental_output_download_job_unchanged(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -817,19 +1053,19 @@ def test_incremental_output_download_job_unchanged(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"resumed from checkpoint at {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"UNCHANGED Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "unchanged: 1" in result.output, result.output
+    assert "UNCHANGED Mock Job" in result.output, result.output
+    assert "skipped     1 unchanged" in result.output, result.output
 
 
 @pytest.mark.skipif(
@@ -865,6 +1101,7 @@ def test_incremental_output_download_job_canceled(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -879,20 +1116,20 @@ def test_incremental_output_download_job_canceled(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about the bootstrapping and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint not found, lookback is 0.0 minutes" in result.output, result.output
+    assert "(0.0 minute lookback, no checkpoint found)" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Initializing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"bootstrapping from {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Succeeded tasks: 1 / 2" in result.output, result.output
-    assert "added: 1" in result.output, result.output
+    assert "NEW       Mock Job" in result.output, result.output
+    assert "(1/2 tasks succeeded)" in result.output, result.output
+    assert "jobs        0 downloaded, 1 in progress" in result.output, result.output
 
     # RUN 2: Run the CLI command again to see that the job is canceled
     mock_jobs[0]["taskRunStatus"] = "CANCELED"
@@ -906,6 +1143,7 @@ def test_incremental_output_download_job_canceled(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -920,23 +1158,22 @@ def test_incremental_output_download_job_canceled(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"resumed from checkpoint at {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"FINISHED TRACKING Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
+    assert "RETIRED   Mock Job" in result.output, result.output
     assert (
-        "Job is not a download candidate anymore (likely suspended, canceled or failed)"
-        in result.output
+        "no longer a download candidate (likely suspended, canceled or failed)" in result.output
     ), result.output
-    assert "inactive: 1" in result.output, result.output
+    assert "1 retired" in result.output, result.output
 
 
 @pytest.mark.skipif(
@@ -974,6 +1211,7 @@ def test_incremental_output_download_job_completed_then_requeued(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -990,20 +1228,20 @@ def test_incremental_output_download_job_completed_then_requeued(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about the bootstrapping and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint not found, lookback is 4.5 minutes" in result.output, result.output
+    assert "(4.5 minute lookback, no checkpoint found)" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Initializing from: {(iso_freeze_time - timedelta(minutes=4.5)).astimezone().isoformat()}"
+        f"bootstrapping from {(iso_freeze_time - timedelta(minutes=4.5)).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Succeeded tasks: 2 / 2" in result.output, result.output
-    assert "completed: 1" in result.output, result.output
+    assert "NEW       Mock Job" in result.output, result.output
+    assert "(2/2 tasks succeeded)" in result.output, result.output
+    assert "jobs        1 downloaded" in result.output, result.output
 
     # RUN 2: Run the CLI command again to see that the job becomes inactive
     with freeze_time(ISO_FREEZE_TIME_PLUS_5MIN):
@@ -1012,6 +1250,7 @@ def test_incremental_output_download_job_completed_then_requeued(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -1026,18 +1265,18 @@ def test_incremental_output_download_job_completed_then_requeued(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {(iso_freeze_time - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().isoformat()}"
+        f"resumed from checkpoint at {(iso_freeze_time - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert "inactive: 1" in result.output, result.output
+    assert "1 retired" in result.output, result.output
 
     # RUN 3: Run the CLI command again after requeuing tasks
     mock_jobs[0]["taskRunStatus"] = "READY"
@@ -1052,6 +1291,7 @@ def test_incremental_output_download_job_completed_then_requeued(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -1066,20 +1306,20 @@ def test_incremental_output_download_job_completed_then_requeued(
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about loading the checkpoint and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint found" in result.output, result.output
+    assert "resumed from checkpoint" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Continuing from: {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_5MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().isoformat()}"
+        f"resumed from checkpoint at {(datetime.fromisoformat(ISO_FREEZE_TIME_PLUS_5MIN) - timedelta(seconds=EVENTUAL_CONSISTENCY_MAX_SECONDS)).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Succeeded tasks: 1 / 2" in result.output, result.output
-    assert "added: 1" in result.output, result.output
+    assert "NEW       Mock Job" in result.output, result.output
+    assert "(1/2 tasks succeeded)" in result.output, result.output
+    assert "jobs        0 downloaded, 1 in progress" in result.output, result.output
 
 
 @pytest.mark.skipif(
@@ -1113,6 +1353,7 @@ def test_incremental_output_download_dry_run(fresh_deadline_config, deadline_moc
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--farm-id",
                 MOCK_FARM_ID,
@@ -1128,24 +1369,23 @@ def test_incremental_output_download_dry_run(fresh_deadline_config, deadline_moc
     assert result.exit_code == 0, result.output
 
     # Assert that the output contained information about the bootstrapping and the mocked resources
-    assert "Started incremental download for queue: Mock Queue" in result.output, result.output
+    assert "Queue sync: Mock Queue" in result.output, result.output
     assert (
-        f"Checkpoint: {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
+        f"checkpoint  {os.path.join(checkpoint_dir, MOCK_QUEUE_ID + '_ignore-storage-profiles_download_checkpoint.json')}"
         in result.output
     ), result.output
-    assert "Checkpoint not found, lookback is 0.0 minutes" in result.output, result.output
+    assert "(0.0 minute lookback, no checkpoint found)" in result.output, result.output
     # Need to convert the freeze time to the local time zone for this print assertion
     assert (
-        f"Initializing from: {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().isoformat()}"
+        f"bootstrapping from {datetime.fromisoformat(ISO_FREEZE_TIME).astimezone().strftime('%Y-%m-%d %H:%M:%S')}"
         in result.output
     ), result.output
-    assert f"NEW Job: Mock Job ({MOCK_JOB_ID})" in result.output, result.output
-    assert "Skipping downloads due to DRY RUN" in result.output, result.output
-    assert (
-        "Summary of DRY RUN for incremental output download (no files were downloaded to the file system):"
-        in result.output
-    ), result.output
-    assert "This is a DRY RUN so the checkpoint was not saved" in result.output, result.output
+    assert "NEW       Mock Job" in result.output, result.output
+    # This run has nothing to download, so the per-download dry-run notice is never reached.
+    # The summary heading and the unsaved checkpoint still mark the run as a dry run.
+    assert "nothing new to download" in result.output, result.output
+    assert "Summary (dry run, nothing written to disk)" in result.output, result.output
+    assert "checkpoint  not saved (dry run)" in result.output, result.output
 
 
 @pytest.mark.skipif(
@@ -1183,6 +1423,7 @@ def test_incremental_output_download_stats_telemetry(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--farm-id",
                 MOCK_FARM_ID,
                 "--queue-id",
@@ -1307,6 +1548,7 @@ def test_incremental_output_download_unmapped_paths_without_storage_profile(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--force-bootstrap",
                 "--bootstrap-lookback-minutes",
@@ -1322,7 +1564,9 @@ def test_incremental_output_download_unmapped_paths_without_storage_profile(
 
     # Must not crash (previously raised UnboundLocalError on 'storage_profiles').
     assert result.exit_code == 0, result.output
-    assert "WARNING: THE FOLLOWING FILES WILL NOT BE DOWNLOADED" in result.output, result.output
+    assert "unmapped output paths, these files will not be downloaded" in result.output, (
+        result.output
+    )
     assert "/etc/cron.d/evil" in result.output, result.output
 
 
@@ -1453,6 +1697,7 @@ def test_incremental_output_download_manifest_mismatch_still_downloads(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--force-bootstrap",
                 "--bootstrap-lookback-minutes",
@@ -1468,14 +1713,14 @@ def test_incremental_output_download_manifest_mismatch_still_downloads(
 
     assert result.exit_code == 0, result.output
     # The mismatch warning fired, but the file was STILL downloaded (via the fallback bucket).
-    assert "Manifest list length mismatch" in result.output, result.output
+    assert "manifest list length mismatch" in result.output, result.output
     assert downloaded_file in downloaded_files_seen, (
         f"Expected {downloaded_file} to be downloaded despite skip_attribution; "
         f"got {downloaded_files_seen}"
     )
     # A successful fallback run must still report what it downloaded — the retained "" bucket
     # feeds the run-level stats, so a real download never reports "0 files downloaded".
-    assert "Downloaded files: 1" in result.output, result.output
+    assert "files       1 downloaded" in result.output, result.output
     # ...and the run is reported successful, with no synthetic "" job leaking into the entries.
     status_path = os.path.join(
         checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
@@ -1598,6 +1843,7 @@ def test_incremental_output_download_fallback_failure_marks_run_failed(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--force-bootstrap",
                 "--bootstrap-lookback-minutes",
@@ -1620,6 +1866,13 @@ def test_incremental_output_download_fallback_failure_marks_run_failed(
     with open(status_path) as f:
         status = json.load(f)
     assert status["sync_metadata"]["last_run_status"] == "failed", status
+
+    # The failure is recorded only under the synthetic "" bucket, which is not a job. The
+    # closing line still has to report the run as failed: it is the sole record that the whole
+    # window was lost, and a green line is what a scheduled job's log gets grepped for.
+    result_line = click.unstyle(result.output.strip().splitlines()[-1])
+    assert result_line.startswith("FAILED  "), result_line
+    assert "no job could be identified" in result_line, result_line
     # The synthetic "" bucket never leaks into the per-job entries.
     assert "" not in status["jobs"], status["jobs"]
 
@@ -1778,6 +2031,7 @@ def test_incremental_output_download_per_task_error_isolation(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--force-bootstrap",
                 "--bootstrap-lookback-minutes",
@@ -1795,7 +2049,15 @@ def test_incremental_output_download_per_task_error_isolation(
 
     # The run summary counts the succeeded tasks even though the job carries an error_code:
     # task-0 and task-2 landed their files, so 2 (not 0) files are reported downloaded.
-    assert "Downloaded files: 2" in result.output, result.output
+    assert "files       2 downloaded" in result.output, result.output
+
+    # The failure is repeated in the summary so an unattended run does not bury it, and the
+    # closing line reports the failure without needing to scroll back.
+    assert "problems    1 job failed" in result.output, result.output
+    assert "PERMISSION_DENIED" in result.output.split("problems")[1], result.output
+    assert "jobs        0 downloaded, 1 in progress, 1 failed" in result.output, result.output
+    result_line = click.unstyle(result.output.strip().splitlines()[-1])
+    assert result_line.startswith("FAILED  1 of 1 jobs failed after "), result_line
 
     # The status file records per-task isolation: task-1 failed, task-0 and task-2 succeeded.
     status_file_path = os.path.join(
@@ -2240,6 +2502,7 @@ def test_incremental_output_download_leftover_non_task_paths_are_downloaded(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--force-bootstrap",
                 "--bootstrap-lookback-minutes",
@@ -2258,7 +2521,7 @@ def test_incremental_output_download_leftover_non_task_paths_are_downloaded(
     assert task_file_path in downloaded_paths, downloaded_paths
     assert leftover_file_path in downloaded_paths, downloaded_paths
     assert os.path.exists(leftover_file_path), "leftover non-task path was silently dropped"
-    assert "Downloaded files: 2" in result.output, result.output
+    assert "files       2 downloaded" in result.output, result.output
 
 
 @pytest.mark.skipif(
@@ -2390,6 +2653,7 @@ def test_incremental_output_download_same_path_across_tasks_downloaded_once(
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--force-bootstrap",
                 "--bootstrap-lookback-minutes",
@@ -2406,7 +2670,7 @@ def test_incremental_output_download_same_path_across_tasks_downloaded_once(
     assert result.exit_code == 0, result.output
     # The shared path is downloaded once, not once per task.
     assert downloaded_paths.count(shared_file_path) == 1, downloaded_paths
-    assert "Downloaded files: 1" in result.output, result.output
+    assert "files       1 downloaded" in result.output, result.output
 
     # It is attributed to the newer task only; the older task no longer owns it.
     status_file_path = os.path.join(
@@ -2559,6 +2823,7 @@ def test_incremental_output_download_shared_path_newest_wins_regardless_of_order
             [
                 "queue",
                 "sync-output",
+                "--verbose",
                 "--ignore-storage-profiles",
                 "--force-bootstrap",
                 "--bootstrap-lookback-minutes",
@@ -2577,8 +2842,8 @@ def test_incremental_output_download_shared_path_newest_wins_regardless_of_order
     # The newer job owns the shared path and performs the actual download; the older job
     # is deduped out and downloads nothing. With list-order attribution (the bug), the
     # older job — appearing later in the list — would incorrectly claim the path.
-    assert "for job: New Job" in result.output, result.output
-    assert "for job: Old Job" not in result.output, result.output
+    assert "New Job: downloading" in result.output, result.output
+    assert "Old Job: downloading" not in result.output, result.output
 
     # The deduped (losing) job must still report filesystem-based status, not total=0/downloaded=0.
     # Its paths were claimed by the winning job and pruned from the download lists, so its status
@@ -3257,7 +3522,7 @@ def test_incremental_output_download_retries_failed_job_via_get_job(
     # --force-bootstrap is intentionally omitted: it clears the failed-jobs tracker for a
     # fresh start. Without it (and with no checkpoint file) the run still bootstraps but
     # preserves the tracker, so the previously-failed jobs are retried.
-    assert "Retrying 2 previously failed job(s)" in result.output, result.output
+    assert "retrying 2 previously failed jobs" in result.output, result.output
     # The re-fetched job was pulled in via GetJob.
     assert retried_job_id in [c.kwargs.get("jobId") for c in deadline_mock.get_job.call_args_list]
 
@@ -3511,7 +3776,7 @@ def test_incremental_output_download_shared_path_across_three_jobs_newest_wins(
 
     assert result.exit_code == 0, result.output
     assert downloaded_paths.count(shared_path) == 1, downloaded_paths
-    assert "Downloaded files: 1" in result.output, result.output
+    assert "files       1 downloaded" in result.output, result.output
 
     with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
         status = json.load(f)
@@ -3556,7 +3821,7 @@ def test_incremental_output_download_cross_job_then_within_job_overwrite(
 
     assert result.exit_code == 0, result.output
     assert downloaded_paths.count(shared_path) == 1, downloaded_paths
-    assert "Downloaded files: 1" in result.output, result.output
+    assert "files       1 downloaded" in result.output, result.output
 
     with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
         status = json.load(f)
@@ -3603,7 +3868,7 @@ def test_incremental_output_download_case_differing_paths_treated_as_one(
     # One download total — the two spellings are one file, so only the newest owner fetches it.
     assert len(downloaded_paths) == 1, downloaded_paths
     assert downloaded_paths[0] == lower_path, downloaded_paths
-    assert "Downloaded files: 1" in result.output, result.output
+    assert "files       1 downloaded" in result.output, result.output
 
     with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
         status = json.load(f)
@@ -3659,7 +3924,7 @@ def test_incremental_output_download_every_path_downloaded_exactly_once(
     # Every distinct path fetched exactly once — none skipped, none fetched twice.
     assert sorted(downloaded_paths) == sorted(all_paths), downloaded_paths
     assert len(downloaded_paths) == len(set(downloaded_paths)), downloaded_paths
-    assert "Downloaded files: 5" in result.output, result.output
+    assert "files       5 downloaded" in result.output, result.output
     for path in all_paths:
         assert os.path.exists(path), path
 
@@ -3865,7 +4130,7 @@ def test_incremental_output_download_transient_getjob_error_keeps_job_in_tracker
     # A control-plane error on the retry path must not fail the whole sync — the other jobs in
     # the run still have output to fetch.
     assert result.exit_code == 0, result.output
-    assert "Retrying 2 previously failed job(s)" in result.output, result.output
+    assert "retrying 2 previously failed jobs" in result.output, result.output
 
     with open(failed_jobs_file) as f:
         tracker_after = json.load(f)
@@ -3998,8 +4263,8 @@ def test_incremental_output_download_succeeded_task_with_no_output_is_not_a_fail
         )
 
     assert result.exit_code == 0, result.output
-    assert "ran 1 / 1 session actions with no output" in result.output, result.output
-    assert "Downloaded files: 0" in result.output, result.output
+    assert "ran 1/1 task runs with no output" in result.output, result.output
+    assert "files       0 downloaded" in result.output, result.output
 
     with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
         status = json.load(f)
@@ -4157,7 +4422,7 @@ def test_incremental_output_download_mixed_output_and_no_output_steps(
     assert result.exit_code == 0, result.output
     assert downloaded_paths == [output_path], downloaded_paths
     # The output-free session action is filtered, not downloaded, and the run says so.
-    assert "ran 1 / 2 session actions with no output" in result.output, result.output
+    assert "ran 1/2 task runs with no output" in result.output, result.output
 
     with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
         status = json.load(f)
