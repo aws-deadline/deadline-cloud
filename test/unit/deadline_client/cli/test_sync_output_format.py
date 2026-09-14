@@ -209,8 +209,9 @@ def test_warning_and_error_use_text_prefixes():
     assert lines[1] == "  ERROR: broken"
 
 
-def test_output_is_pure_ascii():
-    """No unicode anywhere: redirecting under a legacy Windows codepage must not fail."""
+def test_decoration_is_pure_ascii():
+    """The formatter's own headings, tags and labels add no non-ASCII of their own, so a
+    report carrying only ASCII values stays encodable under a legacy Windows codepage."""
     lines = _render(
         lambda fmt: (
             fmt.section("Download"),
@@ -228,6 +229,20 @@ def test_output_is_pure_ascii():
     joined = "\n".join(lines)
     assert joined.isascii(), [line for line in lines if not line.isascii()]
     joined.encode("cp1252")
+
+
+def test_values_pass_through_unchanged():
+    """A shared drive path or job name keeps its own characters. The formatter must not
+    strip, escape or transliterate them, so the path stays one the operator can copy."""
+    path = "/Volumes/Renders/Caf\u00e9/\u65e5\u672c\u8a9e/shot_010.exr"
+    job = "render_caf\u00e9_\u65e5\u672c\u8a9e"
+
+    assert _format_path(path) == path
+
+    lines = _render(lambda fmt: (fmt.field("checkpoint", path), fmt.entry("NEW", job)))
+
+    assert path in lines[0]
+    assert job in lines[1]
 
 
 def test_warning_and_error_record_a_problem_on_the_shared_writer():

@@ -3,9 +3,13 @@
 """
 Terminal formatting for the `deadline queue sync-output` command.
 
-Output is plain ASCII. Color is used only to flag a problem (yellow for warnings, red
-for errors), matching the rest of the CLI, and structure is carried by indentation so
-the log reads the same when redirected, piped, or collected by a log agent.
+Headings, labels, tags and separators are plain ASCII, and structure is carried by
+indentation, so the log reads the same when redirected, piped, or collected by a log
+agent. Values are passed through untouched: a path or a job name keeps whatever
+characters it has, so a report that names a non-ASCII path is not ASCII overall.
+
+Color is used only to flag a problem (yellow for warnings, red for errors), matching
+the rest of the CLI.
 """
 
 from __future__ import annotations
