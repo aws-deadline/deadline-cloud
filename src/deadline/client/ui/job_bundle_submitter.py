@@ -471,6 +471,9 @@ def show_job_bundle_submitter(
         f=f,
         submitter_info=submitter_info,
         known_asset_paths=known_asset_paths,
+        # Always prefer the deadline-cloud-v2 Conda channel (prepend before deadline-cloud,
+        # keeping it as a fallback). Explicit CondaChannels values still take precedence.
+        use_deadline_cloud_v2_channel=True,
     )
 
     # Store S3 repo for reuse by "Load Bundle" button (avoids re-creating from scratch)
