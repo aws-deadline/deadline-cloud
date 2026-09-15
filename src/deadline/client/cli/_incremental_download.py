@@ -1742,7 +1742,6 @@ def _incremental_output_download(
                             file_conflict_resolution,
                             on_downloading_files=_make_progress_callback(),
                             # Suppressed: this helper's only output is a worker-thread count.
-                            # Suppressed: this helper's only output is a worker-thread count.
                             print_function_callback=lambda msg: None,
                         )
                         if not sigint_handler.continue_operation:
@@ -1791,7 +1790,6 @@ def _incremental_output_download(
                             boto3_session_for_s3,
                             file_conflict_resolution,
                             on_downloading_files=_make_progress_callback(),
-                            # Suppressed: this helper's only output is a worker-thread count.
                             # Suppressed: this helper's only output is a worker-thread count.
                             print_function_callback=lambda msg: None,
                         )
@@ -2131,7 +2129,13 @@ def _incremental_output_download(
 
     if not fmt.suppressed:
         _print_summary(
-            fmt, stats, dry_run, job_download_results, download_candidate_jobs, unmapped_paths
+            fmt,
+            stats,
+            dry_run,
+            job_download_results,
+            download_candidate_jobs,
+            unmapped_paths,
+            categorized_job_ids,
         )
 
     return (
@@ -2161,6 +2165,7 @@ def _print_summary(
     job_download_results: dict[str, dict[str, Any]],
     download_candidate_jobs: dict[str, dict[str, Any]],
     unmapped_paths: dict[str, list[str]],
+    categorized_job_ids: CategorizedJobIds,
 ) -> None:
     """Prints the closing summary block, including every job that failed this run."""
     fmt.section("Summary (dry run, nothing written to disk)" if dry_run else "Summary")
@@ -2175,14 +2180,20 @@ def _print_summary(
         for job_id, result in job_download_results.items()
         if result.get("error_code") is not None
     }
-    in_progress = stats["jobs_with_downloads"]["added"] + stats["jobs_with_downloads"]["updated"]
-    job_parts = [f"{stats['jobs_with_downloads']['completed']} downloaded"]
+    # The synthetic "" bucket is listed under problems but is not a job, so it is kept out of
+    # every count here. Failed ids come out of the category buckets so the row sums to the
+    # number of jobs rather than counting a failed job under "downloaded" as well.
+    failed_ids = {job_id for job_id in failures if job_id}
+    downloaded = len(categorized_job_ids.completed - failed_ids)
+    in_progress = len((categorized_job_ids.added | categorized_job_ids.updated) - failed_ids)
+
+    job_parts = [f"{downloaded} downloaded"]
     if in_progress:
         job_parts.append(f"{in_progress} in progress")
-    if stats["jobs_without_downloads"]["inactive"]:
-        job_parts.append(f"{stats['jobs_without_downloads']['inactive']} retired")
-    if failures:
-        job_parts.append(f"{len(failures)} failed")
+    if categorized_job_ids.inactive:
+        job_parts.append(f"{len(categorized_job_ids.inactive)} retired")
+    if failed_ids:
+        job_parts.append(f"{len(failed_ids)} failed")
     fmt.summary_row("jobs", ", ".join(job_parts))
 
     fmt.summary_row("task runs", str(stats["downloaded_session_actions"]))
@@ -2199,7 +2210,12 @@ def _print_summary(
 
     # Repeat each failure here so an unattended run does not bury them mid-download.
     if failures:
-        fmt.summary_row("problems", _plural(len(failures), "job") + " failed")
+        fmt.summary_row(
+            "problems",
+            _plural(len(failed_ids), "job") + " failed"
+            if failed_ids
+            else "download failed, no job could be identified",
+        )
         for job_id, result in sorted(failures.items()):
             label = _job_label(job_id, download_candidate_jobs)
             fmt.summary_continuation(f"{result['error_code']:<18} {label}")

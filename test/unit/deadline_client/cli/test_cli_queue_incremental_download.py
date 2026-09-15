@@ -1873,6 +1873,15 @@ def test_incremental_output_download_fallback_failure_marks_run_failed(
     result_line = click.unstyle(result.output.strip().splitlines()[-1])
     assert result_line.startswith("FAILED  "), result_line
     assert "no job could be identified" in result_line, result_line
+
+    # The bucket is listed so the error code is visible, but it is not a job, so it must not
+    # be counted as one anywhere. Counting it would contradict the result line just checked.
+    assert "problems    download failed, no job could be identified" in result.output, result.output
+    assert "(unattributed paths)" in result.output, result.output
+    jobs_row = next(
+        line for line in result.output.splitlines() if line.startswith("  jobs        ")
+    )
+    assert "failed" not in jobs_row, jobs_row
     # The synthetic "" bucket never leaks into the per-job entries.
     assert "" not in status["jobs"], status["jobs"]
 
@@ -2055,7 +2064,13 @@ def test_incremental_output_download_per_task_error_isolation(
     # closing line reports the failure without needing to scroll back.
     assert "problems    1 job failed" in result.output, result.output
     assert "PERMISSION_DENIED" in result.output.split("problems")[1], result.output
-    assert "jobs        0 downloaded, 1 in progress, 1 failed" in result.output, result.output
+    assert "jobs        0 downloaded, 1 failed" in result.output, result.output
+    # One job, so the parts of the row have to add up to one. A failed job counted under
+    # "in progress" as well would read as two.
+    jobs_row = next(
+        line for line in result.output.splitlines() if line.startswith("  jobs        ")
+    )
+    assert sum(int(part.split()[0]) for part in jobs_row.split("jobs")[1].split(",")) == 1, jobs_row
     result_line = click.unstyle(result.output.strip().splitlines()[-1])
     assert result_line.startswith("FAILED  1 of 1 jobs failed after "), result_line
 
