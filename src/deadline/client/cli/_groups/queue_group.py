@@ -8,6 +8,8 @@ import click
 import json
 import time
 import os
+from contextlib import contextmanager
+from typing import Iterator
 from configparser import ConfigParser
 from typing import Optional
 import boto3
@@ -36,11 +38,86 @@ from .._main import deadline as main
 from .._incremental_download import _incremental_output_download
 from .._download_status_file import write_download_status_file
 from .._pid_file_lock import PidFileLock
+from .._sync_output_format import (
+    _SyncOutputFormatter,
+    _SyncOutputWriter,
+    _format_duration,
+    _format_path,
+    _format_timestamp,
+    _plural,
+)
+from ....job_attachments.api import human_readable_file_size
 from ....job_attachments._incremental_downloads.incremental_download_state import (
     IncrementalDownloadState,
 )
 
 DOWNLOAD_CHECKPOINT_FILE_NAME = "download_checkpoint.json"
+
+
+@contextmanager
+def _report_on_failure(writer: _SyncOutputWriter) -> Iterator[None]:
+    """Releases a held-back report when the body raises.
+
+    A quiet run buffers its progress lines and normally drops them. On failure they are the
+    only record of what the run had done so far, so an operator reading a scheduled job's log
+    gets the context leading up to the error instead of the traceback alone.
+    """
+    try:
+        yield
+    except BaseException:
+        writer.flush()
+        raise
+
+
+def _echo_result_line(
+    fmt: _SyncOutputFormatter,
+    stats: dict,
+    job_download_results: dict,
+    dry_run: bool,
+    command_start: float,
+) -> None:
+    """Prints the closing one-line result, so a tail or grep of the log tells the outcome."""
+    elapsed = _format_duration(time.monotonic() - command_start)
+    # The synthetic "" bucket holds paths that could not be attributed to a job. It is not a
+    # job, so it stays out of the job counts, but a failure recorded only there still means
+    # the run failed: it is the sole record of a lost window when attribution was skipped.
+    any_failure = any(
+        result.get("error_code") is not None for result in job_download_results.values()
+    )
+    failed = [
+        job_id
+        for job_id, result in job_download_results.items()
+        if job_id and result.get("error_code") is not None
+    ]
+    attempted = [job_id for job_id in job_download_results if job_id]
+    size = human_readable_file_size(stats["downloaded_bytes"])
+    files = stats["downloaded_files"]
+
+    if failed:
+        fmt.result(
+            f"{len(failed)} of {len(attempted)} jobs failed after {elapsed}"
+            f" ({files} files, {size} downloaded)",
+            failed=True,
+        )
+    elif any_failure:
+        fmt.result(
+            f"download failed after {elapsed}, no job could be identified"
+            f" ({files} files, {size} downloaded)",
+            failed=True,
+        )
+    elif dry_run:
+        fmt.result(f"dry run, {files} files ({size}) would be downloaded, checked in {elapsed}")
+    elif files:
+        downloaded_jobs = len(
+            [
+                job_id
+                for job_id, result in job_download_results.items()
+                if job_id and result.get("downloaded_files")
+            ]
+        )
+        fmt.result(f"{files} files, {size}, {_plural(downloaded_jobs, 'job')} in {elapsed}")
+    else:
+        fmt.result(f"nothing to download, checked in {elapsed}")
 
 
 @main.group(name="queue")
@@ -319,6 +396,14 @@ def queue_get(**args):
     help="Perform a dry run of the operation, don't actually download the output files.",
     default=False,
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Print the full per-job report even when the run finds nothing new to download.\n"
+    "By default such a run prints a single line, so polling a queue on a schedule does not\n"
+    "fill the log. A run that does find work always prints the full report.",
+    default=False,
+)
 @_handle_error
 @api.record_success_fail_telemetry_event(metric_name="queue_sync_output")
 def sync_output(
@@ -329,6 +414,7 @@ def sync_output(
     ignore_storage_profiles: bool,
     conflict_resolution: str,
     dry_run: bool,
+    verbose: bool,
     **args,
 ):
     """
@@ -354,6 +440,11 @@ def sync_output(
         )
 
     logger: ClickLogger = ClickLogger(is_json=json)
+    # Hold the report back so a run that turns out to have nothing to do can collapse to a
+    # single line. --verbose opts out and prints every section as it happens.
+    writer = _SyncOutputWriter(logger.echo, buffered=not verbose)
+    fmt = _SyncOutputFormatter(writer)
+    command_start = time.monotonic()
 
     # Expand '~' to home directory and create the checkpoint directory if necessary
     checkpoint_dir = os.path.abspath(os.path.expanduser(checkpoint_dir))
@@ -384,7 +475,6 @@ def sync_output(
     if ignore_storage_profiles:
         local_storage_profile_id = None
         local_storage_profile = None
-        logger.echo("Ignoring all storage profiles.")
     else:
         local_storage_profile_id = config_file.get_setting(
             "settings.storage_profile_id", config=config
@@ -428,19 +518,19 @@ def sync_output(
             f"Queue '{queue['displayName']}' does not have job attachments configured."
         )
 
-    logger.echo(f"Started incremental download for queue: {queue['displayName']}")
-    logger.echo(f"Checkpoint: {checkpoint_file_path}")
-    logger.echo()
+    fmt.section(f"Queue sync: {queue['displayName']}")
+    fmt.field("checkpoint", _format_path(checkpoint_file_path))
 
     if local_storage_profile_id:
         assert local_storage_profile is not None
-        logger.echo(
-            f"Mapping job output paths to the local storage profile {local_storage_profile['displayName']} ({local_storage_profile_id})"
+        fmt.field(
+            "storage",
+            f"{local_storage_profile['displayName']} ({local_storage_profile_id})",
         )
-        logger.echo("  File system locations for the storage profile are:")
         for location in local_storage_profile["fileSystemLocations"]:
-            logger.echo(f"    {location['name']}: {location['path']}")
-        logger.echo()
+            fmt.field_continuation(f"{location['name']}: {_format_path(location['path'])}")
+    else:
+        fmt.field("storage", "ignoring all storage profiles")
 
     # Pre-flight validation: warn about inaccessible storage profile locations.
     # Downloads proceed regardless — jobs only map to the locations their outputs fall under,
@@ -449,23 +539,26 @@ def sync_output(
         for location in local_storage_profile["fileSystemLocations"]:
             location_path = location["path"]
             if not os.path.isdir(location_path):
-                logger.echo(
-                    f"WARNING: File system location '{location['name']}' does not exist: {location_path}"
-                    " — status file will not be written to this location."
+                fmt.warning(
+                    f"file system location '{location['name']}' does not exist:"
+                    f" {_format_path(location_path)}, no status file will be written there"
                 )
             elif not os.access(location_path, os.W_OK):
-                logger.echo(
-                    f"WARNING: File system location '{location['name']}' is not writable: {location_path}"
-                    " — status file will not be written to this location."
+                fmt.warning(
+                    f"file system location '{location['name']}' is not writable:"
+                    f" {_format_path(location_path)}, no status file will be written there"
                 )
 
     # Perform incremental download while holding a process id lock
 
     pid_lock_file_path: str = os.path.join(checkpoint_dir, f"{download_checkpoint_file_name}.pid")
 
-    with PidFileLock(
-        pid_lock_file_path,
-        operation_name="incremental output download",
+    with (
+        PidFileLock(
+            pid_lock_file_path,
+            operation_name="incremental output download",
+        ),
+        _report_on_failure(writer),
     ):
         checkpoint: IncrementalDownloadState
 
@@ -481,7 +574,11 @@ def sync_output(
 
             # Print the bootstrap time in local time
             if force_bootstrap:
-                logger.echo(f"Bootstrap forced, lookback is {bootstrap_lookback_minutes} minutes")
+                fmt.field(
+                    "state",
+                    f"bootstrap forced from {_format_timestamp(bootstrap_timestamp)}"
+                    f" ({bootstrap_lookback_minutes} minute lookback)",
+                )
                 # Also clear the failed jobs tracker so abandoned jobs get a fresh start
                 storage_profile_key = local_storage_profile_id or "ignore-storage-profiles"
                 failed_jobs_file = os.path.join(
@@ -493,16 +590,14 @@ def sync_output(
                 except OSError:
                     pass  # File doesn't exist — nothing to clear
             else:
-                logger.echo(
-                    f"Checkpoint not found, lookback is {bootstrap_lookback_minutes} minutes"
+                fmt.field(
+                    "state",
+                    f"bootstrapping from {_format_timestamp(bootstrap_timestamp)}"
+                    f" ({bootstrap_lookback_minutes} minute lookback, no checkpoint found)",
                 )
-            logger.echo(f"Initializing from: {bootstrap_timestamp.astimezone().isoformat()}")
         else:
             # Load the incremental download checkpoint file
             checkpoint = IncrementalDownloadState.from_file(checkpoint_file_path)
-
-            # Print the previous download completed time in local time
-            logger.echo("Checkpoint found")
 
             # The checkpoint's local storage profile id must match the CLI option
             if local_storage_profile_id != checkpoint.local_storage_profile_id:
@@ -518,11 +613,11 @@ def sync_output(
                     f"The checkpoint was created with local storage profile {checkpoint.local_storage_profile_id}, but the configured storage profile is {local_storage_profile_id}"
                 )
 
-            logger.echo(
-                f"Continuing from: {checkpoint.downloads_completed_timestamp.astimezone().isoformat()}"
+            fmt.field(
+                "state",
+                "resumed from checkpoint at"
+                f" {_format_timestamp(checkpoint.downloads_completed_timestamp)}",
             )
-
-        logger.echo()
 
         (
             updated_download_state,
@@ -531,6 +626,7 @@ def sync_output(
             job_download_results,
             task_download_results,
             succeeded_task_ids,
+            stats,
         ) = _incremental_output_download(
             boto3_session=boto3_session,
             farm_id=farm_id,
@@ -539,7 +635,7 @@ def sync_output(
             file_conflict_resolution=FileConflictResolution[conflict_resolution],
             checkpoint_dir=checkpoint_dir,
             config=config,
-            print_function_callback=logger.echo,
+            print_function_callback=writer,
             dry_run=dry_run,
         )
 
@@ -555,10 +651,19 @@ def sync_output(
                 job_download_results=job_download_results,
                 task_download_results=task_download_results,
                 succeeded_task_ids=succeeded_task_ids,
-                print_function_callback=logger.echo,
+                print_function_callback=writer,
             )
 
             updated_download_state.save_file(checkpoint_file_path)
-            logger.echo("Checkpoint saved")
+
+        if not fmt.suppressed:
+            fmt.summary_row("checkpoint", "not saved (dry run)" if dry_run else "saved")
+            fmt.summary_row("elapsed", _format_duration(time.monotonic() - command_start))
+            _echo_result_line(fmt, stats, job_download_results, dry_run, command_start)
         else:
-            logger.echo("This is a DRY RUN so the checkpoint was not saved")
+            # Quiet run: one line, emitted here so it lands after the checkpoint and status
+            # file are written and therefore below any warning either of them raised.
+            fmt.result(
+                f"{queue['displayName']}: nothing new"
+                f" ({stats['window_summary']}, checked {stats['checked_at']})"
+            )
