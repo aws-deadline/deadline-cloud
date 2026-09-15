@@ -3,6 +3,8 @@ from __future__ import annotations
 
 __all__ = ["get_queue_parameter_definitions"]
 
+import re
+from logging import getLogger
 from typing import Optional
 
 import yaml
@@ -16,8 +18,11 @@ from ..job_bundle.parameters import (
     get_ui_control_for_parameter_definition,
     parameter_definition_difference,
     validate_job_parameter,
+    validate_job_parameter_value,
 )
 from ..ui._utils import tr
+
+logger = getLogger(__name__)
 
 
 # The default Conda channel that Deadline Cloud configures automatically, and its v2 successor.
@@ -55,13 +60,69 @@ def _apply_deadline_cloud_v2_channel_migration(queue_parameters: list[JobParamet
     Args:
         queue_parameters (list[JobParameter]): The queue parameter definitions to modify.
     """
+    if not queue_parameters:
+        # An empty list means the queue parameters have not loaded yet (no farm/queue selected,
+        # a failed fetch, or a farm switch clearing dependent data), not that the queue lacks a
+        # CondaChannels parameter. There is nothing to migrate and nothing worth logging.
+        return
+
+    found_conda_channels = False
+    changed = False
+    constrained_skip = False
     for parameter in queue_parameters:
         if parameter.get("name") != "CondaChannels":
             continue
+        found_conda_channels = True
+        # Compute the migrated value for each present string field that actually changes.
+        migrations: dict[str, str] = {}
         for field in ("default", "value"):
             channels = parameter.get(field)
             if isinstance(channels, str):
-                parameter[field] = _prepend_v2_channel(channels)
+                migrated = _prepend_v2_channel(channels)
+                if migrated != channels:
+                    migrations[field] = migrated
+        if not migrations:
+            continue
+        # A constrained CondaChannels may reject the longer migrated value; leave the field
+        # unchanged rather than produce a value that is silently dropped by the dropdown or rejected
+        # with a hard error at submit time. Validate the whole parameter atomically so default and
+        # value stay consistent — the widget resolves value over default, so migrating only one
+        # field would silently submit the unmigrated one. validate_job_parameter_value covers
+        # minLength/maxLength/min-maxValue/allowedValues (and needs "type", which queue definitions
+        # always carry) but not allowedPattern, so check that too (re.match matches OpenJD's
+        # semantics). Any doubt -> leave unchanged; a malformed pattern/entry counts as doubt.
+        allowed_pattern = dict(parameter).get("allowedPattern")
+        try:
+            for migrated in migrations.values():
+                if "type" in parameter:
+                    validate_job_parameter_value(parameter, migrated)
+                if isinstance(allowed_pattern, str) and re.match(allowed_pattern, migrated) is None:
+                    raise ValueError
+        except (ValueError, TypeError, re.error):
+            constrained_skip = True
+            continue
+        if "default" in migrations:
+            parameter["default"] = migrations["default"]
+        if "value" in migrations:
+            parameter["value"] = migrations["value"]
+        changed = True
+
+    if not found_conda_channels:
+        logger.debug(
+            "deadline-cloud-v2 channel requested, but this queue has no CondaChannels parameter; "
+            "leaving Conda channels unchanged."
+        )
+    elif constrained_skip and not changed:
+        logger.debug(
+            "deadline-cloud-v2 channel requested, but this queue's CondaChannels constrains values "
+            "(allowedValues, maxLength, ...) such that the migrated value is invalid; leaving Conda "
+            "channels unchanged."
+        )
+    elif not changed:
+        logger.debug(
+            "deadline-cloud-v2 channel requested, but CondaChannels already lists deadline-cloud-v2 "
+            "or has no deadline-cloud channel to prepend before; leaving Conda channels unchanged."
+        )
 
 
 @api.record_function_latency_telemetry_event()
