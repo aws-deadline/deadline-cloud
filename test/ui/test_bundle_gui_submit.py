@@ -36,19 +36,20 @@ class TestSubmitterOpens:
 
     def test_has_submit_and_export_buttons(self, gui_submit: SubmitterDialog):
         assert gui_submit.button("Submit").exists()
-        assert gui_submit.button("Export bundle").exists()
+        assert gui_submit.button("Save bundle as").exists()
 
 
 class TestExportBundle:
     def test_export_creates_bundle(self, bundle_dir, submitter_env):
-        job_history_dir = submitter_env["_JOB_HISTORY_DIR"]
+        # A local "Save bundle as" writes to the configured job-bundle default
+        # directory, which the fixture points at a known location.
+        export_root = submitter_env["_EXPORT_DIR"]
         with SubmitterDialog.open(bundle_dir, env=submitter_env) as app:
             app.wait_farm_resolved()
             app.export_bundle()
 
-            assert os.path.isdir(job_history_dir), "Job history dir was not created"
             templates = []
-            for root, _dirs, files in os.walk(job_history_dir):
+            for root, _dirs, files in os.walk(export_root):
                 for fn in files:
                     if fn.startswith("template."):
                         templates.append(os.path.join(root, fn))

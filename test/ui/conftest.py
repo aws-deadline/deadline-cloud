@@ -221,6 +221,8 @@ def submitter_env(deadline_env, tmp_path) -> dict:
     queue = backend.create_queue(farmId=farm["farmId"], displayName="TestQueue", description="")
 
     job_history_dir = tmp_path / "job_history"
+    export_dir = tmp_path / "exported_bundles"
+    export_dir.mkdir()
     config = env["DEADLINE_CONFIG_FILE_PATH"]
     with open(config, "w") as f:
         f.write(
@@ -235,9 +237,11 @@ def submitter_env(deadline_env, tmp_path) -> dict:
             "\n"
             "[profile-(default) settings]\n"
             f"job_history_dir = {job_history_dir}\n"
+            f"job_bundle_default_directory = {export_dir.as_posix()}\n"
         )
 
     env["_JOB_HISTORY_DIR"] = str(job_history_dir)
+    env["_EXPORT_DIR"] = str(export_dir)
     return env
 
 

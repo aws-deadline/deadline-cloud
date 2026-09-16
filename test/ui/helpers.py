@@ -551,12 +551,60 @@ class SubmitterDialog(DeadlineApp):
             time.sleep(0.25)
         return False
 
-    def export_bundle(self) -> None:
-        """Click 'Export bundle' and dismiss the confirmation dialog."""
-        self.button("Export bundle").press()
+    def export_bundle(self, *, to_queue: bool = False) -> None:
+        """Drive the 'Save bundle as' export dialog end to end.
+
+        The dialog now requires picking a sharing method (Queue vs. Local)
+        before saving. We select the requested radio (Local by default),
+        press the dialog's own 'Save bundle as' accept button, then dismiss
+        the 'Bundle saved to:' confirmation box.
+        """
+        self.button("Save bundle as").press()
+
+        # Choose where to export. The Local radio is preselected when the
+        # queue is unavailable, but select it explicitly so the choice is
+        # deterministic regardless of queue availability.
+        self._select_radio("Queue" if to_queue else "Local")
+
+        # The export dialog carries its own 'Save bundle as' accept button;
+        # scope the selector to the dialog so it isn't confused with the
+        # submitter's button of the same name.
+        save = self.locator('dialog[name="Save bundle as"] button[name="Save bundle as"]')
+        save.wait_visible(timeout=EXPORT_TIMEOUT)
+        save.press()
+
+        # A "Bundle saved to:" information box confirms the local export.
         ok = self.button("OK")
         ok.wait_visible(timeout=EXPORT_TIMEOUT)
         ok.press()
+
+    def _select_radio(self, name: str) -> None:
+        """Select the named radio button, tolerating per-platform action support.
+
+        Radio buttons expose different accessibility actions per backend
+        (macOS AX activates via ``press``; AT-SPI/UIA use ``select``/``toggle``),
+        so ``press`` alone raises ``ActionNotSupportedError`` on some platforms.
+        If the radio is already selected we do nothing — both because there is
+        nothing to do and because ``toggle`` would otherwise turn it back off.
+        """
+        radio = self.locator(f'radio_button[name="{name}"]')
+        radio.wait_visible(timeout=EXPORT_TIMEOUT)
+        if radio.element().checked == "on" or radio.element().selected:
+            return
+        last_exc: Optional[BaseException] = None
+        for action in ("select", "toggle", "press"):
+            try:
+                radio.perform_action(action)
+            except xa11y.XA11yError as exc:
+                last_exc = exc
+                continue
+            if radio.element().checked == "on" or radio.element().selected:
+                return
+        self.dump_tree()
+        raise AssertionError(
+            f"Could not select radio {name!r} via select/toggle/press"
+            + (f" (last error: {last_exc})" if last_exc is not None else "")
+        )
 
     def submit_and_ok(self, timeout: float = SUBMIT_TIMEOUT) -> None:
         """Click Submit, wait for success, click Ok."""

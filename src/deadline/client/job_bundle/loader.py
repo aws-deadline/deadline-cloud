@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "is_job_bundle_dir",
     "parse_yaml_or_json_content",
     "read_yaml_or_json",
     "read_yaml_or_json_object",
@@ -16,7 +17,16 @@ from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
+from .._path_utils import is_path_contained
 from ..exceptions import DeadlineOperationError
+
+
+def is_job_bundle_dir(path: str) -> bool:
+    """Returns True if the directory contains a template.yaml or template.json file."""
+    if not os.path.isdir(path):
+        return False
+    template_prefix = os.path.join(path, "template")
+    return os.path.isfile(template_prefix + ".yaml") or os.path.isfile(template_prefix + ".json")
 
 
 def validate_directory_symlink_containment(job_bundle_dir: str) -> None:
@@ -34,8 +44,7 @@ def validate_directory_symlink_containment(job_bundle_dir: str) -> None:
         for path in chain(dir_names, file_names):
             norm_path = os.path.normpath(os.path.join(root_dir, path))
             resolved_path = os.path.realpath(norm_path)
-            common_path = os.path.commonpath([resolved_root, resolved_path])
-            if common_path != resolved_root:
+            if not is_path_contained(resolved_path, resolved_root, path_module=os.path):
                 raise DeadlineOperationError(
                     f"Job bundle cannot contain a path that resolves outside of the resolved bundle directory:\n{resolved_root}\n\nPath in bundle:\n{norm_path}\nResolves to:\n{resolved_path}"
                 )

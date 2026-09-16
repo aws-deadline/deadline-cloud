@@ -17,6 +17,7 @@ from deadline.client.api._session import (
     get_session_client,
     precache_clients,
     _resolve_region,
+    _ADAPTIVE_RETRIES_CLIENT_CONFIG,
 )
 
 
@@ -537,6 +538,63 @@ def test_get_session_client_same_region_cached():
     client2 = get_session_client(session, "s3", region="eu-west-1")
 
     assert client1 is client2
+
+
+def test_get_session_client_client_config_merges_over_default():
+    """
+    A caller-supplied client_config is merged over the default config: its options
+    (here the adaptive retry mode) take effect while the default config's
+    user-agent tagging is preserved.
+    """
+    get_session_client.cache_clear()
+    session = boto3.Session()
+
+    client = get_session_client(session, "s3", client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG)
+    retries = client.meta.config.retries
+    assert retries["mode"] == "adaptive"
+    assert retries["total_max_attempts"] == 10
+    # The default config's user-agent tagging survives the merge
+    assert "app/deadline-client" in client.meta.config.user_agent_extra
+
+    default_client = get_session_client(session, "s3")
+    default_retries = default_client.meta.config.retries or {}
+    assert default_retries.get("mode") != "adaptive"
+
+
+def test_get_session_client_client_config_distinct_cache_entry():
+    """
+    client_config participates in the lru_cache key: passing the shared config
+    yields a different client object than the default, and repeated calls with
+    the same config instance return the same cached client.
+    """
+    get_session_client.cache_clear()
+    session = boto3.Session()
+
+    default_client = get_session_client(session, "s3")
+    adaptive_client = get_session_client(
+        session, "s3", client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG
+    )
+    assert default_client is not adaptive_client
+
+    adaptive_client2 = get_session_client(
+        session, "s3", client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG
+    )
+    assert adaptive_client is adaptive_client2
+
+
+def test_get_session_client_client_config_with_region():
+    """
+    client_config composes with the region argument: the region-scoped client
+    carries both the requested region and the merged retry configuration.
+    """
+    get_session_client.cache_clear()
+    session = boto3.Session()
+
+    client = get_session_client(
+        session, "s3", region="us-west-2", client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG
+    )
+    assert client.meta.region_name == "us-west-2"
+    assert client.meta.config.retries["mode"] == "adaptive"
 
 
 class TestGetSessionClientCrossRegion:

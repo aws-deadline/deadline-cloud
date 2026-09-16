@@ -30,11 +30,17 @@ JSON_FIELD_AUTH_API_AVAILABLE = "api_availability"
 
 def _cli_on_pending_authorization(**kwargs):
     """
-    Callback for `login`, to tell the user that Deadline Cloud monitor is opening
+    Callback for `login`, to tell the user which login flow is opening
     """
 
     if kwargs["credentials_source"] == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
         click.echo("Opening Deadline Cloud monitor. Please log in and then return here.")
+    elif kwargs["credentials_source"] == AwsCredentialsSource.AWS_CONSOLE_LOGIN:
+        # Deadline Cloud monitor opens the browser for the console sign-in itself.
+        click.echo(
+            "Opening Deadline Cloud monitor to sign in with the AWS Console. "
+            "Please sign in and then return here."
+        )
 
 
 @main.group(name="auth")
@@ -54,7 +60,7 @@ def cli_auth():
 def auth_login():
     """
     Opens Deadline Cloud monitor to log in to your farm. Supports profiles
-    created by Deadline Cloud monitor.
+    created by Deadline Cloud monitor or by AWS Console sign-in.
     """
     click.echo(
         f"Logging into AWS Profile {config_file.get_setting('defaults.aws_profile_name')!r} for AWS Deadline Cloud"
@@ -71,11 +77,14 @@ def auth_login():
 @_handle_error
 def auth_logout():
     """
-    Logs out of the configured AWS profile, if it was created by Deadline Cloud monitor.
+    Logs out of the configured AWS profile, if it was created by Deadline Cloud monitor
+    or by AWS Console sign-in.
     """
-    api.logout()
-
-    click.echo("Successfully logged out of all Deadline Cloud monitor AWS profiles")
+    # Echo what logout actually did. The message names the profile type, so hardcoding one
+    # here would misreport the other. The monitor path returns the subprocess's stdout,
+    # which can be empty, so fall back to a generic confirmation.
+    message = api.logout().strip()
+    click.echo(message or "Successfully logged out")
 
 
 @cli_auth.command(name="status")

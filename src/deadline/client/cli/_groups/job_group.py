@@ -41,6 +41,8 @@ from ....job_attachments.api import (
 
 from ... import api
 from ...config import config_file
+from ..._path_summary import common_ancestor
+from ..._path_utils import is_absolute_path
 from ...exceptions import DeadlineOperationError, DeadlineOperationTimedOut
 from .._common import (
     _OUTPUT_FORMAT_HELP,
@@ -541,16 +543,18 @@ def _prompt_for_os_mismatch_roots(
         if PathFormat.get_host_path_format_string() != root_path_format:
             click.echo(_get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format))
             if not is_json_format:
-                new_root = click.prompt(
-                    "> Please enter a new root path",
-                    type=click.Path(exists=False),
+                new_root = str(
+                    click.prompt(
+                        "> Please enter a new root path",
+                        type=click.Path(exists=False),
+                    )
                 )
             else:
                 json_string = click.prompt("", prompt_suffix="", type=str)
                 new_root = _get_value_from_json_line(
                     json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=1
                 )[0]
-                _assert_valid_path(new_root)
+                _assert_valid_path(new_root, path_module=os.path)
             downloader.set_root_path(asset_root, os.path.expanduser(new_root))
     return downloader.get_paths_by_root()
 
@@ -583,10 +587,12 @@ def _prompt_to_confirm_roots(
                 return None
             elif user_choice != "y":
                 index_to_change = int(user_choice)
-                new_root = click.prompt(
-                    "> Please enter the new root directory path, or press Enter to keep it unchanged",
-                    type=click.Path(exists=False),
-                    default=asset_roots[index_to_change],
+                new_root = str(
+                    click.prompt(
+                        "> Please enter the new root directory path, or press Enter to keep it unchanged",
+                        type=click.Path(exists=False),
+                        default=asset_roots[index_to_change],
+                    )
                 )
                 downloader.set_root_path(asset_roots[index_to_change], str(Path(new_root)))
                 paths_by_root = downloader.get_paths_by_root()
@@ -601,7 +607,7 @@ def _prompt_to_confirm_roots(
             json_string, JSON_MSG_TYPE_PATHCONFIRM, expected_size=len(asset_roots)
         )
         for index, confirmed_root in enumerate(confirmed_asset_roots):
-            _assert_valid_path(confirmed_root)
+            _assert_valid_path(confirmed_root, path_module=os.path)
             downloader.set_root_path(asset_roots[index], str(Path(confirmed_root)))
         paths_by_root = downloader.get_paths_by_root()
         if on_roots_changed:
@@ -910,7 +916,7 @@ def _get_summary_of_files_to_download_message(
         return _get_json_line(JSON_MSG_TYPE_PRESUMMARY, output_paths_by_root)
     else:
         paths_message_joined = "    " + "\n    ".join(
-            f"{os.path.commonpath([os.path.join(directory, p) for p in output_paths])} ({len(output_paths)} file{'s' if len(output_paths) > 1 else ''})"
+            f"{common_ancestor([os.path.join(directory, p) for p in output_paths], path_module=os.path)} ({len(output_paths)} file{'s' if len(output_paths) > 1 else ''})"
             for directory, output_paths in output_paths_by_root.items()
         )
         return f"\nSummary of files to download:\n{paths_message_joined}\n"
@@ -1019,12 +1025,15 @@ def _get_value_from_json_line(
         raise ValueError(f"Invalid JSON line '{json_line}': {e}")
 
 
-def _assert_valid_path(path: str) -> None:
+def _assert_valid_path(path: str, *, path_module: Any = None) -> None:
     """
     Validates that the path has the format of the OS currently running.
+
+    Not ``Path.is_absolute``, which reads a host-level UNC path as relative before
+    Python 3.13 and so rejects '\\\\host' as a download root on four of the six
+    supported versions -- the same disagreement #1321 reports for containment.
     """
-    path_obj = Path(path)
-    if not path_obj.is_absolute():
+    if not is_absolute_path(path, path_module=path_module):
         raise ValueError(f"Path {path} is not an absolute path.")
 
 

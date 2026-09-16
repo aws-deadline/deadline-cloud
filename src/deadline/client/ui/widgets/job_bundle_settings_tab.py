@@ -10,20 +10,20 @@ import os
 from logging import getLogger
 from typing import Any, Optional
 
-from qtpy.QtCore import Signal  # type: ignore
+from qtpy.QtCore import QThread, Signal  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
     QVBoxLayout,
     QWidget,
-    QFileDialog,
     QMessageBox,
 )
 
 from ..dataclasses import JobBundleSettings
+from ...config import get_setting
+from ...job_bundle._repository import S3BundleRepository as _S3BundleRepository
 from .openjd_parameters_widget import OpenJDParametersWidget
 from ...job_bundle.submission import AssetReferences
 from ...job_bundle.loader import read_yaml_or_json_object, validate_directory_symlink_containment
 from ...job_bundle.parameters import read_job_bundle_parameters
-from ...config import config_file
 
 logger = getLogger(__name__)
 
@@ -76,50 +76,122 @@ class JobBundleSettingsWidget(QWidget):
             lambda message: self.parameter_changed.emit(message)
         )
 
-    def on_load_bundle(self):
+    def on_load_bundle(self, s3_repo=None):
         """
         Browse and load the selected submission bundle
         """
-        # Open the file picker dialog
-        bundle_path = os.path.expanduser(config_file.get_setting("settings.job_history_dir"))
-        input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            self, "Choose job bundle directory", bundle_path
-        )
-        if not input_job_bundle_dir:
-            return
+        from ..dialogs.job_bundle_browser_dialog import JobBundleBrowserDialog
 
-        # Update job bundle directory path
-        self.input_job_bundle_dir = input_job_bundle_dir
+        # Determine the default local browse directory
+        default_dir = get_setting("settings.job_bundle_default_directory")
+        if default_dir:
+            default_dir = os.path.expanduser(default_dir)
 
-        # Warn the user if the Job Bundle could not be loaded
+        # Get the job history directory for the current profile
+        job_history_dir = os.path.expanduser(get_setting("settings.job_history_dir"))
+
+        s3_worker = None
+        if s3_repo:
+            # Reuse existing repo — no background init needed
+            browser = JobBundleBrowserDialog(
+                queue_source=s3_repo,
+                queue_error="",
+                local_source=default_dir,
+                history_source=job_history_dir,
+                parent=self,
+            )
+        else:
+            # Start S3 initialization in background
+            class _S3InitWorker(QThread):
+                # NOTE: named ``done`` rather than ``finished`` to avoid shadowing
+                # QThread's built-in ``finished`` signal.
+                done = Signal(object, str, list, set)
+
+                def run(self):
+                    try:
+                        from concurrent.futures import ThreadPoolExecutor
+
+                        repo = _S3BundleRepository.from_config()
+                        with ThreadPoolExecutor(max_workers=2) as ex:
+                            entries_f = ex.submit(repo.list_entries, repo.root_path())
+                            hidden_f = ex.submit(repo.get_hidden_set)
+                            entries = entries_f.result()
+                            hidden = hidden_f.result()
+                        self.done.emit(repo, "", entries, hidden)
+                    except Exception as e:
+                        self.done.emit(None, str(e), [], set())
+
+            browser = JobBundleBrowserDialog(
+                queue_source=None,
+                queue_error="",
+                queue_loading=True,
+                local_source=default_dir,
+                history_source=job_history_dir,
+                parent=self,
+            )
+            # Connect the worker's result BEFORE starting it. A fast failure (e.g.
+            # not logged in) can emit ``done`` almost immediately; a cross-thread
+            # queued signal emitted before the connection exists is dropped, which
+            # would leave the browser stuck on "Loading..." forever.
+            s3_worker = _S3InitWorker()
+            s3_worker.done.connect(browser.set_queue_source)
+            s3_worker.start()
+
+        # Everything from here on may return early; wrap it so the background
+        # S3 worker is always joined. Dropping the last reference to a still-
+        # running QThread makes Qt call std::terminate (SIGABRT), crashing the
+        # host application (e.g. Maya/Nuke). This is reachable by picking a
+        # Local/History bundle before the Queue tab finishes loading.
         try:
-            validate_directory_symlink_containment(input_job_bundle_dir)
+            if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
+                return
 
-            asset_references_obj = (
-                read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
-            )
-            asset_references = AssetReferences.from_dict(asset_references_obj)
+            browser.hide()
+            input_job_bundle_dir = browser.resolve_selection()
+            while not input_job_bundle_dir:
+                browser.show()
+                if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
+                    return
+                browser.hide()
+                input_job_bundle_dir = browser.resolve_selection()
 
-            # Load the template to get the bundle name
-            template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
-            name = template.get("name", "Job bundle submission")  # type: ignore[union-attr]
-            job_settings = JobBundleSettings(input_job_bundle_dir=input_job_bundle_dir, name=name)
-            job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
+            # Update job bundle directory path
+            self.input_job_bundle_dir = input_job_bundle_dir
 
-        except Exception as e:
-            msg = str(e)
-            QMessageBox.warning(self, "Could not load job bundle", msg)  # type: ignore[call-arg]
-            logger.warning(msg)
-            return
+            # Warn the user if the Job Bundle could not be loaded
+            try:
+                validate_directory_symlink_containment(input_job_bundle_dir)
 
-        dialog = self.window()
-        if dialog is not None and hasattr(dialog, "refresh"):
-            dialog.refresh(  # type: ignore[union-attr]
-                job_settings=job_settings,
-                auto_detected_attachments=asset_references,
-                attachments=None,
-                load_new_bundle=True,
-            )
+                asset_references_obj = (
+                    read_yaml_or_json_object(input_job_bundle_dir, "asset_references", False) or {}
+                )
+                asset_references = AssetReferences.from_dict(asset_references_obj)
+
+                # Load the template to get the bundle name
+                template = read_yaml_or_json_object(input_job_bundle_dir, "template", True)
+                name = template.get("name", "Job bundle submission")  # type: ignore[union-attr]
+                job_settings = JobBundleSettings(
+                    input_job_bundle_dir=input_job_bundle_dir, name=name
+                )
+                job_settings.parameters = read_job_bundle_parameters(input_job_bundle_dir)
+
+            except Exception as e:
+                msg = str(e)
+                QMessageBox.warning(self, "Could not load job bundle", msg)  # type: ignore[call-arg]
+                logger.warning(msg)
+                return
+
+            dialog = self.window()
+            if dialog is not None and hasattr(dialog, "refresh"):
+                dialog.refresh(  # type: ignore[union-attr]
+                    job_settings=job_settings,
+                    auto_detected_attachments=asset_references,
+                    attachments=None,
+                    load_new_bundle=True,
+                )
+        finally:
+            if s3_worker:
+                s3_worker.wait()
 
     def update_settings(self, settings: JobBundleSettings):
         """

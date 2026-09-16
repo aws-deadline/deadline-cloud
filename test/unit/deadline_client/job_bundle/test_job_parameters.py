@@ -7,6 +7,12 @@ job bundle parameters
 
 from __future__ import annotations
 
+import ntpath
+from contextlib import contextmanager
+from copy import deepcopy
+from typing import Any
+from unittest.mock import patch
+
 import pytest
 
 from deadline.client.job_bundle import parameters
@@ -686,3 +692,135 @@ def test_ui_control_for_parameter_definition_errors(parameter_def):
 def test_parameter_definition_difference(parameter1, parameter2, expected_difference):
     """Test that parameter_definition_difference returns expected differences."""
     assert parameters.parameter_definition_difference(parameter1, parameter2) == expected_difference
+
+
+class TestPathDefaultContainmentWindowsPaths:
+    """
+    Windows path semantics for the PATH-default containment check in
+    read_job_bundle_parameters, exercised through a simulated ntpath filesystem so the
+    cases run on every platform.
+
+    os.path.commonpath raises ValueError when the bundle sits at a UNC share root
+    ('\\\\host\\share' vs '\\\\host\\share\\sub' -> "Can't mix absolute and relative
+    paths"). That exception is not caught, so a valid template would fail to load with a
+    raw ValueError instead of resolving its default.
+    """
+
+    TEMPLATE = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "name": "PathDefault",
+        "parameterDefinitions": [
+            {
+                "name": "OutDir",
+                "type": "PATH",
+                "objectType": "DIRECTORY",
+                "dataFlow": "OUT",
+                "default": "output",
+            }
+        ],
+    }
+
+    @contextmanager
+    def _simulated_windows_bundle(self, bundle_dir, resolves_to=None, default=None):
+        resolves_to = resolves_to or {}
+
+        class _WindowsPath:
+            def __getattr__(self, name):
+                return getattr(ntpath, name)
+
+            @staticmethod
+            def realpath(path):
+                return resolves_to.get(ntpath.normpath(path), ntpath.normpath(path))
+
+        def read_yaml_or_json_object(bundle_dir, filename, required):
+            # Deep-copied because read_job_bundle_parameters sets 'value' on the
+            # parameter definitions in place.
+            if filename != "template":
+                return None
+            template: Any = deepcopy(self.TEMPLATE)
+            if default is not None:
+                template["parameterDefinitions"][0]["default"] = default
+            return template
+
+        with (
+            patch.object(parameters.os, "path", _WindowsPath()),
+            patch.object(parameters, "read_yaml_or_json_object", read_yaml_or_json_object),
+        ):
+            yield
+
+    def _out_dir_value(self, result):
+        return next(p for p in result if p["name"] == "OutDir")["value"]
+
+    def test_bundle_at_unc_share_root_resolves_default(self):
+        bundle_dir = r"\\host\share"
+        with self._simulated_windows_bundle(bundle_dir):
+            result = parameters.read_job_bundle_parameters(bundle_dir)
+        assert self._out_dir_value(result) == r"\\host\share\output"
+
+    def test_bundle_under_unc_share_resolves_default(self):
+        bundle_dir = r"\\host\share\bundle"
+        with self._simulated_windows_bundle(bundle_dir):
+            result = parameters.read_job_bundle_parameters(bundle_dir)
+        assert self._out_dir_value(result) == r"\\host\share\bundle\output"
+
+    def test_default_resolving_outside_unc_share_is_rejected(self):
+        bundle_dir = r"\\host\share\bundle"
+        with self._simulated_windows_bundle(
+            bundle_dir,
+            {r"\\host\share\bundle\output": r"\\host\other\secret"},
+        ):
+            with pytest.raises(
+                exceptions.DeadlineOperationError,
+                match="specifies files outside of Job Bundle directory",
+            ):
+                parameters.read_job_bundle_parameters(bundle_dir)
+
+    def test_default_resolving_from_drive_bundle_onto_unc_share_is_rejected(self):
+        bundle_dir = r"C:\bundle"
+        with self._simulated_windows_bundle(
+            bundle_dir,
+            {r"C:\bundle\output": r"\\host\share\secret"},
+        ):
+            with pytest.raises(
+                exceptions.DeadlineOperationError,
+                match="specifies files outside of Job Bundle directory",
+            ):
+                parameters.read_job_bundle_parameters(bundle_dir)
+
+    def test_default_resolving_into_sibling_prefix_directory_is_rejected(self):
+        """A string prefix is not a directory prefix: 'C:\\bundle-secret' is outside
+        'C:\\bundle'. Its two sibling guards -- the symlink check and the archive guard --
+        each have this case; without it a naive startswith passes here."""
+        bundle_dir = r"C:\bundle"
+        with self._simulated_windows_bundle(
+            bundle_dir,
+            {r"C:\bundle\output": r"C:\bundle-secret\output"},
+        ):
+            with pytest.raises(
+                exceptions.DeadlineOperationError,
+                match="specifies files outside of Job Bundle directory",
+            ):
+                parameters.read_job_bundle_parameters(bundle_dir)
+
+    @pytest.mark.parametrize(
+        "default",
+        [
+            # A share root is the spelling ntpath.splitdrive left with no tail before
+            # 3.11, so isabs read it as relative and it fell through to the containment
+            # check, which rejected it for the wrong reason.
+            r"\\host\share",
+            r"\\host",
+            r"\\host\share\output",
+            r"C:\output",
+        ],
+    )
+    def test_absolute_default_is_rejected_as_absolute(self, default):
+        """An absolute default must be reported as absolute, not as escaping the bundle.
+
+        ``match`` is load-bearing: both branches raise the same exception type, so without
+        it this passes on the misattributed error.
+        """
+        bundle_dir = r"\\host\share\bundle"
+        with self._simulated_windows_bundle(bundle_dir, default=default):
+            with pytest.raises(exceptions.DeadlineOperationError, match="is absolute"):
+                parameters.read_job_bundle_parameters(bundle_dir)

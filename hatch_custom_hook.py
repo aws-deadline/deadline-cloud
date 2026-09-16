@@ -35,9 +35,12 @@ class HatchCustomBuildHook(BuildHookInterface):
             self.root, "src", "deadline", "client", "ui", "translations", "locales"
         )
 
-        # Load en_US as the source for type generation
+        # Load en_US as the source for type generation. The encoding must be explicit: several keys
+        # contain non-ASCII characters (e.g. the U+2022 bullet), and on Windows the default encoding
+        # is cp1252, which mis-decodes them into mojibake. That produces a Literal that no longer
+        # matches the string in the source, so mypy rejects every tr() call using those keys.
         en_file = os.path.join(translations_dir, "en_US.json")
-        with open(en_file) as f:
+        with open(en_file, encoding="utf-8") as f:
             translations = json.load(f)
 
         # Generate type hints file

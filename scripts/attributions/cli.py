@@ -49,6 +49,11 @@ _ATTRIBUTIONS_ALLOW_LIST = {
         "license_sha256": "59ec4225bd380e349a82e6482437ff9475eeb1c2e676a2d1185bb53315d45bf9",
         "spdx": _MIT,
     },
+    "awscrt": {
+        "license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "notice_sha256": "067810db3be5d23e3e2be0e01edf86414174092a01bdcb387930fe0f11bf4152",
+        "spdx": _APACHE_2_0,
+    },
     "boto3": {
         "license_sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
         "notice_sha256": "04fb1e61484a7810f1ba09bb42bc01ca58c9af33927d7c5a21556e4c4d1c7fa4",
@@ -555,7 +560,10 @@ def _get_license_info(python_interpreter: PythonInstall, dev: bool) -> list[_Pac
         python_args = python_interpreter.get_uv_venv_python_args()
         uv_venv_args = ["uv", "venv", venv, *python_args]
         subprocess.check_call(uv_venv_args)
-        uv_pip(["install", repository_root], venv, dev)
+        # The "console" extra is installed because the frozen installer bundles it
+        # (see scripts/pyinstaller/allowlist.py), so awscrt has to reach
+        # pip-licenses for its license text to land in THIRD_PARTY_LICENSES.
+        uv_pip(["install", f"{repository_root}[console]"], venv, dev)
         # Install all platform-conditional packages so pip-licenses discovers
         # them regardless of which OS we're running on.
         # Skip Windows-only packages when not on Windows.

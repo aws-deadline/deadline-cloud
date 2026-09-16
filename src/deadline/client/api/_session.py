@@ -37,6 +37,12 @@ class AwsCredentialsSource(Enum):
     NOT_VALID = 0
     HOST_PROVIDED = 2
     DEADLINE_CLOUD_MONITOR_LOGIN = 3
+    # An AWS Console sign-in profile, created by `aws login` or by Deadline Cloud
+    # monitor's console sign-in flow. Identified by the `login_session` key. botocore's
+    # LoginProvider refreshes the cached token in-process, so nothing external is needed
+    # to keep the session alive. Starting a new one needs a browser, which Deadline Cloud
+    # monitor provides.
+    AWS_CONSOLE_LOGIN = 4
 
 
 class AwsAuthenticationStatus(Enum):
@@ -258,8 +264,26 @@ def apply_proxy_settings(
     return session
 
 
+# Shared botocore Config for code paths that make many API calls in a burst (e.g. one
+# call per job across a large queue). The "adaptive" strategy suits long bursts of
+# repeated calls: it rate-limits client-side and retains backoff state across calls
+# instead of starting fresh each time. The larger attempt budget rides out sustained
+# throttling instead of surfacing a ThrottlingException mid-operation.
+#
+# Defined once at module level because get_session_client caches by the Config
+# instance's identity — reusing this instance is what makes the client cacheable.
+_ADAPTIVE_RETRIES_CLIENT_CONFIG = botocore.config.Config(
+    retries=dict(mode="adaptive", total_max_attempts=10)
+)
+
+
 @lru_cache
-def get_session_client(session: boto3.Session, service_name: str, region: Optional[str] = None):
+def get_session_client(
+    session: boto3.Session,
+    service_name: str,
+    region: Optional[str] = None,
+    client_config: Optional[botocore.config.Config] = None,
+):
     """
     Create and cache a boto3 client for the given session, service name, and region.
 
@@ -283,21 +307,33 @@ def get_session_client(session: boto3.Session, service_name: str, region: Option
         service_name: The name of the AWS service (e.g., 'deadline', 's3')
         region: The AWS region to create the client for. If None, the session's
             default region is used.
+        client_config: Optional botocore Config merged over the default client
+            config (``get_default_client_config``), taking precedence where both
+            set an option. The default config's user-agent tagging is preserved.
+            CAUTION: ``botocore.config.Config`` hashes by object identity, and this
+            argument is part of the lru_cache key — pass a shared (e.g. module-level)
+            instance rather than constructing a new one per call, or every call
+            builds a new client. Pass ``_ADAPTIVE_RETRIES_CLIENT_CONFIG`` for code
+            paths that make many API calls in a burst.
 
     Returns:
         A boto3 client for the specified service
     """
-    if region is None:
-        return session.client(service_name, config=get_default_client_config())
+    resolved_config = get_default_client_config()
+    if client_config is not None:
+        resolved_config = resolved_config.merge(client_config)
 
-    client = session.client(service_name, config=get_default_client_config(), region_name=region)
+    if region is None:
+        return session.client(service_name, config=resolved_config)
+
+    client = session.client(service_name, config=resolved_config, region_name=region)
     resolved = client.meta.endpoint_url
     session_region = session.region_name
     # An override leaked the session's region into a cross-region endpoint.
     if region not in resolved and session_region and session_region in resolved:
         return session.client(
             service_name,
-            config=get_default_client_config(),
+            config=resolved_config,
             region_name=region,
             endpoint_url=resolved.replace(session_region, region, 1),
         )
@@ -394,7 +430,8 @@ def get_credentials_source(
     config: Optional[ConfigParser] = None,
 ) -> AwsCredentialsSource:
     """
-    Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud monitor wrote the credentials, HOST_PROVIDED otherwise.
+    Returns DEADLINE_CLOUD_MONITOR_LOGIN if Deadline Cloud monitor wrote the credentials,
+    AWS_CONSOLE_LOGIN for an AWS Console sign-in profile, HOST_PROVIDED otherwise.
 
     Args:
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
@@ -408,6 +445,10 @@ def get_credentials_source(
     if "monitor_id" in profile_config:
         # Deadline Cloud monitor Desktop adds the "monitor_id" key
         return AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN
+    elif "login_session" in profile_config:
+        # `aws login` and Deadline Cloud monitor's console sign-in flow add the
+        # "login_session" key, holding the ARN the cached token was issued for.
+        return AwsCredentialsSource.AWS_CONSOLE_LOGIN
     else:
         return AwsCredentialsSource.HOST_PROVIDED
 
@@ -558,7 +599,7 @@ def check_authentication_status(
     Returns AwsAuthenticationStatus enum value:
       - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
       - AUTHENTICATED if they are fine
-      - NEEDS_LOGIN if a Deadline Cloud monitor login is required.
+      - NEEDS_LOGIN if a login is required, for the profile types that support it.
     """
 
     with _modified_logging_level(logging.getLogger("botocore.credentials"), logging.ERROR):
@@ -566,10 +607,13 @@ def check_authentication_status(
             _list_farms_for_auth_probe(config=config)
             return AwsAuthenticationStatus.AUTHENTICATED
         except Exception:
-            # We assume that the presence of a Deadline Cloud monitor profile
-            # means we will know everything necessary to start it and login.
+            # We assume that the presence of a Deadline Cloud monitor or AWS Console
+            # sign-in profile means we know everything necessary to start a login.
 
-            if get_credentials_source(config) == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
+            if get_credentials_source(config) in (
+                AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN,
+                AwsCredentialsSource.AWS_CONSOLE_LOGIN,
+            ):
                 return AwsAuthenticationStatus.NEEDS_LOGIN
             return AwsAuthenticationStatus.CONFIGURATION_ERROR
 

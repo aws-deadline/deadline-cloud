@@ -519,7 +519,29 @@ def test_cli_queue_sync_output_region(fresh_deadline_config, tmp_path):
             queue_group, "get_session_client", return_value=deadline_client
         ) as mock_get_session_client,
         patch.object(
-            queue_group, "_incremental_output_download", return_value=(MagicMock(), MagicMock(), {})
+            queue_group,
+            "_incremental_output_download",
+            return_value=(
+                MagicMock(),
+                MagicMock(),
+                {},
+                {},
+                {},
+                {},
+                {
+                    "downloaded_files": 0,
+                    "downloaded_bytes": 0,
+                    "downloaded_session_actions": 0,
+                    "jobs_with_downloads": {"completed": 0, "added": 0, "updated": 0},
+                    "jobs_without_downloads": {
+                        "not_using_job_attachments": 0,
+                        "missing_storage_profile": 0,
+                        "unchanged": 0,
+                        "inactive": 0,
+                    },
+                    "unmapped_paths": 0,
+                },
+            ),
         ),
     ):
         runner = CliRunner()

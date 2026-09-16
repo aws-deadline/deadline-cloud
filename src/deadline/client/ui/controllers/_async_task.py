@@ -7,9 +7,13 @@ This module provides a clean pattern for running background operations
 with proper Qt signal integration and automatic cancellation handling.
 """
 
+from logging import getLogger
 from typing import Any, Callable, Iterator, Optional
 
 from qtpy.QtCore import QObject, QRunnable, Signal
+
+
+logger = getLogger(__name__)
 
 
 class WorkerSignals(QObject):
@@ -104,6 +108,33 @@ class AsyncTask(QRunnable):
         """Check if this task has been canceled."""
         return self._is_canceled
 
+    def _safe_emit(self, signal_name: str, *args: Any) -> None:
+        """
+        Emit ``self.signals.<signal_name>`` unless the task was canceled or the
+        signal source has already been deleted.
+
+        ``run()`` executes in a background thread and may still be in-flight when
+        the owning runner (or the widget it is parented to) is destroyed. When that
+        happens the underlying ``WorkerSignals`` C++ object is deleted out from under
+        us, and touching/emitting it raises ``RuntimeError("Signal source has been
+        deleted")``. A deleted source has no live listeners, so there is nothing to
+        deliver - we log at debug level and move on instead of letting the exception
+        cascade through the result/error/finished emissions.
+        """
+        if self._is_canceled:
+            return
+        try:
+            getattr(self.signals, signal_name).emit(*args)
+        except RuntimeError as exc:
+            # For a DirectConnection, emit() invokes slots synchronously, so a
+            # RuntimeError may originate in a slot body rather than from a deleted
+            # signal source. Only swallow the "source deleted" case (nothing is
+            # listening anymore); re-raise anything else so genuine slot bugs and
+            # failed error/finished deliveries aren't silently lost.
+            if "has been deleted" not in str(exc):
+                raise
+            logger.debug("Skipping '%s' emit; signal source has been deleted", signal_name)
+
     def run(self) -> None:
         """
         Execute the task in the thread pool.
@@ -116,20 +147,21 @@ class AsyncTask(QRunnable):
         2. Execute the function
         3. Check if canceled before emitting result/error
         4. Emit finished signal (if not canceled)
+
+        Emissions are routed through :meth:`_safe_emit`, which additionally
+        tolerates the signal source being deleted mid-flight (e.g. when the
+        owning runner/widget is torn down before a slow task returns).
         """
         if self._is_canceled:
             return
 
         try:
             result = self.fn(*self.args, **self.kwargs)
-            if not self._is_canceled:
-                self.signals.result.emit(result)
+            self._safe_emit("result", result)
         except Exception as e:
-            if not self._is_canceled:
-                self.signals.error.emit(e)
+            self._safe_emit("error", e)
         finally:
-            if not self._is_canceled:
-                self.signals.finished.emit()
+            self._safe_emit("finished")
 
 
 class StreamingAsyncTask(AsyncTask):
@@ -159,7 +191,9 @@ class StreamingAsyncTask(AsyncTask):
 
         Runs in a background thread. Emits ``progress`` per yielded item, a single
         terminal ``result`` once exhausted, ``error`` if the generator raises, and
-        ``finished`` at the end. All emissions are guarded by cancellation checks.
+        ``finished`` at the end. All emissions are guarded by cancellation checks
+        and tolerate the signal source being deleted mid-flight (see
+        :meth:`AsyncTask._safe_emit`).
         """
         if self._is_canceled:
             return
@@ -169,13 +203,10 @@ class StreamingAsyncTask(AsyncTask):
             for item in iterator:
                 if self._is_canceled:
                     return
-                self.signals.progress.emit(item)
-            if not self._is_canceled:
-                # Terminal result (no aggregate payload; progress already delivered each item).
-                self.signals.result.emit(None)
+                self._safe_emit("progress", item)
+            # Terminal result (no aggregate payload; progress already delivered each item).
+            self._safe_emit("result", None)
         except Exception as e:
-            if not self._is_canceled:
-                self.signals.error.emit(e)
+            self._safe_emit("error", e)
         finally:
-            if not self._is_canceled:
-                self.signals.finished.emit()
+            self._safe_emit("finished")

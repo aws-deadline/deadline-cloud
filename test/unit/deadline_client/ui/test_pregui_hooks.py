@@ -489,6 +489,38 @@ class TestApplyPreGuiOutput:
         apply_pre_gui_output({"parameters": {"deadline:priority": 90}}, settings, shared)
         assert shared["deadline:priority"] == 90
 
+    def test_deadline_property_in_parameters_list_still_routes_to_shared(self):
+        """Regression: read_job_bundle_parameters keeps ``deadline:*`` values as entries in the
+        parameters list, so ``deadline:priority`` IS a template-param name. It must still be
+        treated as a shared job property (routed to the shared values the spinner + CreateJob
+        read), not written into the unread settings.parameters entry. The dialog seeds a stale
+        50 from the bundle; the hook's 88 must overwrite it."""
+        settings = self._settings(
+            parameters=[{"name": "deadline:priority", "type": "INT", "value": 50}]
+        )
+        shared: dict = {"deadline:priority": 50}  # seeded from the bundle by the submitter
+        apply_pre_gui_output({"parameters": {"deadline:priority": 88}}, settings, shared)
+        # The value the spinner + CreateJob read is overridden to 88...
+        assert shared["deadline:priority"] == 88
+        # ...and the settings.parameters entry is left untouched (nothing reads it for priority).
+        prio = next(p for p in settings.parameters if p["name"] == "deadline:priority")
+        assert prio["value"] == 50
+
+    def test_cli_deadline_property_still_wins_over_hook(self):
+        """CLI --parameter for a deadline: property beats the hook value (the CLI check runs
+        before the deadline: routing)."""
+        settings = self._settings(
+            parameters=[{"name": "deadline:priority", "type": "INT", "value": 50}]
+        )
+        shared: dict = {"deadline:priority": 75}  # CLI-provided value already in shared
+        apply_pre_gui_output(
+            {"parameters": {"deadline:priority": 88}},
+            settings,
+            shared,
+            cli_provided_param_names={"deadline:priority"},
+        )
+        assert shared["deadline:priority"] == 75  # CLI wins, hook's 88 ignored
+
     def test_cli_provided_name_blocks_hook_override(self):
         settings = self._settings(
             parameters=[{"name": "Foo", "type": "STRING", "value": "cli_value"}]

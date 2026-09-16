@@ -84,3 +84,45 @@ def test_needs_login_hides_switch_profile_button_when_disabled(qtbot, mock_statu
 
     assert not widget._switch_profile_button.isVisibleTo(widget)
     assert widget._login_button.isVisibleTo(widget)
+
+
+def test_console_profile_needs_login_shows_login_button(qtbot, mock_status):
+    """
+    An expired AWS Console sign-in profile is recoverable by logging in, so it must
+    land in NEEDS_LOGIN and offer the Log in button -- not the dead-end
+    CONFIGURATION_ERROR state it fell into when console profiles read as
+    HOST_PROVIDED.
+    """
+    mock_status.creds_source = api.AwsCredentialsSource.AWS_CONSOLE_LOGIN
+    mock_status.auth_status = api.AwsAuthenticationStatus.NEEDS_LOGIN
+
+    widget = _make_widget(qtbot, mock_status, profile_name="console-us-west-2")
+
+    assert widget._get_current_auth_state_key() == AuthenticationState.NEEDS_LOGIN
+    assert widget._login_button.isVisibleTo(widget)
+    assert not widget._more_info_button.isVisibleTo(widget)
+
+
+def test_console_profile_offers_logout(qtbot, mock_status):
+    """
+    Logging out a console profile deletes its cached token in-process, which always
+    works, so offer it.
+    """
+    mock_status.creds_source = api.AwsCredentialsSource.AWS_CONSOLE_LOGIN
+    mock_status.auth_status = api.AwsAuthenticationStatus.AUTHENTICATED
+
+    widget = _make_widget(qtbot, mock_status, profile_name="console-us-west-2")
+
+    assert widget._should_show_logout()
+    assert widget._logout_menu_action.isVisible()
+
+
+def test_host_provided_profile_does_not_offer_logout(qtbot, mock_status):
+    """Profiles with no login flow have nothing to log out of."""
+    mock_status.creds_source = api.AwsCredentialsSource.HOST_PROVIDED
+    mock_status.auth_status = api.AwsAuthenticationStatus.AUTHENTICATED
+
+    widget = _make_widget(qtbot, mock_status, profile_name="plain-profile")
+
+    assert not widget._should_show_logout()
+    assert not widget._logout_menu_action.isVisible()

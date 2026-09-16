@@ -23,11 +23,26 @@ from ... import api
 from ...api._monitor_urls import _get_job_monitor_url
 from ...config import config_file
 from ...dataclasses import SubmitterInfo
+from ...job_bundle.loader import is_job_bundle_dir
+from ...job_bundle._repository import (
+    BundleRepository,
+    LocalBundleRepository,
+    S3BundleRepository,
+    S3_JOB_BUNDLES_PREFIX,
+    _parse_template,
+    archive_bundle_dir,
+    build_bundle_metadata,
+    extract_bundle_info,
+    get_bundle_dir_size,
+    read_template_from_archive,
+    sanitize_bundle_name,
+)
 from ....job_attachments.exceptions import (
     AssetSyncError,
     AssetSyncCancelledError,
     MisconfiguredInputsError,
 )
+from ....job_attachments._aws.deadline import get_queue
 from ....job_attachments.models import JobAttachmentsFileSystem
 
 from ...exceptions import DeadlineOperationError, CreateJobWaiterCanceled
@@ -483,6 +498,16 @@ def bundle_gui_submit(
     from ...ui._utils import tr
 
     with gui_context_for_cli(automatically_install_dependencies=install_gui) as app:
+        # Pre-warm boto3 session + Deadline client (lru_cached, reused by background thread)
+        if browse:
+            try:
+                from ...api import get_boto3_session, get_boto3_client
+
+                get_boto3_session()
+                get_boto3_client("deadline")
+            except Exception:
+                pass  # Non-fatal — background thread will handle it
+
         from ...ui.job_bundle_submitter import show_job_bundle_submitter
 
         if not job_bundle_dir and not browse:
@@ -556,3 +581,510 @@ def _print_response(
                 click.echo(f"Job URL: {job_url}")
         else:
             click.echo("Job submission canceled.")
+
+
+def _get_queue_s3_settings(config):
+    """Get the queue's job attachment S3 settings from config."""
+    farm_id = config_file.get_setting("defaults.farm_id", config=config)
+    queue_id = config_file.get_setting("defaults.queue_id", config=config)
+    if not farm_id or not queue_id:
+        raise DeadlineOperationError(
+            "A default farm and queue must be configured. Run 'deadline config set defaults.farm_id <id>' and 'deadline config set defaults.queue_id <id>'."
+        )
+    boto3_session = api.get_boto3_session(config=config)
+    queue = get_queue(farm_id=farm_id, queue_id=queue_id, session=boto3_session)
+    if not queue.jobAttachmentSettings:
+        raise DeadlineOperationError(
+            f"Queue {queue_id} does not have job attachment settings configured."
+        )
+    # Use queue role credentials for S3 access (required for DCM profiles)
+    deadline_client = api.get_boto3_client("deadline", config=config)
+    s3_session = api.get_queue_user_boto3_session(
+        deadline=deadline_client, config=config, farm_id=farm_id, queue_id=queue_id
+    )
+    return queue.jobAttachmentSettings, s3_session
+
+
+@cli_bundle.command(name="list")
+@click.argument("path", required=False)
+@click.option(
+    "--queue",
+    "use_queue",
+    is_flag=True,
+    help="List bundles shared on the queue.",
+)
+@click.option(
+    "--show-hidden",
+    is_flag=True,
+    help="Include hidden bundles in the output (queue only).",
+)
+@click.option(
+    "--no-archives",
+    is_flag=True,
+    help="Skip archive files when listing local bundles.",
+)
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
+)
+@_handle_error
+def bundle_list(path, use_queue, show_hidden, no_archives, output, **args):
+    """
+    List job bundles.
+
+    \b
+    With no arguments, lists bundles in the configured default local directory
+    (settings.job_bundle_default_directory, or home if not set).
+    With PATH, lists bundles in that local directory.
+    With --queue, lists bundles shared on the queue.
+    """
+    output = _resolve_output_format(output)
+
+    hidden_set: set[str] = set()
+    if use_queue:
+        config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+        repo: BundleRepository = S3BundleRepository.from_config(config)
+        hidden_set = repo.get_hidden_set()  # type: ignore[attr-defined]
+    else:
+        if path:
+            local_root = os.path.abspath(path)
+        else:
+            local_root = config_file.get_setting("settings.job_bundle_default_directory")
+            if not local_root:
+                local_root = os.path.expanduser("~")
+            local_root = os.path.expanduser(local_root)
+        repo = LocalBundleRepository(root=local_root, include_archives=not no_archives)
+
+    entries = repo.list_entries(repo.root_path())
+    bundles = [e for e in entries if e.is_bundle]
+
+    # Filter hidden bundles unless --show-hidden
+    if use_queue and not show_hidden:
+        bundles = [e for e in bundles if e.name not in hidden_set]
+
+    if output == "json":
+        result = [
+            {
+                "name": e.name,
+                "path": e.path,
+                "format": "archive" if e.is_archive else "folder",
+                **({"hidden": True} if e.name in hidden_set else {}),
+            }
+            for e in bundles
+        ]
+        click.echo(json.dumps(result, indent=2))
+    else:
+        for e in bundles:
+            suffix = " (hidden)" if e.name in hidden_set else ""
+            click.echo(f"{e.name}{suffix}")
+
+
+@cli_bundle.command(name="upload")
+@click.argument("job_bundle_dir")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option(
+    "--name",
+    help="Name for the shared archive on the queue. Defaults to the bundle directory name.",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Overwrite an existing shared bundle without prompting (for non-interactive use).",
+)
+@_handle_error
+def bundle_upload(job_bundle_dir, name, yes, **args):
+    """
+    Upload a job bundle to share on the queue as an .ojd archive.
+    """
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    s3_settings, boto3_session = _get_queue_s3_settings(config)
+
+    job_bundle_dir = os.path.abspath(job_bundle_dir)
+
+    # Determine if input is an .ojd archive or a directory
+    is_archive_input = os.path.isfile(job_bundle_dir) and job_bundle_dir.endswith(".ojd")
+
+    if not is_archive_input and not is_job_bundle_dir(job_bundle_dir):
+        raise DeadlineOperationError(
+            f"Directory does not appear to be a job bundle (no template.yaml or template.json): {job_bundle_dir}"
+        )
+
+    # Parse the template to extract metadata for S3 object metadata
+    bundle_metadata = {}
+    if is_archive_input:
+        result = read_template_from_archive(job_bundle_dir)
+        if result:
+            raw, fname = result
+            template = _parse_template(raw, fname)
+            if template:
+                info = extract_bundle_info(template, job_bundle_dir)
+                bundle_metadata = build_bundle_metadata(bundle_info=info)
+    else:
+        bundle_metadata = build_bundle_metadata(job_bundle_dir)
+
+    bundle_name = name or os.path.basename(job_bundle_dir)
+    if is_archive_input and bundle_name.endswith(".ojd"):
+        bundle_name = bundle_name[:-4]
+    # Sanitize the name the same way the GUI export path does: replace characters
+    # that are unsafe in a filename and reject empty or path-traversal names. This
+    # keeps CLI and GUI behavior consistent and prevents a name like "../foo" or
+    # "a/b" from being written to an arbitrary S3 sub-prefix (or with ".."
+    # segments) that the browser and `bundle list` would not find consistently.
+    try:
+        bundle_name = sanitize_bundle_name(bundle_name)
+    except ValueError:
+        raise DeadlineOperationError(
+            "Bundle name is empty or invalid. Use --name to specify a valid name."
+        )
+    prefix = f"{s3_settings.rootPrefix.rstrip('/')}/{S3_JOB_BUNDLES_PREFIX}"
+    s3_key = f"{prefix}/{bundle_name}.ojd"
+    if len(s3_key) > 1024:
+        raise DeadlineOperationError(
+            f"Bundle name is too long. S3 key would be {len(s3_key)} characters (max 1024)."
+        )
+
+    s3 = boto3_session.client("s3")
+
+    # Check if bundle already exists
+    try:
+        s3.head_object(Bucket=s3_settings.s3BucketName, Key=s3_key)
+        if not yes and not click.confirm(
+            f"Bundle '{bundle_name}' already exists on the queue. Overwrite?"
+        ):
+            click.echo("Upload canceled.")
+            return
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "404":
+            raise
+
+    # Archive and upload
+    # Advertise the archive's true type as a courtesy hint for other consumers.
+    # The download/browse paths do NOT trust ContentType (it's set by the
+    # uploader) and validate by parsing the zip; this just keeps the object
+    # correctly typed. Kept consistent with S3BundleRepository.upload_archive.
+    extra_args: dict = {"ContentType": "application/zip"}
+    if bundle_metadata:
+        extra_args["Metadata"] = bundle_metadata
+    if is_archive_input:
+        # Already an .ojd — upload directly
+        file_size = os.path.getsize(job_bundle_dir)
+        with (
+            open(job_bundle_dir, "rb") as f,
+            click.progressbar(length=file_size, label="Uploading") as bar,  # type: ignore[var-annotated]
+        ):
+            s3.upload_fileobj(
+                f,
+                s3_settings.s3BucketName,
+                s3_key,
+                ExtraArgs=extra_args,
+                Callback=lambda bytes_sent: bar.update(bytes_sent),
+            )
+    else:
+        total_size = get_bundle_dir_size(job_bundle_dir)
+        with click.progressbar(length=total_size, label="Archiving") as bar:  # type: ignore[var-annotated]
+            buf = archive_bundle_dir(job_bundle_dir, progress_callback=lambda n: bar.update(n))
+
+        file_size = buf.getbuffer().nbytes
+        with click.progressbar(length=file_size, label="Uploading") as bar:  # type: ignore[var-annotated]
+            s3.upload_fileobj(
+                buf,
+                s3_settings.s3BucketName,
+                s3_key,
+                ExtraArgs=extra_args,
+                Callback=lambda bytes_sent: bar.update(bytes_sent),
+            )
+    click.echo(f"Uploaded bundle to s3://{s3_settings.s3BucketName}/{s3_key}")
+
+
+@cli_bundle.command(name="download")
+@click.argument("bundle_name")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@click.option(
+    "-o",
+    "--output-dir",
+    default=None,
+    help="Local directory to copy the bundle to. If not specified, uses the local cache.",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Overwrite the destination directory if it already exists (for non-interactive use).",
+)
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
+)
+@_handle_error
+def bundle_download(bundle_name, output_dir, yes, output, **args):
+    """
+    Download a shared job bundle from the queue.
+
+    BUNDLE_NAME is the name of the bundle (e.g. 'blender-render').
+    """
+    output = _resolve_output_format(output)
+    # Validate the name up front so an unsafe name (e.g. "..") produces a clean
+    # error rather than a raw traceback from the local dest-path derivation.
+    try:
+        safe_bundle_name = sanitize_bundle_name(bundle_name)
+    except ValueError:
+        raise DeadlineOperationError(f"Bundle name '{bundle_name}' is not a valid bundle name.")
+
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    repo = S3BundleRepository.from_config(config)
+
+    if output_dir:
+        output_dir = os.path.abspath(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+
+    # List entries to find the bundle by name
+    entries = repo.list_entries(repo.root_path())
+    match = None
+    for entry in entries:
+        if entry.name == bundle_name and entry.is_bundle:
+            match = entry
+            break
+
+    if not match:
+        available = [e.name for e in entries if e.is_bundle]
+        msg = f"Bundle '{bundle_name}' not found in {repo.root_path()}"
+        if available:
+            msg += f"\nAvailable bundles: {', '.join(available)}"
+        raise DeadlineOperationError(msg)
+
+    # Get file size for progress bar
+    file_size = repo.get_bundle_size(match.path)
+
+    # Download and extract are sequential inside download_full_bundle. Show
+    # progress bars only in human (non-json) output — matching the convention in
+    # `job download-output` (`if not is_json_format:`) so machine-readable JSON on
+    # stdout is never interleaved with progress rendering.
+    show_progress = output != "json"
+    _bars: dict = {}
+
+    def _dl_callback(n):
+        if "dl" not in _bars:
+            _bars["dl"] = click.progressbar(length=file_size, label="Downloading")
+            _bars["dl_ctx"] = _bars["dl"].__enter__()
+        _bars["dl_ctx"].update(n)
+
+    def _ex_callback(n):
+        if "dl" in _bars and "dl_closed" not in _bars:
+            _bars["dl_closed"] = True
+            _bars["dl"].__exit__(None, None, None)
+        if "ex" not in _bars:
+            _bars["ex"] = click.progressbar(
+                length=_bars.get("ex_size", file_size), label="Extracting"
+            )
+            _bars["ex_ctx"] = _bars["ex"].__enter__()
+        _bars["ex_ctx"].update(n)
+
+    def _ex_size_callback(total):
+        _bars["ex_size"] = total
+
+    local_path = repo.download_full_bundle(
+        match.path,
+        progress_callback=_dl_callback if show_progress else None,
+        extract_callback=_ex_callback if show_progress else None,
+        extract_size_callback=_ex_size_callback if show_progress else None,
+    )
+    if "dl" in _bars and "dl_closed" not in _bars:
+        _bars["dl"].__exit__(None, None, None)
+    if "ex" in _bars:
+        _bars["ex"].__exit__(None, None, None)
+    # download_full_bundle resolves to cache; copy to user's output_dir if specified
+    if output_dir:
+        dest_path = os.path.join(output_dir, safe_bundle_name)
+        if os.path.exists(dest_path):
+            # Only ever recursively delete a path that is itself a job bundle
+            # (i.e. a prior download of this bundle). Refuse to clobber an
+            # arbitrary folder/file that merely collides with the bundle name,
+            # so a name matching an existing project directory can't be
+            # destroyed — even with --yes from a non-interactive caller.
+            if not is_job_bundle_dir(dest_path):
+                raise DeadlineOperationError(
+                    f"'{dest_path}' already exists and is not a job bundle. "
+                    "Choose a different name or output directory."
+                )
+            # Deleting the user's existing bundle is destructive, so require
+            # confirmation (or --yes for non-interactive callers) rather than
+            # clobbering it silently.
+            if not yes and not click.confirm(
+                f"'{dest_path}' already exists and will be overwritten. Continue?",
+                default=False,
+            ):
+                raise DeadlineOperationError(
+                    "Download canceled; pass --yes to overwrite the destination."
+                )
+        # Copy into a staging dir on the same filesystem, then swap into place
+        # only once the copy succeeds, so a failed copy (permissions, disk full)
+        # can't leave the user with neither the old nor the new bundle. The swap
+        # is a fast rename because staging lives under output_dir.
+        with tempfile.TemporaryDirectory(dir=output_dir) as staging:
+            staged = os.path.join(staging, safe_bundle_name)
+            shutil.copytree(local_path, staged)
+            if os.path.exists(dest_path):
+                shutil.rmtree(dest_path)
+            shutil.move(staged, dest_path)
+        result_path = dest_path
+    else:
+        result_path = local_path
+
+    if output == "json":
+        click.echo(json.dumps({"path": result_path}))
+    else:
+        click.echo(f"Downloaded bundle to: {result_path}")
+
+
+@cli_bundle.command(name="hide")
+@click.argument("bundle_name")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@_handle_error
+def bundle_hide(bundle_name, **args):
+    """
+    Hide a shared queue bundle from your own listings.
+
+    Hiding is a private, per-user view preference stored in a local file — it
+    never changes anything on S3 and does not affect what other users see. The
+    bundle is simply no longer shown in the browser or `deadline bundle list`
+    by default; use `deadline bundle list --show-hidden` to see it again.
+    """
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    repo = S3BundleRepository.from_config(config)
+
+    # Validate the name against the listing (like download/info) so a typo isn't
+    # silently persisted forever in the local visibility file.
+    entries = repo.list_entries(repo.root_path())
+    match = next((e for e in entries if e.name == bundle_name and e.is_bundle), None)
+    if not match:
+        available = [e.name for e in entries if e.is_bundle]
+        msg = f"Bundle '{bundle_name}' not found on queue."
+        if available:
+            msg += f"\nAvailable bundles: {', '.join(available)}"
+        raise DeadlineOperationError(msg)
+
+    key = repo.visibility_key(match.path)
+    hidden_set = repo.get_hidden_set()
+    if key in hidden_set:
+        click.echo(f"Bundle already hidden: {bundle_name}")
+        return
+
+    repo.set_bundle_visibility(key, hidden=True)
+    click.echo(f"Hidden bundle: {bundle_name}")
+
+
+@cli_bundle.command(name="unhide")
+@click.argument("bundle_name")
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@_handle_error
+def bundle_unhide(bundle_name, **args):
+    """
+    Unhide a previously hidden queue bundle in your own listings.
+
+    Clears the local, per-user hidden preference so the bundle is shown again
+    in the browser and `deadline bundle list`. No S3 changes are made.
+    """
+    config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+    repo = S3BundleRepository.from_config(config)
+
+    hidden_set = repo.get_hidden_set()
+    if bundle_name not in hidden_set:
+        click.echo(f"Bundle is not hidden: {bundle_name}")
+        return
+
+    repo.set_bundle_visibility(bundle_name, hidden=False)
+    click.echo(f"Unhidden bundle: {bundle_name}")
+
+
+@cli_bundle.command(name="info")
+@click.argument("bundle_name")
+@click.option(
+    "--queue",
+    "use_queue",
+    is_flag=True,
+    help="Inspect a bundle shared on the queue.",
+)
+@click.option(
+    "--output",
+    type=click.Choice(["verbose", "json"], case_sensitive=False),
+    default=None,
+    help=_OUTPUT_FORMAT_HELP,
+)
+@click.option("--profile", help="The AWS profile to use.")
+@click.option("--farm-id", help="The farm to use.")
+@click.option("--queue-id", help="The queue to use.")
+@_handle_error
+def bundle_info(bundle_name, use_queue, output, **args):
+    """
+    Show details about a job bundle (name, description, steps, parameters).
+
+    BUNDLE_NAME is either a local path to a job bundle directory, or the name
+    of a shared bundle on the queue (when used with --queue). For local bundles,
+    if the path doesn't exist, searches by name in the current directory and then
+    the configured job bundle default directory.
+    """
+    output = _resolve_output_format(output)
+    if use_queue:
+        config = _apply_cli_options_to_config(required_options={"farm_id", "queue_id"}, **args)
+        repo: BundleRepository = S3BundleRepository.from_config(config)
+        # Find the bundle by name in the listing
+        entries = repo.list_entries(repo.root_path())
+        match = next((e for e in entries if e.name == bundle_name and e.is_bundle), None)
+        if not match:
+            available = [e.name for e in entries if e.is_bundle]
+            msg = f"Bundle '{bundle_name}' not found on queue."
+            if available:
+                msg += f"\nAvailable bundles: {', '.join(available)}"
+            raise DeadlineOperationError(msg)
+        info = repo.get_bundle_info(match.path)
+    else:
+        bundle_path = os.path.abspath(bundle_name)
+        if not os.path.isdir(bundle_path):
+            # Search by name in cwd, then configured default directory
+            for search_dir in [
+                os.getcwd(),
+                os.path.expanduser(
+                    config_file.get_setting("settings.job_bundle_default_directory") or ""
+                ),
+            ]:
+                if not search_dir:
+                    continue
+                candidate = os.path.join(search_dir, bundle_name)
+                if os.path.isdir(candidate) and is_job_bundle_dir(candidate):
+                    bundle_path = candidate
+                    break
+            else:
+                raise DeadlineOperationError(
+                    f"Bundle '{bundle_name}' not found as a path, in current directory, "
+                    "or in the configured job bundle default directory."
+                )
+        repo = LocalBundleRepository(root=os.path.dirname(bundle_path))
+        info = repo.get_bundle_info(bundle_path)
+
+    if not info:
+        raise DeadlineOperationError(
+            f"Could not read bundle template for '{bundle_name}'. "
+            "The template may be missing or malformed."
+        )
+
+    if output == "json":
+        result = info.to_dict()
+        result["path"] = info.path
+        click.echo(json.dumps(result, indent=2))
+    else:
+        click.echo(f"Path: {info.path}")
+        click.echo(info.format_text())
