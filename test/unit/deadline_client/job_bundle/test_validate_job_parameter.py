@@ -279,7 +279,7 @@ def test_validate_job_parameter_nonvalid_type(
         when()
     assert (
         str(ctx.value)
-        == f'Job parameter "foo" had "type" {typ} but expected one of ("STRING", "PATH", "INT", "FLOAT")'
+        == f'Job parameter "foo" had "type" {typ} but expected one of ("STRING", "PATH", "INT", "FLOAT", "BOOL")'
     )
 
 
@@ -387,6 +387,39 @@ def test_validate_job_parameter_nonvalid_allowed_values(
     assert (
         str(ctx.value)
         == f'Job parameter "foo" got {type(allowed_values).__name__} for "allowedValues" but expected list'
+    )
+
+
+@pytest.mark.parametrize(
+    argnames="allowed_values",
+    argvalues=(
+        pytest.param([True, False], id="native-bools"),
+        pytest.param(["true", "false"], id="strings"),
+        pytest.param([True], id="single-value"),
+    ),
+)
+def test_validate_job_parameter_bool_with_allowed_values(
+    allowed_values: list[Any],
+) -> None:
+    """Tests that a BOOL job parameter with "allowedValues" raises an exception, since
+    OpenJD does not permit "allowedValues" on BOOL parameters."""
+    # GIVEN
+    job_parameter: parameters.JobParameter = {
+        "name": "foo",
+        "type": "BOOL",
+        "allowedValues": allowed_values,
+    }
+
+    # WHEN
+    def when() -> None:
+        parameters.validate_job_parameter(job_parameter)
+
+    # THEN
+    with pytest.raises(ValueError) as ctx:
+        when()
+    assert (
+        str(ctx.value)
+        == 'Job parameter "foo" has "allowedValues" but type "BOOL" does not support it'
     )
 
 

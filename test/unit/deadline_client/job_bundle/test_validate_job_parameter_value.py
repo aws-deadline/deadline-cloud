@@ -62,6 +62,41 @@ STRING_PARAM_WITH_ALLOWED_VALUES: parameters.JobParameter = {
     "allowedValues": ["option1", "option2", "option3"],
 }
 
+BASE_BOOL_PARAM: parameters.JobParameter = {"name": "test_bool_param", "type": "BOOL"}
+
+
+@pytest.mark.parametrize(
+    "input_value,expected_output",
+    [
+        pytest.param(True, True, id="native_true"),
+        pytest.param(False, False, id="native_false"),
+        pytest.param("true", True, id="string_true"),
+        pytest.param("TRUE", True, id="uppercase_string_true"),
+        pytest.param("yes", True, id="string_yes"),
+        pytest.param("on", True, id="string_on"),
+        pytest.param("1", True, id="string_one"),
+        pytest.param("false", False, id="string_false"),
+        pytest.param("FALSE", False, id="uppercase_string_false"),
+        pytest.param("no", False, id="string_no"),
+        pytest.param("off", False, id="string_off"),
+        pytest.param("0", False, id="string_zero"),
+        pytest.param(1, True, id="integer_one"),
+        pytest.param(0, False, id="integer_zero"),
+        pytest.param(1.0, True, id="float_one"),
+        pytest.param(0.0, False, id="float_zero"),
+    ],
+)
+def test_bool_parameter_validation_valid_values(input_value: Any, expected_output: bool) -> None:
+    result = parameters.validate_job_parameter_value(BASE_BOOL_PARAM, input_value)
+    assert result is expected_output
+
+
+@pytest.mark.parametrize("input_value", ["maybe", 2, -1, 0.5, None, [], {}])
+def test_bool_parameter_validation_invalid_values(input_value: Any) -> None:
+    with pytest.raises(ValueError, match="is not boolean"):
+        parameters.validate_job_parameter_value(BASE_BOOL_PARAM, input_value)
+
+
 INT_PARAM_WITH_ALLOWED_VALUES: parameters.JobParameter = {
     "name": "int_with_allowed_values",
     "type": "INT",

@@ -11,7 +11,7 @@ import os
 from typing import Any, Tuple, Optional
 
 from ..exceptions import DeadlineOperationError
-from .parameters import JobParameter
+from .parameters import JobParameter, validate_job_parameter_value
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,10 @@ def split_parameter_args(
                     pass
                 else:
                     parameter_type = parameter["type"].lower()
-                    job_parameters[parameter_name] = {parameter_type: str(parameter_value)}
+                    if parameter_type == "bool":
+                        parameter_value = validate_job_parameter_value(parameter, parameter_value)
+                    else:
+                        parameter_value = str(parameter_value)
+                    job_parameters[parameter_name] = {parameter_type: parameter_value}
 
     return app_parameters, job_parameters
