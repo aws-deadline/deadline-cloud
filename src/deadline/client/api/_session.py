@@ -22,6 +22,7 @@ from botocore.client import BaseClient  # type: ignore[import]
 from botocore.credentials import CredentialProvider, RefreshableCredentials
 from botocore.exceptions import (  # type: ignore[import]
     ClientError,
+    MissingDependencyException,
     ProfileNotFound,
 )
 from botocore.session import get_session as get_botocore_session
@@ -597,7 +598,8 @@ def check_authentication_status(
                 object to use instead of the config file.
 
     Returns AwsAuthenticationStatus enum value:
-      - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
+      - CONFIGURATION_ERROR if there is an unexpected error accessing credentials, or
+        the environment is missing a dependency that logging in cannot supply
       - AUTHENTICATED if they are fine
       - NEEDS_LOGIN if a login is required, for the profile types that support it.
     """
@@ -606,6 +608,22 @@ def check_authentication_status(
         try:
             _list_farms_for_auth_probe(config=config)
             return AwsAuthenticationStatus.AUTHENTICATED
+        except MissingDependencyException as e:
+            # botocore raises this when a feature needs an optional dependency that is
+            # not usable. For AWS Console sign-in profiles that is awscrt: the login
+            # credential provider needs it before it even reads the cached token, and a
+            # compiled awscrt module that fails to import looks identical to an absent
+            # one (botocore.compat swallows the ImportError). Logging in again cannot
+            # fix either, so reporting NEEDS_LOGIN here would turn a packaging fault
+            # into a permanent "sign-in needed" loop.
+            logging.getLogger(__name__).error(
+                "The AWS SDK is missing a dependency it needs for this AWS profile, "
+                "so authentication cannot be checked. This usually means the "
+                "application's Python environment is missing or has a broken 'awscrt' "
+                "package; logging in will not fix it. Original error: %s",
+                e,
+            )
+            return AwsAuthenticationStatus.CONFIGURATION_ERROR
         except Exception:
             # We assume that the presence of a Deadline Cloud monitor or AWS Console
             # sign-in profile means we know everything necessary to start a login.

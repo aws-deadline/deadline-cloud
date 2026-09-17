@@ -10,6 +10,7 @@ from unittest.mock import call, patch, MagicMock, ANY
 
 import boto3  # type: ignore[import]
 import botocore.config  # type: ignore[import]
+from botocore.exceptions import MissingDependencyException  # type: ignore[import]
 import pytest
 from deadline.client import api, config
 from deadline.client.api._session import (
@@ -131,6 +132,31 @@ def test_get_check_authentication_status_configuration_error(fresh_deadline_conf
         boto3_client_mock.return_value.list_farms.side_effect = Exception("some uncaught exception")
 
         assert api.check_authentication_status() == api.AwsAuthenticationStatus.CONFIGURATION_ERROR
+
+
+def test_get_check_authentication_status_missing_dependency_is_not_needs_login(
+    fresh_deadline_config, caplog
+):
+    """A missing or broken awscrt raises MissingDependencyException before botocore
+    even reads the cached token. Logging in cannot supply the dependency, so the
+    status must be CONFIGURATION_ERROR even for a profile type that supports login --
+    NEEDS_LOGIN would turn a packaging fault into a permanent sign-in loop."""
+    with (
+        patch.object(api._session, "get_boto3_client") as boto3_client_mock,
+        patch.object(
+            api._session,
+            "get_credentials_source",
+            return_value=api._session.AwsCredentialsSource.AWS_CONSOLE_LOGIN,
+        ),
+        patch.object(api._list_apis, "get_user_and_identity_store_id", return_value=(None, None)),
+    ):
+        config.set_setting("defaults.aws_profile_name", "console-login-profile")
+        boto3_client_mock.return_value.list_farms.side_effect = MissingDependencyException(
+            msg='pip install "botocore[crt]"'
+        )
+
+        assert api.check_authentication_status() == api.AwsAuthenticationStatus.CONFIGURATION_ERROR
+        assert "awscrt" in caplog.text
 
 
 def test_get_queue_user_boto3_session_no_profile(fresh_deadline_config):
