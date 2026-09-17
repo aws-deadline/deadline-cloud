@@ -16,8 +16,10 @@ from deadline.client.cli._sync_output_format import _format_path
 from deadline.client.cli._download_status_file import (
     _atomic_write_json,
     _build_status_file_content,
+    _count_task_records,
     _determine_job_download_status,
     _get_status_file_paths,
+    _record_status_file_telemetry,
     _status_file_lock,
     write_download_status_file,
 )
@@ -482,6 +484,198 @@ class TestAtomicWriteJson:
 
         with open(file_path, "r") as f:
             assert json.load(f)["version"] == 2
+
+    def test_writes_without_indentation_or_separator_padding(self, tmp_path):
+        file_path = str(tmp_path / "status.json")
+        data = {"schema_version": 1, "jobs": {MOCK_JOB_ID: {"tasks": {"1-1": {"a": 1}}}}}
+        _atomic_write_json(file_path, data)
+
+        with open(file_path, "r") as f:
+            raw = f.read()
+        assert "\n" not in raw
+        assert ", " not in raw
+        assert ": " not in raw
+
+    def test_compact_output_is_smaller_than_indented(self, tmp_path):
+        data = {
+            "jobs": {
+                f"job-{i}": {"tasks": {"1-1": {"download_status": "downloaded"}}} for i in range(20)
+            }
+        }
+        file_path = str(tmp_path / "status.json")
+        _atomic_write_json(file_path, data)
+
+        assert os.path.getsize(file_path) < len(json.dumps(data, indent=2))
+
+
+class TestCountTaskRecords:
+    """Tests for _count_task_records."""
+
+    def test_sums_records_across_jobs(self):
+        jobs: dict[str, Any] = {
+            "job-a": {"tasks": {"1-1": {}, "1-2": {}}},
+            "job-b": {"tasks": {"2-1": {}}},
+        }
+        assert _count_task_records(jobs) == 3
+
+    def test_returns_zero_for_no_jobs(self):
+        assert _count_task_records({}) == 0
+
+    @pytest.mark.parametrize(
+        "jobs",
+        [
+            pytest.param({"job-a": None}, id="entry-is-none"),
+            pytest.param({"job-a": "corrupt"}, id="entry-is-str"),
+            pytest.param({"job-a": {}}, id="entry-has-no-tasks-key"),
+            pytest.param({"job-a": {"tasks": None}}, id="tasks-is-none"),
+            pytest.param({"job-a": {"tasks": []}}, id="tasks-is-list"),
+        ],
+    )
+    def test_tolerates_malformed_entries(self, jobs):
+        assert _count_task_records(jobs) == 0
+
+    def test_counts_valid_entries_alongside_malformed_ones(self):
+        jobs = {"job-a": "corrupt", "job-b": {"tasks": {"1-1": {}, "1-2": {}}}}
+        assert _count_task_records(jobs) == 2
+
+
+class TestRecordStatusFileTelemetry:
+    """Tests for _record_status_file_telemetry."""
+
+    @staticmethod
+    def _capture_events(monkeypatch) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+
+        class _FakeClient:
+            def record_event(self, *, event_type, event_details):
+                events.append({"event_type": event_type, "event_details": event_details})
+
+        monkeypatch.setattr(
+            "deadline.client.api.get_deadline_cloud_library_telemetry_client",
+            lambda *a, **k: _FakeClient(),
+        )
+        return events
+
+    def test_reports_size_and_counts(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        content: dict[str, Any] = {
+            "jobs": {
+                "job-a": {"tasks": {"1-1": {}, "1-2": {}}},
+                "job-b": {"tasks": {"2-1": {}}},
+            }
+        }
+        file_path = str(tmp_path / "status.json")
+        _atomic_write_json(file_path, content)
+
+        _record_status_file_telemetry(file_path, content)
+
+        assert len(events) == 1
+        assert events[0]["event_type"] == "com.amazon.rum.deadline.queue_sync_output_status_file"
+        assert events[0]["event_details"] == {
+            "file_size_bytes": os.path.getsize(file_path),
+            "job_count": 2,
+            "task_record_count": 3,
+        }
+
+    def test_reports_zero_counts_for_an_empty_file(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        file_path = str(tmp_path / "status.json")
+        _atomic_write_json(file_path, {"jobs": {}})
+
+        _record_status_file_telemetry(file_path, {"jobs": {}})
+
+        assert events[0]["event_details"]["job_count"] == 0
+        assert events[0]["event_details"]["task_record_count"] == 0
+        assert events[0]["event_details"]["file_size_bytes"] > 0
+
+    def test_swallows_a_missing_file(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+
+        _record_status_file_telemetry(str(tmp_path / "absent.json"), {"jobs": {}})
+
+        assert events == []
+
+    def test_swallows_a_failing_telemetry_client(self, tmp_path, monkeypatch):
+        def _raise(*a, **k):
+            raise RuntimeError("telemetry unavailable")
+
+        monkeypatch.setattr(
+            "deadline.client.api.get_deadline_cloud_library_telemetry_client", _raise
+        )
+        file_path = str(tmp_path / "status.json")
+        _atomic_write_json(file_path, {"jobs": {}})
+
+        _record_status_file_telemetry(file_path, {"jobs": {}})
+
+    def test_write_reports_the_file_it_just_wrote(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        assert len(events) == 1
+        assert events[0]["event_details"]["file_size_bytes"] == status_file.stat().st_size
+        assert events[0]["event_details"]["job_count"] == 1
+
+    def test_write_reports_once_per_location(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        first = tmp_path / "one"
+        second = tmp_path / "two"
+        first.mkdir()
+        second.mkdir()
+        profile = {
+            "fileSystemLocations": [
+                {"name": "one", "path": str(first)},
+                {"name": "two", "path": str(second)},
+            ]
+        }
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        assert len(events) == 2
+
+    def test_write_still_succeeds_when_telemetry_raises(self, tmp_path, monkeypatch):
+        def _raise(*a, **k):
+            raise RuntimeError("telemetry unavailable")
+
+        monkeypatch.setattr(
+            "deadline.client.api.get_deadline_cloud_library_telemetry_client", _raise
+        )
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        messages: list[str] = []
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+            print_function_callback=messages.append,
+        )
+
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        assert status_file.exists()
+        assert not any("failed to write status file" in m for m in messages)
 
 
 class TestWriteDownloadStatusFile:
