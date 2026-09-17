@@ -171,6 +171,12 @@ def validate_job_parameter(
             raise TypeError(
                 f'Job parameter "{name}" got {type(allowed_values).__name__} for "allowedValues" but expected list'
             )
+        # A boolean already enumerates its own domain, so OpenJD does not
+        # permit "allowedValues" on BOOL parameters.
+        if input.get("type") == "BOOL":
+            raise ValueError(
+                f'Job parameter "{name}" has "allowedValues" but type "BOOL" does not support it'
+            )
 
     # Validate "dataFlow"
     if "dataFlow" in input:
