@@ -29,7 +29,11 @@ from qtpy.QtWidgets import (  # type: ignore
 )
 
 from ...job_bundle.job_template import ControlType
-from ...job_bundle.parameters import JobParameter, get_ui_control_for_parameter_definition
+from ...job_bundle.parameters import (
+    JobParameter,
+    get_ui_control_for_parameter_definition,
+    validate_job_parameter_value,
+)
 from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
@@ -735,9 +739,9 @@ ALLOWED_VALUES_FOR_CHECK_BOX = (["TRUE", "FALSE"], ["YES", "NO"], ["ON", "OFF"],
 
 class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
     OPENJD_CONTROL_TYPE: ControlType = ControlType.CHECK_BOX
-    OPENJD_TYPES: List[str] = ["STRING"]
-    OPENJD_DEFAULT_VALUE: str = "false"
-    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_TYPES: List[str] = ["STRING", "BOOL"]
+    OPENJD_DEFAULT_VALUE: bool = False
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
     OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = [
         "maxValue",
         "minValue",
@@ -753,40 +757,43 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
         layout.addWidget(self.edit_control, Qt.AlignLeft)
         self.setLayout(layout)
 
-        # Validate that 'allowedValues' is correct
-        allowed_values = parameter.get("allowedValues", [])
-        allowed_values_set = set(v.upper() for v in allowed_values)
-        if allowed_values_set not in [set(allowed) for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]:
-            raise RuntimeError(
-                f"Job template parameter {parameter['name']} with CHECK_BOX user interface control requires that 'allowedValues' be "
-                + f"one of {ALLOWED_VALUES_FOR_CHECK_BOX} (case and order insensitive)"
-            )
-
-        # Determine the true/false correspondence
-        true_values = [allowed[0] for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]
-        if allowed_values[0].upper() in true_values:
-            self.true_value = allowed_values[0]
-            self.false_value = allowed_values[1]
+        if parameter["type"] == "BOOL":
+            self.true_value = True
+            self.false_value = False
         else:
-            self.true_value = allowed_values[1]
-            self.false_value = allowed_values[0]
+            # STRING checkboxes represent boolean values through allowedValues.
+            allowed_values = parameter.get("allowedValues", [])
+            allowed_values_set = set(v.upper() for v in allowed_values)
+            if allowed_values_set not in [set(allowed) for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]:
+                raise RuntimeError(
+                    f"Job template parameter {parameter['name']} with CHECK_BOX user interface control requires that 'allowedValues' be "
+                    + f"one of {ALLOWED_VALUES_FOR_CHECK_BOX} (case and order insensitive)"
+                )
 
-        # Add the decription as a tooltip if provided
+            # Determine the true/false correspondence
+            true_values = [allowed[0] for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]
+            if allowed_values[0].upper() in true_values:
+                self.true_value = allowed_values[0]
+                self.false_value = allowed_values[1]
+            else:
+                self.true_value = allowed_values[1]
+                self.false_value = allowed_values[0]
+
+        # Add the description as a tooltip if provided
         if "description" in parameter:
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def value(self) -> str:
+    def value(self) -> str | bool:
         if self.edit_control.isChecked():
             return self.true_value
         else:
             return self.false_value
 
-    def set_value(self, value: str) -> None:
-        if value == self.true_value:
-            self.edit_control.setChecked(True)
-        else:
-            self.edit_control.setChecked(False)
+    def set_value(self, value: str | bool) -> None:
+        if self.job_template_parameter["type"] == "BOOL":
+            value = validate_job_parameter_value(self.job_template_parameter, value)
+        self.edit_control.setChecked(value == self.true_value)
 
     def _handle_value_changed(self, value, callback):
         message = deepcopy(self.job_template_parameter)
@@ -806,6 +813,7 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         "INT",
         "FLOAT",
         "STRING",
+        "BOOL",
     ]
 
     OPENJD_DEFAULT_VALUE: str = ""  # Hidden parameters do not require defaults

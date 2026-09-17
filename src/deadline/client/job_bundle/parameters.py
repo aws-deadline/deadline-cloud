@@ -32,6 +32,7 @@ _VALID_PARAMETER_TYPES = (
     "PATH",
     "INT",
     "FLOAT",
+    "BOOL",
 )
 _VALID_UI_CONTROLS = (
     "CHECK_BOX",
@@ -253,8 +254,8 @@ def validate_job_parameter(
 
 def validate_job_parameter_value(
     job_parameter: JobParameter,
-    value: str | int | float,
-) -> str | int | float:
+    value: Any,
+) -> str | int | float | bool:
     """
     Validates a value for the specified parameter definition, returning the value with the correct type,
     e.g. a string "19" for an INT parameter is returned as the integer 19.
@@ -276,6 +277,25 @@ def validate_job_parameter_value(
         if not isinstance(value, str):
             raise TypeError(
                 f"Job parameter {name!r} has type {param_type} but got value {value!r} of type {type(value)}."
+            )
+    elif param_type == "BOOL":
+        if isinstance(value, bool):
+            pass
+        elif isinstance(value, (int, float)) and value in (0, 1):
+            value = bool(value)
+        elif isinstance(value, str):
+            normalized = value.lower()
+            if normalized in ("true", "yes", "on", "1"):
+                value = True
+            elif normalized in ("false", "no", "off", "0"):
+                value = False
+            else:
+                raise ValueError(
+                    f"Job parameter {name!r} has type BOOL but got value {value!r} which is not boolean."
+                )
+        else:
+            raise ValueError(
+                f"Job parameter {name!r} has type BOOL but got value {value!r} which is not boolean."
             )
     elif param_type == "INT":
         original_value = value
@@ -852,6 +872,7 @@ _SUPPORTED_CONTROLS_FOR_TYPE = {
     },
     "INT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
     "FLOAT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
+    "BOOL": {"CHECK_BOX", "HIDDEN"},
 }
 
 
@@ -876,6 +897,8 @@ def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
                 return "CHOOSE_DIRECTORY"
         elif param_type in ("INT", "FLOAT"):
             return "SPIN_BOX"
+        elif param_type == "BOOL":
+            return "CHECK_BOX"
         else:
             raise DeadlineOperationError(
                 f"The job template parameter '{param_def.get('name', '<unnamed>')}' "
