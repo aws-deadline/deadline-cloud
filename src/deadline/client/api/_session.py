@@ -57,17 +57,20 @@ class AwsAuthenticationStatus(Enum):
     MISSING_DEPENDENCY = 4
 
 
-# Shared by every surface that reports MISSING_DEPENDENCY -- the login poll loop
-# (_loginout.py), `deadline auth status` (auth_group.py), and the GUI status widget
-# (deadline_authentication_status_widget.py) -- so they don't drift out of sync.
-# Not profile-type-specific: every MissingDependencyException botocore raises (DPoP
-# signing, SigV4A endpoint resolution, CRT-only checksums, MRAP) is gated on the same
-# optional 'awscrt' ('botocore[crt]') dependency, regardless of which credentials
-# source triggered the probe.
+# Shared by every surface that reports MISSING_DEPENDENCY -- the pre-flight check
+# (_check_console_login_dependency) and the login poll loop (both in _loginout.py),
+# `deadline auth status` (auth_group.py), and the GUI status widget's more-info dialog
+# (deadline_authentication_status_widget.py) -- so they don't drift out of sync or
+# recommend different fixes for the same fault. Not profile-type-specific: every
+# MissingDependencyException botocore raises (DPoP signing, SigV4A endpoint resolution,
+# CRT-only checksums, MRAP) is gated on the same optional 'awscrt' dependency, regardless
+# of which credentials source triggered the probe. Recommends the `deadline[console]`
+# extra rather than the underlying `botocore[crt]` directly, so a reinstall of this
+# package keeps requesting the same dependency instead of silently dropping it.
 MISSING_DEPENDENCY_REMEDIATION = (
     "The AWS SDK's optional 'awscrt' package is missing or broken in this Python "
-    "environment. Logging in will not fix this -- install it, for example with "
-    'pip install "botocore[crt]", and try again.'
+    "environment. Logging in will not fix this, so install it, for example with "
+    'pip install "deadline[console]", and try again.'
 )
 
 

@@ -58,8 +58,8 @@ def _check_console_login_dependency(profile_name: str) -> None:
 
     if EC is None:
         raise DeadlineOperationError(
-            f"Signing in to the AWS Console sign-in profile {profile_name} requires an additional "
-            'dependency. Install it with: pip install "deadline[console]"'
+            f"Could not sign in to the AWS Console sign-in profile {profile_name}: "
+            f"{_session.MISSING_DEPENDENCY_REMEDIATION}"
         )
 
 

@@ -176,5 +176,5 @@
   "Select directory": "Sélectionner le répertoire",
   "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
   "Missing Dependency": "Missing Dependency",
-  "There is a missing dependency issue with the profile '{profile}'.\n\nTo resolve this issue:\n• Install the AWS SDK's optional 'awscrt' package, which this profile's authentication needs:\n  • pip install \"botocore[crt]\"\n• Logging in again will not fix this -- the package must be installed": "There is a missing dependency issue with the profile '{profile}'.\n\nTo resolve this issue:\n• Install the AWS SDK's optional 'awscrt' package, which this profile's authentication needs:\n  • pip install \"botocore[crt]\"\n• Logging in again will not fix this -- the package must be installed"
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

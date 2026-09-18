@@ -155,9 +155,9 @@ def test_get_check_authentication_status_missing_dependency_is_not_needs_login(
     ):
         config.set_setting("defaults.aws_profile_name", "console-login-profile")
         # A distinctive marker, not real botocore wording: MISSING_DEPENDENCY_REMEDIATION
-        # (asserted below) also happens to mention "botocore[crt]", so a real-looking message
-        # here wouldn't prove the log carries `e`'s own text rather than just the hardcoded
-        # remediation string.
+        # (asserted below) also happens to mention "deadline[console]", so a real-looking
+        # message here wouldn't prove the log carries `e`'s own text rather than just the
+        # hardcoded remediation string.
         boto3_client_mock.return_value.list_farms.side_effect = MissingDependencyException(
             msg="TEST-ORIGINAL-EXCEPTION-MARKER"
         )
