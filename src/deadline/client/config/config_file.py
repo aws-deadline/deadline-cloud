@@ -452,6 +452,10 @@ def write_config(config: ConfigParser) -> None:
         config (ConfigParser): The config object to write. Generally this is
             a modified value from what `read_config` returns.
     """
+    global __config
+    global __config_file_path
+    global __config_mtime
+
     config_file_path = get_config_file_path()
     if not config_file_path.parent.exists():
         config_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -467,6 +471,17 @@ def write_config(config: ConfigParser) -> None:
         config.write(configfile)
 
     os.replace(tmp_file_name, config_file_path)
+
+    # Point read_config()'s cache directly at what we just wrote, rather than leaving the
+    # next read_config() call to re-derive freshness from a stat() mtime comparison.
+    # _should_read_config() only needs that comparison to detect a change made by someone
+    # else (a different process, or a config file edited by hand); for our own write, we
+    # already know exactly what's on disk now -- it's `config` -- so there's no reason to
+    # depend on filesystem timestamp resolution being fine enough to tell "before this
+    # write" apart from "after this write" for back-to-back writes.
+    __config = config
+    __config_file_path = config_file_path
+    __config_mtime = config_file_path.stat().st_mtime
 
 
 def _get_setting_config(setting_name: str) -> dict:

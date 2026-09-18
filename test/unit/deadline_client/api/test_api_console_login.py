@@ -79,7 +79,7 @@ def console_profile(fresh_deadline_config, aws_config):
 
 
 @pytest.fixture
-def console_profile_with_monitor(console_profile):
+def console_profile_with_monitor(console_profile, fresh_deadline_config):
     """
     A console sign-in profile on a workstation that has Deadline Cloud monitor.
 
@@ -90,9 +90,20 @@ def console_profile_with_monitor(console_profile):
     The setting is read back rather than assumed. When it doesn't stick, `login` raises the
     "monitor is not configured" error, which reads as a product bug rather than a broken
     fixture -- so fail here instead, pointing at the actual cause.
+
+    Reads the config file directly rather than through `config.get_setting()`: this fixture
+    writes three settings in quick succession (this one, plus `console_profile`'s
+    `defaults.aws_profile_name` and `fresh_deadline_config`'s `telemetry.identifier`), and
+    `read_config()`'s cache invalidation keys off a filesystem mtime comparison whose
+    resolution isn't guaranteed finer than that -- so a same-tick write could in principle
+    read back as "unchanged" on some platform/filesystem combination. Checking the file's
+    actual bytes sidesteps that entirely, without weakening what's being verified: this
+    fixture's whole point is confirming the write reached disk.
     """
     config.set_setting("deadline-cloud-monitor.path", MONITOR_PATH)
-    assert config.get_setting("deadline-cloud-monitor.path"), (
+    with open(fresh_deadline_config, "r", encoding="utf-8") as f:
+        persisted_config = f.read()
+    assert "[deadline-cloud-monitor]" in persisted_config, (
         "deadline-cloud-monitor.path did not persist, so this test's premise doesn't hold"
     )
     return console_profile
