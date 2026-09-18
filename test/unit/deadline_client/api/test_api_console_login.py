@@ -301,6 +301,32 @@ def test_console_login_cancellation_kills_monitor(console_profile_with_monitor):
     login_process.kill.assert_called_once()
 
 
+def test_console_login_stops_polling_on_configuration_error(console_profile_with_monitor):
+    """
+    CONFIGURATION_ERROR (missing/broken awscrt for this credentials source) can't be fixed by
+    finishing the sign-in, and Deadline Cloud monitor keeps running either way -- so the poll
+    loop must stop itself instead of spinning on `p.poll()` forever.
+    """
+    login_process = MagicMock()
+    login_process.poll.return_value = None
+
+    with (
+        patch.object(subprocess, "Popen", return_value=login_process),
+        patch.object(
+            api._loginout,
+            "check_authentication_status",
+            return_value=AwsAuthenticationStatus.CONFIGURATION_ERROR,
+        ) as status_mock,
+    ):
+        with pytest.raises(DeadlineOperationError, match="configuration error"):
+            api.login(None, None)
+
+    # One call, not an unbounded poll: each call also logs an error, so looping here
+    # would flood the log in addition to hanging.
+    status_mock.assert_called_once()
+    login_process.kill.assert_called_once()
+
+
 def test_console_logout_removes_cached_token(console_profile, login_cache_dir):
     """
     Logout is the deletion of botocore's cached token: the file keyed by the sha256 of

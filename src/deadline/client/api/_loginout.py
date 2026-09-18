@@ -294,8 +294,19 @@ def _login_deadline_cloud_monitor_process(
         # login completes — the GUI does the same on file-watch events in
         # DeadlineAuthenticationStatus.files_changed, but CLI has no watcher.
         _session.get_boto3_session(force_refresh=True, config=config)
-        if check_authentication_status(config) == AwsAuthenticationStatus.AUTHENTICATED:
+        auth_status = check_authentication_status(config)
+        if auth_status == AwsAuthenticationStatus.AUTHENTICATED:
             return f"{profile_type_label}: {profile_name}"
+        if auth_status == AwsAuthenticationStatus.CONFIGURATION_ERROR:
+            # For this function's two credentials sources, check_authentication_status only
+            # returns CONFIGURATION_ERROR for a missing/broken awscrt (see its docstring).
+            # Signing in again in the still-running Deadline Cloud monitor can't fix that, so
+            # keep polling would hang forever instead of surfacing the fix.
+            p.kill()
+            raise DeadlineOperationError(
+                f"Could not verify the {profile_name} profile because of a configuration "
+                "error (see the error logged above). Logging in again will not fix this."
+            )
         if on_cancellation_check:
             # Check if the UI has signaled a cancel
             if on_cancellation_check():
