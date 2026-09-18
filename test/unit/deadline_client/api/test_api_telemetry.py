@@ -498,6 +498,7 @@ def test_latency_decorator(fresh_deadline_config):
         expected_summary: Dict[str, Any] = dict()
         expected_summary["latency"] = 0
         expected_summary["function_call"] = "test_call"
+        expected_summary["is_success"] = True
         expected_summary["usage_mode"] = "CLI"
         expected_event = TelemetryEvent(
             event_type="com.amazon.rum.deadline.latency",
@@ -515,6 +516,131 @@ def test_latency_decorator(fresh_deadline_config):
 
         # THEN
         queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_latency_decorator_records_failure(fresh_deadline_config):
+    """A call that raises still reports, and is distinguishable from a successful one."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        expected_summary: Dict[str, Any] = dict()
+        expected_summary["latency"] = 0
+        expected_summary["function_call"] = "fails"
+        expected_summary["is_success"] = False
+        expected_summary["exception_type"] = "RuntimeError"
+        expected_summary["usage_mode"] = "CLI"
+        expected_event = TelemetryEvent(
+            event_type="com.amazon.rum.deadline.latency",
+            event_details=expected_summary,
+        )
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event()
+        def fails():
+            raise RuntimeError("foobar")
+
+        # WHEN
+        with pytest.raises(RuntimeError):
+            fails()  # type:ignore
+
+        # THEN
+        queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_latency_decorator_details_provider_receives_bound_arguments(fresh_deadline_config):
+    """The provider reads a parameter by name whether it was passed positionally or not."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        def provider(flavor=None, **_kwargs):
+            return {"flavor": flavor}
+
+        @record_function_latency_telemetry_event(details_provider=provider)
+        def test_call(other, flavor=None):
+            return
+
+        # WHEN: flavor is passed positionally, and again by keyword
+        test_call("ignored", "vanilla")  # type:ignore
+        test_call("ignored", flavor="chocolate")  # type:ignore
+
+        # THEN
+        recorded = [
+            call.args[0].event_details["flavor"] for call in queue_mock.put_nowait.mock_calls
+        ]
+        assert recorded == ["vanilla", "chocolate"]
+
+
+def test_latency_decorator_survives_failing_details_provider(fresh_deadline_config):
+    """A provider that raises costs its extra details, not the call or the event."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        def provider(**_kwargs):
+            raise ValueError("provider blew up")
+
+        @record_function_latency_telemetry_event(details_provider=provider)
+        def test_call():
+            return "returned anyway"
+
+        # WHEN
+        result = test_call()  # type:ignore
+
+        # THEN
+        assert result == "returned anyway"
+        queue_mock.put_nowait.assert_called_once()
+        event_details = queue_mock.put_nowait.mock_calls[0].args[0].event_details
+        assert event_details["is_success"] is True
+        assert "flavor" not in event_details
+
+
+def test_success_fail_decorator_does_not_leak_details_between_calls(fresh_deadline_config):
+    """exception_type from a failed call must not reappear on the next successful one."""
+    with patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_success_fail_telemetry_event(event_details={"shared": "dict"})
+        def sometimes(should_raise):
+            if should_raise:
+                raise RuntimeError("foobar")
+
+        # WHEN
+        with pytest.raises(RuntimeError):
+            sometimes(True)  # type:ignore
+        sometimes(False)  # type:ignore
+
+        # THEN
+        failed, succeeded = [
+            call.args[0].event_details for call in queue_mock.put_nowait.mock_calls
+        ]
+        assert failed["exception_type"] == "RuntimeError"
+        assert "exception_type" not in succeeded
 
 
 def test_get_telemetry_client_caches_by_package_name(fresh_deadline_config):

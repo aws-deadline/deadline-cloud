@@ -7,7 +7,7 @@ configured for AWS Deadline Cloud to use on the local workstation.
 
 from configparser import ConfigParser
 from logging import getLogger
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 import os
 import subprocess
 import sys
@@ -29,6 +29,19 @@ logger = getLogger(__name__)
 
 class UnsupportedProfileTypeForLoginLogout(DeadlineOperationError):
     pass
+
+
+def _credentials_source_details(
+    config: Optional[ConfigParser] = None, **_kwargs: Any
+) -> Dict[str, Any]:
+    """
+    Tags login/logout telemetry with the kind of profile the call acted on.
+
+    Which profile type an outcome belongs to is not recoverable from the rest of the event:
+    nothing else in the payload separates an AWS Console sign-in profile from a Deadline
+    Cloud monitor one, and the two have different failure modes.
+    """
+    return {"credentials_source": get_credentials_source(config).name}
 
 
 def _check_console_login_dependency(profile_name: str) -> None:
@@ -314,7 +327,7 @@ def _login_deadline_cloud_monitor_process(
         time.sleep(0.5)
 
 
-@api.record_function_latency_telemetry_event()
+@api.record_function_latency_telemetry_event(details_provider=_credentials_source_details)
 def login(
     on_pending_authorization: Optional[Callable],
     on_cancellation_check: Optional[Callable],
@@ -346,7 +359,7 @@ def login(
     )
 
 
-@api.record_function_latency_telemetry_event()
+@api.record_function_latency_telemetry_event(details_provider=_credentials_source_details)
 def logout(config: Optional[ConfigParser] = None) -> str:
     """
     For AWS profiles created by Deadline Cloud monitor or by AWS Console sign-in,

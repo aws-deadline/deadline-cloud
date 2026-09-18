@@ -2,6 +2,7 @@
 
 import atexit
 from functools import lru_cache, wraps
+from inspect import signature
 import json
 import logging
 import os
@@ -539,7 +540,10 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Any) -> Callable[[F]
             finally:
                 event_name = decorator_kwargs.get("metric_name", function.__name__)
 
-                event_details: dict = decorator_kwargs.get("event_details", {})
+                # Copy: the decorator's dict is shared by every call to this function, and
+                # record_event writes usage_mode into whatever it is handed, so mutating it
+                # in place carries this call's exception_type into the next call's event.
+                event_details: dict = dict(decorator_kwargs.get("event_details", {}))
                 event_details["is_success"] = success
                 raised_exception = sys.exc_info()[1]
                 if raised_exception is not None:
@@ -556,9 +560,43 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Any) -> Callable[[F]
     return inner
 
 
+def _resolve_details_provider(
+    details_provider: Callable[..., Dict[str, Any]],
+    function: Callable[..., Any],
+    args: tuple,
+    kwargs: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Bind a wrapped call's arguments to their parameter names and pass them to
+    ``details_provider``, so a provider can declare only the parameters it needs and read
+    them whether the caller passed them positionally or by keyword.
+
+    Returns an empty dict on any failure: a provider must not be able to fail the call it
+    is describing, nor cost that call its latency event.
+    """
+    try:
+        bound = signature(function).bind_partial(*args, **kwargs)
+        bound.apply_defaults()
+        return details_provider(**bound.arguments)
+    except Exception:
+        logger.debug("Swallowed exception in telemetry details provider", exc_info=True)
+        return {}
+
+
 def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable[[F], F]:
     """
     Decorator to time a function. Sends a latency telemetry event.
+
+    The event is recorded whether the call returns or raises, and carries ``is_success``
+    plus, when it raised, ``exception_type``. A decorated function whose failures are the
+    thing worth measuring would otherwise report nothing at all on exactly those calls,
+    leaving a failure indistinguishable from a call that was never made.
+
+    Recognised keyword arguments:
+      * ``metric_name``: recorded as ``function_call``; defaults to the function's name.
+      * ``details_provider``: callable returning extra event details, called with the
+        wrapped call's own arguments bound to their parameter names.
+
     :param ** Python variable arguments. See https://docs.python.org/3/glossary.html#term-parameter.
     """
 
@@ -566,18 +604,34 @@ def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable
         @wraps(function)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             start_t = time.perf_counter_ns()
-            ret_val = function(*args, **kwargs)
-            end_t = time.perf_counter_ns()
+            success: bool = False
+            try:
+                ret_val = function(*args, **kwargs)
+                success = True
+                return ret_val
+            finally:
+                latency = time.perf_counter_ns() - start_t
 
-            latency = end_t - start_t
+                event_name = decorator_kwargs.get("metric_name", function.__name__)
+                event_details: Dict[str, Any] = {
+                    "latency": latency,
+                    "function_call": event_name,
+                    "is_success": success,
+                }
+                raised_exception = sys.exc_info()[1]
+                if raised_exception is not None:
+                    event_details["exception_type"] = type(raised_exception).__name__
 
-            event_name = decorator_kwargs.get("metric_name", function.__name__)
-            get_deadline_cloud_library_telemetry_client().record_event(
-                event_type="com.amazon.rum.deadline.latency",
-                event_details={"latency": latency, "function_call": event_name},
-            )
+                details_provider = decorator_kwargs.get("details_provider")
+                if details_provider is not None:
+                    event_details.update(
+                        _resolve_details_provider(details_provider, function, args, kwargs)
+                    )
 
-            return ret_val
+                get_deadline_cloud_library_telemetry_client().record_event(
+                    event_type="com.amazon.rum.deadline.latency",
+                    event_details=event_details,
+                )
 
         return cast(F, wrapper)
 
