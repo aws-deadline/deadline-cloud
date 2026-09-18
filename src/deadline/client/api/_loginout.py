@@ -7,7 +7,7 @@ configured for AWS Deadline Cloud to use on the local workstation.
 
 from configparser import ConfigParser
 from logging import getLogger
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 import os
 import subprocess
 import sys
@@ -29,6 +29,34 @@ logger = getLogger(__name__)
 
 class UnsupportedProfileTypeForLoginLogout(DeadlineOperationError):
     pass
+
+
+class LoginCanceled(DeadlineOperationError):
+    """
+    Raised when the user abandons a login rather than it failing.
+
+    Distinct from the errors around it so telemetry's ``exception_type`` separates the two:
+    cancelling is the most common non-success outcome of the GUI flow, and bucketing it
+    with genuine sign-in failures would read as a large failure rate made mostly of users
+    who changed their mind. It also gives the dialog something to display -- a bare
+    ``Exception()`` rendered as an empty reason.
+    """
+
+    def __init__(self, message: str = "Login canceled."):
+        super().__init__(message)
+
+
+def _credentials_source_details(
+    config: Optional[ConfigParser] = None, **_kwargs: Any
+) -> Dict[str, Any]:
+    """
+    Tags login/logout telemetry with the kind of profile the call acted on.
+
+    Which profile type an outcome belongs to is not recoverable from the rest of the event:
+    nothing else in the payload separates an AWS Console sign-in profile from a Deadline
+    Cloud monitor one, and the two have different failure modes.
+    """
+    return {"credentials_source": get_credentials_source(config).name}
 
 
 def _check_console_login_dependency(profile_name: str) -> None:
@@ -300,7 +328,7 @@ def _login_deadline_cloud_monitor_process(
             # Check if the UI has signaled a cancel
             if on_cancellation_check():
                 p.kill()
-                raise Exception()
+                raise LoginCanceled()
         if p.poll():
             # Deadline Cloud monitor has stopped, we assume it returned us an error on one line on stderr
             # but let's be specific about Deadline Cloud monitor failing incase the error is non-obvious
@@ -314,11 +342,12 @@ def _login_deadline_cloud_monitor_process(
         time.sleep(0.5)
 
 
-@api.record_function_latency_telemetry_event()
+@api.record_function_latency_telemetry_event(details_provider=_credentials_source_details)
 def login(
     on_pending_authorization: Optional[Callable],
     on_cancellation_check: Optional[Callable],
     config: Optional[ConfigParser] = None,
+    from_gui: bool = False,
 ) -> str:
     """
     For AWS profiles created by Deadline Cloud monitor or by AWS Console sign-in,
@@ -332,6 +361,9 @@ def login(
         on_cancellation_check (Callable): A callback that allows the operation to cancel before login completes
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
+        from_gui (bool): Whether a GUI made this call, recorded as the telemetry event's
+                usage_mode. Both the CLI and the submitter GUIs reach this function, and
+                nothing else in the call distinguishes them.
     """
     credentials_source = get_credentials_source(config)
     if credentials_source == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
@@ -346,8 +378,8 @@ def login(
     )
 
 
-@api.record_function_latency_telemetry_event()
-def logout(config: Optional[ConfigParser] = None) -> str:
+@api.record_function_latency_telemetry_event(details_provider=_credentials_source_details)
+def logout(config: Optional[ConfigParser] = None, from_gui: bool = False) -> str:
     """
     For AWS profiles created by Deadline Cloud monitor or by AWS Console sign-in,
     logs out of Deadline Cloud.
@@ -355,6 +387,9 @@ def logout(config: Optional[ConfigParser] = None) -> str:
      Args:
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
+        from_gui (bool): Whether a GUI made this call, recorded as the telemetry event's
+                usage_mode. Both the CLI and the submitter GUIs reach this function, and
+                nothing else in the call distinguishes them.
     """
     credentials_source = get_credentials_source(config)
     if credentials_source == AwsCredentialsSource.AWS_CONSOLE_LOGIN:

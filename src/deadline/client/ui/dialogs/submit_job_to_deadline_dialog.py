@@ -439,7 +439,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.deadline_authentication_status.refresh_status()
 
     def on_logout(self):
-        api.logout()
+        api.logout(from_gui=True)
         self.refresh_deadline_settings()
         # This widget watches the auth files, but that does
         # not always catch a change so force a refresh here.
