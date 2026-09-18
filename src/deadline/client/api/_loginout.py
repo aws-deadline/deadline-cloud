@@ -58,8 +58,8 @@ def _check_console_login_dependency(profile_name: str) -> None:
 
     if EC is None:
         raise DeadlineOperationError(
-            f"Signing in to the AWS Console sign-in profile {profile_name} requires an additional "
-            'dependency. Install it with: pip install "deadline[console]"'
+            f"Could not sign in to the AWS Console sign-in profile {profile_name}: "
+            f"{_session.MISSING_DEPENDENCY_REMEDIATION}"
         )
 
 
@@ -294,7 +294,8 @@ def _login_deadline_cloud_monitor_process(
         # login completes — the GUI does the same on file-watch events in
         # DeadlineAuthenticationStatus.files_changed, but CLI has no watcher.
         _session.get_boto3_session(force_refresh=True, config=config)
-        if check_authentication_status(config) == AwsAuthenticationStatus.AUTHENTICATED:
+        auth_status = check_authentication_status(config)
+        if auth_status == AwsAuthenticationStatus.AUTHENTICATED:
             return f"{profile_type_label}: {profile_name}"
         if on_cancellation_check:
             # Check if the UI has signaled a cancel
@@ -310,6 +311,23 @@ def _login_deadline_cloud_monitor_process(
             )
             out = p.stdout.read().decode("utf-8") if p.stdout else ""
             raise DeadlineOperationError(f"{err_prefix}\n{out}")
+        if auth_status == AwsAuthenticationStatus.MISSING_DEPENDENCY:
+            # Unlike CONFIGURATION_ERROR, this one can never resolve by itself (see
+            # check_authentication_status), so keep polling would hang forever instead of
+            # surfacing the fix. Leave Deadline Cloud monitor running: the missing/broken
+            # dependency is in this process's own Python environment, not the monitor's, and
+            # a launcher `p` typically just foregrounds an already-running instance -- killing
+            # it wouldn't stop that instance, and would be collateral for a fault it didn't
+            # cause.
+            #
+            # profile_type_label, not a hardcoded profile type: this function is shared by
+            # both AWS Console sign-in and Deadline Cloud monitor profiles, and
+            # MISSING_DEPENDENCY isn't console-specific either (see
+            # MISSING_DEPENDENCY_REMEDIATION's docstring in _session.py).
+            raise DeadlineOperationError(
+                f"Could not sign in to the {profile_type_label} {profile_name}: "
+                f"{_session.MISSING_DEPENDENCY_REMEDIATION}"
+            )
 
         time.sleep(0.5)
 

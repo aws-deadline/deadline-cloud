@@ -173,5 +173,8 @@
   "Value": "값",
   "Save to": "저장 위치",
   "Location": "위치",
-  "Select directory": "디렉터리 선택"
+  "Select directory": "디렉터리 선택",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

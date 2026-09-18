@@ -22,6 +22,7 @@ from botocore.client import BaseClient  # type: ignore[import]
 from botocore.credentials import CredentialProvider, RefreshableCredentials
 from botocore.exceptions import (  # type: ignore[import]
     ClientError,
+    MissingDependencyException,
     ProfileNotFound,
 )
 from botocore.session import get_session as get_botocore_session
@@ -49,6 +50,28 @@ class AwsAuthenticationStatus(Enum):
     CONFIGURATION_ERROR = 1
     AUTHENTICATED = 2
     NEEDS_LOGIN = 3
+    # Distinct from CONFIGURATION_ERROR: this is the one cause a login can never fix
+    # (see check_authentication_status), so callers that poll for login completion
+    # can safely stop on this value without also stopping on an ordinary,
+    # possibly-transient CONFIGURATION_ERROR.
+    MISSING_DEPENDENCY = 4
+
+
+# Shared by every surface that reports MISSING_DEPENDENCY -- the pre-flight check
+# (_check_console_login_dependency) and the login poll loop (both in _loginout.py),
+# `deadline auth status` (auth_group.py), and the GUI status widget's more-info dialog
+# (deadline_authentication_status_widget.py) -- so they don't drift out of sync or
+# recommend different fixes for the same fault. Not profile-type-specific: every
+# MissingDependencyException botocore raises (DPoP signing, SigV4A endpoint resolution,
+# CRT-only checksums, MRAP) is gated on the same optional 'awscrt' dependency, regardless
+# of which credentials source triggered the probe. Recommends the `deadline[console]`
+# extra rather than the underlying `botocore[crt]` directly, so a reinstall of this
+# package keeps requesting the same dependency instead of silently dropping it.
+MISSING_DEPENDENCY_REMEDIATION = (
+    "The AWS SDK's optional 'awscrt' package is missing or broken in this Python "
+    "environment. Logging in will not fix this, so install it, for example with "
+    'pip install "deadline[console]", and try again.'
+)
 
 
 # Place for stashing context to be attached to boto clients.
@@ -597,6 +620,8 @@ def check_authentication_status(
                 object to use instead of the config file.
 
     Returns AwsAuthenticationStatus enum value:
+      - MISSING_DEPENDENCY if the environment is missing a dependency that logging in
+        cannot supply
       - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
       - AUTHENTICATED if they are fine
       - NEEDS_LOGIN if a login is required, for the profile types that support it.
@@ -606,6 +631,22 @@ def check_authentication_status(
         try:
             _list_farms_for_auth_probe(config=config)
             return AwsAuthenticationStatus.AUTHENTICATED
+        except MissingDependencyException as e:
+            # botocore raises this when a feature needs awscrt and it's absent or broken
+            # (botocore.compat swallows the ImportError, so "broken" and "absent" look
+            # identical). This isn't only the AWS Console sign-in LoginProvider path: it
+            # also gates SigV4A endpoint resolution, CRT-only checksums, and S3 MRAP, none
+            # of which are console-profile-specific. Logging in again cannot fix any of
+            # them, so reporting NEEDS_LOGIN here would turn a packaging fault into a
+            # permanent "sign-in needed" loop. Kept distinct from the generic
+            # CONFIGURATION_ERROR below: unlike that one, this cause can never resolve
+            # on its own, so a caller polling for login completion can stop on this
+            # value alone without also stopping on an ordinary, possibly-transient
+            # CONFIGURATION_ERROR.
+            logging.getLogger(__name__).error(
+                "%s Original error: %s", MISSING_DEPENDENCY_REMEDIATION, e
+            )
+            return AwsAuthenticationStatus.MISSING_DEPENDENCY
         except Exception:
             # We assume that the presence of a Deadline Cloud monitor or AWS Console
             # sign-in profile means we know everything necessary to start a login.
