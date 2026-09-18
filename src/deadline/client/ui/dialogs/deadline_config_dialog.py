@@ -171,7 +171,7 @@ class DeadlineConfigDialog(QDialog):
         self.config_box.refresh()
 
     def on_logout(self):
-        api.logout(config=self.config_box.config)
+        api.logout(config=self.config_box.config, from_gui=True)
         self.deadline_authentication_status.refresh_status()
         self.config_box.refresh()
 

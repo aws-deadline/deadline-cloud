@@ -584,6 +584,59 @@ def test_latency_decorator_details_provider_receives_bound_arguments(fresh_deadl
         assert recorded == ["vanilla", "chocolate"]
 
 
+def test_latency_decorator_usage_mode_follows_from_gui_argument(fresh_deadline_config):
+    """usage_mode tracks the wrapped call's from_gui argument, not the decoration site."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event()
+        def test_call(from_gui: bool = False):
+            return
+
+        # WHEN: the same decorated function is reached from both surfaces
+        test_call()  # type:ignore
+        test_call(from_gui=True)  # type:ignore
+        test_call(True)  # type:ignore
+
+        # THEN
+        recorded = [
+            call.args[0].event_details["usage_mode"] for call in queue_mock.put_nowait.mock_calls
+        ]
+        assert recorded == ["CLI", "GUI", "GUI"]
+
+
+def test_latency_decorator_usage_mode_defaults_to_cli_without_from_gui(fresh_deadline_config):
+    """A wrapped function that declares no from_gui parameter still reports CLI."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event()
+        def test_call():
+            return
+
+        # WHEN
+        test_call()  # type:ignore
+
+        # THEN
+        assert queue_mock.put_nowait.mock_calls[0].args[0].event_details["usage_mode"] == "CLI"
+
+
 def test_latency_decorator_survives_failing_details_provider(fresh_deadline_config):
     """A provider that raises costs its extra details, not the call or the event."""
     with (

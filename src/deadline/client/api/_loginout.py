@@ -332,6 +332,7 @@ def login(
     on_pending_authorization: Optional[Callable],
     on_cancellation_check: Optional[Callable],
     config: Optional[ConfigParser] = None,
+    from_gui: bool = False,
 ) -> str:
     """
     For AWS profiles created by Deadline Cloud monitor or by AWS Console sign-in,
@@ -345,6 +346,9 @@ def login(
         on_cancellation_check (Callable): A callback that allows the operation to cancel before login completes
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
+        from_gui (bool): Whether a GUI made this call, recorded as the telemetry event's
+                usage_mode. Both the CLI and the submitter GUIs reach this function, and
+                nothing else in the call distinguishes them.
     """
     credentials_source = get_credentials_source(config)
     if credentials_source == AwsCredentialsSource.DEADLINE_CLOUD_MONITOR_LOGIN:
@@ -360,7 +364,7 @@ def login(
 
 
 @api.record_function_latency_telemetry_event(details_provider=_credentials_source_details)
-def logout(config: Optional[ConfigParser] = None) -> str:
+def logout(config: Optional[ConfigParser] = None, from_gui: bool = False) -> str:
     """
     For AWS profiles created by Deadline Cloud monitor or by AWS Console sign-in,
     logs out of Deadline Cloud.
@@ -368,6 +372,9 @@ def logout(config: Optional[ConfigParser] = None) -> str:
      Args:
         config (ConfigParser, optional): The AWS Deadline Cloud configuration
                 object to use instead of the config file.
+        from_gui (bool): Whether a GUI made this call, recorded as the telemetry event's
+                usage_mode. Both the CLI and the submitter GUIs reach this function, and
+                nothing else in the call distinguishes them.
     """
     credentials_source = get_credentials_source(config)
     if credentials_source == AwsCredentialsSource.AWS_CONSOLE_LOGIN:

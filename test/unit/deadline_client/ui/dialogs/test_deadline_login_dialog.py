@@ -77,9 +77,12 @@ class TestDeadlineLoginDialogReturnValue:
         """
         login_started = threading.Event()
 
-        def blocking_login(on_pending_authorization, on_cancellation_check, config=None):
+        def blocking_login(
+            on_pending_authorization, on_cancellation_check, config=None, from_gui=False
+        ):
             # Emulate the real handshake: keep running until the dialog signals
             # cancellation (via the Cancel button setting dialog.canceled).
+            assert from_gui is True, "the dialog must mark its logins as GUI usage"
             login_started.set()
             while not on_cancellation_check():
                 pass
@@ -138,7 +141,7 @@ class TestPendingAuthorizationMessage:
         then blocks until cancelled, and returns the text the dialog settled on.
         """
 
-        def login(on_pending_authorization, on_cancellation_check, config=None):
+        def login(on_pending_authorization, on_cancellation_check, config=None, from_gui=False):
             on_pending_authorization(credentials_source=credentials_source)
             while not on_cancellation_check():
                 pass
