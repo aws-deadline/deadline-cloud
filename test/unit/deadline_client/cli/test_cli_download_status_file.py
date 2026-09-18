@@ -507,6 +507,23 @@ class TestAtomicWriteJson:
 
         assert os.path.getsize(file_path) < len(json.dumps(data, indent=2))
 
+    def test_returns_the_byte_count_written(self, tmp_path):
+        file_path = str(tmp_path / "status.json")
+        data: dict[str, Any] = {"jobs": {f"job-{i}": {"tasks": {"1-1": {}}} for i in range(15)}}
+
+        written = _atomic_write_json(file_path, data)
+
+        assert written == os.path.getsize(file_path)
+
+    def test_returns_the_byte_count_for_non_ascii_content(self, tmp_path):
+        file_path = str(tmp_path / "status.json")
+        # json.dump escapes non-ASCII, so the count must match bytes on disk, not characters in.
+        data = {"jobs": {"job-a": {"error_message": "café ünïcode 日本語"}}}
+
+        written = _atomic_write_json(file_path, data)
+
+        assert written == os.path.getsize(file_path)
+
 
 class TestCountTaskRecords:
     """Tests for _count_task_records."""
@@ -565,9 +582,9 @@ class TestRecordStatusFileTelemetry:
             }
         }
         file_path = str(tmp_path / "status.json")
-        _atomic_write_json(file_path, content)
+        written = _atomic_write_json(file_path, content)
 
-        _record_status_file_telemetry(file_path, content)
+        _record_status_file_telemetry(file_path, content, written)
 
         assert len(events) == 1
         assert events[0]["event_type"] == "com.amazon.rum.deadline.queue_sync_output_status_file"
@@ -580,20 +597,38 @@ class TestRecordStatusFileTelemetry:
     def test_reports_zero_counts_for_an_empty_file(self, tmp_path, monkeypatch):
         events = self._capture_events(monkeypatch)
         file_path = str(tmp_path / "status.json")
-        _atomic_write_json(file_path, {"jobs": {}})
+        written = _atomic_write_json(file_path, {"jobs": {}})
 
-        _record_status_file_telemetry(file_path, {"jobs": {}})
+        _record_status_file_telemetry(file_path, {"jobs": {}}, written)
 
         assert events[0]["event_details"]["job_count"] == 0
         assert events[0]["event_details"]["task_record_count"] == 0
         assert events[0]["event_details"]["file_size_bytes"] > 0
 
-    def test_swallows_a_missing_file(self, tmp_path, monkeypatch):
+    def test_reports_our_own_write_not_whatever_is_at_the_path_now(self, tmp_path, monkeypatch):
+        """Another machine syncing this queue can replace the path once the lock is released."""
         events = self._capture_events(monkeypatch)
+        content: dict[str, Any] = {"jobs": {"job-a": {"tasks": {"1-1": {}}}}}
+        file_path = str(tmp_path / "status.json")
+        written = _atomic_write_json(file_path, content)
+        _atomic_write_json(file_path, {"status_file_path": "/elsewhere"})
 
-        _record_status_file_telemetry(str(tmp_path / "absent.json"), {"jobs": {}})
+        _record_status_file_telemetry(file_path, content, written)
 
-        assert events == []
+        assert events[0]["event_details"]["file_size_bytes"] == written
+        assert events[0]["event_details"]["file_size_bytes"] != os.path.getsize(file_path)
+
+    def test_reports_the_counts_even_when_the_file_is_gone(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        content: dict[str, Any] = {"jobs": {"job-a": {"tasks": {"1-1": {}, "1-2": {}}}}}
+        file_path = str(tmp_path / "status.json")
+        written = _atomic_write_json(file_path, content)
+        os.unlink(file_path)
+
+        _record_status_file_telemetry(file_path, content, written)
+
+        assert events[0]["event_details"]["task_record_count"] == 2
+        assert events[0]["event_details"]["file_size_bytes"] == written
 
     def test_swallows_a_failing_telemetry_client(self, tmp_path, monkeypatch):
         def _raise(*a, **k):
@@ -603,9 +638,9 @@ class TestRecordStatusFileTelemetry:
             "deadline.client.api.get_deadline_cloud_library_telemetry_client", _raise
         )
         file_path = str(tmp_path / "status.json")
-        _atomic_write_json(file_path, {"jobs": {}})
+        written = _atomic_write_json(file_path, {"jobs": {}})
 
-        _record_status_file_telemetry(file_path, {"jobs": {}})
+        _record_status_file_telemetry(file_path, {"jobs": {}}, written)
 
     def test_write_reports_the_file_it_just_wrote(self, tmp_path, monkeypatch):
         events = self._capture_events(monkeypatch)

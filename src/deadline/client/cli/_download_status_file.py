@@ -383,9 +383,13 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
     return {}
 
 
-def _atomic_write_json(file_path: str, data: dict[str, Any]) -> None:
+def _atomic_write_json(file_path: str, data: dict[str, Any]) -> int:
     """
     Writes JSON data atomically using a temp file + rename to prevent partial reads.
+
+    Returns the byte count from our own descriptor: another machine syncing this queue can
+    replace file_path the moment the lock is released, so stat'ing it afterwards can size
+    someone else's write.
     """
     dir_path = os.path.dirname(file_path)
     os.makedirs(dir_path, exist_ok=True)
@@ -395,7 +399,10 @@ def _atomic_write_json(file_path: str, data: dict[str, Any]) -> None:
         with os.fdopen(fd, "w") as f:
             # Grows unbounded and the Monitor re-parses all of it per poll.
             json.dump(data, f, separators=(",", ":"))
+            f.flush()
+            size = os.fstat(f.fileno()).st_size
         os.replace(tmp_path, file_path)
+        return size
     except Exception:
         try:
             os.unlink(tmp_path)
@@ -414,14 +421,16 @@ def _count_task_records(jobs: dict[str, Any]) -> int:
     return total
 
 
-def _record_status_file_telemetry(status_file_path: str, status_content: dict[str, Any]) -> None:
+def _record_status_file_telemetry(
+    status_file_path: str, status_content: dict[str, Any], file_size_bytes: int
+) -> None:
     """Best-effort: the file is already written, so a telemetry failure must not fail the write."""
     try:
         jobs = status_content.get("jobs", {})
         api.get_deadline_cloud_library_telemetry_client().record_event(
             event_type="com.amazon.rum.deadline.queue_sync_output_status_file",
             event_details={
-                "file_size_bytes": os.path.getsize(status_file_path),
+                "file_size_bytes": file_size_bytes,
                 "job_count": len(jobs),
                 "task_record_count": _count_task_records(jobs),
             },
@@ -607,10 +616,10 @@ def write_download_status_file(
                     succeeded_task_ids=succeeded_task_ids,
                 )
 
-                _atomic_write_json(status_file_path, status_content)
+                written_bytes = _atomic_write_json(status_file_path, status_content)
             written_paths.append(status_file_path)
             # Outside the lock: it is contended by every machine syncing this queue.
-            _record_status_file_telemetry(status_file_path, status_content)
+            _record_status_file_telemetry(status_file_path, status_content, written_bytes)
             if not fmt.suppressed:
                 fmt.summary_row("status file", _format_path(status_file_path))
         except Exception as e:
