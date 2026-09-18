@@ -2,7 +2,7 @@
 
 import atexit
 from functools import lru_cache, wraps
-from inspect import signature
+from inspect import Parameter, signature
 import json
 import logging
 import os
@@ -436,7 +436,10 @@ class TelemetryClient:
     def record_event(
         self, event_type: str, event_details: Dict[str, Any], *, from_gui: bool = False
     ):
-        event_details["usage_mode"] = "GUI" if from_gui else "CLI"
+        # setdefault, not assignment: a caller that already knows its surface is not
+        # always one of this pair -- the MCP server records usage_mode "MCP" -- and
+        # overwriting it forced every such event into the CLI bucket.
+        event_details.setdefault("usage_mode", "GUI" if from_gui else "CLI")
         self._put_telemetry_record(
             TelemetryEvent(
                 event_type=event_type,
@@ -519,6 +522,102 @@ def get_deadline_cloud_library_telemetry_client(
     return get_telemetry_client("deadline-cloud-library", version, config=config)
 
 
+@_swallow_exceptions
+def _record_decorator_event(
+    *,
+    event_type: str,
+    event_details: Dict[str, Any],
+    success: bool,
+    from_gui: bool,
+) -> None:
+    """
+    Record an event describing a decorated call's outcome.
+
+    Swallows its own failures. Both decorators record from a ``finally``, so this runs
+    while the wrapped call's exception is propagating; anything raised here would replace
+    the error the caller is trying to report with a telemetry error.
+    """
+    event_details["is_success"] = success
+    if not success:
+        # Only read when the call actually failed: sys.exc_info() reports whatever
+        # exception this THREAD is handling, not this try block. A decorated call made
+        # from inside an except block that then succeeds would otherwise be tagged with
+        # the unrelated exception being handled around it.
+        raised_exception = sys.exc_info()[1]
+        if raised_exception is not None:
+            event_details["exception_type"] = type(raised_exception).__name__
+
+    get_deadline_cloud_library_telemetry_client().record_event(
+        event_type=event_type,
+        event_details=event_details,
+        from_gui=from_gui,
+    )
+
+
+def _bind_arguments(
+    function: Callable[..., Any], args: tuple, kwargs: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Map a call's arguments onto their parameter names, so a caller of this can read a
+    parameter by name whether it was passed positionally or by keyword.
+
+    Arguments absorbed by a ``**kwargs`` parameter are flattened to the top level rather
+    than left nested under it, and ``*args`` is dropped since it has no parameter name to
+    record values under. Without the flattening, a lookup by name silently misses every
+    value the caller passed through a catch-all.
+
+    Returns an empty dict if the arguments cannot be bound: telemetry reads these for
+    labelling only, and must not fail the call it is describing.
+    """
+    try:
+        function_signature = signature(function)
+        bound = function_signature.bind_partial(*args, **kwargs)
+        bound.apply_defaults()
+
+        flattened: Dict[str, Any] = {}
+        for name, value in bound.arguments.items():
+            kind = function_signature.parameters[name].kind
+            if kind is Parameter.VAR_KEYWORD:
+                flattened.update(value)
+            elif kind is not Parameter.VAR_POSITIONAL:
+                flattened[name] = value
+        return flattened
+    except Exception:
+        logger.debug("Swallowed exception binding arguments for telemetry", exc_info=True)
+        return {}
+
+
+def _resolve_details_provider(
+    details_provider: Callable[..., Dict[str, Any]],
+    bound_arguments: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Pass a call's bound arguments to ``details_provider`` and return the details it made.
+
+    A provider receives only the parameters it declares, unless it declares a ``**kwargs``
+    catch-all, in which case it receives all of them. Passing everything unconditionally
+    would mean a provider naming just the one parameter it cares about raises TypeError on
+    every call and silently contributes nothing.
+
+    Returns an empty dict on any failure, or if the provider returns a non-mapping: a
+    provider must not be able to fail the call it is describing, nor cost it its event.
+    """
+    try:
+        parameters = signature(details_provider).parameters
+        if any(parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values()):
+            provider_arguments = bound_arguments
+        else:
+            provider_arguments = {
+                name: value for name, value in bound_arguments.items() if name in parameters
+            }
+
+        details = details_provider(**provider_arguments)
+        return details if isinstance(details, dict) else {}
+    except Exception:
+        logger.debug("Swallowed exception in telemetry details provider", exc_info=True)
+        return {}
+
+
 def record_success_fail_telemetry_event(**decorator_kwargs: Any) -> Callable[[F], F]:
     """
     Decorator to try catch a function. Sends a success / fail telemetry event.
@@ -526,12 +625,8 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Any) -> Callable[[F]
     """
 
     def inner(function: F) -> F:
+        @wraps(function)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            """
-            Wrapper to try-catch a function for telemetry
-            :param * Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
-            :param ** Python variable argument. See https://docs.python.org/3/glossary.html#term-parameter
-            """
             success: bool = False
             try:
                 result = function(*args, **kwargs)
@@ -543,58 +638,18 @@ def record_success_fail_telemetry_event(**decorator_kwargs: Any) -> Callable[[F]
                 # Copy: the decorator's dict is shared by every call to this function, and
                 # record_event writes usage_mode into whatever it is handed, so mutating it
                 # in place carries this call's exception_type into the next call's event.
-                event_details: dict = dict(decorator_kwargs.get("event_details", {}))
-                event_details["is_success"] = success
-                raised_exception = sys.exc_info()[1]
-                if raised_exception is not None:
-                    event_details["exception_type"] = type(raised_exception).__name__
+                event_details: Dict[str, Any] = dict(decorator_kwargs.get("event_details", {}))
 
-                get_deadline_cloud_library_telemetry_client().record_event(
+                _record_decorator_event(
                     event_type=f"com.amazon.rum.deadline.{event_name}",
                     event_details=event_details,
+                    success=success,
+                    from_gui=bool(_bind_arguments(function, args, kwargs).get("from_gui", False)),
                 )
 
-        wrapper.__doc__ = function.__doc__
         return cast(F, wrapper)
 
     return inner
-
-
-def _bind_arguments(
-    function: Callable[..., Any], args: tuple, kwargs: Dict[str, Any]
-) -> Dict[str, Any]:
-    """
-    Map a call's arguments onto their parameter names, so a caller of this can read a
-    parameter by name whether it was passed positionally or by keyword.
-
-    Returns an empty dict if the arguments cannot be bound: telemetry reads these for
-    labelling only, and must not fail the call it is describing.
-    """
-    try:
-        bound = signature(function).bind_partial(*args, **kwargs)
-        bound.apply_defaults()
-        return bound.arguments
-    except Exception:
-        logger.debug("Swallowed exception binding arguments for telemetry", exc_info=True)
-        return {}
-
-
-def _resolve_details_provider(
-    details_provider: Callable[..., Dict[str, Any]],
-    bound_arguments: Dict[str, Any],
-) -> Dict[str, Any]:
-    """
-    Pass a call's bound arguments to ``details_provider``, so a provider can declare only
-    the parameters it needs.
-
-    Returns an empty dict on any failure: a provider must not be able to fail the call it
-    is describing, nor cost that call its latency event.
-    """
-    try:
-        return details_provider(**bound_arguments)
-    except Exception:
-        logger.debug("Swallowed exception in telemetry details provider", exc_info=True)
-        return {}
 
 
 def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable[[F], F]:
@@ -604,7 +659,9 @@ def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable
     The event is recorded whether the call returns or raises, and carries ``is_success``
     plus, when it raised, ``exception_type``. A decorated function whose failures are the
     thing worth measuring would otherwise report nothing at all on exactly those calls,
-    leaving a failure indistinguishable from a call that was never made.
+    leaving a failure indistinguishable from a call that was never made. Note that
+    ``latency`` therefore also carries time-to-failure, so aggregations over it want to
+    filter on ``is_success``.
 
     ``usage_mode`` comes from the wrapped function's own ``from_gui`` argument when it
     declares one. A value fixed at decoration time would mislabel every call from the
@@ -613,15 +670,30 @@ def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable
 
     Recognised keyword arguments:
       * ``metric_name``: recorded as ``function_call``; defaults to the function's name.
-      * ``details_provider``: callable returning extra event details, called with the
-        wrapped call's own arguments bound to their parameter names.
+      * ``details_provider``: callable returning extra event details, given the wrapped
+        call's arguments bound to their parameter names. Resolved BEFORE the wrapped call
+        runs, so it describes the state the call acted on rather than what the call left.
 
     :param ** Python variable arguments. See https://docs.python.org/3/glossary.html#term-parameter.
     """
 
     def inner(function: F) -> F:
+        details_provider = decorator_kwargs.get("details_provider")
+
         @wraps(function)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            bound_arguments = _bind_arguments(function, args, kwargs)
+
+            # Resolved up front rather than in the finally: login and logout tear down the
+            # very state a provider reads -- logout invalidates the boto3 session cache and
+            # the monitor may remove the profile -- so reading it afterwards reports the
+            # state the call left behind instead of the one it acted on.
+            provider_details = (
+                _resolve_details_provider(details_provider, bound_arguments)
+                if details_provider is not None
+                else {}
+            )
+
             start_t = time.perf_counter_ns()
             success: bool = False
             try:
@@ -629,29 +701,16 @@ def record_function_latency_telemetry_event(**decorator_kwargs: Any) -> Callable
                 success = True
                 return ret_val
             finally:
-                latency = time.perf_counter_ns() - start_t
-
-                event_name = decorator_kwargs.get("metric_name", function.__name__)
                 event_details: Dict[str, Any] = {
-                    "latency": latency,
-                    "function_call": event_name,
-                    "is_success": success,
+                    "latency": time.perf_counter_ns() - start_t,
+                    "function_call": decorator_kwargs.get("metric_name", function.__name__),
                 }
-                raised_exception = sys.exc_info()[1]
-                if raised_exception is not None:
-                    event_details["exception_type"] = type(raised_exception).__name__
+                event_details.update(provider_details)
 
-                bound_arguments = _bind_arguments(function, args, kwargs)
-
-                details_provider = decorator_kwargs.get("details_provider")
-                if details_provider is not None:
-                    event_details.update(
-                        _resolve_details_provider(details_provider, bound_arguments)
-                    )
-
-                get_deadline_cloud_library_telemetry_client().record_event(
+                _record_decorator_event(
                     event_type="com.amazon.rum.deadline.latency",
                     event_details=event_details,
+                    success=success,
                     from_gui=bool(bound_arguments.get("from_gui", False)),
                 )
 

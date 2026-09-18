@@ -31,6 +31,21 @@ class UnsupportedProfileTypeForLoginLogout(DeadlineOperationError):
     pass
 
 
+class LoginCanceled(DeadlineOperationError):
+    """
+    Raised when the user abandons a login rather than it failing.
+
+    Distinct from the errors around it so telemetry's ``exception_type`` separates the two:
+    cancelling is the most common non-success outcome of the GUI flow, and bucketing it
+    with genuine sign-in failures would read as a large failure rate made mostly of users
+    who changed their mind. It also gives the dialog something to display -- a bare
+    ``Exception()`` rendered as an empty reason.
+    """
+
+    def __init__(self, message: str = "Login canceled."):
+        super().__init__(message)
+
+
 def _credentials_source_details(
     config: Optional[ConfigParser] = None, **_kwargs: Any
 ) -> Dict[str, Any]:
@@ -313,7 +328,7 @@ def _login_deadline_cloud_monitor_process(
             # Check if the UI has signaled a cancel
             if on_cancellation_check():
                 p.kill()
-                raise Exception()
+                raise LoginCanceled()
         if p.poll():
             # Deadline Cloud monitor has stopped, we assume it returned us an error on one line on stderr
             # but let's be specific about Deadline Cloud monitor failing incase the error is non-obvious
