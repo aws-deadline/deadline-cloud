@@ -137,10 +137,13 @@ def test_get_check_authentication_status_configuration_error(fresh_deadline_conf
 def test_get_check_authentication_status_missing_dependency_is_not_needs_login(
     fresh_deadline_config, caplog
 ):
-    """A missing or broken awscrt raises MissingDependencyException before botocore
-    even reads the cached token. Logging in cannot supply the dependency, so the
-    status must be CONFIGURATION_ERROR even for a profile type that supports login --
-    NEEDS_LOGIN would turn a packaging fault into a permanent sign-in loop."""
+    """A missing or broken awscrt makes the `deadline:ListFarms` probe raise
+    MissingDependencyException. Logging in cannot supply the dependency, so the status
+    must be MISSING_DEPENDENCY -- not NEEDS_LOGIN, even for a profile type that supports
+    login, and not the generic CONFIGURATION_ERROR, since callers that poll for login
+    completion key on this value specifically to know the fault can't resolve on retry."""
+    caplog.set_level("ERROR", logger="deadline.client.api._session")
+
     with (
         patch.object(api._session, "get_boto3_client") as boto3_client_mock,
         patch.object(
@@ -155,8 +158,10 @@ def test_get_check_authentication_status_missing_dependency_is_not_needs_login(
             msg='pip install "botocore[crt]"'
         )
 
-        assert api.check_authentication_status() == api.AwsAuthenticationStatus.CONFIGURATION_ERROR
-        assert "awscrt" in caplog.text
+        assert api.check_authentication_status() == api.AwsAuthenticationStatus.MISSING_DEPENDENCY
+        # The log is the only place a CLI user sees the original botocore error, so the
+        # interpolated cause -- not just the surrounding hard-coded wording -- must survive.
+        assert 'pip install "botocore[crt]"' in caplog.text
 
 
 def test_get_queue_user_boto3_session_no_profile(fresh_deadline_config):

@@ -50,6 +50,11 @@ class AwsAuthenticationStatus(Enum):
     CONFIGURATION_ERROR = 1
     AUTHENTICATED = 2
     NEEDS_LOGIN = 3
+    # Distinct from CONFIGURATION_ERROR: this is the one cause a login can never fix
+    # (see check_authentication_status), so callers that poll for login completion
+    # can safely stop on this value without also stopping on an ordinary,
+    # possibly-transient CONFIGURATION_ERROR.
+    MISSING_DEPENDENCY = 4
 
 
 # Place for stashing context to be attached to boto clients.
@@ -598,8 +603,9 @@ def check_authentication_status(
                 object to use instead of the config file.
 
     Returns AwsAuthenticationStatus enum value:
-      - CONFIGURATION_ERROR if there is an unexpected error accessing credentials, or
-        the environment is missing a dependency that logging in cannot supply
+      - MISSING_DEPENDENCY if the environment is missing a dependency that logging in
+        cannot supply
+      - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
       - AUTHENTICATED if they are fine
       - NEEDS_LOGIN if a login is required, for the profile types that support it.
     """
@@ -615,7 +621,11 @@ def check_authentication_status(
             # compiled awscrt module that fails to import looks identical to an absent
             # one (botocore.compat swallows the ImportError). Logging in again cannot
             # fix either, so reporting NEEDS_LOGIN here would turn a packaging fault
-            # into a permanent "sign-in needed" loop.
+            # into a permanent "sign-in needed" loop. Kept distinct from the generic
+            # CONFIGURATION_ERROR below: unlike that one, this cause can never resolve
+            # on its own, so a caller polling for login completion can stop on this
+            # value alone without also stopping on an ordinary, possibly-transient
+            # CONFIGURATION_ERROR.
             logging.getLogger(__name__).error(
                 "The AWS SDK is missing a dependency it needs for this AWS profile, "
                 "so authentication cannot be checked. This usually means the "
@@ -623,7 +633,7 @@ def check_authentication_status(
                 "package; logging in will not fix it. Original error: %s",
                 e,
             )
-            return AwsAuthenticationStatus.CONFIGURATION_ERROR
+            return AwsAuthenticationStatus.MISSING_DEPENDENCY
         except Exception:
             # We assume that the presence of a Deadline Cloud monitor or AWS Console
             # sign-in profile means we know everything necessary to start a login.

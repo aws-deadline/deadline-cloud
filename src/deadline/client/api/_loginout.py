@@ -297,16 +297,6 @@ def _login_deadline_cloud_monitor_process(
         auth_status = check_authentication_status(config)
         if auth_status == AwsAuthenticationStatus.AUTHENTICATED:
             return f"{profile_type_label}: {profile_name}"
-        if auth_status == AwsAuthenticationStatus.CONFIGURATION_ERROR:
-            # For this function's two credentials sources, check_authentication_status only
-            # returns CONFIGURATION_ERROR for a missing/broken awscrt (see its docstring).
-            # Signing in again in the still-running Deadline Cloud monitor can't fix that, so
-            # keep polling would hang forever instead of surfacing the fix.
-            p.kill()
-            raise DeadlineOperationError(
-                f"Could not verify the {profile_name} profile because of a configuration "
-                "error (see the error logged above). Logging in again will not fix this."
-            )
         if on_cancellation_check:
             # Check if the UI has signaled a cancel
             if on_cancellation_check():
@@ -321,6 +311,20 @@ def _login_deadline_cloud_monitor_process(
             )
             out = p.stdout.read().decode("utf-8") if p.stdout else ""
             raise DeadlineOperationError(f"{err_prefix}\n{out}")
+        if auth_status == AwsAuthenticationStatus.MISSING_DEPENDENCY:
+            # Unlike CONFIGURATION_ERROR, this one can never resolve by itself (see
+            # check_authentication_status), so keep polling would hang forever instead of
+            # surfacing the fix. Leave Deadline Cloud monitor running: the missing/broken
+            # dependency is in this process's own Python environment, not the monitor's, and
+            # a launcher `p` typically just foregrounds an already-running instance -- killing
+            # it wouldn't stop that instance, and would be collateral for a fault it didn't
+            # cause.
+            raise DeadlineOperationError(
+                f"Could not sign in to the {profile_name} profile: the AWS SDK's optional "
+                "'awscrt' package is missing or broken in this Python environment, so "
+                "authentication cannot be verified. Logging in again will not fix this -- "
+                'install it, for example with `pip install "deadline[console]"`, and try again.'
+            )
 
         time.sleep(0.5)
 

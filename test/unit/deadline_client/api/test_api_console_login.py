@@ -301,30 +301,38 @@ def test_console_login_cancellation_kills_monitor(console_profile_with_monitor):
     login_process.kill.assert_called_once()
 
 
-def test_console_login_stops_polling_on_configuration_error(console_profile_with_monitor):
+def test_console_login_stops_polling_on_missing_dependency(console_profile_with_monitor):
     """
-    CONFIGURATION_ERROR (missing/broken awscrt for this credentials source) can't be fixed by
-    finishing the sign-in, and Deadline Cloud monitor keeps running either way -- so the poll
-    loop must stop itself instead of spinning on `p.poll()` forever.
+    MISSING_DEPENDENCY can't be fixed by finishing the sign-in -- it means awscrt itself is
+    missing/broken in this process's Python environment, nothing DCM does changes that -- so
+    the poll loop must stop itself instead of spinning on `p.poll()` forever.
+
+    Patches `botocore.compat.EC` so this exercises the poll loop regardless of whether awscrt
+    is actually installed in the test environment: without it, `_check_console_login_dependency`
+    would raise its own (different) error before Popen is even called, for real absence of the
+    package, decoupling this test from that pre-flight check entirely.
     """
     login_process = MagicMock()
     login_process.poll.return_value = None
 
     with (
+        patch("botocore.compat.EC", object()),
         patch.object(subprocess, "Popen", return_value=login_process),
         patch.object(
             api._loginout,
             "check_authentication_status",
-            return_value=AwsAuthenticationStatus.CONFIGURATION_ERROR,
+            return_value=AwsAuthenticationStatus.MISSING_DEPENDENCY,
         ) as status_mock,
     ):
-        with pytest.raises(DeadlineOperationError, match="configuration error"):
+        with pytest.raises(DeadlineOperationError, match="awscrt"):
             api.login(None, None)
 
     # One call, not an unbounded poll: each call also logs an error, so looping here
     # would flood the log in addition to hanging.
     status_mock.assert_called_once()
-    login_process.kill.assert_called_once()
+    # Deadline Cloud monitor isn't the cause and may still be wanted running (e.g. other
+    # profiles, or once the environment is fixed) -- this fault must not kill it.
+    login_process.kill.assert_not_called()
 
 
 def test_console_logout_removes_cached_token(console_profile, login_cache_dir):
