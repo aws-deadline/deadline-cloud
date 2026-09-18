@@ -94,6 +94,8 @@ class AuthenticationState(enum.Enum):
         AUTHENTICATED_READY: User is authenticated and has API access to list-farms
         NEEDS_LOGIN: User needs to log in to authenticate with a DCM profile
         CONFIGURATION_ERROR: There is a configuration issue with the AWS profile.
+        MISSING_DEPENDENCY: The Python environment is missing (or has a broken) a
+            dependency that logging in cannot supply.
         UNEXPECTED_ERROR: An unknown or unexpected error occurred during authentication.
         AUTHENTICATED_NO_API: Deprecated. The authenticated-but-no-API-access state has been
             consolidated into the general authentication status check and is no longer used.
@@ -103,6 +105,7 @@ class AuthenticationState(enum.Enum):
     AUTHENTICATED_READY = enum.auto()
     NEEDS_LOGIN = enum.auto()
     CONFIGURATION_ERROR = enum.auto()
+    MISSING_DEPENDENCY = enum.auto()
     UNEXPECTED_ERROR = enum.auto()
     # Deprecated: retained for backwards compatibility only. This state is no longer
     # produced or handled; the authenticated-but-no-API-access case has been consolidated
@@ -265,6 +268,16 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
                 ).format(profile=self._get_profile_name()),
                 more_info_visible=True,
             ),
+            AuthenticationState.MISSING_DEPENDENCY: AuthenticationStateConfig(
+                # No Log in / Switch profile buttons: unlike NEEDS_LOGIN or
+                # CONFIGURATION_ERROR, nothing the user can do with either button fixes a
+                # missing/broken dependency in this process's own Python environment.
+                icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
+                text=lambda: tr(
+                    "A required dependency is missing for the profile '{profile}'."
+                ).format(profile=self._get_profile_name()),
+                more_info_visible=True,
+            ),
             AuthenticationState.UNEXPECTED_ERROR: AuthenticationStateConfig(
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
                 text=tr("There was an error with authentication"),
@@ -290,6 +303,8 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
             return AuthenticationState.NEEDS_LOGIN
         elif self._status.auth_status == api.AwsAuthenticationStatus.CONFIGURATION_ERROR:
             return AuthenticationState.CONFIGURATION_ERROR
+        elif self._status.auth_status == api.AwsAuthenticationStatus.MISSING_DEPENDENCY:
+            return AuthenticationState.MISSING_DEPENDENCY
         else:
             return AuthenticationState.UNEXPECTED_ERROR
 
@@ -312,6 +327,16 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
                 "\u2022 If you are not using a Deadline Cloud Monitor profile:\n"
                 "  \u2022 Verify that any credential process being used is able to retrieve the credentials or that they aren't expired\n"
                 "    \u2022 You can run the following command to check: aws sts get-caller-identity --profile <PROFILE_NAME>"
+            ).format(profile=self._get_profile_name())
+        elif self._status.auth_status == api.AwsAuthenticationStatus.MISSING_DEPENDENCY:
+            title = tr("Missing Dependency")
+            message = tr(
+                "There is a missing dependency issue with the profile '{profile}'.\n\n"
+                "To resolve this issue:\n"
+                "\u2022 Install the AWS SDK's optional 'awscrt' package, which this "
+                "profile's authentication needs:\n"
+                '  \u2022 pip install "botocore[crt]"\n'
+                "\u2022 Logging in again will not fix this -- the package must be installed"
             ).format(profile=self._get_profile_name())
         else:
             title = tr("Unknown Issue With Configured Profile")

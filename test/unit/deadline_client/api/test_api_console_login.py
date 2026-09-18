@@ -311,6 +311,11 @@ def test_console_login_stops_polling_on_missing_dependency(console_profile_with_
     is actually installed in the test environment: without it, `_check_console_login_dependency`
     would raise its own (different) error before Popen is even called, for real absence of the
     package, decoupling this test from that pre-flight check entirely.
+
+    Supplies a real (no-op) cancellation callback rather than None, so the `p.kill()` inside
+    `if on_cancellation_check:` is reachable -- otherwise `kill.assert_not_called()` below
+    would pass regardless of what the MISSING_DEPENDENCY branch does, since that branch would
+    be unreachable in the same way.
     """
     login_process = MagicMock()
     login_process.poll.return_value = None
@@ -324,14 +329,55 @@ def test_console_login_stops_polling_on_missing_dependency(console_profile_with_
             return_value=AwsAuthenticationStatus.MISSING_DEPENDENCY,
         ) as status_mock,
     ):
-        with pytest.raises(DeadlineOperationError, match="awscrt"):
-            api.login(None, None)
+        with pytest.raises(DeadlineOperationError, match="awscrt") as excinfo:
+            api.login(None, lambda: False)
 
+    # The message names the profile type: this function is shared with Deadline Cloud
+    # monitor profiles, which don't go through the console's awscrt-consuming LoginProvider
+    # at all, so the wording must not claim this is console-specific.
+    assert "AWS Console sign-in profile" in str(excinfo.value)
     # One call, not an unbounded poll: each call also logs an error, so looping here
     # would flood the log in addition to hanging.
     status_mock.assert_called_once()
     # Deadline Cloud monitor isn't the cause and may still be wanted running (e.g. other
     # profiles, or once the environment is fixed) -- this fault must not kill it.
+    login_process.kill.assert_not_called()
+
+
+def test_monitor_login_missing_dependency_message_names_monitor_profile(fresh_deadline_config):
+    """
+    `_login_deadline_cloud_monitor_process` is shared with Deadline Cloud monitor profiles,
+    which authenticate via `credential_process` and never touch the console's
+    awscrt-consuming LoginProvider. If MISSING_DEPENDENCY fires there anyway (botocore's
+    exception also gates SigV4A/CRT-checksum paths that aren't profile-type-specific), the
+    message must say "Deadline Cloud monitor profile", not claim an AWS Console sign-in issue.
+    """
+    profile_name = "sandbox-us-west-2"
+    config.set_setting("defaults.aws_profile_name", profile_name)
+    config.set_setting("deadline-cloud-monitor.path", MONITOR_PATH)
+
+    login_process = MagicMock()
+    login_process.poll.return_value = None
+
+    with (
+        patch.object(api._session, "get_boto3_session") as session_mock,
+        patch.object(api, "get_boto3_session", new=session_mock),
+        patch.object(subprocess, "Popen", return_value=login_process),
+        patch.object(
+            api._loginout,
+            "check_authentication_status",
+            return_value=AwsAuthenticationStatus.MISSING_DEPENDENCY,
+        ),
+    ):
+        session_mock().profile_name = profile_name
+        session_mock()._session.get_scoped_config.return_value = MONITOR_SCOPED_CONFIG
+        session_mock()._session.full_config = {"profiles": {profile_name: MONITOR_SCOPED_CONFIG}}
+
+        with pytest.raises(DeadlineOperationError, match="awscrt") as excinfo:
+            api.login(None, lambda: False)
+
+    assert "Deadline Cloud monitor profile" in str(excinfo.value)
+    assert "AWS Console sign-in profile" not in str(excinfo.value)
     login_process.kill.assert_not_called()
 
 

@@ -319,11 +319,14 @@ def _login_deadline_cloud_monitor_process(
             # a launcher `p` typically just foregrounds an already-running instance -- killing
             # it wouldn't stop that instance, and would be collateral for a fault it didn't
             # cause.
+            #
+            # profile_type_label, not a hardcoded profile type: this function is shared by
+            # both AWS Console sign-in and Deadline Cloud monitor profiles, and
+            # MISSING_DEPENDENCY isn't console-specific either (see
+            # MISSING_DEPENDENCY_REMEDIATION's docstring in _session.py).
             raise DeadlineOperationError(
-                f"Could not sign in to the {profile_name} profile: the AWS SDK's optional "
-                "'awscrt' package is missing or broken in this Python environment, so "
-                "authentication cannot be verified. Logging in again will not fix this -- "
-                'install it, for example with `pip install "deadline[console]"`, and try again.'
+                f"Could not sign in to the {profile_type_label} {profile_name}: "
+                f"{_session.MISSING_DEPENDENCY_REMEDIATION}"
             )
 
         time.sleep(0.5)

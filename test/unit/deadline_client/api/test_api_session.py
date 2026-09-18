@@ -154,14 +154,19 @@ def test_get_check_authentication_status_missing_dependency_is_not_needs_login(
         patch.object(api._list_apis, "get_user_and_identity_store_id", return_value=(None, None)),
     ):
         config.set_setting("defaults.aws_profile_name", "console-login-profile")
+        # A distinctive marker, not real botocore wording: MISSING_DEPENDENCY_REMEDIATION
+        # (asserted below) also happens to mention "botocore[crt]", so a real-looking message
+        # here wouldn't prove the log carries `e`'s own text rather than just the hardcoded
+        # remediation string.
         boto3_client_mock.return_value.list_farms.side_effect = MissingDependencyException(
-            msg='pip install "botocore[crt]"'
+            msg="TEST-ORIGINAL-EXCEPTION-MARKER"
         )
 
         assert api.check_authentication_status() == api.AwsAuthenticationStatus.MISSING_DEPENDENCY
         # The log is the only place a CLI user sees the original botocore error, so the
-        # interpolated cause -- not just the surrounding hard-coded wording -- must survive.
-        assert 'pip install "botocore[crt]"' in caplog.text
+        # interpolated cause -- not just the surrounding hard-coded remediation -- must survive.
+        assert "TEST-ORIGINAL-EXCEPTION-MARKER" in caplog.text
+        assert api._session.MISSING_DEPENDENCY_REMEDIATION in caplog.text
 
 
 def test_get_queue_user_boto3_session_no_profile(fresh_deadline_config):

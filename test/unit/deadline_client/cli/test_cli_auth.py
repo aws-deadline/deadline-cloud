@@ -331,3 +331,55 @@ def test_cli_auth_status_json(fresh_deadline_config):
     # THEN
     assert result.exit_code == 0
     assert actual == expected
+
+
+def test_cli_auth_status_missing_dependency_shows_remediation(fresh_deadline_config):
+    """
+    check_authentication_status logs the MISSING_DEPENDENCY diagnosis at ERROR, but `auth
+    status` silences that logger at CRITICAL (see the `with _modified_logging_level(...)`
+    block) -- without this, a CLI user would see only the bare "Status: MISSING_DEPENDENCY"
+    with no explanation. The message must reach them through the command's own output.
+    """
+    profile_name = "sandbox-us-west-2"
+    config.set_setting("defaults.aws_profile_name", profile_name)
+
+    with (
+        patch.object(api._session, "get_boto3_session") as session_mock,
+        patch.object(api, "get_boto3_session", new=session_mock),
+        patch.object(
+            api,
+            "check_authentication_status",
+            return_value=api.AwsAuthenticationStatus.MISSING_DEPENDENCY,
+        ),
+    ):
+        session_mock().profile_name = profile_name
+
+        result = CliRunner().invoke(main, ["auth", "status"])
+
+    assert result.exit_code == 0
+    assert "Message: " in result.output
+    assert "awscrt" in result.output
+
+
+def test_cli_auth_status_json_missing_dependency_includes_message(fresh_deadline_config):
+    """The json output must carry the same remediation as the verbose text."""
+    profile_name = "sandbox-us-west-2"
+    config.set_setting("defaults.aws_profile_name", profile_name)
+
+    with (
+        patch.object(api._session, "get_boto3_session") as session_mock,
+        patch.object(api, "get_boto3_session", new=session_mock),
+        patch.object(
+            api,
+            "check_authentication_status",
+            return_value=api.AwsAuthenticationStatus.MISSING_DEPENDENCY,
+        ),
+    ):
+        session_mock().profile_name = profile_name
+
+        result = CliRunner().invoke(main, ["auth", "status", "--output", "json"])
+        actual = json.loads(result.output)
+
+    assert result.exit_code == 0
+    assert actual["status"] == "MISSING_DEPENDENCY"
+    assert actual["message"] == api._session.MISSING_DEPENDENCY_REMEDIATION

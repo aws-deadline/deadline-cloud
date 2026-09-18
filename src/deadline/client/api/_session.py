@@ -57,6 +57,20 @@ class AwsAuthenticationStatus(Enum):
     MISSING_DEPENDENCY = 4
 
 
+# Shared by every surface that reports MISSING_DEPENDENCY -- the login poll loop
+# (_loginout.py), `deadline auth status` (auth_group.py), and the GUI status widget
+# (deadline_authentication_status_widget.py) -- so they don't drift out of sync.
+# Not profile-type-specific: every MissingDependencyException botocore raises (DPoP
+# signing, SigV4A endpoint resolution, CRT-only checksums, MRAP) is gated on the same
+# optional 'awscrt' ('botocore[crt]') dependency, regardless of which credentials
+# source triggered the probe.
+MISSING_DEPENDENCY_REMEDIATION = (
+    "The AWS SDK's optional 'awscrt' package is missing or broken in this Python "
+    "environment. Logging in will not fix this -- install it, for example with "
+    'pip install "botocore[crt]", and try again.'
+)
+
+
 # Place for stashing context to be attached to boto clients.
 session_context: dict[str, Optional[str]] = {
     "submitter-name": None,
@@ -615,23 +629,19 @@ def check_authentication_status(
             _list_farms_for_auth_probe(config=config)
             return AwsAuthenticationStatus.AUTHENTICATED
         except MissingDependencyException as e:
-            # botocore raises this when a feature needs an optional dependency that is
-            # not usable. For AWS Console sign-in profiles that is awscrt: the login
-            # credential provider needs it before it even reads the cached token, and a
-            # compiled awscrt module that fails to import looks identical to an absent
-            # one (botocore.compat swallows the ImportError). Logging in again cannot
-            # fix either, so reporting NEEDS_LOGIN here would turn a packaging fault
-            # into a permanent "sign-in needed" loop. Kept distinct from the generic
+            # botocore raises this when a feature needs awscrt and it's absent or broken
+            # (botocore.compat swallows the ImportError, so "broken" and "absent" look
+            # identical). This isn't only the AWS Console sign-in LoginProvider path: it
+            # also gates SigV4A endpoint resolution, CRT-only checksums, and S3 MRAP, none
+            # of which are console-profile-specific. Logging in again cannot fix any of
+            # them, so reporting NEEDS_LOGIN here would turn a packaging fault into a
+            # permanent "sign-in needed" loop. Kept distinct from the generic
             # CONFIGURATION_ERROR below: unlike that one, this cause can never resolve
             # on its own, so a caller polling for login completion can stop on this
             # value alone without also stopping on an ordinary, possibly-transient
             # CONFIGURATION_ERROR.
             logging.getLogger(__name__).error(
-                "The AWS SDK is missing a dependency it needs for this AWS profile, "
-                "so authentication cannot be checked. This usually means the "
-                "application's Python environment is missing or has a broken 'awscrt' "
-                "package; logging in will not fix it. Original error: %s",
-                e,
+                "%s Original error: %s", MISSING_DEPENDENCY_REMEDIATION, e
             )
             return AwsAuthenticationStatus.MISSING_DEPENDENCY
         except Exception:

@@ -126,3 +126,50 @@ def test_host_provided_profile_does_not_offer_logout(qtbot, mock_status):
 
     assert not widget._should_show_logout()
     assert not widget._logout_menu_action.isVisible()
+
+
+def test_missing_dependency_has_its_own_state_not_unexpected_error(qtbot, mock_status):
+    """
+    Regression test: MISSING_DEPENDENCY must map to its own state, not fall through the
+    `else` branch of `_get_current_auth_state_key` into UNEXPECTED_ERROR. Falling through
+    would show "There was an error with authentication" and the generic "check console
+    logs" more-info text -- strictly less informative than the CONFIGURATION_ERROR this
+    value split off from, for the one case this PR's diagnosis is most precise about.
+    """
+    mock_status.auth_status = api.AwsAuthenticationStatus.MISSING_DEPENDENCY
+
+    widget = _make_widget(qtbot, mock_status, profile_name="my-profile")
+
+    assert widget._get_current_auth_state_key() == AuthenticationState.MISSING_DEPENDENCY
+    assert widget._get_current_auth_state_key() != AuthenticationState.UNEXPECTED_ERROR
+    # No Log in / Switch profile buttons: unlike NEEDS_LOGIN, logging in again doesn't fix a
+    # missing/broken dependency in this process's own Python environment.
+    assert not widget._login_button.isVisibleTo(widget)
+    assert not widget._switch_profile_button.isVisibleTo(widget)
+    assert widget._more_info_button.isVisibleTo(widget)
+
+
+def test_missing_dependency_more_info_names_the_dependency(qtbot, mock_status, monkeypatch):
+    """
+    The More info dialog must carry the actual diagnosis (the missing/broken 'awscrt'
+    package and how to install it), not the CONFIGURATION_ERROR text's AWS config/region/
+    credential-file checks, none of which apply here, nor the UNEXPECTED_ERROR fallback's
+    "check console logs" text, which a GUI user embedded in a DCC has no way to follow.
+    """
+    mock_status.auth_status = api.AwsAuthenticationStatus.MISSING_DEPENDENCY
+    widget = _make_widget(qtbot, mock_status, profile_name="my-profile")
+
+    shown = {}
+
+    def fake_exec(self):
+        shown["title"] = self.windowTitle()
+        shown["text"] = self.text()
+
+    monkeypatch.setattr(f"{MODULE}.QMessageBox.exec_", fake_exec)
+
+    widget._show_more_info()
+
+    assert "awscrt" in shown["text"]
+    assert "botocore[crt]" in shown["text"]
+    assert "AWS config and credentials files" not in shown["text"]
+    assert "check console logs" not in shown["text"].lower()
