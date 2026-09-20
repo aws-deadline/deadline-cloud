@@ -470,6 +470,17 @@ def write_config(config: ConfigParser) -> None:
     with os.fdopen(file_descriptor, "w", encoding="utf8") as configfile:
         config.write(configfile)
 
+    # Stat the temp file *before* replacing, and cache that mtime below, rather than
+    # stat-ing config_file_path after the replace. os.replace is a rename, not a content
+    # rewrite, so it does not change the mtime (verified on POSIX; matches documented
+    # Windows move/rename behavior) -- the value is identical either way when nothing else
+    # touches the file. The difference matters when something else does: stat-ing after the
+    # replace leaves a window in which an external write (another process, or a hand edit)
+    # landing between our replace and our stat would have its mtime cached against *our*
+    # config contents. _should_read_config() would then see that external write's mtime
+    # unchanged on every later comparison and serve our now-stale cache indefinitely --
+    # rather than just the transient staleness a concurrent external write should cause.
+    new_mtime = os.stat(tmp_file_name).st_mtime
     os.replace(tmp_file_name, config_file_path)
 
     # Point read_config()'s cache directly at what we just wrote, rather than leaving the
@@ -481,7 +492,7 @@ def write_config(config: ConfigParser) -> None:
     # write" apart from "after this write" for back-to-back writes.
     __config = config
     __config_file_path = config_file_path
-    __config_mtime = config_file_path.stat().st_mtime
+    __config_mtime = new_mtime
 
 
 def _get_setting_config(setting_name: str) -> dict:
