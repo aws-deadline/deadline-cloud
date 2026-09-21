@@ -1,3 +1,8 @@
+## 0.60.8 (2026-09-21)
+
+### Features
+* The `deadline queue sync-output` command now displays a restructured progress report with indented plain-ASCII sections, a closing summary, and a greppable result line. A new `--verbose` flag is available for additional detail. Box-drawing glyphs have been replaced with plain ASCII to avoid encoding issues. (#1357)
+* `deadline bundle gui-submit` now always prepends the `deadline-cloud-v2` Conda channel ahead of `deadline-cloud` (kept as a fallback), matching the behavior of all Python DCC submitters. An explicit `CondaChannels` value in a bundle template, `--parameter`, or pre-GUI hook still takes precedence. (#1358)
 ## 0.60.7 (2026-09-07)
 
 ### Bug Fixes
