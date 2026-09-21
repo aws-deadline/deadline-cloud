@@ -173,5 +173,8 @@
   "Value": "Wert",
   "Save to": "Speichern in",
   "Location": "Speicherort",
-  "Select directory": "Verzeichnis auswählen"
+  "Select directory": "Verzeichnis auswählen",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

@@ -13,7 +13,11 @@ import logging
 
 from ... import api
 from .._main import deadline as main
-from ...api._session import _modified_logging_level, AwsCredentialsSource
+from ...api._session import (
+    _modified_logging_level,
+    AwsCredentialsSource,
+    MISSING_DEPENDENCY_REMEDIATION,
+)
 from ...config import config_file, get_setting
 from .._common import (
     _OUTPUT_FORMAT_HELP,
@@ -26,6 +30,7 @@ JSON_FIELD_PROFILE_NAME = "profile_name"
 JSON_FIELD_AUTH_STATUS = "status"
 JSON_FIELD_CREDS_SOURCE = "source"
 JSON_FIELD_AUTH_API_AVAILABLE = "api_availability"
+JSON_FIELD_AUTH_MESSAGE = "message"
 
 
 def _cli_on_pending_authorization(**kwargs):
@@ -123,12 +128,23 @@ def auth_status(output, **args):
         # above rather than making a second, redundant ListFarms call.
         api_availability_result = auth_status == api.AwsAuthenticationStatus.AUTHENTICATED
 
+    # check_authentication_status logs the MISSING_DEPENDENCY diagnosis at ERROR, but the
+    # CRITICAL level above silences it -- this command is the only place that diagnosis
+    # would otherwise reach the user, so carry it in the output instead.
+    message = (
+        MISSING_DEPENDENCY_REMEDIATION
+        if auth_status == api.AwsAuthenticationStatus.MISSING_DEPENDENCY
+        else None
+    )
+
     if not is_json_format:
         width = 17
         click.echo(f"{'Profile Name:': >{width}} {profile_name}")
         click.echo(f"{'Source:': >{width}} {creds_source_result}")
         click.echo(f"{'Status:': >{width}} {auth_status_results}")
         click.echo(f"{'API Availability:': >{width}} {api_availability_result}")
+        if message:
+            click.echo(f"{'Message:': >{width}} {message}")
     else:
         json_output = {
             JSON_FIELD_PROFILE_NAME: profile_name,
@@ -136,4 +152,6 @@ def auth_status(output, **args):
             JSON_FIELD_AUTH_STATUS: auth_status_results,
             JSON_FIELD_AUTH_API_AVAILABLE: api_availability_result,
         }
+        if message:
+            json_output[JSON_FIELD_AUTH_MESSAGE] = message
         click.echo(json.dumps(json_output, ensure_ascii=True))

@@ -28,6 +28,11 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
 )
 
 from ... import api
+
+# Private import (see AGENTS.md's import-style convention): re-exporting this under a
+# public name here would grow this module's public API surface for a value that's just
+# an implementation detail of the more-info text below.
+from ...api._session import MISSING_DEPENDENCY_REMEDIATION as _MISSING_DEPENDENCY_REMEDIATION
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from ...config import config_file
 
@@ -93,7 +98,9 @@ class AuthenticationState(enum.Enum):
         REFRESHING: Authentication status is being loaded or refreshed.
         AUTHENTICATED_READY: User is authenticated and has API access to list-farms
         NEEDS_LOGIN: User needs to log in to authenticate with a DCM profile
-        CONFIGURATION_ERROR: There is a configuration issue with the AWS profile.
+        CONFIGURATION_ERROR: There is a configuration issue with the AWS profile, including
+            a missing/broken dependency that logging in cannot supply (see the profile's
+            more-info text for which one applies).
         UNEXPECTED_ERROR: An unknown or unexpected error occurred during authentication.
         AUTHENTICATED_NO_API: Deprecated. The authenticated-but-no-API-access state has been
             consolidated into the general authentication status check and is no longer used.
@@ -259,9 +266,17 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
                 login_visible=True,
             ),
             AuthenticationState.CONFIGURATION_ERROR: AuthenticationStateConfig(
+                # Covers both an ordinary credentials/config problem and MISSING_DEPENDENCY
+                # (a missing/broken 'awscrt'): neither is public API-worthy as its own
+                # AuthenticationState, since both get identical button treatment here (no
+                # Log in -- signing in again doesn't fix either) and differ only in the
+                # profile-button text and the more-info text below, so the auth_status check
+                # picks the right wording without needing a second dict entry.
                 icon=QStyle.StandardPixmap.SP_MessageBoxWarning,
                 text=lambda: tr(
-                    "A configuration error was received while accessing credentials for the profile '{profile}'."
+                    "A required dependency is missing for the profile '{profile}'."
+                    if self._status.auth_status == api.AwsAuthenticationStatus.MISSING_DEPENDENCY
+                    else "A configuration error was received while accessing credentials for the profile '{profile}'."
                 ).format(profile=self._get_profile_name()),
                 more_info_visible=True,
             ),
@@ -288,7 +303,10 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
             return AuthenticationState.AUTHENTICATED_READY
         elif self._status.auth_status == api.AwsAuthenticationStatus.NEEDS_LOGIN:
             return AuthenticationState.NEEDS_LOGIN
-        elif self._status.auth_status == api.AwsAuthenticationStatus.CONFIGURATION_ERROR:
+        elif self._status.auth_status in (
+            api.AwsAuthenticationStatus.CONFIGURATION_ERROR,
+            api.AwsAuthenticationStatus.MISSING_DEPENDENCY,
+        ):
             return AuthenticationState.CONFIGURATION_ERROR
         else:
             return AuthenticationState.UNEXPECTED_ERROR
@@ -313,6 +331,16 @@ class DeadlineAuthenticationStatusWidget(QGroupBox):
                 "  \u2022 Verify that any credential process being used is able to retrieve the credentials or that they aren't expired\n"
                 "    \u2022 You can run the following command to check: aws sts get-caller-identity --profile <PROFILE_NAME>"
             ).format(profile=self._get_profile_name())
+        elif self._status.auth_status == api.AwsAuthenticationStatus.MISSING_DEPENDENCY:
+            title = tr("Missing Dependency")
+            # Interpolates MISSING_DEPENDENCY_REMEDIATION (_session.py) rather than keeping
+            # a separate translated copy of the same advice, so the CLI, the login error, and
+            # this dialog can't drift out of sync on what to install. The remediation itself
+            # stays untranslated -- it's a literal pip command and package name -- the same
+            # way the CONFIGURATION_ERROR text above embeds an untranslated shell command.
+            message = tr(
+                "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
+            ).format(profile=self._get_profile_name(), remediation=_MISSING_DEPENDENCY_REMEDIATION)
         else:
             title = tr("Unknown Issue With Configured Profile")
             message = tr(

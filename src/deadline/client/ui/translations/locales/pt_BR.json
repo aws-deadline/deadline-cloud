@@ -173,5 +173,8 @@
   "Value": "Valor",
   "Save to": "Salvar em",
   "Location": "Local",
-  "Select directory": "Selecionar diretório"
+  "Select directory": "Selecionar diretório",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

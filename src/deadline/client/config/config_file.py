@@ -17,6 +17,7 @@ __all__ = [
 import getpass
 import os
 import platform
+import time
 from configparser import ConfigParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -444,6 +445,28 @@ def _reset_directory_permissions_windows(directory: Path) -> None:
     )
 
 
+def _replace_with_windows_retry(src: str, dst: Path) -> None:
+    """
+    Calls os.replace(src, dst), retrying on Windows if it raises PermissionError.
+
+    Unlike POSIX, where a rename over an existing file is never blocked by another open
+    handle, Windows can transiently deny a replace with "Access is denied" if something
+    else -- e.g. antivirus/Windows Defender briefly locking a just-created file for a
+    real-time scan -- has the destination or source open. That's a transient condition,
+    not a real permissions problem, so retry a few times with a short backoff before
+    giving up. Not attempted on other platforms: there, PermissionError means what it says.
+    """
+    attempts = 5 if platform.system() == "Windows" else 1
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+
+
 def write_config(config: ConfigParser) -> None:
     """
     Writes the provided config to the AWS Deadline Cloud configuration.
@@ -452,6 +475,10 @@ def write_config(config: ConfigParser) -> None:
         config (ConfigParser): The config object to write. Generally this is
             a modified value from what `read_config` returns.
     """
+    global __config
+    global __config_file_path
+    global __config_mtime
+
     config_file_path = get_config_file_path()
     if not config_file_path.parent.exists():
         config_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -466,7 +493,29 @@ def write_config(config: ConfigParser) -> None:
     with os.fdopen(file_descriptor, "w", encoding="utf8") as configfile:
         config.write(configfile)
 
-    os.replace(tmp_file_name, config_file_path)
+    # Stat the temp file *before* replacing, and cache that mtime below, rather than
+    # stat-ing config_file_path after the replace. os.replace is a rename, not a content
+    # rewrite, so it does not change the mtime (verified on POSIX; matches documented
+    # Windows move/rename behavior) -- the value is identical either way when nothing else
+    # touches the file. The difference matters when something else does: stat-ing after the
+    # replace leaves a window in which an external write (another process, or a hand edit)
+    # landing between our replace and our stat would have its mtime cached against *our*
+    # config contents. _should_read_config() would then see that external write's mtime
+    # unchanged on every later comparison and serve our now-stale cache indefinitely --
+    # rather than just the transient staleness a concurrent external write should cause.
+    new_mtime = os.stat(tmp_file_name).st_mtime
+    _replace_with_windows_retry(tmp_file_name, config_file_path)
+
+    # Point read_config()'s cache directly at what we just wrote, rather than leaving the
+    # next read_config() call to re-derive freshness from a stat() mtime comparison.
+    # _should_read_config() only needs that comparison to detect a change made by someone
+    # else (a different process, or a config file edited by hand); for our own write, we
+    # already know exactly what's on disk now -- it's `config` -- so there's no reason to
+    # depend on filesystem timestamp resolution being fine enough to tell "before this
+    # write" apart from "after this write" for back-to-back writes.
+    __config = config
+    __config_file_path = config_file_path
+    __config_mtime = new_mtime
 
 
 def _get_setting_config(setting_name: str) -> dict:
