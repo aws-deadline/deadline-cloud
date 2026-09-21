@@ -17,6 +17,7 @@ __all__ = [
 import getpass
 import os
 import platform
+import time
 from configparser import ConfigParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -444,6 +445,28 @@ def _reset_directory_permissions_windows(directory: Path) -> None:
     )
 
 
+def _replace_with_windows_retry(src: str, dst: Path) -> None:
+    """
+    Calls os.replace(src, dst), retrying on Windows if it raises PermissionError.
+
+    Unlike POSIX, where a rename over an existing file is never blocked by another open
+    handle, Windows can transiently deny a replace with "Access is denied" if something
+    else -- e.g. antivirus/Windows Defender briefly locking a just-created file for a
+    real-time scan -- has the destination or source open. That's a transient condition,
+    not a real permissions problem, so retry a few times with a short backoff before
+    giving up. Not attempted on other platforms: there, PermissionError means what it says.
+    """
+    attempts = 5 if platform.system() == "Windows" else 1
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+
+
 def write_config(config: ConfigParser) -> None:
     """
     Writes the provided config to the AWS Deadline Cloud configuration.
@@ -481,7 +504,7 @@ def write_config(config: ConfigParser) -> None:
     # unchanged on every later comparison and serve our now-stale cache indefinitely --
     # rather than just the transient staleness a concurrent external write should cause.
     new_mtime = os.stat(tmp_file_name).st_mtime
-    os.replace(tmp_file_name, config_file_path)
+    _replace_with_windows_retry(tmp_file_name, config_file_path)
 
     # Point read_config()'s cache directly at what we just wrote, rather than leaving the
     # next read_config() call to re-derive freshness from a stat() mtime comparison.

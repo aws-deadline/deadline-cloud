@@ -188,6 +188,65 @@ def test_write_config_mtime_is_not_attributable_to_a_later_external_write(fresh_
     assert config.get_setting("defaults.aws_profile_name") == "ProfileName"
 
 
+def test_replace_with_windows_retry_recovers_from_transient_permission_error():
+    """
+    Windows CI observed write_config() fail with PermissionError ("Access is denied") on
+    os.replace, immediately after creating and writing the temp file -- consistent with
+    antivirus/Windows Defender briefly locking a just-created file for a real-time scan.
+    That's transient, so it must be retried rather than surfaced as a real failure.
+    """
+    call_count = {"n": 0}
+
+    def flaky_replace(src, dst):
+        call_count["n"] += 1
+        if call_count["n"] < 3:
+            raise PermissionError("[WinError 5] Access is denied")
+
+    with (
+        patch.object(config_file.platform, "system", return_value="Windows"),
+        patch.object(config_file.os, "replace", side_effect=flaky_replace),
+        patch.object(config_file.time, "sleep"),
+    ):
+        config_file._replace_with_windows_retry("src", Path("dst"))
+
+    assert call_count["n"] == 3
+
+
+def test_replace_with_windows_retry_gives_up_after_repeated_permission_errors():
+    """Not an infinite retry -- a persistent PermissionError must still surface eventually."""
+    with (
+        patch.object(config_file.platform, "system", return_value="Windows"),
+        patch.object(
+            config_file.os, "replace", side_effect=PermissionError("[WinError 5] Access is denied")
+        ),
+        patch.object(config_file.time, "sleep"),
+    ):
+        with pytest.raises(PermissionError):
+            config_file._replace_with_windows_retry("src", Path("dst"))
+
+
+def test_replace_with_windows_retry_does_not_retry_on_other_platforms():
+    """
+    PermissionError means what it says on POSIX -- there's no antivirus-locking failure
+    mode to paper over there, so don't retry (and don't mask a real permissions problem
+    behind a delay that only makes sense for a Windows-specific transient condition).
+    """
+    call_count = {"n": 0}
+
+    def always_fails(src, dst):
+        call_count["n"] += 1
+        raise PermissionError("Permission denied")
+
+    with (
+        patch.object(config_file.platform, "system", return_value="Linux"),
+        patch.object(config_file.os, "replace", side_effect=always_fails),
+    ):
+        with pytest.raises(PermissionError):
+            config_file._replace_with_windows_retry("src", Path("dst"))
+
+    assert call_count["n"] == 1
+
+
 @patch.object(config_file, "_should_read_config", MagicMock(return_value=True))
 def test_config_file_env_var(fresh_deadline_config):
     """Test that setting the env var DEADLINE_CONFIG_FILE_PATH overrides the config path"""
