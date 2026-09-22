@@ -1437,3 +1437,68 @@ def test_bundle_gui_submit_submitter_info_file_missing_submitter_name(
 
     assert result.exit_code != 0
     assert "submitter_name is required" in result.output
+
+
+def test_cli_bundle_submit_wait_exits_nonzero_on_failure(
+    fresh_deadline_config, deadline_mock, temp_job_bundle_dir
+):
+    """--wait blocks on the submitted job and exits non-zero when it does not succeed."""
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+    deadline_mock.create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+    deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
+
+    with patch.object(api_module, "wait_for_job_completion") as mock_wait:
+        mock_wait.return_value = MagicMock(status="FAILED")
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                temp_job_bundle_dir,
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--wait",
+            ],
+        )
+
+    mock_wait.assert_called_once()
+    assert "Job completed with status: FAILED" in result.output
+    assert result.exit_code != 0
+
+
+def test_cli_bundle_submit_download_on_success(
+    fresh_deadline_config, deadline_mock, temp_job_bundle_dir
+):
+    """--download-on-success waits, then downloads output when the job SUCCEEDS."""
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        f.write(MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"][1])
+    deadline_mock.create_job.return_value = MOCK_CREATE_JOB_RESPONSE
+    deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
+
+    with (
+        patch.object(api_module, "wait_for_job_completion") as mock_wait,
+        patch("deadline.client.cli._groups.job_group._download_job_output") as mock_download,
+    ):
+        mock_wait.return_value = MagicMock(status="SUCCEEDED")
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "bundle",
+                "submit",
+                temp_job_bundle_dir,
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--download-on-success",
+            ],
+        )
+
+    mock_wait.assert_called_once()
+    mock_download.assert_called_once()
+    assert result.exit_code == 0
