@@ -41,3 +41,6 @@ src/deadline/client/ui/_translation_keys.py
 # Install builder license
 license.xml
 /THIRD_PARTY_LICENSES
+
+# Agent evals run artifacts
+/evals/output/
