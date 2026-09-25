@@ -91,7 +91,30 @@ def test_bool_parameter_validation_valid_values(input_value: Any, expected_outpu
     assert result is expected_output
 
 
-@pytest.mark.parametrize("input_value", ["maybe", 2, -1, 0.5, None, [], {}])
+@pytest.mark.parametrize(
+    "input_value",
+    [
+        pytest.param("maybe", id="string_maybe"),
+        pytest.param("", id="empty_string"),
+        pytest.param("2", id="string_two"),
+        pytest.param("-1", id="string_negative_one"),
+        pytest.param("1.0", id="string_float_one"),
+        # Only exactly 0 or 1 are accepted, not any non-zero number.
+        pytest.param(2, id="integer_two"),
+        pytest.param(-1, id="integer_negative_one"),
+        pytest.param(100, id="integer_hundred"),
+        pytest.param(0.5, id="float_half"),
+        pytest.param(1.5, id="float_one_and_half"),
+        pytest.param(2.0, id="float_two"),
+        pytest.param(-1.0, id="float_negative_one"),
+        pytest.param(1e-9, id="float_tiny"),
+        pytest.param(float("nan"), id="float_nan"),
+        pytest.param(float("inf"), id="float_inf"),
+        pytest.param(None, id="none"),
+        pytest.param([], id="list"),
+        pytest.param({}, id="dict"),
+    ],
+)
 def test_bool_parameter_validation_invalid_values(input_value: Any) -> None:
     with pytest.raises(ValueError, match="is not boolean"):
         parameters.validate_job_parameter_value(BASE_BOOL_PARAM, input_value)

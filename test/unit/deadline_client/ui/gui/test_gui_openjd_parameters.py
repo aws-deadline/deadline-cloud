@@ -224,6 +224,22 @@ class TestOpenJDParametersWidget:
 
         assert widget.controls["EnableFeature"].value() is False
 
+    def test_native_bool_checkbox_invalid_value_degrades_gracefully(self, qtbot):
+        """Verify an invalid BOOL value from an untrusted bundle leaves the box
+        unchecked instead of raising out of widget construction."""
+        parameter = {"name": "EnableFeature", "type": "BOOL", "value": "maybe"}
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+        # Same for set_parameter_value after construction: an invalid value
+        # unchecks the box rather than raising.
+        widget.set_parameter_value({"name": "EnableFeature", "value": True})
+        assert widget.controls["EnableFeature"].value() is True
+        widget.set_parameter_value({"name": "EnableFeature", "value": "maybe"})
+        assert widget.controls["EnableFeature"].value() is False
+
     def test_int_spinbox_creation_and_range(self, qtbot):
         """Verify INT SPIN_BOX respects min/max values."""
         widget = OpenJDParametersWidget(
@@ -260,6 +276,33 @@ class TestOpenJDParametersWidget:
         qtbot.addWidget(widget)
 
         assert widget.controls["EnableFeature"].value() is False
+
+    def test_hidden_bool_widget_without_default_is_false(self, qtbot):
+        """Verify a hidden BOOL with no value or default holds False, not the string ""."""
+        parameter = {
+            "name": "EnableFeature",
+            "type": "BOOL",
+            "userInterface": {"control": "HIDDEN"},
+        }
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_hidden_bool_widget_coerces_values(self, qtbot):
+        """Verify a hidden BOOL coerces valid spellings to bool and keeps invalid
+        values for the submit path to report."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[_bool_param(default=False, control="HIDDEN")]
+        )
+        qtbot.addWidget(widget)
+
+        widget.set_parameter_value({"name": "EnableFeature", "value": "yes"})
+        assert widget.controls["EnableFeature"].value() is True
+        widget.set_parameter_value({"name": "EnableFeature", "value": 0})
+        assert widget.controls["EnableFeature"].value() is False
+        widget.set_parameter_value({"name": "EnableFeature", "value": "maybe"})
+        assert widget.controls["EnableFeature"].value() == "maybe"
 
     def test_directory_picker_creation(self, qtbot):
         """Verify CHOOSE_DIRECTORY widget is created with correct default."""

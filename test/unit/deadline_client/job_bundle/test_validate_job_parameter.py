@@ -423,6 +423,27 @@ def test_validate_job_parameter_bool_with_allowed_values(
     )
 
 
+@pytest.mark.parametrize(
+    argnames=("field", "field_value"),
+    argvalues=(
+        pytest.param("minLength", 1, id="minLength"),
+        pytest.param("maxLength", 5, id="maxLength"),
+        pytest.param("minValue", 0, id="minValue"),
+        pytest.param("maxValue", 1, id="maxValue"),
+    ),
+)
+def test_validate_job_parameter_bool_with_constraint_fields(field: str, field_value: int) -> None:
+    """Tests that a BOOL job parameter rejects length and numeric constraints, which
+    have no meaning for a boolean."""
+    job_parameter: Any = {"name": "foo", "type": "BOOL", field: field_value}
+
+    with pytest.raises(ValueError) as ctx:
+        parameters.validate_job_parameter(job_parameter)
+    assert (
+        str(ctx.value) == f'Job parameter "foo" has "{field}" but type "BOOL" does not support it'
+    )
+
+
 def test_validate_job_parameter_valid_no_data_flow(
     valid_type: str,
 ) -> None:

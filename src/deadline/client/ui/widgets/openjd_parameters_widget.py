@@ -5,6 +5,7 @@ UI widgets for the Scene Settings tab.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -32,7 +33,9 @@ from ...job_bundle.job_template import ControlType
 from ...job_bundle.parameters import (
     JobParameter,
     get_ui_control_for_parameter_definition,
-    validate_job_parameter_value,
+)
+from ...job_bundle.parameters import (
+    validate_job_parameter_value as _validate_job_parameter_value,
 )
 from .path_widgets import (
     DirectoryPickerWidget,
@@ -40,6 +43,8 @@ from .path_widgets import (
     OutputFilePickerWidget,
 )
 from .spinbox_widgets import DecimalMode, FloatDragSpinBox, IntDragSpinBox
+
+_logger = logging.getLogger(__name__)
 
 
 class OpenJDParametersWidget(QWidget):
@@ -792,8 +797,21 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
 
     def set_value(self, value: str | bool) -> None:
         if self.job_template_parameter["type"] == "BOOL":
-            value = validate_job_parameter_value(self.job_template_parameter, value)
-        self.edit_control.setChecked(value == self.true_value)
+            try:
+                checked = _validate_job_parameter_value(self.job_template_parameter, value) is True
+            except (ValueError, TypeError):
+                # The value may come from an untrusted job bundle, e.g. a shared queue
+                # bundle's parameter_values.yaml. Degrade gracefully like the other
+                # controls (STRING checkbox, dropdown) instead of breaking the dialog.
+                _logger.warning(
+                    "Job parameter %r has non-boolean value %r; falling back to unchecked.",
+                    self.job_template_parameter["name"],
+                    value,
+                )
+                checked = False
+        else:
+            checked = value == self.true_value
+        self.edit_control.setChecked(checked)
 
     def _handle_value_changed(self, value, callback):
         message = deepcopy(self.job_template_parameter)
@@ -830,6 +848,15 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         return self._value
 
     def set_value(self, value: Any) -> None:
+        if self.job_template_parameter["type"] == "BOOL":
+            if value == self.OPENJD_DEFAULT_VALUE:
+                value = False
+            else:
+                try:
+                    value = _validate_job_parameter_value(self.job_template_parameter, value)
+                except (ValueError, TypeError):
+                    # Keep the value as-is so submission reports it as an error.
+                    pass
         self._value = value
 
     def connect_parameter_changed(self, callback):

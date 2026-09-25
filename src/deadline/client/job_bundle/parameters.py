@@ -34,6 +34,13 @@ _VALID_PARAMETER_TYPES = (
     "FLOAT",
     "BOOL",
 )
+_BOOL_DISALLOWED_FIELDS = (
+    "allowedValues",
+    "minLength",
+    "maxLength",
+    "minValue",
+    "maxValue",
+)
 _VALID_UI_CONTROLS = (
     "CHECK_BOX",
     "CHOOSE_DIRECTORY",
@@ -76,6 +83,25 @@ class JobParameter(TypedDict):
     maxValue: NotRequired[Union[int, float, str]]
     minValue: NotRequired[Union[int, float, str]]
     userInterface: NotRequired[UserInterfaceSpec]
+
+
+def _normalize_parameter_type_case(template: dict[str, Any]) -> None:
+    """Upper-cases the "type" of each job parameter definition in place when the template
+    declares the EXPR extension, which makes OpenJD parameter type names case-insensitive.
+
+    Only the client's in-memory parameter definitions are normalized. The template
+    submitted to CreateJob is read separately and left unchanged, so task parameter
+    type names reach the service as written.
+    """
+    extensions = template.get("extensions")
+    if not isinstance(extensions, list) or "EXPR" not in extensions:
+        return
+    parameter_definitions = template.get("parameterDefinitions")
+    if not isinstance(parameter_definitions, list):
+        return
+    for parameter in parameter_definitions:
+        if isinstance(parameter, dict) and isinstance(parameter.get("type"), str):
+            parameter["type"] = parameter["type"].upper()
 
 
 def validate_job_parameter(
@@ -165,17 +191,20 @@ def validate_job_parameter(
     elif default_required:
         raise ValueError(f'Job parameter "{name}" is missing required key "default"')
 
+    # A boolean already enumerates its own domain, and has no length or numeric
+    # ordering, so OpenJD does not permit these constraints on BOOL parameters.
+    if input.get("type") == "BOOL":
+        for field in _BOOL_DISALLOWED_FIELDS:
+            if field in input:
+                raise ValueError(
+                    f'Job parameter "{name}" has "{field}" but type "BOOL" does not support it'
+                )
+
     if "allowedValues" in input:
         allowed_values = input["allowedValues"]
         if not isinstance(allowed_values, list):
             raise TypeError(
                 f'Job parameter "{name}" got {type(allowed_values).__name__} for "allowedValues" but expected list'
-            )
-        # A boolean already enumerates its own domain, so OpenJD does not
-        # permit "allowedValues" on BOOL parameters.
-        if input.get("type") == "BOOL":
-            raise ValueError(
-                f'Job parameter "{name}" has "allowedValues" but type "BOOL" does not support it'
             )
 
     # Validate "dataFlow"
@@ -260,7 +289,7 @@ def validate_job_parameter(
 
 def validate_job_parameter_value(
     job_parameter: JobParameter,
-    value: Any,
+    value: str | int | float | bool,
 ) -> str | int | float | bool:
     """
     Validates a value for the specified parameter definition, returning the value with the correct type,
@@ -287,8 +316,9 @@ def validate_job_parameter_value(
     elif param_type == "BOOL":
         if isinstance(value, bool):
             pass
-        elif isinstance(value, (int, float)) and value in (0, 1):
-            value = bool(value)
+        elif isinstance(value, (int, float)) and (value == 0 or value == 1):
+            # Only exactly 0 or 1, not C-style truthiness where any non-zero is true.
+            value = value == 1
         elif isinstance(value, str):
             normalized = value.lower()
             if normalized in ("true", "yes", "on", "1"):
@@ -796,6 +826,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
             raise DeadlineOperationError(
                 f"Job Template for job bundle {bundle_dir}:\nJob parameter definitions must be a list."
             )
+        _normalize_parameter_type_case(template)
         template_parameters = {param["name"]: param for param in template["parameterDefinitions"]}
 
     # Add the parameter values where provided
