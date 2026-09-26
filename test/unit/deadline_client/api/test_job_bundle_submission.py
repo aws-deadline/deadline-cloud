@@ -1097,6 +1097,58 @@ def test_create_job_from_job_bundle_without_target_task_run_status(
         assert "targetTaskRunStatus" not in create_job_call.kwargs
 
 
+def test_create_job_from_job_bundle_expr_lowercase_parameter_types(
+    fresh_deadline_config,
+    temp_job_bundle_dir,
+):
+    """With EXPR, lower-case job and task parameter type names are accepted. The job
+    parameters are encoded by their canonical type, and the template, including task
+    parameter definitions, is submitted as written."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    template = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": ["FEATURE_BUNDLE_1", "EXPR"],
+        "name": "TestJob",
+        "parameterDefinitions": [
+            {"name": "Verbose", "type": "bool", "default": True},
+            {"name": "Count", "type": "int", "default": 3},
+            {"name": "Message", "type": "String", "default": "hi"},
+        ],
+        "steps": [
+            {
+                "name": "Step",
+                "parameterSpace": {
+                    "taskParameterDefinitions": [{"name": "Frame", "type": "int", "range": "1-3"}]
+                },
+                "bash": {"script": "echo {{Task.Param.Frame}}"},
+            }
+        ],
+    }
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        json.dump(template, f)
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir,
+            job_parameters=[
+                {"name": "Verbose", "value": "off"},
+                {"name": "Count", "value": "5"},
+                {"name": "Message", "value": "hi"},
+            ],
+            queue_parameter_definitions=[],
+        )
+
+        create_job_kwargs = mock.get_boto3_client().create_job.call_args.kwargs
+        assert create_job_kwargs["parameters"] == {
+            "Verbose": {"bool": "false"},
+            "Count": {"int": "5"},
+            "Message": {"string": "hi"},
+        }
+        assert json.loads(create_job_kwargs["template"]) == template
+
+
 get_job_responses = [
     pytest.param(
         [

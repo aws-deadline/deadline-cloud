@@ -32,6 +32,14 @@ _VALID_PARAMETER_TYPES = (
     "PATH",
     "INT",
     "FLOAT",
+    "BOOL",
+)
+_BOOL_DISALLOWED_FIELDS = (
+    "allowedValues",
+    "minLength",
+    "maxLength",
+    "minValue",
+    "maxValue",
 )
 _VALID_UI_CONTROLS = (
     "CHECK_BOX",
@@ -75,6 +83,25 @@ class JobParameter(TypedDict):
     maxValue: NotRequired[Union[int, float, str]]
     minValue: NotRequired[Union[int, float, str]]
     userInterface: NotRequired[UserInterfaceSpec]
+
+
+def _normalize_parameter_type_case(template: dict[str, Any]) -> None:
+    """Upper-cases the "type" of each job parameter definition in place when the template
+    declares the EXPR extension, which makes OpenJD parameter type names case-insensitive.
+
+    Only the client's in-memory parameter definitions are normalized. The template
+    submitted to CreateJob is read separately and left unchanged, so task parameter
+    type names reach the service as written.
+    """
+    extensions = template.get("extensions")
+    if not isinstance(extensions, list) or "EXPR" not in extensions:
+        return
+    parameter_definitions = template.get("parameterDefinitions")
+    if not isinstance(parameter_definitions, list):
+        return
+    for parameter in parameter_definitions:
+        if isinstance(parameter, dict) and isinstance(parameter.get("type"), str):
+            parameter["type"] = parameter["type"].upper()
 
 
 def validate_job_parameter(
@@ -163,6 +190,15 @@ def validate_job_parameter(
             raise ValueError(f'Job parameter "{name}" had None for "default" but expected a value')
     elif default_required:
         raise ValueError(f'Job parameter "{name}" is missing required key "default"')
+
+    # A boolean already enumerates its own domain, and has no length or numeric
+    # ordering, so OpenJD does not permit these constraints on BOOL parameters.
+    if input.get("type") == "BOOL":
+        for field in _BOOL_DISALLOWED_FIELDS:
+            if field in input:
+                raise ValueError(
+                    f'Job parameter "{name}" has "{field}" but type "BOOL" does not support it'
+                )
 
     if "allowedValues" in input:
         allowed_values = input["allowedValues"]
@@ -253,8 +289,8 @@ def validate_job_parameter(
 
 def validate_job_parameter_value(
     job_parameter: JobParameter,
-    value: str | int | float,
-) -> str | int | float:
+    value: str | int | float | bool,
+) -> str | int | float | bool:
     """
     Validates a value for the specified parameter definition, returning the value with the correct type,
     e.g. a string "19" for an INT parameter is returned as the integer 19.
@@ -276,6 +312,26 @@ def validate_job_parameter_value(
         if not isinstance(value, str):
             raise TypeError(
                 f"Job parameter {name!r} has type {param_type} but got value {value!r} of type {type(value)}."
+            )
+    elif param_type == "BOOL":
+        if isinstance(value, bool):
+            pass
+        elif isinstance(value, (int, float)) and (value == 0 or value == 1):
+            # Only exactly 0 or 1, not C-style truthiness where any non-zero is true.
+            value = value == 1
+        elif isinstance(value, str):
+            normalized = value.lower()
+            if normalized in ("true", "yes", "on", "1"):
+                value = True
+            elif normalized in ("false", "no", "off", "0"):
+                value = False
+            else:
+                raise ValueError(
+                    f"Job parameter {name!r} has type BOOL but got value {value!r} which is not boolean."
+                )
+        else:
+            raise ValueError(
+                f"Job parameter {name!r} has type BOOL but got value {value!r} which is not boolean."
             )
     elif param_type == "INT":
         original_value = value
@@ -770,6 +826,7 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
             raise DeadlineOperationError(
                 f"Job Template for job bundle {bundle_dir}:\nJob parameter definitions must be a list."
             )
+        _normalize_parameter_type_case(template)
         template_parameters = {param["name"]: param for param in template["parameterDefinitions"]}
 
     # Add the parameter values where provided
@@ -852,6 +909,7 @@ _SUPPORTED_CONTROLS_FOR_TYPE = {
     },
     "INT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
     "FLOAT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
+    "BOOL": {"CHECK_BOX", "HIDDEN"},
 }
 
 
@@ -876,6 +934,8 @@ def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
                 return "CHOOSE_DIRECTORY"
         elif param_type in ("INT", "FLOAT"):
             return "SPIN_BOX"
+        elif param_type == "BOOL":
+            return "CHECK_BOX"
         else:
             raise DeadlineOperationError(
                 f"The job template parameter '{param_def.get('name', '<unnamed>')}' "

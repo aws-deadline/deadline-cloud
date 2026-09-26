@@ -8,10 +8,14 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
-from typing import Any, Tuple, Optional
+from typing import Any, TYPE_CHECKING, Tuple, Optional
 
 from ..exceptions import DeadlineOperationError
-from .parameters import JobParameter
+
+# parameters.py imports AssetReferences from this module, so avoid a module-level
+# import cycle by importing from parameters only where needed.
+if TYPE_CHECKING:
+    from .parameters import JobParameter
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +150,20 @@ def split_parameter_args(
                     pass
                 else:
                     parameter_type = parameter["type"].lower()
-                    job_parameters[parameter_name] = {parameter_type: str(parameter_value)}
+                    if parameter_type == "bool":
+                        from .parameters import validate_job_parameter_value
+
+                        try:
+                            bool_value = validate_job_parameter_value(parameter, parameter_value)
+                        except (ValueError, TypeError) as e:
+                            raise DeadlineOperationError(
+                                f"{e}\nFrom job bundle:\n{job_bundle_dir}"
+                            ) from e
+                        # CreateJob's JobParameter.bool is a string shape, so normalize
+                        # the accepted spellings (yes/on/1/...) to "true"/"false".
+                        parameter_value = "true" if bool_value else "false"
+                    else:
+                        parameter_value = str(parameter_value)
+                    job_parameters[parameter_name] = {parameter_type: parameter_value}
 
     return app_parameters, job_parameters

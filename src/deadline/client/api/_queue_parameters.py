@@ -15,6 +15,7 @@ from ._session import get_boto3_client
 from ..exceptions import DeadlineOperationError
 from ..job_bundle.parameters import (
     JobParameter,
+    _normalize_parameter_type_case,
     get_ui_control_for_parameter_definition,
     parameter_definition_difference,
     validate_job_parameter,
@@ -170,6 +171,7 @@ def get_queue_parameter_definitions(
 
     queue_parameters_definitions: dict[str, JobParameter] = {}
     for template in queue_environment_templates:
+        _normalize_parameter_type_case(template)
         for parameter in template.get("parameterDefinitions", []):
             parameter = validate_job_parameter(parameter, type_required=True, default_required=True)
 
