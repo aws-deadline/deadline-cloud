@@ -1,0 +1,2045 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/deadline-cloud/design/job-bundle-browser/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Job Bundle Browser - AWS Deadline Cloud - Client Library Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#job-bundle-browser" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-header__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud - Client Library Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Job Bundle Browser
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AWS Deadline Cloud - Client Library Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cli_reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_attachment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    attachment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    auth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_farm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    farm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_fleet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fleet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_handle-web-url/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    handle-web-url
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_job/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_manifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    manifest
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mcp-server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_queue/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Library Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    deadline.client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    deadline.client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    api
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cli
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_job_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job_bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ui
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../submission-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Submission Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bundle-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bundle Formats
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backend-abstraction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend Abstraction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3-bucket-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        S3 Bucket Convention
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#job-history-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Job History Source
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archive-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archive Caching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3-object-metadata-for-preview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        S3 Object Metadata for Preview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#detection-what-is-a-job-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Detection: What Is a Job Bundle?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#browser-dialog-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Browser Dialog UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#export-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export Bundle
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lazy-loading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lazy Loading
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#preview-prefetch-background-queue-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preview Prefetch (background, Queue source)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bundle-resolution-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bundle Resolution Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changes-to-existing-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changes to Existing Code
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Commands
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CLI Commands">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#deadline-bundle-list-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deadline bundle list [path]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deadline-bundle-upload-job_bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deadline bundle upload &lt;job_bundle&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deadline-bundle-download-bundle_name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deadline bundle download &lt;bundle_name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deadline-bundle-hide-bundle_name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deadline bundle hide &lt;bundle_name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deadline-bundle-unhide-bundle_name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deadline bundle unhide &lt;bundle_name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deadline-bundle-info-bundle_name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deadline bundle info &lt;bundle_name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bundle-visibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bundle Visibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#progress-indication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Progress Indication
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archive-safety" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archive Safety
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bundle-name-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bundle Name Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        S3 Considerations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mcp-server-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MCP Server Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-scope-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of Scope (Future)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="job-bundle-browser">Job Bundle Browser<a class="headerlink" href="#job-bundle-browser" title="Permanent link">&para;</a></h1>
+<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">&para;</a></h2>
+<p>When using <code>deadline bundle gui-submit --browse</code> or the "Load a different job bundle" button, users are presented with a native OS folder picker. This is inadequate because:</p>
+<ul>
+<li>Job bundles are not distinguishable from regular folders by name alone.</li>
+<li>Users must already know where their bundles live and navigate there manually.</li>
+<li>There is no preview of what a bundle contains — users pick blindly.</li>
+<li>The picker always starts at the job history directory or home, with no way to configure a default location.</li>
+</ul>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>Replace the native folder picker with a custom job bundle browser dialog that:</p>
+<ol>
+<li>Provides a navigable directory tree showing only folders, archives, and job bundles.</li>
+<li>Displays a preview panel with bundle metadata when a job bundle is selected.</li>
+<li>Supports both local filesystem and S3 bucket browsing through a common backend abstraction.</li>
+<li>Supports job bundles as directories or <code>.ojd</code> archives (zip format under the hood).</li>
+<li>For S3, uses the selected queue's job attachment bucket with a <code>job-bundles/</code> prefix — no extra configuration needed.</li>
+<li>Caches S3 archive bundles locally with ETag validation for fast repeated access.</li>
+<li>Respects a configurable default local browse directory.</li>
+</ol>
+<h2 id="design">Design<a class="headerlink" href="#design" title="Permanent link">&para;</a></h2>
+<h3 id="bundle-formats">Bundle Formats<a class="headerlink" href="#bundle-formats" title="Permanent link">&para;</a></h3>
+<p>Job bundles can be either:</p>
+<ul>
+<li><strong>Directories</strong> — a folder containing <code>template.yaml</code> or <code>template.json</code> at the root, plus any scripts, data files, and <code>asset_references.yaml</code>.</li>
+<li><strong>Archives</strong> — an <code>.ojd</code> file (zip format under the hood) containing a job bundle. The template can be at the archive root or inside a single wrapper directory.</li>
+</ul>
+<p>Both formats are supported for local browsing. S3 browsing only supports <code>.ojd</code> archives — this is the canonical sharing format. Archives are extracted to a local directory before submission. If an archive contains a single top-level wrapper directory (e.g. <code>my-bundle/template.yaml</code> instead of <code>template.yaml</code> at the root), the wrapper is detected and the inner directory is used as the bundle path.</p>
+<h3 id="backend-abstraction">Backend Abstraction<a class="headerlink" href="#backend-abstraction" title="Permanent link">&para;</a></h3>
+<p>To support both local and S3 browsing without coupling the UI to either, introduce a <code>BundleRepository</code> protocol:</p>
+<pre><code class="language-python">@dataclass
+class BundleInfo:
+    &quot;&quot;&quot;Metadata extracted from a job bundle's template.&quot;&quot;&quot;
+    path: str              # Local path, archive path, or s3:// URI
+    name: str              # From template &quot;name&quot; field
+    description: str       # From template &quot;description&quot; field, or &quot;&quot;
+    step_names: list[str]  # Names of each step in the template
+    parameters: list[dict] # Parameter definitions from the template
+
+@dataclass
+class BrowseEntry:
+    &quot;&quot;&quot;A single item in the browser listing.&quot;&quot;&quot;
+    name: str              # Display name (folder basename or archive name without extension)
+    path: str              # Full path or S3 URI
+    is_bundle: bool        # True if this is a valid job bundle
+    is_archive: bool       # True if this is an archive file
+
+class BundleRepository(Protocol):
+    def list_entries(self, path: str) -&gt; list[BrowseEntry]:
+        &quot;&quot;&quot;List immediate children of `path`. Returns folders, archives, and bundles.&quot;&quot;&quot;
+        ...
+
+    def get_bundle_info(self, path: str) -&gt; Optional[BundleInfo]:
+        &quot;&quot;&quot;Load and return metadata for the bundle at `path`, or None if invalid.&quot;&quot;&quot;
+        ...
+
+    def root_path(self) -&gt; str:
+        &quot;&quot;&quot;The starting path for browsing.&quot;&quot;&quot;
+        ...
+</code></pre>
+<p>Two implementations:</p>
+<ul>
+<li><code>LocalBundleRepository</code> — walks the local filesystem. Lists directories and archive files. Directories are bundles if they contain <code>template.yaml</code>/<code>template.json</code>. Archives are always shown as bundles (validated on preview). Provides <code>extract_bundle()</code> for extracting archives to a local directory.</li>
+<li><code>S3BundleRepository</code> — lists objects and prefixes under the queue's job attachment bucket at <code>{rootPrefix}/job-bundles/</code>. Only <code>.ojd</code> archives are recognized as bundles; subfolders are shown for navigation only. Provides <code>download_full_bundle()</code> which handles archive download+cache+extract. The <code>from_config()</code> classmethod encapsulates all initialization logic (session creation, queue lookup, settings extraction) to avoid duplicating this across callers.</li>
+</ul>
+<h3 id="s3-bucket-convention">S3 Bucket Convention<a class="headerlink" href="#s3-bucket-convention" title="Permanent link">&para;</a></h3>
+<p>The S3 bundle repository browses:</p>
+<pre><code>s3://{s3BucketName}/{rootPrefix}/job-bundles/
+</code></pre>
+<p>Where <code>s3BucketName</code> and <code>rootPrefix</code> come from the selected queue's <code>jobAttachmentSettings</code>. This means:</p>
+<ul>
+<li>No extra configuration is needed — the bucket is derived from the queue the user already has selected.</li>
+<li>Users (or admins) place job bundles as <code>.ojd</code> archives in the <code>job-bundles/</code> folder within the queue's attachment bucket.</li>
+<li>Subfolders within <code>job-bundles/</code> are supported for organization but only <code>.ojd</code> files are recognized as bundles.</li>
+</ul>
+<p>Example S3 layout:</p>
+<pre><code>s3://my-farm-bucket/DeadlineCloud/job-bundles/
+    blender-render.ojd
+    maya-arnold.ojd
+    rendering/
+        custom-renderer.ojd
+</code></pre>
+<h3 id="job-history-source">Job History Source<a class="headerlink" href="#job-history-source" title="Permanent link">&para;</a></h3>
+<p>The Job History source browses the job history directory for the current AWS profile, as configured by <code>settings.job_history_dir</code> (default: <code>~/.deadline/job_history/{aws_profile_name}</code>). This directory contains bundles from previous submissions, organized by date.</p>
+<p>This is useful for:
+- Re-submitting a previous job with modified parameters.
+- Using a previously submitted bundle as a starting point for a new submission.
+- Reviewing what was submitted in the past.</p>
+<p>The Job History source uses the same <code>LocalBundleRepository</code> as the Local source, just rooted at the job history directory instead of the user's home or configured default.</p>
+<h3 id="archive-caching">Archive Caching<a class="headerlink" href="#archive-caching" title="Permanent link">&para;</a></h3>
+<p>Archive bundles (both local <code>.ojd</code> files and S3 archives) are cached in a unified location to avoid redundant extraction and downloads.</p>
+<p><strong>Cache location</strong>: <code>~/.deadline/cache/job-bundles/{hash}/{bundle-name}/</code></p>
+<p>Where <code>{hash}</code> is a truncated SHA-256 of the source identifier:
+- <strong>S3 archives</strong>: <code>hash(bucket/s3-key)</code>
+- <strong>Local archives</strong>: <code>hash(local-file-path)</code></p>
+<p><strong>Cache validation</strong>:
+- <strong>S3</strong>: A <code>head_object</code> call retrieves the archive's ETag. If it matches the cached ETag, the local copy is used. If it differs (or no cache exists), the archive is re-downloaded and re-extracted.
+- <strong>Local</strong>: The file's mtime is compared to the cached mtime. If it differs, the archive is re-extracted in-place.</p>
+<p><strong>Cache metadata</strong> (<code>.bundle_cache_meta.json</code>):</p>
+<pre><code class="language-json">{
+  &quot;etag&quot;: &quot;\&quot;d41d8cd98f00b204e9800998ecf8427e\&quot;&quot;,
+  &quot;last_modified&quot;: &quot;2026-04-30T12:00:00+00:00&quot;
+}
+</code></pre>
+<p>For S3 archives, <code>etag</code> is used for validation. For local archives, <code>mtime</code> (float, seconds since epoch) is stored instead. The fields present indicate the source type.</p>
+<p><strong>Cleanup</strong>: Extracted archives live in the local cache directory and can be removed manually if needed. There is no separate temp dir or <code>atexit</code> cleanup — all extracted archives live in the cache.</p>
+<h3 id="s3-object-metadata-for-preview">S3 Object Metadata for Preview<a class="headerlink" href="#s3-object-metadata-for-preview" title="Permanent link">&para;</a></h3>
+<p>When <code>deadline bundle upload</code> uploads an archive, it attaches bundle metadata as S3 user metadata on the object:</p>
+<ul>
+<li><code>ojd-name</code>: The template's <code>name</code> field (hard cap: 256 chars)</li>
+<li><code>ojd-desc</code>: The template's <code>description</code> field, newlines collapsed to spaces (hard cap: 600 chars)</li>
+<li><code>ojd-steps</code>: Comma-separated list of step names (dynamically allocated)</li>
+<li><code>ojd-params</code>: Comma-separated <code>name:type</code> pairs (dynamically allocated)</li>
+<li><code>ojd-step-count</code>: Total number of steps in the template (always included, enables accurate count display when steps are truncated)</li>
+<li><code>ojd-param-count</code>: Total number of parameters in the template (always included, enables accurate count display when params are truncated)</li>
+</ul>
+<p><strong>Budget allocation</strong>: S3 user-defined metadata is limited to 2 KB total (sum of all UTF-8 encoded keys and values, including the <code>x-amz-meta-</code> prefix). We reserve 256 bytes for customer-defined metadata on the same object, leaving ~1,792 bytes for bundle preview metadata. The budget is allocated dynamically with the following priority:</p>
+<ol>
+<li><strong>Name</strong> (hard cap 256 chars) and <strong>Description</strong> (hard cap 600 chars) — always allocated first.</li>
+<li><strong>Step count</strong> and <strong>Param count</strong> — always included (tiny, ~10 bytes total).</li>
+<li><strong>Steps</strong> and <strong>Params</strong> — split the remaining budget evenly between them. If only one is present, it gets the full remainder.</li>
+</ol>
+<p>This means bundles with short names and descriptions get more space for steps/params, while bundles with long descriptions still get a fair split. Constants are defined in <code>_repository.py</code> (<code>METADATA_LIMIT_NAME</code>, <code>METADATA_LIMIT_DESC</code>, <code>S3_METADATA_TOTAL_BUDGET</code>). See: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingMetadata.html#UserMetadata</p>
+<p>When truncation occurs, the CLI emits a yellow warning (e.g. <code>Warning: Bundle metadata 'ojd-params' truncated from 899 to 520 characters</code>) and the truncated value ends with <code>...</code> to make it visually obvious in the preview that information was cut off. The browser dialog detects truncation and uses the count metadata to show accurate totals (e.g. "Parameters (12)" even when only 8 fit in the metadata). When count metadata is unavailable (older uploads), the count displays as "N+" to indicate more exist.</p>
+<p>This metadata is returned by <code>head_object</code>, which is already called for ETag validation. This means preview of uploaded archives requires <strong>zero downloads</strong> — a single <code>head_object</code> provides both cache validation and all preview information. When a valid local cache exists (ETag matches), the cached template is preferred over metadata as it includes full parameter values and defaults.</p>
+<h3 id="detection-what-is-a-job-bundle">Detection: What Is a Job Bundle?<a class="headerlink" href="#detection-what-is-a-job-bundle" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Directories</strong> (local or S3 prefix): contains <code>template.yaml</code> or <code>template.json</code>.</li>
+<li><strong>Archives</strong> (local file or S3 object): filename ends with <code>.ojd</code>. Validated by reading the template from inside the archive on preview.</li>
+</ul>
+<p>For <code>list_entries</code>, detection is kept fast:</p>
+<ul>
+<li><strong>Local directories</strong>: stat check for template file existence (no parsing).</li>
+<li><strong>Local archives</strong>: matched by <code>.ojd</code> extension, then validated by checking for a template inside the archive. This prevents random files from appearing as bundles. Archive scanning can be disabled via <code>include_archives=False</code> on <code>LocalBundleRepository</code> (used via <code>--no-archives</code> in the CLI). The browser dialog shows both directory bundles and <code>.ojd</code> archives for a consistent experience across Local and Queue sources.</li>
+<li><strong>S3 folders</strong>: shown for navigation only (expandable in the tree), never treated as bundles.</li>
+<li><strong>S3 archives</strong>: matched by <code>.ojd</code> extension only (no API call).</li>
+</ul>
+<p>Full template parsing happens only in <code>get_bundle_info</code> when the user clicks a bundle for preview.</p>
+<h3 id="browser-dialog-ui">Browser Dialog UI<a class="headerlink" href="#browser-dialog-ui" title="Permanent link">&para;</a></h3>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│  Job Bundle Browser                                         │
+├─────────────────────────────────────────────────────────────┤
+│  Source: (•) Queue  ( ) Local  ( ) History                  │
+│  Path:  [/job-bundles/                      ]               │
+├────────────────────────────────┬────────────────────────────┤
+│  [Filter bundles...  ] ☐ Hidden│  Name: Blender Render      │
+│  📁 my-bundles/               │  Description (1):          │
+│    📦 blender-render          │  Renders a Blender scene   │
+│    📦 maya-arnold             │  file...                   │
+│    📁 wip/                    │                            │
+│      📦 experimental-job      │  Steps (1):                │
+│    📦 simple-job/             │    • RenderBlender         │
+│                               │                            │
+│                               │  Parameters (2):           │
+│                               │  ┌──────────┬──────┬─────┐ │
+│                               │  │ Name     │ Type │ Val │ │
+│                               │  ├──────────┼──────┼─────┤ │
+│                               │  │ Frames   │ Text │     │ │
+│                               │  │ OutputDir│ Path │     │ │
+│                               │  └──────────┴──────┴─────┘ │
+│                               │           [Download bundle]│
+├────────────────────────────────┴────────────────────────────┤
+│                                          [Cancel] [Select]  │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<p><strong>Top bar</strong> — Source selection, path, and options:
+- Radio toggle between Queue, Local, and History sources. Queue is selected by default when available; otherwise Local is selected. Queue option is disabled if the queue has no job attachment settings or access fails. When Queue is unavailable, an inline warning label appears below the radio buttons explaining why (e.g. "⚠ <strong>Queue browsing unavailable:</strong> AccessDeniedException..."). The warning uses theme-aware, WCAG-AA contrast colors derived from the Qt palette.
+- Path display showing the current browse location (read-only, positioned under the source selector).
+- "Show hidden" checkbox — grouped with the filter as a view control. Unchecked by default, toggling refreshes the tree to include/exclude hidden items. For Local/History sources, this means dot-prefixed directories. For the Queue source, this means bundles the user has hidden in their local, per-user view (see <a href="#bundle-visibility">Bundle Visibility</a>).</p>
+<p><strong>Left panel</strong> — Filter and navigable tree view:
+- A text filter at the top that narrows the tree as you type. Case-insensitive, matches against entry names. Uses recursive filtering so parent folders remain visible when a child matches. The tree auto-expands when filtering to show results.
+- Shows folders (📁) and job bundles (📦) with distinct icons. Both directory bundles and archive bundles use the 📦 icon. Local archives show the <code>.ojd</code> extension to distinguish them from directory bundles.
+- Folders are listed before bundles at each level; both sorted alphabetically within their group.
+- Clicking a folder clears any active filter, expands the folder to show its children, and scrolls it to the top of the view. This makes the search-then-navigate flow natural: search for a folder, click it, see its contents.
+- Job bundles are leaf nodes (selectable, not expandable).
+- Non-bundle, non-archive files are hidden.
+- Hidden folders (names starting with <code>.</code>) and hidden S3 bundles are hidden by default; toggled via the "Show hidden" checkbox.
+- <strong>Context menu</strong> (Queue source only): Right-clicking a visible bundle shows "Hide bundle"; right-clicking a hidden bundle (when "Show hidden" is checked) shows "Unhide bundle". Hidden bundles are rendered with a dimmed/grayed icon to distinguish them from visible ones. Hide/unhide is a local, per-user view change (a small local file write) that never touches S3 (see <a href="#bundle-visibility">Bundle Visibility</a>).</p>
+<p><strong>Right panel</strong> — Preview (shown when a bundle is selected, scrollable):
+- When no bundle is selected, a centered empty state is shown with a bundle glyph and prompt.
+- All bundle-derived text (name, description, step names) is rendered as <strong>plain text</strong> (<code>Qt.PlainText</code>), never rich text. Since a name/description/step value can come from attacker-influenced S3 metadata, this ensures a crafted value cannot inject HTML/CSS into the preview (Qt labels have no script engine, so this is injection hardening, not RCE prevention). Widget-level styling (fonts, colors, word-wrap) is unaffected. Parameter values render in a <code>QTableWidget</code>, which is plain-text by default.
+- <strong>Name</strong>: From the template's <code>name</code> field, shown as-is (with <code>{{Param.X}}</code> references unresolved).
+- <strong>Description</strong>: From the template's <code>description</code> field, if present. Multi-line descriptions are normalized to wrap to the panel width. Section label shows item count. Expanded by default.
+- <strong>Parameters</strong>: Rendered as a table (indented under its section header) with Name, Type, and Value columns. Type uses friendly labels (Text, Path, Number instead of STRING, PATH, INT). Parameters with no default are marked <code>(required)</code>. Section label shows item count. Table is sized to content (no large empty void). If parameters were truncated in S3 metadata, the last garbled entry is dropped and a gray "… additional parameters not shown" row is appended. Ordered before Steps and <strong>expanded by default</strong>, since parameters are the most commonly inspected detail before submitting.
+- <strong>Steps</strong>: List of step names from the template, in definition order. Section label shows item count. Expanded by default.
+- The panel uses a raised, rounded surface with subtle gradient, visually distinct from the tree. Colors are theme-aware (derived from the Qt palette).
+- <strong>Download / Open bundle</strong> button — pinned to the bottom-right of the preview panel, shown only while a bundle is being previewed (hidden in the empty and error states). For Queue bundles (fetched over the network) it reads <strong>"Download bundle"</strong> and shows the size (e.g. "Download bundle (12.3 MB)"), taken from the preview's <code>head_object</code> <code>ContentLength</code> so no extra call is made. For Local/History bundles (which open in place) it reads <strong>"Open bundle"</strong> with no size. It opens the bundle in the OS file explorer (Finder / Explorer / <code>xdg-open</code>) without closing the dialog. Queue bundles are downloaded — and archives extracted — to the local cache first (reusing the Select resolution flow, so the download progress dialog appears and is cancellable); Local and History bundles open in place. Failures are surfaced inline in the preview panel, not as popups.</p>
+<p><strong>Bottom bar</strong>:
+- Cancel and Select buttons. Select is enabled only when a valid bundle is highlighted.</p>
+<h3 id="export-bundle">Export Bundle<a class="headerlink" href="#export-bundle" title="Permanent link">&para;</a></h3>
+<p>The submitter dialog's "Export bundle" button replaces the previous separate "Export" and "Share" buttons with a unified flow. Clicking it opens an export dialog:</p>
+<pre><code>┌─ Export Bundle ─────────────────────────────┐
+│                                             │
+│  Name: [blender-render_________]            │
+│                                             │
+│  Save to:                                   │
+│  (•) Queue    ( ) Local                     │
+│                                             │
+│  ⚠ Queue unavailable: AccessDenied...       │
+│  (inline warning, shown only when Queue     │
+│   is disabled)                              │
+│                                             │
+│  Location: [s3://bucket/DC/job-bundles/]    │
+│  (read-only for Queue, editable for Local)  │
+│                                             │
+│                     [Cancel] [Export]        │
+└─────────────────────────────────────────────┘
+</code></pre>
+<p><strong>Name</strong> — defaults to the job name with <code>{{Param.X}}</code> references resolved using current parameter values. Editable. Used as the <code>.ojd</code> filename for Queue or the directory name for Local.</p>
+<p><strong>Save to</strong> — Queue or Local:
+- <strong>Queue</strong>: archives the bundle as <code>.ojd</code> and uploads to the queue's S3 <code>job-bundles/</code> folder. S3 user metadata (name, description, steps, parameters) is attached for zero-download preview. If a bundle with the same name already exists, the user is prompted to confirm overwrite. When Queue is unavailable (no permissions, no farm/queue configured, no job attachment settings), the radio button is disabled and an inline warning label explains why.
+- <strong>Local</strong>: saves the bundle as a directory to the specified location. Defaults to <code>settings.job_bundle_default_directory</code> — the same path the browser's Local source browses. The exported bundle immediately appears when browsing Local.</p>
+<p><strong>Location</strong> — always visible, updates based on the selected source:
+- <strong>Queue selected</strong>: shows the S3 path (e.g. <code>s3://bucket/DeadlineCloud/job-bundles/</code>), read-only.
+- <strong>Local selected</strong>: shows the local directory path, editable with a folder picker button for override.</p>
+<p>Queue export is enabled when the API is available and a farm and queue are configured. Local export is always available.</p>
+<p>Note: the job history directory (<code>settings.job_history_dir</code>) is still used internally during Submit to record what was submitted, but Export now targets user-visible locations (Local browse path or Queue) rather than the history directory.</p>
+<h3 id="lazy-loading">Lazy Loading<a class="headerlink" href="#lazy-loading" title="Permanent link">&para;</a></h3>
+<p>The tree is populated lazily — only the children of expanded nodes are fetched. This keeps the initial load fast and avoids scanning deep directory trees or making excessive S3 API calls.</p>
+<p>As an exception, the <strong>immediate children of each top-level folder are preloaded one level deep</strong> (<code>_preload_first_level</code>, sharing <code>_load_children</code> with the on-expand handler). This lets the text filter match one level below the root without the user first expanding folders, while keeping the up-front cost bounded (a directory read, or one S3 list per top-level folder). Deeper levels remain lazy — the filter only searches what has been loaded (root + the preloaded level + any folders the user has since expanded).</p>
+<h3 id="preview-prefetch-background-queue-source">Preview Prefetch (background, Queue source)<a class="headerlink" href="#preview-prefetch-background-queue-source" title="Permanent link">&para;</a></h3>
+<p>The Queue listing itself is fast: a single paginated <code>list_objects_v2</code> plus one local read of the per-user visibility file (see <a href="#bundle-visibility">Bundle Visibility</a>) — no per-bundle S3 calls are on the critical path, so the tree renders immediately regardless of how many bundles the queue holds.</p>
+<p>Once the listing is on screen, the dialog warms a <strong>preview prefetch cache</strong> off the UI thread (<code>S3BundleRepository.prefetch_previews()</code> run in a <code>QThread</code> from <code>_on_s3_refresh_done</code>). It issues a <code>head_object</code> per <code>.ojd</code> object in parallel (bounded by <code>PREVIEW_PREFETCH_MAX_WORKERS</code>, default 16) and stashes each response — ETag, S3 user metadata, and <code>ContentLength</code> — in <code>_head_cache</code>. The preview (<code>_get_archive_bundle_info</code>), size (<code>get_bundle_size</code>), and download (<code>_resolve_archive_bundle</code>) paths consult that cache first, so clicking a bundle whose HEAD has already been warmed needs <strong>zero</strong> extra S3 round-trips.</p>
+<p>Key properties:
+- <strong>Decoupled from visibility.</strong> Visibility is a local file read; the prefetch is a pure preview optimization. Neither depends on the other.
+- <strong>Off the critical path.</strong> The prefetch never blocks the listing — a slow or failing prefetch just means the first preview falls back to an on-demand <code>head_object</code>. Individual HEAD failures are logged and ignored.
+- <strong>Rebuilt per refresh.</strong> A full prefetch clears <code>_head_cache</code> and repopulates it, dropping entries for bundles that no longer exist. The S3 client's connection pool is sized to <code>max(settings.s3_max_pool_connections, PREVIEW_PREFETCH_MAX_WORKERS)</code> so the parallel HEADs don't exhaust it.</p>
+<h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h3>
+<p>Add a new setting for the default local browse directory:</p>
+<pre><code class="language-python"># In SETTINGS dict in config_file.py
+&quot;settings.job_bundle_default_directory&quot;: {
+    &quot;default&quot;: &quot;&quot;,
+    &quot;description&quot;: (
+        &quot;The default local directory to open when browsing for job bundles. &quot;
+        &quot;If empty, defaults to the user's home directory.&quot;
+    ),
+}
+</code></pre>
+<p>This setting is also exposed in the Deadline Cloud settings dialog (Settings → General settings) as a "Job bundle directory" picker, alongside the existing "Job history directory" setting.</p>
+<h3 id="cli-integration">CLI Integration<a class="headerlink" href="#cli-integration" title="Permanent link">&para;</a></h3>
+<p>The <code>--browse</code> flag on <code>deadline bundle gui-submit</code> opens this new dialog instead of <code>QFileDialog.getExistingDirectory()</code>. No new flags needed. When <code>--browse</code> is used, the browser dialog opens before the submitter dialog. If the user cancels the browser, the command exits. Additionally, a "Load Bundle" button is added to the submitter dialog's button bar, allowing users to switch bundles mid-session by reopening the browser.</p>
+<p>The "Load a different job bundle" button inside the submitter dialog (<code>JobBundleSettingsWidget.on_load_bundle</code>) also uses the new browser dialog, giving users the same browsing experience when switching bundles mid-session.</p>
+<h3 id="bundle-resolution-flow">Bundle Resolution Flow<a class="headerlink" href="#bundle-resolution-flow" title="Permanent link">&para;</a></h3>
+<p>After the user selects a bundle in the browser, it must be resolved to a local directory for the existing submission pipeline:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Format</th>
+<th>Resolution</th>
+<th>Cleanup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Local</td>
+<td>Directory</td>
+<td>Used directly (no copy)</td>
+<td>None needed</td>
+</tr>
+<tr>
+<td>Local</td>
+<td>Archive (.ojd)</td>
+<td>Extracted to cache dir (<code>hash(path)</code> + mtime validation)</td>
+<td>Local cache dir</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>Archive (.ojd)</td>
+<td>Downloaded to cache dir (<code>hash(bucket/key)</code> + ETag validation), extracted</td>
+<td>Local cache dir</td>
+</tr>
+</tbody>
+</table>
+<p>The CLI <code>deadline bundle download</code> command downloads the <code>.ojd</code> archive, caches it locally with ETag validation, and extracts it to the output directory.</p>
+<p>Once resolved to a local directory, the standard submission flow takes over: <code>read_job_bundle_parameters()</code> parses the template and resolves relative PATH defaults against the bundle directory, <code>apply_job_parameters()</code> processes asset references, and the job is submitted normally.</p>
+<p>Bundled assets (scripts, data files) with relative paths resolve correctly against the extracted/downloaded directory because the existing path resolution logic operates on the <code>bundle_dir</code> path regardless of its origin.</p>
+<h3 id="changes-to-existing-code">Changes to Existing Code<a class="headerlink" href="#changes-to-existing-code" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config/config_file.py</code></td>
+<td>Add <code>settings.job_bundle_default_directory</code> to <code>SETTINGS</code></td>
+</tr>
+<tr>
+<td><code>cli/_groups/bundle_group.py</code></td>
+<td>Add <code>deadline bundle list</code>, <code>deadline bundle upload</code>, <code>deadline bundle download</code>, <code>deadline bundle info</code>, <code>deadline bundle hide</code>, and <code>deadline bundle unhide</code> commands</td>
+</tr>
+<tr>
+<td><code>ui/dialogs/job_bundle_browser_dialog.py</code></td>
+<td><strong>New file.</strong> The browser dialog with filter, Queue/Local/History sources, "Show hidden" toggle, parameter table preview, and right-click context menu for hide/unhide (Queue source). Constructor takes keyword-only args: <code>queue_source</code>, <code>queue_error</code>, <code>local_source</code>, <code>history_source</code>.</td>
+</tr>
+<tr>
+<td><code>ui/dialogs/deadline_config_dialog.py</code></td>
+<td>Add "Job bundle directory" picker to the settings dialog</td>
+</tr>
+<tr>
+<td><code>ui/dialogs/submit_job_to_deadline_dialog.py</code></td>
+<td>Replace "Export" and "Share" buttons with unified "Export bundle" button that opens the export dialog</td>
+</tr>
+<tr>
+<td><code>ui/dialogs/export_bundle_dialog.py</code></td>
+<td><strong>New file.</strong> Export dialog with Queue/Local destination, name override, and location display</td>
+</tr>
+<tr>
+<td><code>ui/widgets/job_bundle_settings_tab.py</code></td>
+<td><code>on_load_bundle</code> opens the new browser dialog instead of <code>QFileDialog</code></td>
+</tr>
+<tr>
+<td><code>ui/job_bundle_submitter.py</code></td>
+<td><code>show_job_bundle_submitter</code> uses the new browser dialog when <code>browse=True</code>; handles archive extraction and S3 resolution</td>
+</tr>
+<tr>
+<td><code>job_bundle/loader.py</code></td>
+<td>Add <code>is_job_bundle_dir(path) -&gt; bool</code> helper for quick detection</td>
+</tr>
+<tr>
+<td><code>job_bundle/_repository.py</code></td>
+<td><strong>New file.</strong> <code>BundleRepository</code> protocol, <code>LocalBundleRepository</code>, <code>S3BundleRepository</code> (with <code>from_config()</code> factory), archive helpers, cache management, metadata constants, and a local per-user visibility store (<code>_LocalBundleVisibility</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="cli-commands">CLI Commands<a class="headerlink" href="#cli-commands" title="Permanent link">&para;</a></h3>
+<h4 id="deadline-bundle-list-path"><code>deadline bundle list [path]</code><a class="headerlink" href="#deadline-bundle-list-path" title="Permanent link">&para;</a></h4>
+<p>Lists job bundles in a local directory or the queue's S3 <code>job-bundles/</code> folder.</p>
+<ul>
+<li>With no arguments, lists bundles in the configured default local directory (<code>settings.job_bundle_default_directory</code>, or home if not set). No AWS config needed.</li>
+<li>With <code>path</code>, lists bundles in that local directory.</li>
+<li>With <code>--queue</code>, lists bundles shared on the queue (requires farm and queue). Hidden bundles are excluded by default.</li>
+<li>With <code>--queue --show-hidden</code>, includes hidden bundles in the output (marked with <code>(hidden)</code> in plain text, <code>"hidden": true</code> in JSON).</li>
+<li>Default output is one bundle name per line, suitable for piping.</li>
+<li><code>--output json</code>: JSON array with name, format (archive/folder), and path.</li>
+</ul>
+<pre><code>$ deadline bundle list
+blender-render
+maya-arnold
+
+$ deadline bundle list ./my-bundles
+simple-job
+
+$ deadline bundle list --queue
+blender-render
+maya-arnold
+monte_carlo_simulation
+
+$ deadline bundle list --queue --show-hidden
+blender-render
+maya-arnold
+monte_carlo_simulation
+old-maya-job (hidden)
+
+$ deadline bundle list --queue --output json
+[{&quot;name&quot;: &quot;blender-render&quot;, &quot;path&quot;: &quot;s3://bucket/prefix/job-bundles/blender-render.ojd&quot;, &quot;format&quot;: &quot;archive&quot;}, ...]
+
+$ deadline bundle list | head -1 | xargs deadline bundle gui-submit --browse
+</code></pre>
+<p>The plain-text output enables chaining with other commands — e.g. selecting a bundle interactively with <code>fzf</code>:</p>
+<pre><code>$ deadline bundle submit $(deadline bundle download $(deadline bundle list | fzf) -o /tmp/bundles)
+</code></pre>
+<p>Use <code>jq</code> with JSON output to filter by format or extract paths:</p>
+<pre><code>$ deadline bundle list --output json | jq -r '.[] | select(.format == &quot;archive&quot;) | .name'
+blender-render
+maya-arnold
+
+$ deadline bundle list --output json | jq -r '.[0].path'
+s3://my-farm-bucket/DeadlineCloud/job-bundles/blender-render.ojd
+</code></pre>
+<h4 id="deadline-bundle-upload-job_bundle"><code>deadline bundle upload &lt;job_bundle&gt;</code><a class="headerlink" href="#deadline-bundle-upload-job_bundle" title="Permanent link">&para;</a></h4>
+<p>Uploads a local job bundle to share on the queue as an <code>.ojd</code> archive. Accepts either a bundle directory or an existing <code>.ojd</code> archive file.</p>
+<ul>
+<li>When given a directory, archives it as <code>.ojd</code> and uploads. Symlinks are skipped (not followed).</li>
+<li>When given an <code>.ojd</code> file, uploads it directly without re-archiving.</li>
+<li><code>--name</code>: Override the bundle name (defaults to the directory/file name).</li>
+<li><code>--profile</code>, <code>--farm-id</code>, <code>--queue-id</code>: Standard config overrides.</li>
+<li>If a bundle with the same name already exists, prompts for confirmation before overwriting.</li>
+</ul>
+<pre><code>$ deadline bundle upload ./my-render-job
+Uploaded bundle to s3://my-farm-bucket/DeadlineCloud/job-bundles/my-render-job.ojd
+
+$ deadline bundle upload ./my-render-job.ojd
+Uploaded bundle to s3://my-farm-bucket/DeadlineCloud/job-bundles/my-render-job.ojd
+
+$ deadline bundle upload ./my-render-job --name custom-name
+Uploaded bundle to s3://my-farm-bucket/DeadlineCloud/job-bundles/custom-name.ojd
+
+$ deadline bundle upload ./my-render-job
+Bundle 'my-render-job' already exists on the queue. Overwrite? [y/N]: y
+Uploaded bundle to s3://my-farm-bucket/DeadlineCloud/job-bundles/my-render-job.ojd
+</code></pre>
+<h4 id="deadline-bundle-download-bundle_name"><code>deadline bundle download &lt;bundle_name&gt;</code><a class="headerlink" href="#deadline-bundle-download-bundle_name" title="Permanent link">&para;</a></h4>
+<p>Downloads a shared job bundle from the queue.</p>
+<ul>
+<li>Finds the <code>.ojd</code> archive matching the given name.</li>
+<li>Uses the ETag cache (same as the browser dialog) — repeated downloads are instant if the archive hasn't changed.</li>
+<li>Copies the resolved bundle to the output directory (cache is used internally but the user gets a clean copy at their requested location).</li>
+<li><code>-o, --output-dir</code>: Local directory to download to (defaults to <code>.</code>).</li>
+<li><code>--profile</code>, <code>--farm-id</code>, <code>--queue-id</code>: Standard config overrides.</li>
+</ul>
+<pre><code>$ deadline bundle download blender-render
+Downloaded bundle to: ./blender-render
+
+$ deadline bundle download blender-render -o /tmp/bundles
+Downloaded bundle to: /tmp/bundles/blender-render
+</code></pre>
+<h4 id="deadline-bundle-hide-bundle_name"><code>deadline bundle hide &lt;bundle_name&gt;</code><a class="headerlink" href="#deadline-bundle-hide-bundle_name" title="Permanent link">&para;</a></h4>
+<p>Hides a shared bundle in <strong>your</strong> view. The bundle stays on the queue for everyone else; it is just no longer shown in your browser or your <code>deadline bundle list</code> by default.</p>
+<ul>
+<li>Records the name in your local per-user view file (no S3 calls, no permissions needed).</li>
+<li><code>--profile</code>, <code>--farm-id</code>, <code>--queue-id</code>: Standard config overrides (used to identify which queue's view to update).</li>
+<li>No-op if the bundle is already hidden in your view.</li>
+</ul>
+<pre><code>$ deadline bundle hide blender-render
+Hidden bundle: blender-render
+
+$ deadline bundle hide blender-render
+Bundle already hidden: blender-render
+</code></pre>
+<h4 id="deadline-bundle-unhide-bundle_name"><code>deadline bundle unhide &lt;bundle_name&gt;</code><a class="headerlink" href="#deadline-bundle-unhide-bundle_name" title="Permanent link">&para;</a></h4>
+<p>Unhides a bundle in your view, making it visible again in your browser and <code>deadline bundle list</code>.</p>
+<ul>
+<li>Removes the name from your local per-user view file (no S3 calls).</li>
+<li><code>--profile</code>, <code>--farm-id</code>, <code>--queue-id</code>: Standard config overrides.</li>
+<li>No-op if the bundle is not hidden in your view.</li>
+</ul>
+<pre><code>$ deadline bundle unhide blender-render
+Unhidden bundle: blender-render
+
+$ deadline bundle unhide blender-render
+Bundle is not hidden: blender-render
+</code></pre>
+<h4 id="deadline-bundle-info-bundle_name"><code>deadline bundle info &lt;bundle_name&gt;</code><a class="headerlink" href="#deadline-bundle-info-bundle_name" title="Permanent link">&para;</a></h4>
+<p>Shows detailed information about a job bundle — the same data shown in the browser's preview panel.</p>
+<ul>
+<li>Without <code>--queue</code>, <code>bundle_name</code> is treated as a local path to a job bundle directory. If the path doesn't exist, searches by name in the current directory and then the configured <code>settings.job_bundle_default_directory</code>.</li>
+<li>With <code>--queue</code>, looks up the named bundle on the queue (uses S3 metadata for zero-download preview when available).</li>
+<li>Output always includes the resolved path so the user knows where the bundle was found.</li>
+<li><code>--output json</code>: JSON object with path, name, description, steps, and parameters.</li>
+<li><code>--profile</code>, <code>--farm-id</code>, <code>--queue-id</code>: Standard config overrides (with <code>--queue</code>).</li>
+</ul>
+<pre><code>$ deadline bundle info ./my-render-job
+Path: /home/user/my-render-job
+Name: Blender Render
+Description: Renders a Blender scene file using Cycles
+Steps:
+  • RenderBlender
+Parameters:
+  Frames (STRING) = 1-100
+  OutputDir (PATH) = /tmp/output
+
+$ deadline bundle info blender-render --queue
+Path: s3://my-farm-bucket/DeadlineCloud/job-bundles/blender-render.ojd
+Name: Blender Render
+Description: Renders a Blender scene file using Cycles
+Steps:
+  • RenderBlender
+Parameters:
+  Frames (STRING) = 1-100
+  OutputDir (PATH) = /tmp/output
+
+$ deadline bundle info blender-render --queue --output json
+{
+  &quot;path&quot;: &quot;s3://my-farm-bucket/DeadlineCloud/job-bundles/blender-render.ojd&quot;,
+  &quot;name&quot;: &quot;Blender Render&quot;,
+  &quot;description&quot;: &quot;Renders a Blender scene file using Cycles&quot;,
+  &quot;steps&quot;: [&quot;RenderBlender&quot;],
+  &quot;parameters&quot;: [
+    {&quot;name&quot;: &quot;Frames&quot;, &quot;type&quot;: &quot;STRING&quot;, &quot;_display_value&quot;: &quot;1-100&quot;},
+    {&quot;name&quot;: &quot;OutputDir&quot;, &quot;type&quot;: &quot;PATH&quot;, &quot;_display_value&quot;: &quot;/tmp/output&quot;}
+  ]
+}
+</code></pre>
+<h3 id="bundle-visibility">Bundle Visibility<a class="headerlink" href="#bundle-visibility" title="Permanent link">&para;</a></h3>
+<p>A shared bundle can be "hidden" so it doesn't clutter the browser or <code>deadline bundle list</code>. Hiding is a <strong>private, per-user view preference</strong> — it does not change anything on S3 and does not affect what other users see. Showing or hiding a bundle only changes your own listing.</p>
+<p><strong>Mechanism — local per-user view file:</strong></p>
+<p>Hidden bundle names are stored in a small local JSON file, one <strong>per queue</strong> (in that queue's folder inside the bundle cache, keyed by bucket + prefix). The file is hidden (dot-prefixed) — it's a private view store, not meant for manual editing:</p>
+<pre><code>~/.deadline/cache/job-bundles/{hash(bucket/prefix)}/.visibility.json
+</code></pre>
+<pre><code class="language-json">{
+  &quot;version&quot;: 1,
+  &quot;hidden&quot;: [&quot;blender-render&quot;, &quot;rendering/old-maya-job&quot;]
+}
+</code></pre>
+<p>The <code>hidden</code> array holds bundle names relative to <code>job-bundles/</code> (subfolder paths preserved, e.g. <code>"rendering/old-maya-job"</code>), without the <code>.ojd</code> extension.</p>
+<ul>
+<li><code>get_hidden_set()</code> reads that file and returns the set of hidden names (empty if the file is missing, unreadable, or malformed). <strong>No S3 calls.</strong></li>
+<li><code>set_bundle_visibility(name, hidden=...)</code> reads the current set, adds/removes the name, and writes it back atomically (temp file + <code>os.replace</code>). <strong>No S3 calls.</strong></li>
+</ul>
+<p>The file lives in the queue's own folder inside the bundle cache as <code>.visibility.json</code> — one per queue. Visibility is a per-queue, per-user concept, so it sits alongside that queue's cached data.</p>
+<p><strong>Why local instead of on S3?</strong>
+- <strong>Per-user, not shared.</strong> One person hiding a bundle from their own view shouldn't remove it from everyone else's. Visibility is a personal UI preference, like collapsing a folder.
+- <strong>No write permissions or object rewrites needed.</strong> Hiding requires nothing on S3 — no <code>s3:PutObject</code>, no object rewrite, no ETag churn, and no 5 GB copy limit. Read-only users can hide/show freely.
+- <strong>Instant.</strong> Reading and writing the hidden set is a local file operation; it never scales with the number of bundles on the queue.</p>
+<p><strong>Browser behavior:</strong></p>
+<ul>
+<li>When "Show hidden" is unchecked (default), locally-hidden bundles are excluded from the tree.</li>
+<li>When "Show hidden" is checked, hidden bundles appear with a dimmed/grayed 📦 icon.</li>
+<li>Right-click context menu on bundles (Queue source only):</li>
+<li>Visible bundle → "Hide bundle"</li>
+<li>Hidden bundle → "Unhide bundle"</li>
+<li>After hide/unhide, the tree refreshes to reflect the change (a local file write).</li>
+</ul>
+<p><strong>Sync behavior:</strong> Because the hidden set is local and per-user, there is nothing to sync. If a bundle is deleted from the queue, a stale entry may remain in the local file; it is simply ignored during listing (it matches no existing bundle) and is harmless.</p>
+<p><strong>Permissions:</strong> Browsing/reading and previewing bundles requires <code>s3:ListBucket</code>, <code>s3:GetObject</code> (and <code>s3:GetObjectAttributes</code>/HeadObject) on the bucket. Hiding/unhiding requires <strong>no</strong> S3 permissions at all — it only writes a local file.</p>
+<h3 id="progress-indication">Progress Indication<a class="headerlink" href="#progress-indication" title="Permanent link">&para;</a></h3>
+<p>Operations that involve network I/O show progress to the user:</p>
+<ul>
+<li><strong>Browser dialog</strong>: Selecting an S3 bundle and clicking "Select" opens a cancellable progress dialog (<code>QDialog</code> + <code>QProgressBar</code>) showing download progress via the S3 <code>download_fileobj</code> callback delivering updates over Qt signals from the background transfer thread. The progress bar is scaled to KiB and the size signal is typed as <code>qlonglong</code> to avoid 32-bit int overflow for large (multi-GiB) bundles, and the label is formatted with <code>human_readable_file_size</code> (e.g. "1.2 GB / 2.1 GB").</li>
+<li><strong>Save to Queue (GUI)</strong>: Archiving and upload run on a background <code>QThread</code>. A <code>QProgressDialog</code> shows two phases:</li>
+<li>"Archiving bundle... X MB / Y MB" — progress updates per file (small files use fast <code>zf.write()</code>, files &gt;8MB use chunked 4MB writes for smoother progress).</li>
+<li>"Uploading bundle... X MB / Y MB" — byte-level progress via <code>upload_fileobj</code> callback.
+  On completion, the dialog shows "Bundle saved to queue." with a Close button. All values are scaled to KB to avoid 32-bit int overflow for large bundles.</li>
+<li><strong>CLI</strong>: <code>deadline bundle upload</code> shows a click progress bar with bytes uploaded. <code>deadline bundle download</code> shows a progress bar with bytes downloaded. <code>deadline bundle hide</code>/<code>unhide</code> complete fast enough to not need progress.</li>
+</ul>
+<h3 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h3>
+<p>Errors are displayed inline rather than as popup dialogs:</p>
+<ul>
+<li><strong>Queue unavailable</strong> (no farm/queue, no JA settings, auth failure): The Queue radio button is disabled and a styled inline warning label appears below the source selector showing the reason (e.g. "⚠ <strong>Queue browsing unavailable:</strong> AccessDeniedException...").</li>
+<li><strong>Listing failure</strong> (network error, permissions): The preview panel shows "⚠ Error" in red with the error message.</li>
+<li><strong>Expand failure</strong> (subfolder listing fails): A disabled <code>⚠ Error: {message}</code> entry appears in the tree under that folder.</li>
+<li><strong>Preview failure</strong> (malformed template, missing fields): The preview panel shows "⚠ Error" with "Could not read bundle template" and the tree entry icon changes from 📦 to ⚠.</li>
+<li><strong>Double-click</strong>: Double-clicking a bundle selects it and accepts the dialog. Double-clicking a folder does nothing.</li>
+<li><strong>Hide/unhide failure</strong> (insufficient permissions or conflict): The context menu action is always shown. If the operation fails (e.g. <code>AccessDeniedException</code>), an inline warning appears below the tree: "⚠ Could not hide bundle: AccessDeniedException".</li>
+</ul>
+<h3 id="archive-safety">Archive Safety<a class="headerlink" href="#archive-safety" title="Permanent link">&para;</a></h3>
+<p>Archives are validated before extraction to prevent path traversal attacks:</p>
+<ul>
+<li>All entry paths are checked for absolute paths and <code>../</code> traversal using <code>os.path.commonpath()</code> with <code>os.path.realpath()</code> — this handles mixed path separators on Windows. The entire archive is rejected if any entry would extract outside the target directory.</li>
+</ul>
+<p>Resource-exhaustion / zip-bomb protection is enforced before extraction. Checks read the zip central directory (<code>infolist()</code>), so nothing is decompressed to validate; <code>zipfile</code> also caps actual output at each entry's declared <code>file_size</code>, making these central-directory values a sound upper bound. The archive is rejected if:</p>
+<ul>
+<li>It has more than <code>MAX_ARCHIVE_ENTRIES</code> (100,000) entries.</li>
+<li>Its declared uncompressed size exceeds <code>max(MAX_ARCHIVE_UNCOMPRESSED_FLOOR, compressed × MAX_ARCHIVE_COMPRESSION_RATIO)</code> — i.e. <code>max(256 MB, compressed × 200)</code>. A generous absolute floor is always permitted; above it the expansion ratio must be plausible for real data. There is no absolute size ceiling, so legitimately large (low-ratio) bundles still extract.</li>
+<li>The extracted payload wouldn't fit in the destination filesystem's free space.</li>
+<li>The template entry is larger than <code>MAX_TEMPLATE_BYTES</code> (16 MB), refused when reading the template (a template, even with embedded scripts, is small).</li>
+</ul>
+<p>Symlink protection during upload:</p>
+<ul>
+<li><code>os.walk(followlinks=False)</code> is used when archiving bundles. Symlinked files and directories are skipped to prevent unintended inclusion of files outside the bundle directory.</li>
+</ul>
+<h3 id="bundle-name-validation">Bundle Name Validation<a class="headerlink" href="#bundle-name-validation" title="Permanent link">&para;</a></h3>
+<p>Upload rejects bundles with invalid names:</p>
+<ul>
+<li>Empty names or names consisting only of whitespace/slashes are rejected with an error directing the user to <code>--name</code>.</li>
+<li>The full S3 key (prefix + name + <code>.ojd</code>) is validated against S3's 1024-character key limit.</li>
+<li>Control characters (0x00–0x1F, 0x7F) are considered invalid.</li>
+</ul>
+<p>On download, the bundle name is sanitized for the local filesystem in a platform-specific manner:</p>
+<ul>
+<li><strong>POSIX</strong> (macOS/Linux): <code>/</code> and control characters (0x00–0x1F, 0x7F) are replaced with <code>_</code>. While most control characters are technically valid in POSIX filenames, they cause issues in terminals and scripts.</li>
+<li><strong>Windows</strong>: <code>\ / : * ? " &lt; &gt; |</code> and control characters are replaced with <code>_</code>.</li>
+</ul>
+<p>This means the S3 key preserves the original name as-is (all characters are valid in S3 keys), and only the local directory name is adjusted for the user's OS.</p>
+<h3 id="s3-considerations">S3 Considerations<a class="headerlink" href="#s3-considerations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Authentication</strong>: S3 browsing and CLI commands use <code>api.get_boto3_session()</code> which respects the configured AWS profile in <code>~/.deadline/config</code>. The <code>S3BundleRepository.from_config()</code> factory method encapsulates session creation, queue lookup, and settings extraction in one place. No separate auth flow.</li>
+<li><strong>Permissions</strong>: Requires <code>s3:ListBucket</code> and <code>s3:GetObject</code> on the queue's attachment bucket for browsing/preview/download. Upload additionally requires <code>s3:PutObject</code>. Hiding/unhiding requires <strong>no</strong> S3 permissions — it is a local, per-user view preference (see <a href="#bundle-visibility">Bundle Visibility</a>). If access is denied, show an error rather than crashing.</li>
+<li><strong>Performance</strong>: Listing is a single paginated <code>list_objects_v2</code> call with delimiter. Archive preview with S3 metadata is 1 <code>head_object</code> (no download). Cached archive selection is 1 <code>head_object</code>.</li>
+<li><strong>S3 object metadata</strong>: <code>deadline bundle upload</code> attaches bundle name, description, steps, and parameters as S3 user metadata. This enables zero-download preview via <code>head_object</code>. Archives uploaded by other means fall back to downloading the archive for preview.</li>
+<li><strong>Bundled assets</strong>: Scripts, data files, and other assets within the bundle are included in the archive. Relative PATH parameters resolve against the extracted copy.</li>
+</ul>
+<h3 id="mcp-server-integration">MCP Server Integration<a class="headerlink" href="#mcp-server-integration" title="Permanent link">&para;</a></h3>
+<p>The MCP server exposes bundle sharing operations as tools for AI assistants:</p>
+<ul>
+<li><strong>list_shared_bundles</strong> — Lists bundles on the queue (respects visibility, supports <code>show_hidden</code>).</li>
+<li><strong>upload_bundle</strong> — Uploads a local job bundle (directory or <code>.ojd</code> archive) to the queue. Archives are uploaded directly without re-archiving.</li>
+<li><strong>download_bundle</strong> — Downloads a shared bundle from the queue to a local directory.</li>
+</ul>
+<p>These tools use the same <code>S3BundleRepository</code> as the CLI and GUI, so behavior is consistent. Hide/unhide is not exposed via MCP — it's a management action better suited to direct user intent via CLI or GUI.</p>
+<h2 id="out-of-scope-future">Out of Scope (Future)<a class="headerlink" href="#out-of-scope-future" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Favoriting or pinning frequently used bundles.</li>
+<li>Browsing bundles from a Deadline Cloud service API (e.g. farm-level bundle registry).</li>
+<li>Configurable S3 bucket/prefix (currently always derived from the queue).</li>
+<li>Cache size limits or TTL-based eviction.</li>
+<li><strong>Persisting the visibility/preview scan across sessions.</strong> Today the hidden-set scan (list + parallel HEADs) and its <code>_head_cache</code> prefetch live only for the lifetime of a repository instance and are rebuilt on every listing/refresh. A future improvement could persist this data — e.g. a local on-disk index keyed by bucket/prefix with ETag-based validation, or an <code>If-Modified-Since</code>/conditional-HEAD refresh that only re-reads changed objects — so repeated browses avoid re-HEADing every bundle. This would recover most of the manifest's single-round-trip snappiness while keeping visibility state on the objects themselves.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    </div>
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

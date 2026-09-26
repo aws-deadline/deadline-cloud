@@ -1,0 +1,2518 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/deadline-cloud/submission-hooks/">
+      
+      
+        <link rel="prev" href="../code_reference/client_ui/">
+      
+      
+        <link rel="next" href="../mcp_guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Submission Hooks - AWS Deadline Cloud - Client Library Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#submission-hooks" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="AWS Deadline Cloud - Client Library Documentation" class="md-header__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud - Client Library Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Submission Hooks
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="AWS Deadline Cloud - Client Library Documentation" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AWS Deadline Cloud - Client Library Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../cli_reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_attachment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    attachment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    auth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_farm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    farm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_fleet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fleet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_handle-web-url/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    handle-web-url
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_job/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_manifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    manifest
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mcp-server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_queue/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/deadline_worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Library Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    deadline.client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    deadline.client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_reference/client_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    api
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_reference/client_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cli
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_reference/client_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_reference/client_exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_reference/client_job_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job_bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_reference/client_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ui
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Submission Hooks
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Submission Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Start
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quick Start">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-bundle-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Bundle Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-environment-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Environment Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hook-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook Types
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pre-gui-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-GUI Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pre-submission-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-Submission Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-submission-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Submission Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hooksyaml-or-hooksjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hooks.yaml or hooks.json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hook-definition-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook Definition Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#path-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Path Resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hook-input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook Input
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook Input">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#progress-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Progress Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#json-via-stdin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON via stdin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hook-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook Output
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook Output">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pre-submission-hooks_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-Submission Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-submission-hooks_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Submission Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example Scripts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Example Scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#asset-validator-pre-submission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asset Validator (Pre-Submission)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#texture-discovery-pre-submission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Texture Discovery (Pre-Submission)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slack-notification-post-submission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slack Notification (Post-Submission)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bundle-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bundle Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#confirmation-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Confirmation Prompt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration Summary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#studio-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Studio Deployment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Error Handling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pre-submission-hook-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-Submission Hook Failures
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-submission-hook-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Submission Hook Failures
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submission-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submission methods
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Start
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quick Start">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-bundle-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Bundle Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-environment-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Environment Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hook-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook Types
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pre-gui-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-GUI Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pre-submission-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-Submission Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-submission-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Submission Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hooksyaml-or-hooksjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hooks.yaml or hooks.json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hook-definition-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook Definition Fields
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#path-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Path Resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hook-input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook Input
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook Input">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#progress-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Progress Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#json-via-stdin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON via stdin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hook-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hook Output
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hook Output">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pre-submission-hooks_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-Submission Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-submission-hooks_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Submission Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example Scripts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Example Scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#asset-validator-pre-submission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asset Validator (Pre-Submission)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#texture-discovery-pre-submission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Texture Discovery (Pre-Submission)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slack-notification-post-submission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slack Notification (Post-Submission)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bundle-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bundle Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#confirmation-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Confirmation Prompt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration Summary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#studio-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Studio Deployment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Error Handling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pre-submission-hook-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-Submission Hook Failures
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-submission-hook-failures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Submission Hook Failures
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submission-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submission methods
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="submission-hooks">Submission Hooks<a class="headerlink" href="#submission-hooks" title="Permanent link">&para;</a></h1>
+<p>Submission hooks allow you to run custom scripts during the job submission workflow. You can use hooks to validate job configurations, discover additional assets, modify submission parameters, or integrate with external systems.</p>
+<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<p>There are two ways to configure hooks:</p>
+<h3 id="1-bundle-hooks">1. Bundle Hooks<a class="headerlink" href="#1-bundle-hooks" title="Permanent link">&para;</a></h3>
+<p>Place a <code>hooks.yaml</code> (or <code>hooks.json</code>) in your job bundle directory alongside <code>template.yaml</code>. This works well for CLI workflows where the bundle already exists before submission:</p>
+<pre><code class="language-yaml">version: &quot;1.0&quot;
+preGUI:
+  - command: python3
+    args: [prefill.py]
+    timeout: 10
+
+preSubmission:
+  - command: python3
+    args: [validate.py]
+    timeout: 30
+
+postSubmission:
+  - command: python3
+    args: [notify.py]
+</code></pre>
+<p>Requires <code>settings.allow_bundle_hooks</code> to be enabled.</p>
+<h3 id="2-environment-hooks">2. Environment Hooks<a class="headerlink" href="#2-environment-hooks" title="Permanent link">&para;</a></h3>
+<p>For DCC submitters (Maya, Blender, etc.) where the bundle is created at submission time, or for studios that want to enforce hooks across all submissions, point <code>DEADLINE_HOOKS_DIR</code> to a directory containing <code>hooks.yaml</code>:</p>
+<pre><code class="language-bash"># Studio IT sets this per-application
+export DEADLINE_HOOKS_DIR=/studio/pipeline/hooks/maya
+</code></pre>
+<p>Requires <code>settings.allow_environment_hooks</code> to be enabled. Both sources can be active simultaneously — environment hooks run first, then bundle hooks.</p>
+<h2 id="hook-types">Hook Types<a class="headerlink" href="#hook-types" title="Permanent link">&para;</a></h2>
+<h3 id="pre-gui-hooks">Pre-GUI Hooks<a class="headerlink" href="#pre-gui-hooks" title="Permanent link">&para;</a></h3>
+<p>Run <strong>before</strong> the submission dialog opens. Use these to:
+- Pre-populate job name, description, and priority
+- Set parameter defaults based on the current scene or pipeline context
+- Query a project management system for task metadata</p>
+<p>Pre-GUI hooks <strong>block the dialog from opening</strong> if they fail (non-zero exit code or timeout).</p>
+<p>Output JSON to stdout to modify the initial dialog state:</p>
+<pre><code class="language-python">import json
+
+output = {
+    &quot;name&quot;: &quot;My Render - v042&quot;,
+    &quot;description&quot;: &quot;Submitted via pipeline&quot;,
+    &quot;parameters&quot;: {
+        # Job template parameters
+        &quot;SceneFile&quot;: &quot;/resolved/path/to/scene.ma&quot;,
+        &quot;OutputPath&quot;: &quot;/shots/sh010/renders/&quot;,
+        # Shared job properties use the deadline: prefix
+        &quot;deadline:priority&quot;: 75,
+        &quot;deadline:maxFailedTasksCount&quot;: 5,
+        &quot;deadline:maxRetriesPerTask&quot;: 3,
+        &quot;deadline:maxWorkerCount&quot;: 10,
+        &quot;deadline:targetTaskRunStatus&quot;: &quot;READY&quot;,  # or &quot;SUSPENDED&quot;
+    }
+}
+print(json.dumps(output))
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Output field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>Pre-fill the job name field</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>string</td>
+<td>Pre-fill the job description field</td>
+</tr>
+<tr>
+<td><code>parameters</code></td>
+<td>object</td>
+<td>Pre-fill parameter values by name (see below)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parameter keys</strong> (inside <code>parameters</code>):</p>
+<p>Job template parameters use their name directly. Shared job properties use the <code>deadline:</code> prefix:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>deadline:priority</code></td>
+<td>integer</td>
+<td>Priority (0–100)</td>
+</tr>
+<tr>
+<td><code>deadline:maxFailedTasksCount</code></td>
+<td>integer</td>
+<td>Maximum failed tasks before the job fails</td>
+</tr>
+<tr>
+<td><code>deadline:maxRetriesPerTask</code></td>
+<td>integer</td>
+<td>Maximum retries per failed task</td>
+</tr>
+<tr>
+<td><code>deadline:maxWorkerCount</code></td>
+<td>integer</td>
+<td>Maximum concurrent workers</td>
+</tr>
+<tr>
+<td><code>deadline:targetTaskRunStatus</code></td>
+<td>string</td>
+<td>Initial task status: <code>"READY"</code> or <code>"SUSPENDED"</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Note:</strong> CLI-supplied <code>--parameter</code> values take precedence over hook-supplied <code>parameters</code>.</p>
+</blockquote>
+<h3 id="pre-submission-hooks">Pre-Submission Hooks<a class="headerlink" href="#pre-submission-hooks" title="Permanent link">&para;</a></h3>
+<p>Run <strong>before</strong> job attachments are hashed and uploaded. Use these to:
+- Validate job configuration
+- Discover and add additional input files
+- Modify job parameters (priority, etc.)
+- Enforce studio policies</p>
+<p>Pre-submission hooks <strong>block submission</strong> if they fail (non-zero exit code or timeout).</p>
+<h3 id="post-submission-hooks">Post-Submission Hooks<a class="headerlink" href="#post-submission-hooks" title="Permanent link">&para;</a></h3>
+<p>Run <strong>after</strong> the CreateJob API call returns successfully (i.e., the job has been accepted by AWS Deadline Cloud). Use these to:
+- Send notifications (Slack, email, etc.)
+- Update tracking systems
+- Log submission details</p>
+<p>Post-submission hooks <strong>do not block</strong> - failures are logged as warnings.</p>
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<h3 id="hooksyaml-or-hooksjson">hooks.yaml or hooks.json<a class="headerlink" href="#hooksyaml-or-hooksjson" title="Permanent link">&para;</a></h3>
+<p>Place either <code>hooks.yaml</code> or <code>hooks.json</code> in your job bundle directory alongside <code>template.yaml</code>, or in the directory specified by <code>DEADLINE_HOOKS_DIR</code>. If both formats exist in the same directory, an error is raised.</p>
+<p>The <code>version</code> field is required and must be <code>"1.0"</code>.</p>
+<p><strong>YAML format:</strong></p>
+<pre><code class="language-yaml">version: &quot;1.0&quot;
+preGUI:
+  - command: python3
+    args: [scripts/prefill_from_shotgrid.py]
+    timeout: 10
+
+preSubmission:
+  - command: python3
+    args: [scripts/validate_assets.py]
+    timeout: 60
+    env:
+      VALIDATION_LEVEL: strict
+
+  - command: python3
+    args: [scripts/discover_textures.py]
+
+postSubmission:
+  - command: python3
+    args: [scripts/notify_slack.py]
+    timeout: 15
+    env:
+      SLACK_WEBHOOK: https://hooks.slack.com/...
+</code></pre>
+<p><strong>JSON format:</strong></p>
+<pre><code class="language-json">{
+  &quot;preSubmission&quot;: [
+    {
+      &quot;command&quot;: &quot;python3&quot;,
+      &quot;args&quot;: [&quot;scripts/validate_assets.py&quot;],
+      &quot;timeout&quot;: 60,
+      &quot;env&quot;: {
+        &quot;VALIDATION_LEVEL&quot;: &quot;strict&quot;
+      }
+    }
+  ],
+  &quot;postSubmission&quot;: [
+    {
+      &quot;command&quot;: &quot;python3&quot;,
+      &quot;args&quot;: [&quot;scripts/notify_slack.py&quot;],
+      &quot;timeout&quot;: 15
+    }
+  ]
+}
+</code></pre>
+<h3 id="hook-definition-fields">Hook Definition Fields<a class="headerlink" href="#hook-definition-fields" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>command</code></td>
+<td>Yes</td>
+<td>-</td>
+<td>Executable or interpreter (e.g., <code>python3</code>, <code>bash</code>)</td>
+</tr>
+<tr>
+<td><code>args</code></td>
+<td>No</td>
+<td><code>[]</code></td>
+<td>Command-line arguments</td>
+</tr>
+<tr>
+<td><code>timeout</code></td>
+<td>No</td>
+<td><code>60</code></td>
+<td>Maximum execution time in seconds</td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td>No</td>
+<td><code>{}</code></td>
+<td>Additional environment variables</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Note:</strong> Hooks inherit the submitter's full environment. The <code>DEADLINE_*</code> variables and any hook-specific <code>env</code> values are layered on top (overriding on conflict).</p>
+</blockquote>
+<h3 id="path-resolution">Path Resolution<a class="headerlink" href="#path-resolution" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Absolute paths</strong>: Used as-is</li>
+<li><strong>Relative paths</strong>: Resolved relative to the job bundle directory</li>
+<li><strong>Command names</strong>: Searched in system PATH</li>
+</ul>
+<h2 id="hook-input">Hook Input<a class="headerlink" href="#hook-input" title="Permanent link">&para;</a></h2>
+<p>Hooks receive job metadata via JSON on stdin and through convenience environment variables.</p>
+<h3 id="progress-output">Progress Output<a class="headerlink" href="#progress-output" title="Permanent link">&para;</a></h3>
+<p>Hooks can be slow — for example, generating auth tokens for several services before
+submission. To keep the user informed, anything a hook writes to stderr is surfaced to the
+user line-by-line as the hook runs, prefixed with the hook's phase and index (e.g.
+<code>[pre-submission hook 1] Fetching token for renderfarm...</code>). Write progress messages to
+stderr so they appear immediately:</p>
+<pre><code class="language-python">import sys
+
+print(&quot;Fetching token for renderfarm...&quot;, file=sys.stderr, flush=True)
+# ... slow work ...
+print(&quot;Done.&quot;, file=sys.stderr, flush=True)
+</code></pre>
+<p>stdout is not streamed as progress — it is reserved for the JSON contract (see
+<a href="#hook-output">Hook Output</a>). Use stderr for human-readable progress. In the CLI the
+streamed lines print to the console; in the standalone GUI they go to the submission log.</p>
+<h3 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h3>
+<p>Environment variables provide a convenient shorthand for simple scripts (e.g., <code>echo $DEADLINE_JOB_NAME</code> in bash). For structured or nested data, use the JSON stdin payload instead.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DEADLINE_JOB_NAME</code></td>
+<td>Job name</td>
+</tr>
+<tr>
+<td><code>DEADLINE_PRIORITY</code></td>
+<td>Job priority</td>
+</tr>
+<tr>
+<td><code>DEADLINE_FARM_ID</code></td>
+<td>Farm ID</td>
+</tr>
+<tr>
+<td><code>DEADLINE_QUEUE_ID</code></td>
+<td>Queue ID</td>
+</tr>
+<tr>
+<td><code>DEADLINE_JOB_BUNDLE_DIR</code></td>
+<td>Path to job bundle directory</td>
+</tr>
+<tr>
+<td><code>DEADLINE_STORAGE_PROFILE_ID</code></td>
+<td>Storage profile ID (if set)</td>
+</tr>
+<tr>
+<td><code>DEADLINE_JOB_ID</code></td>
+<td>Job ID (post-submission only)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="json-via-stdin">JSON via stdin<a class="headerlink" href="#json-via-stdin" title="Permanent link">&para;</a></h3>
+<p>Complete metadata is provided as JSON on stdin:</p>
+<pre><code class="language-json">{
+  &quot;jobName&quot;: &quot;My Render Job&quot;,
+  &quot;priority&quot;: 50,
+  &quot;farmId&quot;: &quot;farm-abc123&quot;,
+  &quot;queueId&quot;: &quot;queue-def456&quot;,
+  &quot;jobBundleDir&quot;: &quot;/path/to/bundle&quot;,
+  &quot;parameters&quot;: {&quot;SceneFile&quot;: &quot;/path/to/scene.ma&quot;},
+  &quot;submitterName&quot;: &quot;Maya&quot;,
+  &quot;assetReferences&quot;: {
+    &quot;inputFilenames&quot;: [&quot;/path/to/texture.exr&quot;],
+    &quot;inputDirectories&quot;: [],
+    &quot;outputDirectories&quot;: [&quot;/path/to/output&quot;],
+    &quot;referencedPaths&quot;: []
+  },
+  &quot;submissionPayload&quot;: {}
+}
+</code></pre>
+<h2 id="hook-output">Hook Output<a class="headerlink" href="#hook-output" title="Permanent link">&para;</a></h2>
+<h3 id="pre-submission-hooks_1">Pre-Submission Hooks<a class="headerlink" href="#pre-submission-hooks_1" title="Permanent link">&para;</a></h3>
+<p>Output JSON to stdout to modify the submission:</p>
+<pre><code class="language-python">import json
+
+# Add files to upload
+output = {
+    &quot;attachments&quot;: {
+        &quot;assetReferences&quot;: {
+            &quot;inputFilenames&quot;: [&quot;/path/to/discovered/texture.exr&quot;]
+        }
+    }
+}
+print(json.dumps(output))
+</code></pre>
+<p>Asset references are <strong>replaced</strong> at the nested key level - if your hook outputs <code>inputFilenames</code>, it replaces the entire <code>inputFilenames</code> list. Keys not included in your output are preserved from the original. This allows hooks to both add and remove files.</p>
+<p>For example, to remove a file from the input list, output the full list without it:</p>
+<pre><code class="language-python">import json, sys
+
+metadata = json.load(sys.stdin)
+current_files = metadata[&quot;assetReferences&quot;].get(&quot;inputFilenames&quot;, [])
+# Remove unwanted files
+filtered = [f for f in current_files if not f.endswith(&quot;.bak&quot;)]
+print(json.dumps({&quot;attachments&quot;: {&quot;assetReferences&quot;: {&quot;inputFilenames&quot;: filtered}}}))
+</code></pre>
+<p>You can also modify other submission parameters:</p>
+<pre><code class="language-python">print(json.dumps({&quot;priority&quot;: 100}))
+</code></pre>
+<p>Pre-submission hooks can also change job template parameter values, either by rewriting
+<code>parameter_values.yaml</code>/<code>.json</code> on disk or by emitting a <code>parameters</code> map on stdout:</p>
+<pre><code class="language-python">print(json.dumps({&quot;parameters&quot;: {&quot;SceneFile&quot;: &quot;/resolved/scene.ma&quot;, &quot;Quality&quot;: &quot;high&quot;}}))
+</code></pre>
+<p>Parameter keys are job template parameter names. Values from a hook are applied on top of
+the bundle's parameter values, but CLI-supplied <code>--parameter</code> values still take precedence
+over hook-supplied ones.</p>
+<blockquote>
+<p><strong><code>PATH</code> parameters emitted on stdout must be absolute.</strong> A hook does not run from — and
+does not control — the submitting shell's working directory, so a relative <code>PATH</code> value on
+stdout would be ambiguous. Emitting a relative <code>PATH</code> value on stdout is <strong>rejected</strong> with
+an error. Emit an absolute path (for example, join with <code>DEADLINE_JOB_BUNDLE_DIR</code>), or
+write the value to <code>parameter_values.yaml</code>/<code>.json</code> on disk instead, where a relative <code>PATH</code>
+is resolved against the <strong>job bundle directory</strong>.</p>
+</blockquote>
+<h3 id="post-submission-hooks_1">Post-Submission Hooks<a class="headerlink" href="#post-submission-hooks_1" title="Permanent link">&para;</a></h3>
+<p>Output is logged but does not modify anything.</p>
+<h2 id="example-scripts">Example Scripts<a class="headerlink" href="#example-scripts" title="Permanent link">&para;</a></h2>
+<h3 id="asset-validator-pre-submission">Asset Validator (Pre-Submission)<a class="headerlink" href="#asset-validator-pre-submission" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">#!/usr/bin/env python3
+import json
+import os
+import sys
+
+metadata = json.load(sys.stdin)
+asset_refs = metadata.get(&quot;assetReferences&quot;, {})
+
+missing = []
+for f in asset_refs.get(&quot;inputFilenames&quot;, []):
+    if not os.path.exists(f):
+        missing.append(f)
+
+if missing:
+    print(&quot;Missing files:&quot;, file=sys.stderr)
+    for f in missing:
+        print(f&quot;  {f}&quot;, file=sys.stderr)
+    sys.exit(1)
+
+print(&quot;All assets validated&quot;, file=sys.stderr)
+sys.exit(0)
+</code></pre>
+<h3 id="texture-discovery-pre-submission">Texture Discovery (Pre-Submission)<a class="headerlink" href="#texture-discovery-pre-submission" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">#!/usr/bin/env python3
+import json
+import os
+import sys
+
+metadata = json.load(sys.stdin)
+bundle_dir = metadata[&quot;jobBundleDir&quot;]
+
+# Find all texture files in bundle
+textures = []
+for root, _, files in os.walk(bundle_dir):
+    for f in files:
+        if f.endswith(('.exr', '.png', '.jpg', '.tx')):
+            textures.append(os.path.join(root, f))
+
+if textures:
+    print(json.dumps({
+        &quot;attachments&quot;: {
+            &quot;assetReferences&quot;: {
+                &quot;inputFilenames&quot;: textures
+            }
+        }
+    }))
+</code></pre>
+<h3 id="slack-notification-post-submission">Slack Notification (Post-Submission)<a class="headerlink" href="#slack-notification-post-submission" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">#!/usr/bin/env python3
+import json
+import os
+import sys
+import urllib.request
+
+metadata = json.load(sys.stdin)
+webhook = os.environ.get(&quot;SLACK_WEBHOOK&quot;)
+
+if webhook:
+    message = {
+        &quot;text&quot;: f&quot;Job submitted: {metadata['jobName']} (ID: {metadata['jobId']})&quot;
+    }
+    req = urllib.request.Request(
+        webhook,
+        data=json.dumps(message).encode(),
+        headers={&quot;Content-Type&quot;: &quot;application/json&quot;}
+    )
+    urllib.request.urlopen(req)
+</code></pre>
+<h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
+<p>Hooks are disabled by default. There are two sources of hooks, each with its own setting:</p>
+<h3 id="bundle-hooks">Bundle Hooks<a class="headerlink" href="#bundle-hooks" title="Permanent link">&para;</a></h3>
+<p>Hooks defined in <code>hooks.yaml</code> within job bundles. Enable with:</p>
+<pre><code class="language-bash">deadline config set settings.allow_bundle_hooks true
+</code></pre>
+<h3 id="environment-hooks">Environment Hooks<a class="headerlink" href="#environment-hooks" title="Permanent link">&para;</a></h3>
+<p>Hooks from a directory specified by the <code>DEADLINE_HOOKS_DIR</code> environment variable. Enable with:</p>
+<pre><code class="language-bash">deadline config set settings.allow_environment_hooks true
+</code></pre>
+<p>Then set the environment variable (typically in application launcher scripts):</p>
+<pre><code class="language-bash">export DEADLINE_HOOKS_DIR=/studio/pipeline/hooks/blender
+</code></pre>
+<p>This is useful for studios that want to enforce hooks across all submissions without modifying job bundles.</p>
+<h3 id="confirmation-prompt">Confirmation Prompt<a class="headerlink" href="#confirmation-prompt" title="Permanent link">&para;</a></h3>
+<p>When hooks are enabled, you'll be prompted to confirm before they run. Pre-GUI hooks show a prompt before the dialog opens; pre- and post-submission hooks show a prompt when you click Submit.</p>
+<pre><code>This job bundle contains submission hooks that will execute on your machine:
+
+  Pre-GUI hooks:
+    [1] python3 prefill_from_shotgrid.py
+
+  Pre-submission hooks:
+    [1] python3 validate_assets.py
+
+  Post-submission hooks:
+    [1] python3 notify.py
+
+  Bundle: /path/to/bundle
+
+Do you want to run these hooks? [Y/n]
+</code></pre>
+<p>This prompt shows exactly which commands will execute, allowing you to review before proceeding.</p>
+<h3 id="configuration-summary">Configuration Summary<a class="headerlink" href="#configuration-summary" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>settings.allow_bundle_hooks</code></td>
+<td><code>false</code></td>
+<td>Allow hooks from job bundle hooks.yaml</td>
+</tr>
+<tr>
+<td><code>settings.allow_environment_hooks</code></td>
+<td><code>false</code></td>
+<td>Allow hooks from DEADLINE_HOOKS_DIR</td>
+</tr>
+<tr>
+<td><code>settings.auto_accept</code></td>
+<td><code>false</code></td>
+<td>Skip confirmation prompts (for CI/automation)</td>
+</tr>
+</tbody>
+</table>
+<p>To skip confirmation prompts (use with caution, for CI/automation):</p>
+<pre><code class="language-bash">deadline config set settings.auto_accept true
+</code></pre>
+<h3 id="studio-deployment">Studio Deployment<a class="headerlink" href="#studio-deployment" title="Permanent link">&para;</a></h3>
+<p>For pipeline TDs who want hooks to run automatically for all artists:</p>
+<ol>
+<li>
+<p>Configure workstations:
+   <code>bash
+   deadline config set settings.allow_environment_hooks true</code></p>
+</li>
+<li>
+<p>Set <code>DEADLINE_HOOKS_DIR</code> in each application's launcher script:
+   <code>bash
+   # blender_launcher.sh
+   export DEADLINE_HOOKS_DIR=/studio/pipeline/hooks/blender
+   exec blender "$@"</code></p>
+</li>
+<li>
+<p>Create hooks at the specified location:
+   <code>/studio/pipeline/hooks/blender/
+   ├── hooks.yaml
+   └── validate_scene.py</code></p>
+</li>
+</ol>
+<h3 id="best-practices">Best Practices<a class="headerlink" href="#best-practices" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Use environment hooks for studio-wide policies</strong> - More secure than bundle hooks</li>
+<li><strong>Review bundle hooks before enabling</strong> - Inspect hooks.yaml in bundles from untrusted sources</li>
+<li><strong>Keep bundle hooks disabled by default</strong> - Only enable if your workflow requires it</li>
+</ol>
+<h2 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
+<h3 id="pre-submission-hook-failures">Pre-Submission Hook Failures<a class="headerlink" href="#pre-submission-hook-failures" title="Permanent link">&para;</a></h3>
+<p>When a pre-submission hook fails, you'll see:
+- Which hook failed
+- Exit code
+- stdout and stderr output
+- Timeout duration (if timed out)</p>
+<p>Submission is blocked until the issue is resolved.</p>
+<h3 id="post-submission-hook-failures">Post-Submission Hook Failures<a class="headerlink" href="#post-submission-hook-failures" title="Permanent link">&para;</a></h3>
+<p>Failures are logged as warnings but don't affect the submitted job.</p>
+<h2 id="submission-methods">Submission methods<a class="headerlink" href="#submission-methods" title="Permanent link">&para;</a></h2>
+<p>Hooks work with these submission methods:
+- <code>deadline bundle submit</code> (CLI) — pre-submission and post-submission hooks (there is no pre-GUI phase).
+- <code>deadline bundle gui-submit</code> (standalone GUI) — all phases, including pre-GUI.
+- In-application (DCC) submitters — pre-submission and post-submission hooks, plus the pre-GUI phase in submitters that implement it (they call the client's <code>run_pre_gui_hooks</code> entry point).</p>
+<p>The standalone GUI copies <code>hooks.yaml</code> to the job history bundle and resolves script paths back to your original bundle directory.</p>
+<h2 id="best-practices_1">Best Practices<a class="headerlink" href="#best-practices_1" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Keep hooks fast</strong> - Use appropriate timeouts, avoid long-running operations</li>
+<li><strong>Log to stderr</strong> - stdout is reserved for JSON output (pre-submission)</li>
+<li><strong>Handle errors gracefully</strong> - Provide clear error messages</li>
+<li><strong>Test with CLI first</strong> - Easier to debug than GUI</li>
+<li><strong>Use absolute paths in output</strong> - When adding files to asset references</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    </div>
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.expand", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
