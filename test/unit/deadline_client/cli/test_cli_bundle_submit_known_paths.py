@@ -348,7 +348,7 @@ def test_generate_message_for_asset_paths_bare_anchor_does_not_shadow_a_real_roo
 
     assert known_asset_paths == [r"\\host"], known_asset_paths
     assert no_warnings is True, message
-    assert "WARNING: Files were specified outside of known asset paths." not in message, message
+    assert "WARNING: Unknown paths found" not in message, message
 
 
 def test_generate_message_for_asset_paths_unc_host_root_is_known():
@@ -371,7 +371,7 @@ def test_generate_message_for_asset_paths_unc_host_root_is_known():
         )
 
     assert no_warnings is True, message
-    assert "WARNING: Files were specified outside of known asset paths." not in message, message
+    assert "WARNING: Unknown paths found" not in message, message
 
 
 def test_generate_message_for_asset_paths_sibling_prefix_is_unknown():
@@ -396,8 +396,9 @@ def test_generate_message_for_asset_paths_sibling_prefix_is_unknown():
 
     # The sibling file is outside the trusted root, so the warning must fire.
     assert no_warnings is False, message
-    assert "WARNING: Files were specified outside of known asset paths." in message, message
-    assert sibling_file in message, message
+    assert "WARNING: Unknown paths found" in message, message
+    assert os.path.dirname(sibling_file) in message, message
+    assert sibling_file not in message, message
 
 
 def test_generate_message_for_asset_paths_descendant_is_known():
@@ -407,9 +408,16 @@ def test_generate_message_for_asset_paths_descendant_is_known():
     """
     known_root = os.path.join(os.sep, "trusted", "project")
     inside_file = os.path.join(known_root, "sub", "file")
+    output_directory = os.path.join(known_root, "output")
 
     upload_group = AssetUploadGroup(
-        asset_groups=[AssetRootGroup(root_path=known_root, inputs={Path(inside_file)})],
+        asset_groups=[
+            AssetRootGroup(
+                root_path=known_root,
+                inputs={Path(inside_file)},
+                outputs={output_directory, os.path.join(output_directory, os.curdir)},  # type: ignore[arg-type]
+            )
+        ],
         total_input_files=1,
         total_input_bytes=12,
     )
@@ -419,7 +427,8 @@ def test_generate_message_for_asset_paths_descendant_is_known():
     )
 
     assert no_warnings is True, message
-    assert "WARNING: Files were specified outside of known asset paths." not in message, message
+    assert "WARNING: Unknown paths found" not in message, message
+    assert "Worker uploads: Files created in 1 output directory" in message
 
 
 def test_cli_bundle_known_paths_combine(fresh_deadline_config, temp_job_bundle_dir):
@@ -687,10 +696,12 @@ def test_cli_bundle_warning_suppression(fresh_deadline_config, temp_job_bundle_d
                 mock_confirm.assert_called_once_with(ANY, default=False)
                 # The warning message should say there are two input files, but only one has an issue
                 warning_message = mock_confirm.call_args[0][0]
-                assert "Job submission contains 2 input files" in warning_message, warning_message
-                assert (
-                    f"Unknown locations for upload:\n  {external_file_path}" in warning_message
-                ), warning_message
+                assert "Local uploads: 2 files (24 B) before deduplication" in warning_message, (
+                    warning_message
+                )
+                assert f"  {os.path.dirname(external_file_path)}\n" in warning_message, (
+                    warning_message
+                )
 
             # Second test: without known_asset_path - should show warning and fail when user cancels
             with patch.object(click, "confirm", return_value=False) as mock_confirm:
@@ -709,10 +720,12 @@ def test_cli_bundle_warning_suppression(fresh_deadline_config, temp_job_bundle_d
                 mock_confirm.assert_called_once_with(ANY, default=False)
                 # The warning message should say there are two input files, but only one has an issue
                 warning_message = mock_confirm.call_args[0][0]
-                assert "Job submission contains 2 input files" in warning_message, warning_message
-                assert (
-                    f"Unknown locations for upload:\n  {external_file_path}" in warning_message
-                ), warning_message
+                assert "Local uploads: 2 files (24 B) before deduplication" in warning_message, (
+                    warning_message
+                )
+                assert f"  {os.path.dirname(external_file_path)}\n" in warning_message, (
+                    warning_message
+                )
 
             # Third test: with known_asset_path - should not show warning
             with patch.object(click, "confirm", return_value=True) as mock_confirm:

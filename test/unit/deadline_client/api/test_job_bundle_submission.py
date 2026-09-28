@@ -1481,3 +1481,44 @@ def test_create_job_from_job_bundle_debug_snapshot_with_attachments(
         submit_script = f.read()
     assert "aws s3 cp" in submit_script
     assert "aws deadline create-job" in submit_script
+
+
+def test_create_job_from_job_bundle_skips_confirmation_for_referenced_paths_only(
+    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir
+):
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    referenced_path = os.path.join(temp_assets_dir, "reference")
+    upload_group = AssetUploadGroup(
+        asset_groups=[AssetRootGroup(root_path=temp_assets_dir, references={Path(referenced_path)})]
+    )
+
+    with (
+        patch_calls_for_create_job_from_job_bundle() as mock,
+        patch.object(S3AssetManager, "prepare_paths_for_upload", return_value=upload_group),
+    ):
+        mock.hash_attachments.return_value = (None, [])
+        job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as template_file:
+            template_file.write(job_template)
+        with open(
+            os.path.join(temp_job_bundle_dir, "asset_references.json"),
+            "w",
+            encoding="utf8",
+        ) as references_file:
+            json.dump(
+                {"assetReferences": {"referencedPaths": [referenced_path]}},
+                references_file,
+            )
+
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir,
+            queue_parameter_definitions=[],
+        )
+
+    mock.generate_message_for_asset_paths.assert_not_called()
+    mock.hash_attachments.assert_called_once()
