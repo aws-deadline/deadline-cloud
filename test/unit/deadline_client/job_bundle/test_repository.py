@@ -1630,7 +1630,6 @@ class TestBuildBundleMetadata:
     """Tests for build_bundle_metadata — validates S3 metadata extraction from bundle dirs."""
 
     def test_extracts_name_and_description(self, tmp_path):
-
         bundle = tmp_path / "my-bundle"
         bundle.mkdir()
         (bundle / "template.yaml").write_text(
@@ -1651,7 +1650,6 @@ class TestBuildBundleMetadata:
         assert metadata["ojd-steps"] == "Step1"
 
     def test_overrides_name(self, tmp_path):
-
         bundle = tmp_path / "bundle"
         bundle.mkdir()
         (bundle / "template.yaml").write_text(yaml.dump({"name": "Original", "steps": []}))
@@ -1661,14 +1659,12 @@ class TestBuildBundleMetadata:
         assert metadata["ojd-name"] == "Override"
 
     def test_returns_empty_for_missing_template(self, tmp_path):
-
         empty = tmp_path / "empty"
         empty.mkdir()
 
         assert build_bundle_metadata(str(empty)) == {}
 
     def test_truncates_long_values(self, tmp_path):
-
         bundle = tmp_path / "bundle"
         bundle.mkdir()
         (bundle / "template.yaml").write_text(yaml.dump({"name": "A" * 300, "steps": []}))
@@ -1943,7 +1939,6 @@ class TestS3ClearCacheFor:
         return repo
 
     def test_removes_cache_directory(self, fresh_deadline_config, tmp_path):
-
         repo = self._make_repo(fresh_deadline_config)
 
         # Create a fake cache entry
@@ -1958,7 +1953,6 @@ class TestS3ClearCacheFor:
 
 class TestGetBundleCacheDir:
     def test_returns_path_under_deadline_cache(self, fresh_deadline_config):
-
         result = get_bundle_cache_dir()
 
         assert ".deadline" in result
