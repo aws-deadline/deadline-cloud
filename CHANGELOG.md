@@ -1,3 +1,9 @@
+## 0.60.8 (2026-09-28)
+
+### Features
+* Added support for boolean (BOOL) job parameters. You can now use BOOL parameter types in your job templates, with native boolean value handling in CreateJob requests. The GUI displays checkboxes for boolean parameters, and `allowedValues` is correctly rejected on BOOL parameters since booleans already enumerate their own domain. (#1360)
+* The `deadline queue sync-output` command now displays a cleaner, indented plain-ASCII progress report with a closing summary and one greppable result line. A new `--verbose` flag is available for additional detail. Color is now used only to highlight problems (yellow for WARNING, red for ERROR/FAILED), and box-drawing glyphs have been removed to avoid potential UnicodeEncodeErrors. (#1357)
+* `deadline bundle gui-submit` now automatically prepends the `deadline-cloud-v2` Conda channel ahead of `deadline-cloud` (kept as fallback), matching the behavior of all Python DCC submitters. An explicit `CondaChannels` value in your bundle template, `--parameter`, or pre-GUI hook still takes precedence. (#1358)
 ## 0.60.7 (2026-09-07)
 
 ### Bug Fixes
