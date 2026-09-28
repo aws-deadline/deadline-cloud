@@ -7,7 +7,6 @@ pytest-timeout == 2.*
 pytest-xdist == 3.*
 freezegun == 1.*
 types-pyyaml == 6.*
-twine == 6.*
 mypy == 2.3.*; python_version > "3.9"
 mypy == 1.19.*; python_version <= "3.9"
 ruff == 0.15.*
