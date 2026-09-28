@@ -12,6 +12,7 @@ import time
 import os
 import re
 import textwrap
+import math
 from configparser import ConfigParser
 from typing import Any, Callable, Dict, List, Optional, Tuple, Iterable
 from collections.abc import Collection, Mapping
@@ -66,10 +67,7 @@ from ...job_attachments.progress_tracker import (
 from ...job_attachments.upload import S3AssetManager
 from ._session import session_context
 from ._monitor_urls import _get_job_monitor_url
-from ...job_attachments._path_summarization import (
-    human_readable_file_size,
-    summarize_path_list,
-)
+from ...job_attachments._path_summarization import human_readable_file_size
 from ...job_attachments.api._hashing import _hash_attachments
 from .._path_utils import (
     is_absolute_path,
@@ -134,23 +132,69 @@ def _reject_relative_hook_path_values(
             )
 
 
-def _summarize_asset_paths(
-    input_paths: Collection[Path | str], output_paths: Collection[Path | str], name: str
+def _classify_asset_paths(
+    input_directories: Collection[str],
+    output_paths: Collection[Path | str],
+    known_asset_paths: Iterable[str],
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Classifies paths into 4 categories: known input path, known output path, unknown input path, and unknown output path"""
+    known_asset_paths = list(known_asset_paths)
+
+    input_directories_by_components = {
+        tuple(path_components(directory, path_module=os.path)): directory
+        for directory in input_directories
+    }
+    known_input_directories: list[str] = []
+    unknown_input_directories: list[str] = []
+    known_summary_components: list[tuple[str, ...]] = []
+    unknown_summary_components: list[tuple[str, ...]] = []
+    for components in sorted(input_directories_by_components):
+        path = input_directories_by_components[components]
+        if _is_known_path(path, known_asset_paths):
+            summary_paths = known_input_directories
+            summary_components = known_summary_components
+        else:
+            summary_paths = unknown_input_directories
+            summary_components = unknown_summary_components
+        if (
+            not summary_components
+            or components[: len(summary_components[-1])] != summary_components[-1]
+        ):
+            summary_paths.append(path)
+            summary_components.append(components)
+
+    output_directories_by_components: dict[tuple[str, ...], str] = {}
+    for output_path in output_paths:
+        directory = normalized_path(output_path, path_module=os.path)
+        components = tuple(path_components(directory, path_module=os.path))
+        output_directories_by_components.setdefault(components, directory)
+
+    known_output_directories: list[str] = []
+    unknown_output_directories: list[str] = []
+    for components in sorted(output_directories_by_components):
+        path = output_directories_by_components[components]
+        if _is_known_path(path, known_asset_paths):
+            known_output_directories.append(path)
+        else:
+            unknown_output_directories.append(path)
+
+    return (
+        known_input_directories,
+        unknown_input_directories,
+        known_output_directories,
+        unknown_output_directories,
+    )
+
+
+def _truncated_asset_path_list(
+    input_directories: list[str], output_directories: list[str]
 ) -> list[str]:
-    result = []
-    if input_paths:
-        result.append(f"{name} for upload:\n")
-        result.append(textwrap.indent(summarize_path_list(input_paths), "  "))
-    if output_paths:
-        result.append(f"{name} to collect job outputs for download:\n")
-        # We expect the list of output paths to be small, but truncate it to an arbitrary limit just in case for the summary
-        summary_entry_count = 4
-        if len(output_paths) == summary_entry_count + 1:
-            summary_entry_count += 1
-        result.extend(f"  {path}\n" for path in sorted(output_paths)[:summary_entry_count])
-        if len(output_paths) > summary_entry_count:
-            result.append(f"\n  ... and {len(output_paths) - summary_entry_count} more\n")
-    return result
+    all_paths = [*input_directories, *(f"(output) {path}" for path in output_directories)]
+    displayed_paths = all_paths[: 5 if len(all_paths) == 5 else 4]
+    remaining_count = len(all_paths) - len(displayed_paths)
+    if remaining_count:
+        displayed_paths.append(f"  ... and {remaining_count} more")
+    return displayed_paths
 
 
 def _generate_message_for_asset_paths(
@@ -158,67 +202,109 @@ def _generate_message_for_asset_paths(
     storage_profile: Optional[StorageProfile],
     known_asset_paths: Iterable[str],
 ) -> tuple[str, bool]:
-    """Generate a message about asset uploads and along with a flag indicating if there are warnings."""
-    # Collect all the input and output paths
-    all_input_paths: set[Path | str] = set()
+    """Generate the Job Attachments confirmation message and its default response."""
+    all_input_directories: set[str] = set()
     all_output_paths: set[Path | str] = set()
     for group in upload_group.asset_groups:
-        all_input_paths.update(path for path in group.inputs)
-        all_output_paths.update(path for path in group.outputs)
-
-    # Filter to get the unknown paths
-    if known_asset_paths:
-        unknown_input_paths = {
-            path for path in all_input_paths if not _is_known_path(path, known_asset_paths)
-        }
-        unknown_output_paths = {
-            path for path in all_output_paths if not _is_known_path(path, known_asset_paths)
-        }
-    else:
-        unknown_input_paths = all_input_paths
-        unknown_output_paths = all_output_paths
-
-    unknown_path_warnings = _summarize_asset_paths(
-        unknown_input_paths, unknown_output_paths, "Unknown locations"
-    )
-
-    warning_messages = []
-    default_prompt_response = not unknown_path_warnings
-    if unknown_path_warnings:
-        warning_messages.append("\nWARNING: Files were specified outside of known asset paths.\n\n")
-
-    warning_messages.extend(
-        [
-            f"Job submission contains {upload_group.total_input_files} input files "
-            f"totaling {human_readable_file_size(upload_group.total_input_bytes)}. "
-            "All input files will be uploaded to S3 if they are not already present in the job attachments bucket.\n\n"
-        ]
-    )
-    warning_messages.extend(_summarize_asset_paths(all_input_paths, all_output_paths, "Locations"))
-
-    if unknown_path_warnings:
-        warning_messages.append("\n---\n\n")
-        warning_messages.append("The list of known asset prefixes for this submission are:\n")
-        if known_asset_paths:
-            warning_messages.extend(f"  {path}\n" for path in sorted(set(known_asset_paths)))
-        else:
-            warning_messages.append("  (empty list)\n")
-        warning_messages.append("\n")
-        warning_messages.extend(unknown_path_warnings)
-        warning_messages.append(
-            "\nTo enable submission without user input, add directory locations containing the unknown paths to either \n"
-            + "1. The list of known asset paths in the local Deadline Cloud configuration. \n"
+        all_input_directories.update(
+            normalized_path(
+                os.path.dirname(os.fspath(path)) or os.curdir,
+                path_module=os.path,
+            )
+            for path in group.inputs
         )
-        if storage_profile:
-            warning_messages.append(
-                f"2. The Storage Profile '{storage_profile.displayName}' as LOCAL file system locations, from the AWS Deadline Cloud management console.\n"
-            )
-        else:
-            warning_messages.append(
-                "2. In a Storage Profile as LOCAL file system locations created from the AWS Deadline Cloud management console, and then configured on your workstation.\n"
-            )
+        all_output_paths.update(group.outputs)
 
-    return "".join(warning_messages), default_prompt_response
+    known_asset_paths = list(known_asset_paths)
+    (
+        known_input_directories,
+        unknown_input_directories,
+        known_output_directories,
+        unknown_output_directories,
+    ) = _classify_asset_paths(all_input_directories, all_output_paths, known_asset_paths)
+    has_unknown_paths = bool(unknown_input_directories or unknown_output_directories)
+
+    local_storage_profile_paths = (
+        {
+            normalized_path(location.path, path_module=os.path)
+            for location in storage_profile.fileSystemLocations
+            if location.type == FileSystemLocationType.LOCAL
+        }
+        if storage_profile
+        else set()
+    )
+    if storage_profile:
+        known_input_directories = [
+            f"[{storage_profile.displayName}] {path}"
+            if _is_known_path(path, local_storage_profile_paths)
+            else path
+            for path in known_input_directories
+        ]
+        known_output_directories = [
+            f"[{storage_profile.displayName}] {path}"
+            if _is_known_path(path, local_storage_profile_paths)
+            else path
+            for path in known_output_directories
+        ]
+
+    header_section = (
+        "Approval for Job Attachment S3 transfers needed."
+        "\n\n"
+        "Files in the following paths will be uploaded to your queue's S3 bucket. "
+        "Output files will be uploaded by workers after task completion. "
+        "Files in 'SHARED' paths (defined by storage profiles) and duplicates (matching file hashes in S3) are skipped."
+    )
+
+    known_paths_list = "\n    ".join(
+        _truncated_asset_path_list(known_input_directories, known_output_directories)
+    )
+    known_paths_section = f"    Known paths:\n    {known_paths_list or '    (none)'}"
+
+    unknown_paths_section = ""
+    if has_unknown_paths:
+        unknown_paths_list = "\n     ".join(
+            _truncated_asset_path_list(unknown_input_directories, unknown_output_directories)
+        )
+        label = " * WARNING: Unknown paths found * "
+        full_line = "_" * 59
+        title_line = full_line[: math.floor((len(full_line) - len(label)) / 2)]
+        unknown_paths_section = (
+            "    Unknown paths:\n"
+            f"     {unknown_paths_list}\n\n"
+            f"{title_line}{label}{title_line}\n"
+            "| Confirm the unknown paths are correct.\n"
+            "| Add these paths to your known asset paths list in Settings\n"
+            "| or to the Storage Profile as LOCAL to avoid this warning.\n"
+            f"|{full_line[:-1]}"
+        )
+
+    local_uploads_summary = ""
+    worker_uploads_summary = ""
+    if upload_group.total_input_files:
+        file_label = "file" if upload_group.total_input_files == 1 else "files"
+        local_uploads_summary = f"Local uploads: {upload_group.total_input_files} {file_label} ({human_readable_file_size(upload_group.total_input_bytes)}) before deduplication"
+    output_directory_count = len(known_output_directories) + len(unknown_output_directories)
+    if output_directory_count:
+        directory_label = "directory" if output_directory_count == 1 else "directories"
+        worker_uploads_summary = (
+            f"Worker uploads: Files created in {output_directory_count} output {directory_label}"
+        )
+
+    upload_summary_section = "\n".join(
+        section
+        for section in ["Summary:", local_uploads_summary, worker_uploads_summary]
+        if section
+    )
+    message_sections = [
+        header_section,
+        "*" * 59,
+        known_paths_section,
+        unknown_paths_section,
+        "*" * 59,
+        upload_summary_section,
+    ]
+    message = "\n\n".join(section for section in message_sections if section)
+    return f"{message}\n", not has_unknown_paths
 
 
 @api.record_success_fail_telemetry_event(metric_name="asset_upload")
@@ -964,40 +1050,43 @@ def create_job_from_job_bundle(
         )
 
         if upload_group.asset_groups:
-            # Generate warning message if needed
-            asset_path_message, default_prompt_response = _generate_message_for_asset_paths(
-                upload_group, storage_profile, known_asset_paths
+            has_transfer_paths = any(
+                group.inputs or group.outputs for group in upload_group.asset_groups
             )
+            if has_transfer_paths:
+                asset_path_message, default_prompt_response = _generate_message_for_asset_paths(
+                    upload_group, storage_profile, known_asset_paths
+                )
 
-            if interactive_confirmation_callback is None:
-                # In this case, no user prompt can be presented. The result of the function must
-                # be the default that would be presented to the interactive prompt.
-                print_function_callback(asset_path_message)
-                if not default_prompt_response:
-                    print_function_callback("\nJob submission canceled (user input not enabled).")
-                    raise DeadlineOperationCanceled()
-            elif config_file.str2bool(get_setting("settings.auto_accept", config=config)):
-                if not default_prompt_response:
-                    if from_gui:
-                        # In the from_gui case, we present a prompt even though settings.auto_accept is enabled.
-                        if not interactive_confirmation_callback(
-                            asset_path_message + "Do you wish to proceed?",
-                            default_prompt_response,
-                        ):
-                            print_function_callback("Job submission canceled (user input).")
-                            raise UserInitiatedCancel()
-                    else:
-                        # In this case, no user prompt should be presented. The result of the function must
-                        # be the default that would be presented to the interactive prompt.
+                confirmation_prompt = (
+                    "\nPress OK to approve." if from_gui else "\nDo you wish to proceed?"
+                )
+                if interactive_confirmation_callback is None:
+                    print_function_callback(asset_path_message)
+                    if not default_prompt_response:
                         print_function_callback(
-                            f"{asset_path_message}\nJob submission canceled (settings.auto_accept enabled and there were unknown paths)."
+                            "\nJob submission canceled (user input not enabled)."
                         )
                         raise DeadlineOperationCanceled()
-                else:
-                    print_function_callback(asset_path_message)
-            else:
-                if not interactive_confirmation_callback(
-                    asset_path_message + "\nDo you wish to proceed?",
+                elif config_file.str2bool(get_setting("settings.auto_accept", config=config)):
+                    if not default_prompt_response:
+                        if from_gui:
+                            if not interactive_confirmation_callback(
+                                asset_path_message + confirmation_prompt,
+                                default_prompt_response,
+                            ):
+                                print_function_callback("Job submission canceled (user input).")
+                                raise UserInitiatedCancel()
+                        else:
+                            print_function_callback(
+                                f"{asset_path_message}\nJob submission canceled "
+                                "(settings.auto_accept enabled and there were unknown paths)."
+                            )
+                            raise DeadlineOperationCanceled()
+                    else:
+                        print_function_callback(asset_path_message)
+                elif not interactive_confirmation_callback(
+                    asset_path_message + confirmation_prompt,
                     default_prompt_response,
                 ):
                     print_function_callback("Job submission canceled (user input).")
