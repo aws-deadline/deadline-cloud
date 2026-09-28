@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 import pytest
 
+from deadline.client.exceptions import DeadlineOperationError
 from deadline.client.job_bundle import submission
 from deadline.client.job_bundle.parameters import JobParameter
 from deadline.client.job_bundle.submission import AssetReferences
@@ -97,6 +98,10 @@ def test_split_parameter_args() -> None:
         {"name": "param_1", "value": "TESTING", "type": "STRING"},
         {"name": "param_2", "value": 10, "type": "INT"},
         {"name": "param_3", "value": 10.123, "type": "FLOAT"},
+        {"name": "param_4", "value": "true", "type": "BOOL"},
+        {"name": "param_5", "value": False, "type": "BOOL"},
+        {"name": "param_6", "value": "Yes", "type": "BOOL"},
+        {"name": "param_7", "value": 0, "type": "BOOL"},
         # The deadline app prefix should go in expected_app_params
         {"name": "deadline:priority", "value": "55"},
         # Other app prefixes should be dropped
@@ -108,11 +113,26 @@ def test_split_parameter_args() -> None:
         "param_1": {"string": "TESTING"},
         "param_2": {"int": "10"},
         "param_3": {"float": "10.123"},
+        # CreateJob's JobParameter.bool is a string shape, so BOOL values are
+        # normalized to "true"/"false".
+        "param_4": {"bool": "true"},
+        "param_5": {"bool": "false"},
+        "param_6": {"bool": "true"},
+        "param_7": {"bool": "false"},
     }
     app_params, job_params = submission.split_parameter_args(input_bundle_params, "test_bundle")
 
     assert app_params == expected_app_params
     assert job_params == expected_job_params
+
+
+def test_split_parameter_args_rejects_invalid_bool() -> None:
+    input_bundle_params: list[JobParameter] = [
+        {"name": "param", "value": "not-a-bool", "type": "BOOL"}
+    ]
+
+    with pytest.raises(DeadlineOperationError, match="(?s)is not boolean.*test_bundle"):
+        submission.split_parameter_args(input_bundle_params, "test_bundle")
 
 
 def test_split_parameter_args_no_parameters() -> None:

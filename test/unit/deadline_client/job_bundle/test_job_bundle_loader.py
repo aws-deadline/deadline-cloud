@@ -7,13 +7,17 @@ relative default paths into absolute paths rooted in the job bundle.
 """
 
 import json
+import ntpath
 import os
 import sys
+from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 import yaml
 
 from deadline.client.exceptions import DeadlineOperationError
+from deadline.client.job_bundle import loader
 from deadline.client.job_bundle.loader import (
     parse_yaml_or_json_content,
     read_yaml_or_json,
@@ -179,6 +183,72 @@ def test_read_job_bundle_parameters(
     )
 
 
+EXPR_LOWERCASE_TYPES_TEMPLATE = """
+specificationVersion: 'jobtemplate-2023-09'
+extensions: [FEATURE_BUNDLE_1, EXPR]
+name: Lowercase Types
+parameterDefinitions:
+- name: Message
+  type: string
+  default: hello
+- name: Count
+  type: Int
+  default: 3
+- name: Scale
+  type: float
+  default: 1.5
+- name: InputDir
+  type: path
+  objectType: DIRECTORY
+  dataFlow: IN
+- name: Verbose
+  type: bool
+  default: true
+steps:
+- name: Step
+  parameterSpace:
+    taskParameterDefinitions:
+    - name: Frame
+      type: int
+      range: "1-3"
+  bash:
+    script: echo {{ Param.Message }} {{ Task.Param.Frame }}
+"""
+
+
+def test_read_job_bundle_parameters_expr_type_names_are_case_insensitive(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """With the EXPR extension, job parameter type names are case-insensitive, so the
+    client normalizes them to the canonical upper-case names."""
+    with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
+        f.write(EXPR_LOWERCASE_TYPES_TEMPLATE)
+
+    result = read_job_bundle_parameters(temp_job_bundle_dir)
+
+    assert {p["name"]: p["type"] for p in result} == {
+        "Message": "STRING",
+        "Count": "INT",
+        "Scale": "FLOAT",
+        "InputDir": "PATH",
+        "Verbose": "BOOL",
+    }
+
+
+def test_read_job_bundle_parameters_type_names_are_case_sensitive_without_expr(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """Without the EXPR extension, lower-case type names remain invalid."""
+    template = EXPR_LOWERCASE_TYPES_TEMPLATE.replace(
+        "extensions: [FEATURE_BUNDLE_1, EXPR]", "extensions: [FEATURE_BUNDLE_1]"
+    )
+    with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
+        f.write(template)
+
+    with pytest.raises(ValueError, match='"Message" had "type" string'):
+        read_job_bundle_parameters(temp_job_bundle_dir)
+
+
 @pytest.mark.parametrize(
     "content,type,expected_result",
     [('{"a": "b"}', "JSON", {"a": "b"}), ("a: b", "YAML", {"a": "b"})],
@@ -232,13 +302,104 @@ def test_validate_directory_symlink_containment_fail(tmpdir):
 
     symlink_dir = test_root.join("symlink_dir")
     os.symlink(target_dir, test_root.join("symlink_dir"), target_is_directory=True)
-    with pytest.raises(DeadlineOperationError):
+    with pytest.raises(
+        DeadlineOperationError, match="resolves outside of the resolved bundle directory"
+    ):
         validate_directory_symlink_containment(str(test_root))
     os.unlink(symlink_dir)
 
     os.symlink(target_file, test_root.join("symlink_file.txt"))
-    with pytest.raises(DeadlineOperationError):
+    with pytest.raises(
+        DeadlineOperationError, match="resolves outside of the resolved bundle directory"
+    ):
         validate_directory_symlink_containment(str(test_root))
+
+
+class TestSymlinkContainmentWindowsPaths:
+    """
+    Windows path semantics for validate_directory_symlink_containment, exercised through
+    a simulated ntpath filesystem so the cases run on every platform.
+
+    os.path.commonpath raises ValueError for a bundle located at a UNC share root
+    ('\\\\host\\share' vs '\\\\host\\share\\template.yaml' -> "Can't mix absolute and
+    relative paths"), and for a symlink escaping a drive-letter bundle onto a UNC share
+    ('C:\\bundle' vs '\\\\host\\share\\x' -> "Paths don't have the same drive"). Neither
+    exception is caught, so both would surface as a raw ValueError rather than a
+    containment verdict.
+    """
+
+    @contextmanager
+    def _simulated_windows_bundle(self, bundle_dir, entries, resolves_to):
+        """Simulate an ntpath filesystem holding ``entries`` under ``bundle_dir``.
+
+        ``resolves_to`` maps a normalized path to the location it resolves to, standing
+        in for a symlink target.
+        """
+
+        class _WindowsPath:
+            def __getattr__(self, name):
+                return getattr(ntpath, name)
+
+            @staticmethod
+            def isdir(path):
+                return path == bundle_dir
+
+            @staticmethod
+            def realpath(path):
+                return resolves_to.get(ntpath.normpath(path), ntpath.normpath(path))
+
+        def walk(top):
+            yield top, [], list(entries)
+
+        with patch.object(loader.os, "walk", walk), patch.object(loader.os, "path", _WindowsPath()):
+            yield
+
+    def test_bundle_at_unc_share_root_is_valid(self):
+        """A bundle directory that is itself a UNC share root contains its own files."""
+        bundle_dir = r"\\host\share"
+        with self._simulated_windows_bundle(bundle_dir, ["template.yaml"], {}):
+            validate_directory_symlink_containment(bundle_dir)
+
+    def test_bundle_under_unc_share_is_valid(self):
+        bundle_dir = r"\\host\share\bundle"
+        with self._simulated_windows_bundle(bundle_dir, ["template.yaml"], {}):
+            validate_directory_symlink_containment(bundle_dir)
+
+    def test_symlink_escaping_unc_share_root_is_rejected(self):
+        bundle_dir = r"\\host\share"
+        with self._simulated_windows_bundle(
+            bundle_dir,
+            ["escape.yaml"],
+            {r"\\host\share\escape.yaml": r"\\host\other\secret.yaml"},
+        ):
+            with pytest.raises(
+                DeadlineOperationError, match="resolves outside of the resolved bundle directory"
+            ):
+                validate_directory_symlink_containment(bundle_dir)
+
+    def test_symlink_from_drive_bundle_onto_unc_share_is_rejected(self):
+        bundle_dir = r"C:\bundle"
+        with self._simulated_windows_bundle(
+            bundle_dir,
+            ["escape.yaml"],
+            {r"C:\bundle\escape.yaml": r"\\host\share\secret.yaml"},
+        ):
+            with pytest.raises(
+                DeadlineOperationError, match="resolves outside of the resolved bundle directory"
+            ):
+                validate_directory_symlink_containment(bundle_dir)
+
+    def test_symlink_to_sibling_prefix_directory_is_rejected(self):
+        bundle_dir = r"C:\bundle"
+        with self._simulated_windows_bundle(
+            bundle_dir,
+            ["escape.yaml"],
+            {r"C:\bundle\escape.yaml": r"C:\bundle-secret\secret.yaml"},
+        ):
+            with pytest.raises(
+                DeadlineOperationError, match="resolves outside of the resolved bundle directory"
+            ):
+                validate_directory_symlink_containment(bundle_dir)
 
 
 class TestHiddenParameterValidation:

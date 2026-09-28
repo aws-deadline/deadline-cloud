@@ -100,6 +100,13 @@ jobs:
     with:
       tag: ${{ needs.TagRelease.outputs.tag }}
 
+  WindowsSMBPathTest:
+    name: Windows SMB Path Test
+    needs: [TagRelease, UnitTests]
+    uses: ./.github/workflows/windows_smb_test.yml
+    with:
+      tag: ${{ needs.TagRelease.outputs.tag }}
+
   PreRelease:
     needs:
       - TagRelease
@@ -109,6 +116,7 @@ jobs:
       - LinuxDCMIntegrationTest
       - WindowsDCMIntegrationTest
       - MacOSDCMIntegrationTest
+      - WindowsSMBPathTest
     uses: aws-deadline/.github/.github/workflows/reusable_prerelease.yml@mainline
     permissions:
       id-token: write

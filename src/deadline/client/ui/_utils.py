@@ -38,7 +38,11 @@ def _get_translations() -> Dict[str, str]:
         locale_file = translations_dir / "en_US.json"
 
     try:
-        with open(locale_file) as f:
+        # These catalogs are UTF-8, but open() defaults to the platform encoding, which is
+        # cp1252 on Windows. Without this, the CJK catalogs raise UnicodeDecodeError and every
+        # string falls back to its key, while the en_US bullets (U+2022) decode to mojibake
+        # instead of failing outright, so the key lookup misses and the mangled text renders.
+        with open(locale_file, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {}
@@ -47,6 +51,28 @@ def _get_translations() -> Dict[str, str]:
 def tr(text: TranslationKey) -> str:
     """Translate text using JSON translations."""
     return _get_translations().get(text, text)
+
+
+def warning_banner_qss(widget) -> str:
+    """Stylesheet for an inline warning banner that adapts to the active theme.
+
+    The submitter has no in-app theme toggle — it inherits the OS/Qt palette — so a
+    hardcoded light-amber banner looks out of place in dark mode. This derives a
+    light- or dark-amber treatment from the widget's palette. Both pass WCAG AA
+    contrast for the body text (light 7.35:1, dark 9.35:1).
+    """
+    from qtpy.QtGui import QPalette  # type: ignore
+
+    is_dark = widget.palette().color(QPalette.Window).lightness() < 128
+    if is_dark:
+        text, bg, border = "#ffcc80", "#3a2a10", "#8a5a20"
+    else:
+        text, bg, border = "#7a4200", "#fff3e0", "#e0a040"
+    return (
+        f"QLabel {{ color: {text}; background-color: {bg};"
+        f" border: 1px solid {border}; border-radius: 4px;"
+        " padding: 4px 8px; }"
+    )
 
 
 @contextmanager

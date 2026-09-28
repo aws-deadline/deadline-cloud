@@ -6,6 +6,7 @@ A UI Widget containing the render setup tab
 
 from __future__ import annotations
 
+from logging import getLogger
 from typing import Any, Dict, List, Optional
 
 from qtpy.QtCore import Qt, Signal  # type: ignore
@@ -22,7 +23,10 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from .radio_button_widget import HoverRadioButton
 
-from ...api._queue_parameters import _apply_deadline_cloud_v2_channel_migration
+from ...api._queue_parameters import (
+    _DEADLINE_CLOUD_V2_CHANNEL,
+    _apply_deadline_cloud_v2_channel_migration,
+)
 from ...config import config_file, get_setting
 from .._utils import tr
 from ..controllers import DeadlineUIController
@@ -32,6 +36,8 @@ from ._deadline_list_combo_boxes import (
     DeadlineStorageProfileListComboBoxController,
 )
 from .openjd_parameters_widget import OpenJDParametersWidget
+
+_logger = getLogger(__name__)
 
 
 class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-methods
@@ -193,12 +199,31 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         self.__valid_queue = True
         self.valid_parameters.emit(True)
         # Migrate channels before applying submitter overrides, so an explicit override wins.
+        # Remember the pre-migration CondaChannels default so it can be restored if overridden.
+        original_conda_default: Optional[str] = None
         if self.use_deadline_cloud_v2_channel:
+            for parameter in queue_parameters:
+                if parameter["name"] == "CondaChannels" and "default" in parameter:
+                    original_conda_default = parameter["default"]
+                    break
             _apply_deadline_cloud_v2_channel_migration(queue_parameters)
-        # Apply the initial queue parameter values
+        # Apply the initial queue parameter values (an explicit override wins over the migration).
         for parameter in queue_parameters:
-            if parameter["name"] in self.initial_shared_parameter_values:
-                parameter["value"] = self.initial_shared_parameter_values[parameter["name"]]
+            name = parameter["name"]
+            if name in self.initial_shared_parameter_values:
+                override = self.initial_shared_parameter_values[name]
+                if self.use_deadline_cloud_v2_channel and name == "CondaChannels":
+                    # The override wins; restore the pre-migration default too, so no migrated
+                    # default leaks into the submitted definition alongside the override value.
+                    if original_conda_default is not None:
+                        parameter["default"] = original_conda_default
+                    if _DEADLINE_CLOUD_V2_CHANNEL not in str(override).split():
+                        _logger.debug(
+                            "deadline-cloud-v2 channel requested, but an explicit CondaChannels "
+                            "value (bundle, --parameter, or pre-GUI hook) takes precedence; leaving "
+                            "Conda channels unchanged."
+                        )
+                parameter["value"] = override
         self.queue_parameters_box.rebuild_ui(parameter_definitions=queue_parameters)
 
     def update_settings(self, settings):

@@ -36,7 +36,7 @@ def test_cli_config_show_defaults(fresh_deadline_config):
     assert fresh_deadline_config in result.output
 
     # Assert the expected number of settings
-    assert len(settings.keys()) == 27
+    assert len(settings.keys()) == 28
 
     for setting_name in settings.keys():
         assert setting_name in result.output
@@ -115,6 +115,7 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
     config.set_setting("defaults.farm_region", "us-east-1")
     config.set_setting("settings.https_proxy", "http://proxy.example.com:8080")
     config.set_setting("settings.ca_bundle", "/etc/ssl/certs/ca-bundle.pem")
+    config.set_setting("settings.job_bundle_default_directory", "/my/bundles")
 
     runner = CliRunner()
     result = runner.invoke(main, ["config", "show"])
@@ -145,6 +146,12 @@ def test_cli_config_show_modified_config(fresh_deadline_config):
         assert "\\known\\asset\\path" in result.output
     else:
         assert "/known/asset/path" in result.output
+    # job_bundle_default_directory is an is_path setting: stored with forward
+    # slashes but displayed in native format.
+    if os.name == "nt":
+        assert "\\my\\bundles" in result.output
+    else:
+        assert "/my/bundles" in result.output
     # It shouldn't say anywhere that there is a default setting
     assert "(default)" not in result.output
 

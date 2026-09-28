@@ -12,6 +12,8 @@ from _common.mock_deadline_backend import MockDeadlineBackend
 _has_pyside6 = importlib.util.find_spec("PySide6") is not None
 
 _QT_TEST_FILES = [
+    "test_gui_browser_dialog.py",
+    "test_gui_browser_dialog_threading.py",
     "test_gui_host_requirements.py",
     "test_gui_job_attachments.py",
     "test_gui_job_bundle_submitter.py",

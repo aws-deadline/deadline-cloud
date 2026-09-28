@@ -48,6 +48,15 @@ def _checkbox_param(name="EnableFeature", default="True"):
     }
 
 
+def _bool_param(name="EnableFeature", default=True, control="CHECK_BOX"):
+    return {
+        "name": name,
+        "type": "BOOL",
+        "default": default,
+        "userInterface": {"control": control, "label": name},
+    }
+
+
 def _int_spinbox_param(name="Frames", default=10, min_val=1, max_val=1000):
     return {
         "name": name,
@@ -187,6 +196,50 @@ class TestOpenJDParametersWidget:
         widget.set_parameter_value({"name": "Confirm", "value": "No"})
         assert widget.controls["Confirm"].value() == "No"
 
+    def test_native_bool_checkbox(self, qtbot):
+        """Verify BOOL parameters use native boolean checkbox values."""
+        widget = OpenJDParametersWidget(parameter_definitions=[_bool_param()])
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is True
+
+        widget.set_parameter_value({"name": "EnableFeature", "value": False})
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_native_bool_checkbox_coerces_string_values(self, qtbot):
+        """Verify BOOL checkboxes coerce OpenJD's accepted string values."""
+        widget = OpenJDParametersWidget(parameter_definitions=[_bool_param(default="true")])
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is True
+
+        widget.set_parameter_value({"name": "EnableFeature", "value": "false"})
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_native_bool_checkbox_defaults_false(self, qtbot):
+        """Verify a BOOL parameter without a value defaults to false."""
+        parameter = {"name": "EnableFeature", "type": "BOOL"}
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_native_bool_checkbox_invalid_value_degrades_gracefully(self, qtbot):
+        """Verify an invalid BOOL value from an untrusted bundle leaves the box
+        unchecked instead of raising out of widget construction."""
+        parameter = {"name": "EnableFeature", "type": "BOOL", "value": "maybe"}
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+        # Same for set_parameter_value after construction: an invalid value
+        # unchecks the box rather than raising.
+        widget.set_parameter_value({"name": "EnableFeature", "value": True})
+        assert widget.controls["EnableFeature"].value() is True
+        widget.set_parameter_value({"name": "EnableFeature", "value": "maybe"})
+        assert widget.controls["EnableFeature"].value() is False
+
     def test_int_spinbox_creation_and_range(self, qtbot):
         """Verify INT SPIN_BOX respects min/max values."""
         widget = OpenJDParametersWidget(
@@ -214,6 +267,42 @@ class TestOpenJDParametersWidget:
         assert widget.controls["InternalId"].value() == "abc123"
         widget.set_parameter_value({"name": "InternalId", "value": "xyz789"})
         assert widget.controls["InternalId"].value() == "xyz789"
+
+    def test_hidden_bool_widget(self, qtbot):
+        """Verify a hidden BOOL parameter stores a native boolean value."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[_bool_param(default=False, control="HIDDEN")]
+        )
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_hidden_bool_widget_without_default_is_false(self, qtbot):
+        """Verify a hidden BOOL with no value or default holds False, not the string ""."""
+        parameter = {
+            "name": "EnableFeature",
+            "type": "BOOL",
+            "userInterface": {"control": "HIDDEN"},
+        }
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_hidden_bool_widget_coerces_values(self, qtbot):
+        """Verify a hidden BOOL coerces valid spellings to bool and keeps invalid
+        values for the submit path to report."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[_bool_param(default=False, control="HIDDEN")]
+        )
+        qtbot.addWidget(widget)
+
+        widget.set_parameter_value({"name": "EnableFeature", "value": "yes"})
+        assert widget.controls["EnableFeature"].value() is True
+        widget.set_parameter_value({"name": "EnableFeature", "value": 0})
+        assert widget.controls["EnableFeature"].value() is False
+        widget.set_parameter_value({"name": "EnableFeature", "value": "maybe"})
+        assert widget.controls["EnableFeature"].value() == "maybe"
 
     def test_directory_picker_creation(self, qtbot):
         """Verify CHOOSE_DIRECTORY widget is created with correct default."""

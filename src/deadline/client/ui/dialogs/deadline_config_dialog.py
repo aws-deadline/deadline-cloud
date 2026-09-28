@@ -191,7 +191,7 @@ class DeadlineScrollArea(QScrollArea):
         super().__init__(parent)
 
     def sizeHint(self):
-        return QSize(500, 400)
+        return QSize(500, 500)
 
 
 class DeadlineWorkstationConfigWidget(QWidget):
@@ -218,7 +218,7 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.refresh()
 
     def minimumSizeHint(self):
-        return QSize(500, 700)
+        return QSize(500, 800)
 
     def _build_ui(self):
         # Ensure the widget expands horizontally
@@ -305,6 +305,18 @@ class DeadlineWorkstationConfigWidget(QWidget):
         )
         layout.addRow(job_history_dir_label, self.job_history_dir_edit)
         self.job_history_dir_edit.path_changed.connect(self.job_history_dir_changed)
+
+        self.job_bundle_dir_edit = DirectoryPickerWidget(
+            initial_directory="",
+            directory_label=tr("Job bundle directory"),
+            parent=group,
+            collapse_user_dir=True,
+        )
+        job_bundle_dir_label = self.labels["settings.job_bundle_default_directory"] = QLabel(
+            tr("Job bundle directory")
+        )
+        layout.addRow(job_bundle_dir_label, self.job_bundle_dir_edit)
+        self.job_bundle_dir_edit.path_changed.connect(self.job_bundle_dir_changed)
 
     def _build_farm_settings_ui(self, group, layout):
         layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
@@ -433,7 +445,8 @@ class DeadlineWorkstationConfigWidget(QWidget):
         self.labels["settings.known_asset_paths"] = known_paths_label
 
         known_paths_widget = QWidget(parent=group)
-        known_paths_widget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        known_paths_widget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
+        known_paths_widget.setMinimumHeight(120)
         known_paths_layout = QVBoxLayout(known_paths_widget)
         known_paths_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -773,6 +786,15 @@ class DeadlineWorkstationConfigWidget(QWidget):
             )
             self.job_history_dir_edit.setText(job_history_dir)
 
+        with block_signals(self.job_bundle_dir_edit):
+            job_bundle_dir = self.changes.get(
+                "settings.job_bundle_default_directory",
+                config_file.get_setting(
+                    "settings.job_bundle_default_directory", config=self.config
+                ),
+            )
+            self.job_bundle_dir_edit.setText(job_bundle_dir)
+
         for refresh_callback in self._refresh_callbacks:
             refresh_callback()
 
@@ -841,6 +863,14 @@ class DeadlineWorkstationConfigWidget(QWidget):
             "settings.job_history_dir", config=self.config
         ):
             self.changes["settings.job_history_dir"] = job_history_dir
+        self.refresh()
+
+    def job_bundle_dir_changed(self):
+        job_bundle_dir = self.job_bundle_dir_edit.text()
+        if job_bundle_dir != config_file.get_setting(
+            "settings.job_bundle_default_directory", config=self.config
+        ):
+            self.changes["settings.job_bundle_default_directory"] = job_bundle_dir
         self.refresh()
 
     def _on_add_known_path(self):
