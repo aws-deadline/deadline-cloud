@@ -183,6 +183,72 @@ def test_read_job_bundle_parameters(
     )
 
 
+EXPR_LOWERCASE_TYPES_TEMPLATE = """
+specificationVersion: 'jobtemplate-2023-09'
+extensions: [FEATURE_BUNDLE_1, EXPR]
+name: Lowercase Types
+parameterDefinitions:
+- name: Message
+  type: string
+  default: hello
+- name: Count
+  type: Int
+  default: 3
+- name: Scale
+  type: float
+  default: 1.5
+- name: InputDir
+  type: path
+  objectType: DIRECTORY
+  dataFlow: IN
+- name: Verbose
+  type: bool
+  default: true
+steps:
+- name: Step
+  parameterSpace:
+    taskParameterDefinitions:
+    - name: Frame
+      type: int
+      range: "1-3"
+  bash:
+    script: echo {{ Param.Message }} {{ Task.Param.Frame }}
+"""
+
+
+def test_read_job_bundle_parameters_expr_type_names_are_case_insensitive(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """With the EXPR extension, job parameter type names are case-insensitive, so the
+    client normalizes them to the canonical upper-case names."""
+    with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
+        f.write(EXPR_LOWERCASE_TYPES_TEMPLATE)
+
+    result = read_job_bundle_parameters(temp_job_bundle_dir)
+
+    assert {p["name"]: p["type"] for p in result} == {
+        "Message": "STRING",
+        "Count": "INT",
+        "Scale": "FLOAT",
+        "InputDir": "PATH",
+        "Verbose": "BOOL",
+    }
+
+
+def test_read_job_bundle_parameters_type_names_are_case_sensitive_without_expr(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """Without the EXPR extension, lower-case type names remain invalid."""
+    template = EXPR_LOWERCASE_TYPES_TEMPLATE.replace(
+        "extensions: [FEATURE_BUNDLE_1, EXPR]", "extensions: [FEATURE_BUNDLE_1]"
+    )
+    with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
+        f.write(template)
+
+    with pytest.raises(ValueError, match='"Message" had "type" string'):
+        read_job_bundle_parameters(temp_job_bundle_dir)
+
+
 @pytest.mark.parametrize(
     "content,type,expected_result",
     [('{"a": "b"}', "JSON", {"a": "b"}), ("a: b", "YAML", {"a": "b"})],
