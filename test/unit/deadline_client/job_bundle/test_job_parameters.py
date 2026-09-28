@@ -374,6 +374,7 @@ class TestMergeQueueJobParameters:
         ({"name": "X", "type": "PATH"}, "CHOOSE_DIRECTORY"),
         ({"name": "X", "type": "INT"}, "SPIN_BOX"),
         ({"name": "X", "type": "FLOAT"}, "SPIN_BOX"),
+        ({"name": "X", "type": "BOOL"}, "CHECK_BOX"),
         # When there is an allowedValues list
         ({"name": "X", "type": "STRING", "allowedValues": ["A", "B"]}, "DROPDOWN_LIST"),
         ({"name": "X", "type": "PATH", "allowedValues": ["/A", "/B"]}, "DROPDOWN_LIST"),
@@ -531,6 +532,9 @@ class TestMergeQueueJobParameters:
             "DROPDOWN_LIST",
         ),
         ({"name": "X", "type": "FLOAT", "userInterface": {"control": "HIDDEN"}}, "HIDDEN"),
+        # When the control is specified explicitly for BOOL
+        ({"name": "X", "type": "BOOL", "userInterface": {"control": "CHECK_BOX"}}, "CHECK_BOX"),
+        ({"name": "X", "type": "BOOL", "userInterface": {"control": "HIDDEN"}}, "HIDDEN"),
     ],
 )
 def test_ui_control_for_parameter_definition(parameter_def, expected_control):
@@ -572,6 +576,10 @@ def test_ui_control_for_parameter_definition(parameter_def, expected_control):
         ({"name": "X", "type": "FLOAT", "userInterface": {"control": "CHOOSE_INPUT_FILE"}}),
         ({"name": "X", "type": "FLOAT", "userInterface": {"control": "CHOOSE_OUTPUT_FILE"}}),
         ({"name": "X", "type": "FLOAT", "userInterface": {"control": "CHOOSE_DIRECTORY"}}),
+        # Supported controls, but not for the BOOL type
+        ({"name": "X", "type": "BOOL", "userInterface": {"control": "LINE_EDIT"}}),
+        ({"name": "X", "type": "BOOL", "userInterface": {"control": "DROPDOWN_LIST"}}),
+        ({"name": "X", "type": "BOOL", "userInterface": {"control": "SPIN_BOX"}}),
     ],
 )
 def test_ui_control_for_parameter_definition_errors(parameter_def):
