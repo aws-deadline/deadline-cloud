@@ -35,6 +35,8 @@ class JobBundleSettingsWidget(QWidget):
     Signals:
         parameter_changed: This is sent whenever a parameter value in the widget changes. The message
             is a copy of the parameter definition with the "value" key containing the new value.
+        valid_parameters: Sent after each change with whether every parameter currently holds a
+            valid value (see invalid_parameter_names).
 
     Args:
         initial_settings (CliJobSettings): dataclass containing the job-specific settings.
@@ -42,6 +44,7 @@ class JobBundleSettingsWidget(QWidget):
     """
 
     parameter_changed = Signal(dict)
+    valid_parameters = Signal(bool)
 
     def __init__(self, initial_settings: JobBundleSettings, parent: Optional[QWidget] = None):
         super().__init__(parent=parent)
@@ -75,6 +78,15 @@ class JobBundleSettingsWidget(QWidget):
         self.parameters_widget.parameter_changed.connect(
             lambda message: self.parameter_changed.emit(message)
         )
+        self.parameters_widget.valid_parameters.connect(
+            lambda valid: self.valid_parameters.emit(valid)
+        )
+        # The new widget's initial validity was emitted before it could be connected.
+        self.valid_parameters.emit(not self.invalid_parameter_names())
+
+    def invalid_parameter_names(self) -> list[str]:
+        """Names of job parameters whose current value fails the parameter's constraints."""
+        return self.parameters_widget.invalid_parameter_names()
 
     def on_load_bundle(self, s3_repo=None):
         """

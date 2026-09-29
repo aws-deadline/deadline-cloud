@@ -555,3 +555,72 @@ class TestExportBundleLocalOwnershipGuard:
         assert (existing / "template.json").read_text() == '{"old": true}'
         # No leftover staging directories in the parent.
         assert [p.name for p in tmp_path.iterdir()] == ["my-export"]
+
+
+class TestSubmitButtonParameterValidity:
+    """The Submit button is disabled while any job or queue parameter holds an invalid value."""
+
+    MODULE = "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
+
+    RANGE_EXPR_TEMPLATE = """
+specificationVersion: 'jobtemplate-2023-09'
+extensions: [EXPR]
+name: Range Bundle
+parameterDefinitions:
+- name: Frames
+  type: RANGE_EXPR
+  default: "1-10"
+steps:
+- name: NoOp
+  script:
+    actions:
+      onRun:
+        command: "echo hi"
+"""
+
+    def test_invalid_range_expr_disables_submit(self, qtbot, mock_auth_status, tmp_path):
+        from deadline.client.job_bundle.parameters import read_job_bundle_parameters
+        from deadline.client.ui.widgets.job_bundle_settings_tab import JobBundleSettingsWidget
+
+        (tmp_path / "template.yaml").write_text(self.RANGE_EXPR_TEMPLATE, encoding="utf8")
+        type(mock_auth_status).api_availability = PropertyMock(return_value=True)
+        settings = JobBundleSettings(input_job_bundle_dir=str(tmp_path), name="Range Bundle")
+        settings.parameters = read_job_bundle_parameters(str(tmp_path))
+
+        with (
+            patch(
+                "deadline.client.ui.widgets.deadline_authentication_status_widget"
+                ".DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            patch(
+                f"{self.MODULE}.DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            # Farm and queue are configured.
+            patch(f"{self.MODULE}.get_setting", return_value="configured"),
+        ):
+            dialog = SubmitJobToDeadlineDialog(
+                job_setup_widget_type=JobBundleSettingsWidget,
+                initial_job_settings=settings,
+                initial_shared_parameter_values={},
+                auto_detected_attachments=AssetReferences(),
+                attachments=AssetReferences(),
+                on_create_job_bundle_callback=MagicMock(return_value={}),
+            )
+            qtbot.addWidget(dialog)
+            # Pretend the queue environments loaded successfully.
+            with patch.object(dialog.shared_job_settings, "is_queue_valid", return_value=True):
+                dialog._set_submit_button_state()
+                assert dialog.submit_button.isEnabled()
+
+                edit = dialog.job_settings.parameters_widget.controls["Frames"].edit_control
+                edit.setText("1-10,")
+                assert not dialog.submit_button.isEnabled()
+                tooltip = dialog.submit_button.toolTip()
+                assert "Cannot submit job" in tooltip
+                assert "invalid values: Frames" in tooltip
+
+                edit.setText("1-10,15")
+                assert dialog.submit_button.isEnabled()
+                assert dialog.submit_button.toolTip() == ""
