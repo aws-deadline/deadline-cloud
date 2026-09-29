@@ -2,6 +2,7 @@
 
 """GUI submitter bundle tests using pytest-qt."""
 
+import json
 import os
 from configparser import ConfigParser
 from pathlib import Path
@@ -624,3 +625,81 @@ steps:
                 edit.setText("1-10,15")
                 assert dialog.submit_button.isEnabled()
                 assert dialog.submit_button.toolTip() == ""
+
+
+class TestListStringParameterInSubmitDialog:
+    """A LIST[STRING] job parameter in the submit dialog gates Submit and saves as a list."""
+
+    MODULE = "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
+
+    LIST_STRING_TEMPLATE = """
+specificationVersion: 'jobtemplate-2023-09'
+extensions: [EXPR]
+name: List Bundle
+parameterDefinitions:
+- name: Cameras
+  type: list[string]
+  default: ["main", "closeup"]
+  minLength: 1
+steps:
+- name: NoOp
+  script:
+    actions:
+      onRun:
+        command: "echo hi"
+"""
+
+    def test_list_string_validity_and_saved_values(self, qtbot, mock_auth_status, tmp_path):
+        from deadline.client.job_bundle.parameters import read_job_bundle_parameters
+        from deadline.client.ui.widgets.job_bundle_settings_tab import JobBundleSettingsWidget
+
+        (tmp_path / "template.yaml").write_text(self.LIST_STRING_TEMPLATE, encoding="utf8")
+        type(mock_auth_status).api_availability = PropertyMock(return_value=True)
+        settings = JobBundleSettings(input_job_bundle_dir=str(tmp_path), name="List Bundle")
+        settings.parameters = read_job_bundle_parameters(str(tmp_path))
+
+        with (
+            patch(
+                "deadline.client.ui.widgets.deadline_authentication_status_widget"
+                ".DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            patch(
+                f"{self.MODULE}.DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            patch(f"{self.MODULE}.get_setting", return_value="configured"),
+        ):
+            dialog = SubmitJobToDeadlineDialog(
+                job_setup_widget_type=JobBundleSettingsWidget,
+                initial_job_settings=settings,
+                initial_shared_parameter_values={},
+                auto_detected_attachments=AssetReferences(),
+                attachments=AssetReferences(),
+                on_create_job_bundle_callback=MagicMock(return_value={}),
+            )
+            qtbot.addWidget(dialog)
+            with patch.object(dialog.shared_job_settings, "is_queue_valid", return_value=True):
+                dialog._set_submit_button_state()
+                assert dialog.submit_button.isEnabled()
+
+                control = dialog.job_settings.parameters_widget.controls["Cameras"]
+                control.set_value([])
+                assert not dialog.submit_button.isEnabled()
+                assert "invalid values: Cameras" in dialog.submit_button.toolTip()
+
+                control.set_value(["wide", "top"])
+                assert dialog.submit_button.isEnabled()
+
+            # The job history copy of the bundle stores the value as a JSON list, which
+            # read_job_bundle_parameters loads back unchanged.
+            history_dir = tmp_path / "history"
+            history_dir.mkdir()
+            (history_dir / "template.yaml").write_text(self.LIST_STRING_TEMPLATE, encoding="utf8")
+            dialog.save_job_parameters_to_job_bundle(
+                str(history_dir), dialog.job_settings.parameters_widget.get_parameters()
+            )
+            saved = json.loads((history_dir / "parameter_values.json").read_text("utf8"))
+            assert saved["parameterValues"][0]["value"] == ["wide", "top"]
+            (reloaded,) = read_job_bundle_parameters(str(history_dir))
+            assert reloaded["value"] == ["wide", "top"]

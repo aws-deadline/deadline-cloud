@@ -102,6 +102,7 @@ _FRIENDLY_PARAM_TYPES = {
     "FLOAT": "Number",
     "BOOL": "Checkbox",
     "RANGE_EXPR": "Frame range",
+    "LIST[STRING]": "List",
 }
 
 

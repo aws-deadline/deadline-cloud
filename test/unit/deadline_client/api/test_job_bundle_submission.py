@@ -1185,6 +1185,91 @@ def test_create_job_from_job_bundle_rejects_invalid_range_expr(
         mock.get_boto3_client().create_job.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("cli_value", "expected"),
+    [
+        pytest.param('["wide", "top"]', ["wide", "top"], id="cli-json-array"),
+        # The service applies template defaults, so none are sent.
+        pytest.param(None, None, id="default"),
+    ],
+)
+def test_create_job_from_job_bundle_list_string(
+    fresh_deadline_config,
+    temp_job_bundle_dir,
+    cli_value,
+    expected,
+):
+    """A LIST[STRING] value, given as a JSON array string like the CLI -p option passes, is
+    sent to CreateJob as a list in the stringList member."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    template = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": ["EXPR"],
+        "name": "TestJob",
+        "parameterDefinitions": [
+            {"name": "Cameras", "type": "list[string]", "default": ["main", "closeup"]}
+        ],
+        "steps": [
+            {
+                "name": "Step",
+                "parameterSpace": {
+                    "taskParameterDefinitions": [
+                        {"name": "Camera", "type": "STRING", "range": "{{Param.Cameras}}"}
+                    ]
+                },
+                "bash": {"script": "echo {{Task.Param.Camera}}"},
+            }
+        ],
+    }
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        json.dump(template, f)
+
+    job_parameters = [] if cli_value is None else [{"name": "Cameras", "value": cli_value}]
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir,
+            job_parameters=job_parameters,
+            queue_parameter_definitions=[],
+        )
+
+        create_job_kwargs = mock.get_boto3_client().create_job.call_args.kwargs
+        if expected is None:
+            assert "parameters" not in create_job_kwargs
+        else:
+            assert create_job_kwargs["parameters"] == {"Cameras": {"stringList": expected}}
+        assert json.loads(create_job_kwargs["template"]) == template
+
+
+def test_create_job_from_job_bundle_rejects_invalid_list_string(
+    fresh_deadline_config,
+    temp_job_bundle_dir,
+):
+    """A LIST[STRING] value that is not a JSON array is reported before CreateJob is called."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    template = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": ["EXPR"],
+        "name": "TestJob",
+        "parameterDefinitions": [{"name": "Cameras", "type": "LIST[STRING]", "default": ["a"]}],
+        "steps": [{"name": "Step", "bash": {"script": "echo hi"}}],
+    }
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        json.dump(template, f)
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        with pytest.raises(exceptions.DeadlineOperationError, match="not a JSON array of strings"):
+            api.create_job_from_job_bundle(
+                temp_job_bundle_dir,
+                job_parameters=[{"name": "Cameras", "value": "main,closeup"}],
+                queue_parameter_definitions=[],
+            )
+        mock.get_boto3_client().create_job.assert_not_called()
+
+
 get_job_responses = [
     pytest.param(
         [

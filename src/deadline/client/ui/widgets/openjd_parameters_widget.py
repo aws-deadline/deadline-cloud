@@ -5,15 +5,18 @@ UI widgets for the Scene Settings tab.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from copy import deepcopy
 
-from qtpy.QtCore import QRegularExpression, Qt, Signal  # type: ignore
-from qtpy.QtGui import QValidator
+from qtpy.QtCore import QEvent, QRegularExpression, Qt, Signal  # type: ignore
+from qtpy.QtGui import QIcon, QPainter, QValidator
 from qtpy.QtWidgets import (  # type: ignore
+    QAbstractItemDelegate,
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -21,9 +24,15 @@ from qtpy.QtWidgets import (  # type: ignore
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
     QSizePolicy,
     QSpacerItem,
     QSpinBox,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionSizeGrip,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -36,11 +45,13 @@ from ...job_bundle._range_expr import (
 )
 from ...job_bundle.parameters import (
     JobParameter,
+    _MAX_STRING_LIST_ITEMS,
     get_ui_control_for_parameter_definition,
 )
 from ...job_bundle.parameters import (
     validate_job_parameter_value as _validate_job_parameter_value,
 )
+from .._utils import tr
 from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
@@ -138,6 +149,7 @@ class OpenJDParametersWidget(QWidget):
         control_map = {
             ControlType.LINE_EDIT.name: _JobTemplateLineEditWidget,
             ControlType.MULTILINE_EDIT.name: _JobTemplateMultiLineEditWidget,
+            ControlType.LINE_EDIT_LIST.name: _JobTemplateLineEditListWidget,
             ControlType.DROPDOWN_LIST.name: _JobTemplateDropdownListWidget,
             ControlType.CHOOSE_INPUT_FILE.name: _JobTemplateInputFileWidget,
             ControlType.CHOOSE_OUTPUT_FILE.name: _JobTemplateOutputFileWidget,
@@ -483,6 +495,352 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
         self.edit_control.textChanged.connect(
             lambda: self._handle_text_changed(self.value(), callback)
         )
+
+
+class _FixedRowHeightDelegate(QStyledItemDelegate):
+    """Gives every row of a list the same height, whatever decoration it carries."""
+
+    def __init__(self, parent: QWidget, row_height: int):
+        super().__init__(parent)
+        self._row_height = row_height
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        size.setHeight(self._row_height)
+        return size
+
+
+class _ListResizeGrip(QWidget):
+    """A size grip that drags the height of a LINE_EDIT_LIST's list, in whole rows.
+
+    QSizeGrip only resizes top-level windows, so this draws the platform size grip and
+    handles the drag itself.
+    """
+
+    def __init__(self, owner: "_JobTemplateLineEditListWidget"):
+        super().__init__(owner)
+        self._owner = owner
+        self._drag_start: Optional[tuple[int, int]] = None
+        extent = self.style().pixelMetric(QStyle.PM_SizeGripSize, None, self)
+        self.setFixedSize(extent, extent)
+        # Only the height changes; the width follows the dialog.
+        self.setCursor(Qt.SizeVerCursor)
+        self.setToolTip(tr("Drag to show more or fewer rows"))
+
+    def paintEvent(self, event) -> None:
+        option = QStyleOptionSizeGrip()
+        option.initFrom(self)
+        option.corner = Qt.BottomRightCorner
+        painter = QPainter(self)
+        self.style().drawControl(QStyle.CE_SizeGrip, option, painter, self)
+
+    @staticmethod
+    def _global_y(event) -> int:
+        # globalPosition is Qt 6; globalY is its Qt 5 equivalent.
+        if hasattr(event, "globalPosition"):
+            return int(event.globalPosition().y())
+        return event.globalY()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._drag_start = (self._global_y(event), self._owner.edit_control.height())
+            event.accept()
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_start is not None:
+            start_y, start_height = self._drag_start
+            self._owner.resize_to_height(start_height + self._global_y(event) - start_y)
+            event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_start = None
+
+
+class _JobTemplateLineEditListWidget(_JobTemplateWidget):
+    """An editable, reorderable list of single-line strings for a LIST[STRING] parameter.
+
+    Laid out like the known asset paths list in the settings dialog: a button row above
+    a list. Items are edited in place, and can be reordered by dragging since the order
+    of a list parameter's values is significant.
+    """
+
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.LINE_EDIT_LIST
+    OPENJD_TYPES: List[str] = ["LIST[STRING]"]
+    OPENJD_DEFAULT_VALUE: List[str] = []
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    # A fixed height that the user resizes with the grip, so other parameters stay in view.
+    IS_VERTICAL_EXPANDING: bool = False
+    MIN_VISIBLE_ROWS: int = 3
+    MAX_VISIBLE_ROWS: int = _MAX_STRING_LIST_ITEMS
+
+    _ITEM_FLAGS = Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsDragEnabled
+
+    def _build_ui(self, parameter):
+        self._suppress_changes = False
+        self._change_callbacks: List[Any] = []
+        # The row added by the Add button, removed again if its editor closes while empty.
+        self._pending_new_item: Optional[QListWidgetItem] = None
+        self.max_items = min(
+            parameter.get("maxLength", _MAX_STRING_LIST_ITEMS), _MAX_STRING_LIST_ITEMS
+        )
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.label = QLabel(_get_parameter_label(parameter))
+        layout.addWidget(self.label)
+
+        button_layout = QHBoxLayout()
+        self.add_button = QPushButton(tr("Add"), self)
+        self.add_button.clicked.connect(self._on_add)
+        self.edit_button = QPushButton(tr("Edit"), self)
+        self.edit_button.clicked.connect(self._on_edit)
+        self.remove_button = QPushButton(tr("Remove Selected"), self)
+        self.remove_button.clicked.connect(self._on_remove)
+        self.count_label = QLabel(self)
+        button_layout.addWidget(self.add_button)
+        button_layout.addWidget(self.edit_button)
+        button_layout.addWidget(self.remove_button)
+        button_layout.addWidget(self.count_label)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+
+        self.edit_control = QListWidget(self)
+        self.edit_control.setAlternatingRowColors(True)
+        self.edit_control.setDragDropMode(QAbstractItemView.InternalMove)
+        self.edit_control.setDefaultDropAction(Qt.MoveAction)
+        self.edit_control.setEditTriggers(
+            QAbstractItemView.DoubleClicked
+            | QAbstractItemView.EditKeyPressed
+            | QAbstractItemView.SelectedClicked
+        )
+        self.edit_control.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Rows elide instead of scrolling sideways, so the height is a whole number of rows.
+        self.edit_control.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.edit_control.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.edit_control.setUniformItemSizes(True)
+        # Measure a row with the warning icon, which is at least as tall as one without,
+        # and give every row that height so the list is a whole number of rows either way.
+        self._warning_icon = self.style().standardIcon(QStyle.SP_MessageBoxWarning)
+        probe = self._new_item("")
+        self.edit_control.addItem(probe)
+        plain_height = self.edit_control.sizeHintForRow(0)
+        probe.setIcon(self._warning_icon)
+        self._row_height = max(plain_height, self.edit_control.sizeHintForRow(0), 1)
+        self.edit_control.clear()
+        self.edit_control.setItemDelegate(
+            _FixedRowHeightDelegate(self.edit_control, self._row_height)
+        )
+        self._visible_rows = self.MIN_VISIBLE_ROWS
+        self._apply_visible_rows()
+        layout.addWidget(self.edit_control)
+        self.setLayout(layout)
+
+        # The grip sits in the scroll bar's area when that is shown, so it doesn't cover
+        # the scroll bar's down arrow, and in the list's bottom-right corner otherwise.
+        self.scroll_bar_grip = _ListResizeGrip(self)
+        self.edit_control.addScrollBarWidget(self.scroll_bar_grip, Qt.AlignBottom)
+        self.corner_grip = _ListResizeGrip(self)
+        self.corner_grip.setParent(self.edit_control)
+        self.edit_control.verticalScrollBar().rangeChanged.connect(self._place_grip)
+        self.edit_control.installEventFilter(self)
+        self._place_grip()
+
+        self.edit_control.itemSelectionChanged.connect(self._update_buttons)
+        self.edit_control.itemDelegate().closeEditor.connect(self._on_editor_closed)
+        model = self.edit_control.model()
+        for signal in (model.rowsInserted, model.rowsRemoved, model.rowsMoved, model.dataChanged):
+            signal.connect(self._on_list_changed)
+
+        if "description" in parameter:
+            self.label.setToolTip(parameter["description"])
+
+    def _new_item(self, text: str) -> QListWidgetItem:
+        item = QListWidgetItem(text)
+        item.setFlags(self._ITEM_FLAGS)
+        return item
+
+    def visible_rows(self) -> int:
+        """The number of rows the list is sized to show before it scrolls."""
+        return self._visible_rows
+
+    def set_visible_rows(self, rows: int) -> None:
+        self._visible_rows = max(self.MIN_VISIBLE_ROWS, min(rows, self.MAX_VISIBLE_ROWS))
+        self._apply_visible_rows()
+
+    def resize_to_height(self, height: int) -> None:
+        """Sizes the list to the whole number of rows nearest the given pixel height."""
+        frame = 2 * self.edit_control.frameWidth()
+        self.set_visible_rows(round((height - frame) / self._row_height))
+
+    def _apply_visible_rows(self) -> None:
+        frame = 2 * self.edit_control.frameWidth()
+        self.edit_control.setFixedHeight(frame + self._visible_rows * self._row_height)
+
+    def _place_grip(self, *args) -> None:
+        scroll_bar = self.edit_control.verticalScrollBar()
+        scrolls = scroll_bar.maximum() > scroll_bar.minimum()
+        self.corner_grip.setVisible(not scrolls)
+        if not scrolls:
+            frame = self.edit_control.frameWidth()
+            size = self.corner_grip.size()
+            self.corner_grip.move(
+                self.edit_control.width() - frame - size.width(),
+                self.edit_control.height() - frame - size.height(),
+            )
+            self.corner_grip.raise_()
+
+    def eventFilter(self, watched, event) -> bool:
+        if watched is self.edit_control and event.type() == QEvent.Resize:
+            self._place_grip()
+        return super().eventFilter(watched, event)
+
+    def _on_add(self) -> None:
+        # The view closes an open editor itself when the current row changes, without
+        # telling the delegate, so discard a still-empty previous row here too.
+        self._discard_pending_item_if_empty()
+        item = self._new_item("")
+        self.edit_control.addItem(item)
+        self.edit_control.setCurrentItem(item)
+        self._pending_new_item = item
+        self.edit_control.editItem(item)
+
+    def _selected_item(self) -> Optional[QListWidgetItem]:
+        # Buttons act on the selection, not the current row: the current row can
+        # remain after the selection is cleared, or move to a neighbour when a row is removed.
+        selected = self.edit_control.selectedItems()
+        return selected[0] if selected else None
+
+    def _on_edit(self) -> None:
+        item = self._selected_item()
+        if item is not None:
+            self.edit_control.editItem(item)
+
+    def _on_remove(self) -> None:
+        item = self._selected_item()
+        if item is not None:
+            self.edit_control.takeItem(self.edit_control.row(item))
+
+    def _on_editor_closed(self, editor=None, hint=None) -> None:
+        if hint in (
+            QAbstractItemDelegate.SubmitModelCache,
+            QAbstractItemDelegate.EditNextItem,
+            QAbstractItemDelegate.EditPreviousItem,
+        ):
+            # Enter or Tab commits the just-added row, even when it is empty.
+            self._pending_new_item = None
+        else:
+            # Escape, or leaving the editor by clicking elsewhere, discards a just-added
+            # row that is still empty, so Add without typing anything is a no-op.
+            self._discard_pending_item_if_empty()
+
+    def _discard_pending_item_if_empty(self) -> None:
+        item = self._pending_new_item
+        self._pending_new_item = None
+        if item is not None and item.text() == "":
+            row = self.edit_control.row(item)
+            if row >= 0:
+                self.edit_control.takeItem(row)
+                # Removing the row makes a neighbour current and selected. Clear that, so a
+                # button click that closed the editor (Remove, Edit) does not act on it.
+                self.edit_control.setCurrentRow(-1)
+                self.edit_control.clearSelection()
+
+    def _on_list_changed(self, *args) -> None:
+        # Updating feedback sets item colors, which reports dataChanged again.
+        if self._suppress_changes:
+            return
+        self._suppress_changes = True
+        try:
+            self._update_feedback()
+            self._update_buttons()
+        finally:
+            self._suppress_changes = False
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = self.value()
+        for callback in self._change_callbacks:
+            callback(message)
+
+    def _update_buttons(self) -> None:
+        count = self.edit_control.count()
+        has_selection = self._selected_item() is not None
+        self.add_button.setEnabled(count < self.max_items)
+        self.edit_button.setEnabled(has_selection)
+        self.remove_button.setEnabled(has_selection)
+        self.count_label.setText(tr("Items: {count}").format(count=count))
+
+    def _update_feedback(self) -> None:
+        """Highlights the list and each invalid item, with tooltips that explain why."""
+        # Validate each item on its own against just the item constraints, so every
+        # invalid item is marked instead of only the first.
+        item_definition: Any = {
+            "name": self.name(),
+            "type": "LIST[STRING]",
+            "item": self.job_template_parameter.get("item", {}),
+        }
+        warning_icon = self._warning_icon
+        for i in range(self.edit_control.count()):
+            item = self.edit_control.item(i)
+            try:
+                _validate_job_parameter_value(item_definition, [item.text()])
+            except (ValueError, TypeError) as e:
+                # An icon rather than a text color, so an empty item and a selected item
+                # are still visibly marked, and the cue does not rely on color alone.
+                item.setIcon(warning_icon)
+                item.setToolTip(str(e).replace("item 0 ", "", 1))
+            else:
+                item.setIcon(QIcon())
+                item.setToolTip("")
+
+        error = self._validation_error()
+        if error:
+            self.edit_control.setStyleSheet("QListWidget { border: 1px solid red; }")
+            self.edit_control.setToolTip(error)
+        else:
+            self.edit_control.setStyleSheet("")
+            self.edit_control.setToolTip(self.job_template_parameter.get("description", ""))
+
+    def _validation_error(self) -> str:
+        try:
+            _validate_job_parameter_value(self.job_template_parameter, self.value())
+        except (ValueError, TypeError) as e:
+            return str(e)
+        return ""
+
+    def is_valid(self) -> bool:
+        return not self._validation_error()
+
+    def value(self) -> List[str]:
+        return [self.edit_control.item(i).text() for i in range(self.edit_control.count())]
+
+    def set_value(self, value: Any) -> None:
+        if isinstance(value, str):
+            # CLI and pre-GUI hook values arrive as a JSON array string.
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                pass
+        if not isinstance(value, (list, tuple)) or not all(isinstance(v, str) for v in value):
+            # The value may come from an untrusted job bundle. Degrade gracefully like the
+            # other controls instead of breaking the dialog.
+            _logger.warning(
+                "Job parameter %r has value %r that is not a list of strings; starting with an empty list.",
+                self.name(),
+                value,
+            )
+            value = []
+        self._pending_new_item = None
+        self._suppress_changes = True
+        try:
+            self.edit_control.clear()
+            for text in value:
+                self.edit_control.addItem(self._new_item(text))
+        finally:
+            self._suppress_changes = False
+        self._on_list_changed()
+
+    def connect_parameter_changed(self, callback):
+        self._change_callbacks.append(callback)
 
 
 class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
@@ -915,6 +1273,7 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         "STRING",
         "BOOL",
         "RANGE_EXPR",
+        "LIST[STRING]",
     ]
 
     OPENJD_DEFAULT_VALUE: str = ""  # Hidden parameters do not require defaults
@@ -934,6 +1293,15 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         if self.job_template_parameter["type"] == "BOOL":
             if value == self.OPENJD_DEFAULT_VALUE:
                 value = False
+            else:
+                try:
+                    value = _validate_job_parameter_value(self.job_template_parameter, value)
+                except (ValueError, TypeError):
+                    # Keep the value as-is so submission reports it as an error.
+                    pass
+        elif self.job_template_parameter["type"] == "LIST[STRING]":
+            if value == self.OPENJD_DEFAULT_VALUE:
+                value = []
             else:
                 try:
                     value = _validate_job_parameter_value(self.job_template_parameter, value)
