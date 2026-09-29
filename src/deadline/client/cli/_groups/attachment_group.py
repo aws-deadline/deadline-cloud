@@ -123,16 +123,16 @@ def attachment_download(
             # regional endpoint itself.
             boto3_session = api.get_boto3_session(config=config, region=region)
 
-        s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
-            farm_id=farm_id,
-            queue_id=queue_id,
-            session=boto3_session,
-        ).jobAttachmentSettings
-
         # Only fall back to the queue's S3 settings when the caller did not provide an
         # explicit --s3-root-uri. An explicitly-supplied value must always be honored,
-        # even when the queue has no attachment settings of its own.
+        # even when the queue has no attachment settings of its own, so GetQueue is
+        # only called when the fallback is actually needed.
         if not s3_root_uri:
+            s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
+                farm_id=farm_id,
+                queue_id=queue_id,
+                session=boto3_session,
+            ).jobAttachmentSettings
             if not s3_settings:
                 raise MissingJobAttachmentSettingsError(
                     f"Queue {queue_id} has no attachment settings"
@@ -241,16 +241,16 @@ def attachment_upload(
             # regional endpoint itself.
             boto3_session = api.get_boto3_session(config=config, region=region)
 
-        s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
-            farm_id=farm_id,
-            queue_id=queue_id,
-            session=boto3_session,
-        ).jobAttachmentSettings
-
         # Only fall back to the queue's S3 settings when the caller did not provide an
         # explicit --s3-root-uri. An explicitly-supplied value must always be honored,
-        # even when the queue has no attachment settings of its own.
+        # even when the queue has no attachment settings of its own, so GetQueue is
+        # only called when the fallback is actually needed.
         if not s3_root_uri:
+            s3_settings: Optional[JobAttachmentS3Settings] = get_queue(
+                farm_id=farm_id,
+                queue_id=queue_id,
+                session=boto3_session,
+            ).jobAttachmentSettings
             if not s3_settings:
                 raise MissingJobAttachmentSettingsError(
                     f"Queue {queue_id} has no attachment settings"

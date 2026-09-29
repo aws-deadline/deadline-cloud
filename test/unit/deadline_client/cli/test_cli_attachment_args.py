@@ -7,6 +7,8 @@ Tests for argument plumbing in the `deadline attachment` CLI group:
   * `--s3-root-uri` must be honored independently of `--profile`, including when the
     queue has no jobAttachmentSettings of its own (while the no-URI/no-settings case
     must still fail with MissingJobAttachmentSettingsError).
+  * An explicit `--s3-root-uri` must not depend on GetQueue at all, so a failing
+    GetQueue (e.g. AccessDenied) does not abort the command.
   * `--conflict-resolution` must be threaded through to the download call.
   * End-to-end against moto S3 (real transfer code, queue-role credential path): the
     explicit --s3-root-uri bucket is the one actually read from / written to, not the
@@ -21,6 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from click.testing import CliRunner
 
 from deadline.client.cli import main
@@ -312,6 +315,59 @@ def test_attachment_upload_honors_s3_root_uri_when_queue_lacks_settings(
     assert result.exit_code == 0, result.output
     mock_upload.assert_called_once()
     assert mock_upload.call_args.kwargs["s3_root_uri"] == explicit_uri
+
+
+@pytest.mark.parametrize(
+    "command, transfer_fn, transfer_return",
+    [
+        ("download", "_attachment_download", DownloadSummaryStatistics()),
+        ("upload", "_attachment_upload", MagicMock()),
+    ],
+)
+def test_attachment_explicit_s3_root_uri_skips_get_queue(
+    configured_farm_region, tmp_path, command, transfer_fn, transfer_return
+):
+    """
+    Bug: with an explicit --s3-root-uri the queue's settings are never used, so GetQueue
+    must not be called. Otherwise a failing GetQueue (AccessDenied, missing queue) aborts
+    the command even though its result is not needed.
+    """
+    manifest_path = _write_manifest(tmp_path)
+
+    explicit_uri = "s3://my-explicit-bucket/my-explicit-prefix"
+
+    with (
+        patch.object(attachment_group.api, "get_boto3_session", return_value=MagicMock()),
+        patch.object(
+            attachment_group,
+            "get_queue",
+            side_effect=ClientError(
+                {"Error": {"Code": "AccessDeniedException", "Message": "denied"}}, "GetQueue"
+            ),
+        ) as mock_get_queue,
+        patch.object(attachment_group, "get_session_client", return_value=MagicMock()),
+        patch.object(
+            attachment_group.api, "get_queue_user_boto3_session", return_value=MagicMock()
+        ),
+        patch.object(attachment_group, transfer_fn, return_value=transfer_return) as mock_transfer,
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "attachment",
+                command,
+                "--manifests",
+                manifest_path,
+                "--s3-root-uri",
+                explicit_uri,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    mock_get_queue.assert_not_called()
+    mock_transfer.assert_called_once()
+    assert mock_transfer.call_args.kwargs["s3_root_uri"] == explicit_uri
 
 
 # ─── End-to-end tests against moto S3 ────────────────────────────────────────
