@@ -191,6 +191,15 @@ def test_range_expr_parameter_validation_length_constraints() -> None:
         parameters.validate_job_parameter_value(param, "1-100:2")
 
 
+def test_range_expr_parameter_validation_service_length_cap() -> None:
+    """Without an explicit maxLength, the CreateJob rangeExpr limit of 1024 still applies so the
+    CLI rejects what the service would."""
+    long_expr = ",".join(str(i) for i in range(0, 1000, 2))
+    assert len(long_expr) > 1024
+    with pytest.raises(ValueError, match="at most 1024"):
+        parameters.validate_job_parameter_value(BASE_RANGE_EXPR_PARAM, long_expr)
+
+
 INT_PARAM_WITH_ALLOWED_VALUES: parameters.JobParameter = {
     "name": "int_with_allowed_values",
     "type": "INT",

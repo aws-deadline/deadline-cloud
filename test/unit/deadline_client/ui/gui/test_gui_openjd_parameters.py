@@ -409,6 +409,23 @@ class TestOpenJDParametersWidget:
         assert control.value() == "1-100:"
         assert not control.edit_control.hasAcceptableInput()
 
+    def test_range_expr_line_edit_service_length_cap_is_consistent(self, qtbot):
+        """Verify that with no explicit maxLength, a grammatically valid expression longer than
+        the service's 1024-character limit is reported invalid by both the validator (which
+        disables Submit) and the feedback path (red border and tooltip), so the user is told why."""
+        long_expr = ",".join(str(i) for i in range(0, 1000, 2))
+        assert len(long_expr) > 1024
+        widget = OpenJDParametersWidget(parameter_definitions=[_range_expr_param()])
+        qtbot.addWidget(widget)
+        control = widget.controls["Frames"]
+
+        # setText bypasses the validator's input filtering, like a value loaded from a bundle.
+        control.edit_control.setText(long_expr)
+
+        assert widget.invalid_parameter_names() == ["Frames"]
+        assert "red" in control.edit_control.styleSheet()
+        assert "at most 1024" in control.edit_control.toolTip()
+
     def test_range_expr_line_edit_emits_parameter_changed(self, qtbot):
         """Verify edits emit parameter_changed with the RANGE_EXPR definition and text."""
         widget = OpenJDParametersWidget(parameter_definitions=[_range_expr_param()])

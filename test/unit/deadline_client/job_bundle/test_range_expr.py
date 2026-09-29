@@ -7,7 +7,11 @@ from typing import Any
 
 import pytest
 
-from deadline.client.job_bundle._range_expr import IntRange, parse_int_range_expr
+from deadline.client.job_bundle._range_expr import (
+    MAX_RANGE_EXPR_LENGTH,
+    IntRange,
+    parse_int_range_expr,
+)
 
 
 @pytest.mark.parametrize(
@@ -40,8 +44,8 @@ from deadline.client.job_bundle._range_expr import IntRange, parse_int_range_exp
         pytest.param(
             "10-15:2,1-5", [IntRange(1, 5, 1), IntRange(10, 14, 2)], id="spec-example-sorted"
         ),
-        # A stepped range's declared end may reach into the next range as long as no
-        # value it actually produces does; this matches the service and openjd-model.
+        # Overlap is checked on the interval each range spans after its end is
+        # normalized to the last value produced: 1-10:4 stops at 9, so 10-15 is clear.
         pytest.param(
             "1-10:4,10-15", [IntRange(1, 9, 4), IntRange(10, 15, 1)], id="stepped-adjacent"
         ),
@@ -102,15 +106,32 @@ def test_parse_valid(expr: str, expected: list[IntRange] | None) -> None:
         pytest.param("1-10:-1", "ascending range", id="wrong-step-direction"),
         pytest.param("1-10,5-15", "overlapping", id="overlap"),
         pytest.param("1-10:2,3-10:2", "overlapping", id="overlap-interleaved-steps"),
+        # Interleaved stepped ranges are rejected on interval overlap even when the values
+        # they produce are disjoint; this matches openjd-model and the service.
+        pytest.param("1-9:2,2-10:2", "overlapping", id="overlap-interleaved-disjoint-values"),
+        pytest.param("1-100:99,2-5", "overlapping", id="overlap-spanning-step-disjoint-values"),
+        pytest.param("1-10:3,10-15", "overlapping", id="overlap-stepped-reaches-end"),
         pytest.param("1-10:1,10-1:-1", "overlapping", id="overlap-asc-desc"),
         pytest.param("1,2,3,2", "overlapping", id="duplicate-values"),
         pytest.param("1-9223372036854775808", "64-bit", id="int64-overflow"),
         pytest.param("-9223372036854775809", "64-bit", id="int64-underflow"),
+        pytest.param(",".join(str(i) for i in range(0, 1000, 2)), "at most 1024", id="too-long"),
     ],
 )
 def test_parse_invalid(expr: str, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         parse_int_range_expr(expr)
+
+
+def test_parse_max_length_boundary() -> None:
+    """An expression of exactly MAX_RANGE_EXPR_LENGTH characters is accepted; one more is not."""
+    expr = "1-2"
+    while len(expr) < MAX_RANGE_EXPR_LENGTH:
+        expr += " "
+    assert len(expr) == MAX_RANGE_EXPR_LENGTH
+    assert parse_int_range_expr(expr) == [IntRange(1, 2, 1)]
+    with pytest.raises(ValueError, match="1025 characters long but must be at most 1024"):
+        parse_int_range_expr(expr + " ")
 
 
 @pytest.mark.parametrize("value", [None, 5, 1.5, ["1-5"], {"a": 1}])

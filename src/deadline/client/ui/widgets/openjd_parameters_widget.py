@@ -30,7 +30,10 @@ from qtpy.QtWidgets import (  # type: ignore
 )
 
 from ...job_bundle.job_template import ControlType
-from ...job_bundle._range_expr import parse_int_range_expr as _parse_int_range_expr
+from ...job_bundle._range_expr import (
+    MAX_RANGE_EXPR_LENGTH as _MAX_RANGE_EXPR_LENGTH,
+    parse_int_range_expr as _parse_int_range_expr,
+)
 from ...job_bundle.parameters import (
     JobParameter,
     get_ui_control_for_parameter_definition,
@@ -267,8 +270,6 @@ class _JobTemplateLineEditValidator(QValidator):
         return (QValidator.Acceptable, s, pos)
 
 
-# Default maxLength of a RANGE_EXPR parameter, from the OpenJD spec.
-_RANGE_EXPR_DEFAULT_MAX_LENGTH = 1024
 _RANGE_EXPR_CHARACTERS = frozenset("0123456789-:, \t")
 
 
@@ -276,14 +277,19 @@ class _JobTemplateRangeExprValidator(QValidator):
     """Validates a RANGE_EXPR line edit against the <IntRangeExpr> grammar.
 
     Characters that can never appear in a range expression are rejected as they
-    are typed. Text that is not (yet) a complete range expression is Intermediate
-    so the user can keep editing; only a valid expression is Acceptable.
+    are typed, as is text beyond the length the service accepts. Text that is not
+    (yet) a complete range expression is Intermediate so the user can keep editing;
+    only a valid expression is Acceptable.
     """
 
     def __init__(self, min_length: Optional[int], max_length: Optional[int]):
         super().__init__()
         self.min_length = min_length
-        self.max_length = max_length if max_length is not None else _RANGE_EXPR_DEFAULT_MAX_LENGTH
+        self.max_length = (
+            min(max_length, _MAX_RANGE_EXPR_LENGTH)
+            if max_length is not None
+            else _MAX_RANGE_EXPR_LENGTH
+        )
 
     def validate(self, s, pos):
         if len(s) > self.max_length or not set(s) <= _RANGE_EXPR_CHARACTERS:
