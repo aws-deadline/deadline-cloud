@@ -83,7 +83,7 @@ class DevMainWindow(QMainWindow):
             logger.info("Failed to log in")
 
     def logout(self):
-        api.logout()
+        api.logout(from_gui=True)
 
     def signal_handler(self, signal, frame):
         self.close()

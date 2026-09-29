@@ -134,6 +134,7 @@ class DeadlineLoginDialog(QMessageBox):
             on_pending_authorization,
             on_cancellation_check,
             config=self.config,
+            from_gui=True,
         )
 
     def _on_login_success(self, success_message: str) -> None:
