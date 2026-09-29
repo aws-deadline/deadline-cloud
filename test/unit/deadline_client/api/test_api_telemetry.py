@@ -498,6 +498,7 @@ def test_latency_decorator(fresh_deadline_config):
         expected_summary: Dict[str, Any] = dict()
         expected_summary["latency"] = 0
         expected_summary["function_call"] = "test_call"
+        expected_summary["is_success"] = True
         expected_summary["usage_mode"] = "CLI"
         expected_event = TelemetryEvent(
             event_type="com.amazon.rum.deadline.latency",
@@ -515,6 +516,367 @@ def test_latency_decorator(fresh_deadline_config):
 
         # THEN
         queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_latency_decorator_records_failure(fresh_deadline_config):
+    """A call that raises still reports, and is distinguishable from a successful one."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        expected_summary: Dict[str, Any] = dict()
+        expected_summary["latency"] = 0
+        expected_summary["function_call"] = "fails"
+        expected_summary["is_success"] = False
+        expected_summary["exception_type"] = "RuntimeError"
+        expected_summary["usage_mode"] = "CLI"
+        expected_event = TelemetryEvent(
+            event_type="com.amazon.rum.deadline.latency",
+            event_details=expected_summary,
+        )
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event()
+        def fails():
+            raise RuntimeError("foobar")
+
+        # WHEN
+        with pytest.raises(RuntimeError):
+            fails()  # type:ignore
+
+        # THEN
+        queue_mock.put_nowait.assert_called_once_with(expected_event)
+
+
+def test_latency_decorator_details_provider_receives_bound_arguments(fresh_deadline_config):
+    """The provider reads a parameter by name whether it was passed positionally or not."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        def provider(flavor=None, **_kwargs):
+            return {"flavor": flavor}
+
+        @record_function_latency_telemetry_event(details_provider=provider)
+        def test_call(other, flavor=None):
+            return
+
+        # WHEN: flavor is passed positionally, and again by keyword
+        test_call("ignored", "vanilla")  # type:ignore
+        test_call("ignored", flavor="chocolate")  # type:ignore
+
+        # THEN
+        recorded = [
+            call.args[0].event_details["flavor"] for call in queue_mock.put_nowait.mock_calls
+        ]
+        assert recorded == ["vanilla", "chocolate"]
+
+
+def test_latency_decorator_usage_mode_follows_from_gui_argument(fresh_deadline_config):
+    """usage_mode tracks the wrapped call's from_gui argument, not the decoration site."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event()
+        def test_call(from_gui: bool = False):
+            return
+
+        # WHEN: the same decorated function is reached from both surfaces
+        test_call()  # type:ignore
+        test_call(from_gui=True)  # type:ignore
+        test_call(True)  # type:ignore
+
+        # THEN
+        recorded = [
+            call.args[0].event_details["usage_mode"] for call in queue_mock.put_nowait.mock_calls
+        ]
+        assert recorded == ["CLI", "GUI", "GUI"]
+
+
+def test_latency_decorator_usage_mode_defaults_to_cli_without_from_gui(fresh_deadline_config):
+    """A wrapped function that declares no from_gui parameter still reports CLI."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event()
+        def test_call():
+            return
+
+        # WHEN
+        test_call()  # type:ignore
+
+        # THEN
+        assert queue_mock.put_nowait.mock_calls[0].args[0].event_details["usage_mode"] == "CLI"
+
+
+def test_latency_decorator_survives_failing_details_provider(fresh_deadline_config):
+    """A provider that raises costs its extra details, not the call or the event."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        def provider(**_kwargs):
+            raise ValueError("provider blew up")
+
+        @record_function_latency_telemetry_event(details_provider=provider)
+        def test_call():
+            return "returned anyway"
+
+        # WHEN
+        result = test_call()  # type:ignore
+
+        # THEN
+        assert result == "returned anyway"
+        queue_mock.put_nowait.assert_called_once()
+        event_details = queue_mock.put_nowait.mock_calls[0].args[0].event_details
+        assert event_details["is_success"] is True
+        assert "flavor" not in event_details
+
+
+def test_latency_decorator_does_not_tag_success_with_an_ambient_exception(fresh_deadline_config):
+    """sys.exc_info() is thread-scoped, so a success inside an except block must stay clean."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event()
+        def succeeds():
+            return
+
+        # WHEN: called while this thread is handling an unrelated exception
+        try:
+            raise RuntimeError("unrelated")
+        except RuntimeError:
+            succeeds()  # type:ignore
+
+        # THEN
+        event_details = queue_mock.put_nowait.mock_calls[0].args[0].event_details
+        assert event_details["is_success"] is True
+        assert "exception_type" not in event_details
+
+
+def test_latency_decorator_does_not_mask_the_wrapped_exception(fresh_deadline_config):
+    """Recording runs in a finally, so its own failure must not replace the real error."""
+    with patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ):
+        # GIVEN a telemetry client lookup that itself blows up
+        with patch.object(
+            api._telemetry,
+            "get_deadline_cloud_library_telemetry_client",
+            side_effect=ValueError("telemetry is broken"),
+        ):
+
+            @record_function_latency_telemetry_event()
+            def fails():
+                raise RuntimeError("the error the caller cares about")
+
+            # WHEN / THEN: the caller still sees its own exception
+            with pytest.raises(RuntimeError, match="the error the caller cares about"):
+                fails()  # type:ignore
+
+
+def test_latency_decorator_provider_resolved_before_the_call(fresh_deadline_config):
+    """A provider describes the state the call acted on, not what the call left behind."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+        state = {"profile": "before"}
+
+        def provider(**_kwargs):
+            return {"profile": state["profile"]}
+
+        @record_function_latency_telemetry_event(details_provider=provider)
+        def tears_down_state():
+            state["profile"] = "after"
+
+        # WHEN
+        tears_down_state()  # type:ignore
+
+        # THEN
+        assert queue_mock.put_nowait.mock_calls[0].args[0].event_details["profile"] == "before"
+
+
+def test_latency_decorator_provider_need_not_declare_a_catch_all(fresh_deadline_config):
+    """A provider naming only the parameter it wants still receives it."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        def provider(flavor=None):
+            return {"flavor": flavor}
+
+        @record_function_latency_telemetry_event(details_provider=provider)
+        def test_call(other=None, flavor=None):
+            return
+
+        # WHEN
+        test_call(other="ignored", flavor="vanilla")  # type:ignore
+
+        # THEN
+        assert queue_mock.put_nowait.mock_calls[0].args[0].event_details["flavor"] == "vanilla"
+
+
+def test_latency_decorator_ignores_a_non_mapping_provider_result(fresh_deadline_config):
+    """A provider that forgets its return must not break the event."""
+    with (
+        patch.object(
+            api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+        ),
+        patch.object(time, "perf_counter_ns", return_value=0),
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_function_latency_telemetry_event(details_provider=lambda **_kwargs: None)
+        def test_call():
+            return
+
+        # WHEN
+        test_call()  # type:ignore
+
+        # THEN
+        queue_mock.put_nowait.assert_called_once()
+        assert queue_mock.put_nowait.mock_calls[0].args[0].event_details["is_success"] is True
+
+
+def test_bind_arguments_flattens_catch_all_keywords():
+    """Values passed through **kwargs are readable by name, not nested under it."""
+
+    def target(config=None, **kwargs):
+        return
+
+    bound = api._telemetry._bind_arguments(target, (), {"config": "c", "from_gui": True})
+
+    assert bound["from_gui"] is True
+    assert "kwargs" not in bound
+
+
+def test_success_fail_decorator_usage_mode_follows_from_gui_argument(fresh_deadline_config):
+    """The success/fail decorator honours from_gui too, so the two decorators agree."""
+    with patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_success_fail_telemetry_event(metric_name="asset_upload")
+        def uploads(from_gui: bool = False):
+            return
+
+        # WHEN
+        uploads(from_gui=True)  # type:ignore
+
+        # THEN
+        assert queue_mock.put_nowait.mock_calls[0].args[0].event_details["usage_mode"] == "GUI"
+
+
+def test_record_event_keeps_an_explicit_usage_mode(fresh_deadline_config):
+    """A caller that knows its surface is not forced into the CLI/GUI pair."""
+    with patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        # WHEN
+        telemetry_client.record_event(
+            event_type="com.amazon.rum.deadline.mcp_server_start",
+            event_details={"usage_mode": "MCP"},
+        )
+
+        # THEN
+        assert queue_mock.put_nowait.mock_calls[0].args[0].event_details["usage_mode"] == "MCP"
+
+
+def test_success_fail_decorator_does_not_leak_details_between_calls(fresh_deadline_config):
+    """exception_type from a failed call must not reappear on the next successful one."""
+    with patch.object(
+        api._telemetry, "get_deadline_endpoint_url", side_effect=["https://fake-endpoint-url"]
+    ):
+        # GIVEN
+        queue_mock = MagicMock()
+        telemetry_client = get_deadline_cloud_library_telemetry_client()
+        telemetry_client.event_queue = queue_mock
+
+        @record_success_fail_telemetry_event(event_details={"shared": "dict"})
+        def sometimes(should_raise):
+            if should_raise:
+                raise RuntimeError("foobar")
+
+        # WHEN
+        with pytest.raises(RuntimeError):
+            sometimes(True)  # type:ignore
+        sometimes(False)  # type:ignore
+
+        # THEN
+        failed, succeeded = [
+            call.args[0].event_details for call in queue_mock.put_nowait.mock_calls
+        ]
+        assert failed["exception_type"] == "RuntimeError"
+        assert "exception_type" not in succeeded
 
 
 def test_get_telemetry_client_caches_by_package_name(fresh_deadline_config):
