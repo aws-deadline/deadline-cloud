@@ -63,7 +63,8 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
 
     parameter_changed = Signal(dict)
 
-    # Emitted when the queue parameter validity state changes
+    # Emitted when the queue parameter validity state changes. The payload is True only
+    # when the queue's parameters loaded and every one of them holds a valid value.
     valid_parameters = Signal(bool)
 
     def __init__(
@@ -101,6 +102,11 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
         layout.addWidget(self.queue_parameters_box)
         self.queue_parameters_box.parameter_changed.connect(
             lambda message: self.parameter_changed.emit(message)
+        )
+        # Re-evaluate submit readiness whenever a queue parameter value becomes (in)valid.
+        # The queue's parameters are only valid if the queue itself loaded.
+        self.queue_parameters_box.valid_parameters.connect(
+            lambda valid: self.valid_parameters.emit(valid and self.is_queue_valid())
         )
 
         # Track current farm/queue IDs for change detection
@@ -193,6 +199,10 @@ class SharedJobSettingsWidget(QWidget):  # pylint: disable=too-few-public-method
 
     def is_queue_valid(self) -> bool:
         return self.__valid_queue
+
+    def invalid_parameter_names(self) -> list[str]:
+        """Names of queue parameters whose current value fails the parameter's constraints."""
+        return self.queue_parameters_box.invalid_parameter_names()
 
     def _handle_queue_parameters_update(self, queue_parameters: List) -> None:
         """Handle queue parameters update from the controller."""

@@ -25,6 +25,7 @@ else:
 
 from .._path_utils import is_absolute_path, is_path_contained
 from ..exceptions import DeadlineOperationError
+from ._range_expr import parse_int_range_expr
 from .loader import read_yaml_or_json_object
 
 _VALID_PARAMETER_TYPES = (
@@ -33,11 +34,17 @@ _VALID_PARAMETER_TYPES = (
     "INT",
     "FLOAT",
     "BOOL",
+    "RANGE_EXPR",
 )
 _BOOL_DISALLOWED_FIELDS = (
     "allowedValues",
     "minLength",
     "maxLength",
+    "minValue",
+    "maxValue",
+)
+_RANGE_EXPR_DISALLOWED_FIELDS = (
+    "allowedValues",
     "minValue",
     "maxValue",
 )
@@ -200,6 +207,25 @@ def validate_job_parameter(
                     f'Job parameter "{name}" has "{field}" but type "BOOL" does not support it'
                 )
 
+    if input.get("type") == "RANGE_EXPR":
+        for field in _RANGE_EXPR_DISALLOWED_FIELDS:
+            if field in input:
+                raise ValueError(
+                    f'Job parameter "{name}" has "{field}" but type "RANGE_EXPR" does not support it'
+                )
+        if "default" in input:
+            default = input["default"]
+            if not isinstance(default, str):
+                raise TypeError(
+                    f'Job parameter "{name}" got {type(default).__name__} for "default" but type "RANGE_EXPR" expects str'
+                )
+            try:
+                parse_int_range_expr(default)
+            except ValueError as e:
+                raise ValueError(
+                    f'Job parameter "{name}" has "default" that is not a valid range expression: {e}'
+                ) from e
+
     if "allowedValues" in input:
         allowed_values = input["allowedValues"]
         if not isinstance(allowed_values, list):
@@ -333,6 +359,17 @@ def validate_job_parameter_value(
             raise ValueError(
                 f"Job parameter {name!r} has type BOOL but got value {value!r} which is not boolean."
             )
+    elif param_type == "RANGE_EXPR":
+        if not isinstance(value, str):
+            raise TypeError(
+                f"Job parameter {name!r} has type RANGE_EXPR but got value {value!r} of type {type(value)}."
+            )
+        try:
+            parse_int_range_expr(value)
+        except ValueError as e:
+            raise ValueError(
+                f"Job parameter {name!r} has type RANGE_EXPR but got value {value!r} which is not a valid range expression: {e}"
+            ) from e
     elif param_type == "INT":
         original_value = value
         try:
@@ -910,6 +947,7 @@ _SUPPORTED_CONTROLS_FOR_TYPE = {
     "INT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
     "FLOAT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
     "BOOL": {"CHECK_BOX", "HIDDEN"},
+    "RANGE_EXPR": {"LINE_EDIT", "HIDDEN"},
 }
 
 
@@ -923,6 +961,8 @@ def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
         if "allowedValues" in param_def:
             control = "DROPDOWN_LIST"
         elif param_type == "STRING":
+            return "LINE_EDIT"
+        elif param_type == "RANGE_EXPR":
             return "LINE_EDIT"
         elif param_type == "PATH":
             if param_def.get("objectType", "DIRECTORY") == "FILE":
