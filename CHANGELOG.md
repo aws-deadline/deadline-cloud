@@ -1,3 +1,38 @@
+## 0.60.7 (2026-09-07)
+
+### Bug Fixes
+* Fixed path containment checks failing for Windows host-level UNC paths (e.g., `\\server`). Previously, comparing UNC roots with paths under their shares could incorrectly report paths as not contained, causing unexpected errors. This is now handled correctly. (#1327)
+## 0.60.6 (2026-08-31)
+
+### Bug Fixes
+* Fixed a type checking issue where `click.Path` prompt results were not properly coerced to `str`, which could cause type errors with mypy 2.3 and click 8.5. (#1348)
+## 0.60.5 (2026-08-24)
+
+### Features
+* Added job bundle browser and sharing functionality. (#1181)
+
+### Bug Fixes
+* Fixed a crash in `deadline queue sync-output` when syncing against queues with 1000+ candidate jobs. The command now uses adaptive retries for metadata API calls (GetJob, ListSessions, ListSessionActions), preventing unhandled ThrottlingExceptions that could cause a permanent bootstrap crash loop. (#1336)
+## 0.60.4 (2026-08-11)
+
+### Features
+* Added support for login and logout with AWS Console sign-in profiles. Profiles using `login_session` in `~/.aws/config` are now recognized by `deadline auth login` and `deadline auth logout`. Sign-in is handed off to Deadline Cloud monitor, which must be installed and must have created the profile. Automatic credential refresh requires the new `console` extra (`pip install "deadline[console]"`). (#1323)
+* When using `--ignore-storage-profiles` with a custom `--checkpoint-dir`, a status file pointer is now written at the default path, making it easier to locate download progress information. If the default path already held status data from a previous run, it is replaced by the pointer and repopulates as future syncs run. (#1324)
+* The download status file written by `sync-output` now tracks progress per task as well as per job, records per-job file counts and why a job was skipped (for example, it has no attachments, or no matching storage profile was found), and reports tasks that failed on the farm distinctly from tasks whose download failed. A job whose task output failed to download is reported as `failed` at the job level, so the job and task rows no longer disagree. Errors are isolated per job, so one failed download no longer blocks other jobs, and failed jobs are retried on subsequent runs up to 5 times, after which the job is skipped with a warning. (#1223, #1258, #1313)
+
+### Bug Fixes
+* Fixed an issue where `deadline:` prefixed properties (e.g., `deadline:priority`) returned by a pre-GUI hook were silently dropped when using `deadline bundle gui-submit`. These values are now correctly applied. (#1322)
+* Constrained the MCP dependency to v1 to prevent compatibility issues with newer major versions. (#1315)
+## 0.60.3 (2026-07-27)
+
+### Bug Fixes
+* `DeadlineLoginDialog.login()` now correctly returns `True` on successful login. Previously it always returned `False` due to comparing against the wrong dialog result code, breaking the documented `if ...login():` usage pattern. (#1289)
+* Fixed a crash (`UnboundLocalError`) when saving a debug snapshot for a job bundle that has no attachments during `create_job_from_job_bundle`. (#1290)
+* Fixed data loss in the config dialog: editing a known-asset path to a duplicate value no longer silently drops the original row. Also fixed a boolean setting data loss issue. (#1291)
+* The `job trace-schedule` command no longer crashes with `ZeroDivisionError` when run against in-flight or partial jobs that have no completed session durations or zero session actions. (#1293)
+* Fixed a security issue where the known-path containment check during job bundle submission used an unanchored prefix match. A known root like `/trusted/project` would incorrectly suppress warnings for paths in sibling directories like `/trusted/project-secret/file`. The check is now properly anchored. (#1294)
+* Fixed a privacy issue where the telemetry stack-trace sanitizer could leak customer directory names if they happened to share a name with framework packages (e.g., a project directory named `deadline`). Such paths are now properly redacted. (#1295)
+* The minimum `click` dependency has been raised to >= 8.3.3 on Python 3.10+ to address CVE-2026-7246. While deadline-cloud was not directly vulnerable, this resolves security scanner flags. (#1283)
 ## 0.60.2 (2026-07-20)
 
 ### BREAKING CHANGES

@@ -3,7 +3,9 @@
 """Tests for submission hooks functionality."""
 
 import json
+import ntpath
 import os
+import posixpath
 import signal
 import subprocess
 import sys
@@ -17,6 +19,7 @@ import yaml
 from typing import List
 
 from deadline.client import api, config
+from deadline.client.api._submit_job_bundle import _reject_relative_hook_path_values
 from deadline.client.exceptions import DeadlineOperationError
 from deadline.client.job_bundle._hooks import (
     HookConfiguration,
@@ -2231,3 +2234,74 @@ class TestCollectSubmissionHookSources:
 
         assert sources == []
         assert any("is not a valid directory" in w for w in warnings)
+
+
+class TestRejectRelativeHookPathValues:
+    """
+    Windows path semantics for the hook PATH-value guard, exercised by injecting the path
+    module so the cases run on every platform.
+
+    ntpath.isabs cannot be the reference in either direction: before Python 3.11 it read a
+    UNC path naming a share as relative, which would reject a valid hook value on the very
+    setup #1321 reports, and it accepted a rooted, driveless path through 3.12.
+    """
+
+    PATH_PARAM = [{"name": "ScenePath", "type": "PATH"}]
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            r"\\host\share",
+            r"\\host\share\scene.ma",
+            r"\\host",
+            r"C:\scene.ma",
+            r"\\?\UNC\host\share\scene.ma",
+        ],
+    )
+    def test_absolute_windows_value_is_accepted(self, value):
+        _reject_relative_hook_path_values({"ScenePath": value}, self.PATH_PARAM, path_module=ntpath)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            r"relative\scene.ma",
+            "scene.ma",
+            # Rooted but driveless: 'scene.ma' at the root of whichever drive the process
+            # happens to be on, which is the cwd dependence the guard exists to reject.
+            r"\scene.ma",
+            # Drive-relative: the cwd on drive C:.
+            "C:scene.ma",
+        ],
+    )
+    def test_relative_windows_value_is_rejected(self, value):
+        with pytest.raises(DeadlineOperationError, match="relative PATH"):
+            _reject_relative_hook_path_values(
+                {"ScenePath": value}, self.PATH_PARAM, path_module=ntpath
+            )
+
+    def test_posix_values(self):
+        _reject_relative_hook_path_values(
+            {"ScenePath": "/mnt/share/scene.ma"}, self.PATH_PARAM, path_module=posixpath
+        )
+        with pytest.raises(DeadlineOperationError, match="relative PATH"):
+            _reject_relative_hook_path_values(
+                {"ScenePath": "relative/scene.ma"}, self.PATH_PARAM, path_module=posixpath
+            )
+
+    @pytest.mark.parametrize(
+        "parameters, definitions",
+        [
+            # Only PATH parameters are checked.
+            ({"ScenePath": r"relative\scene.ma"}, [{"name": "ScenePath", "type": "STRING"}]),
+            # A parameter the bundle does not define is not a PATH value.
+            ({"Other": r"relative\scene.ma"}, PATH_PARAM),
+            # An empty value is left to the normal parameter handling.
+            ({"ScenePath": ""}, PATH_PARAM),
+            # A non-string value cannot be a path.
+            ({"ScenePath": 42}, PATH_PARAM),
+            # A definition with no name is skipped rather than raising.
+            ({"ScenePath": r"relative\scene.ma"}, [{"type": "PATH"}]),
+        ],
+    )
+    def test_values_outside_the_guard_are_left_alone(self, parameters, definitions):
+        _reject_relative_hook_path_values(parameters, definitions, path_module=ntpath)

@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from unittest.mock import patch
+import logging
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,30 +24,76 @@ def shared_job_settings_tab(qtbot, temp_job_bundle_dir) -> SharedJobSettingsWidg
     return widget
 
 
-@pytest.fixture(scope="function")
-def v2_channel_settings_tab(qtbot, temp_job_bundle_dir) -> SharedJobSettingsWidget:
-    """A SharedJobSettingsWidget opted into the deadline-cloud-v2 Conda channel migration."""
+@pytest.mark.parametrize(
+    "override, expected_value, expected_default, expect_precedence_log, reason",
+    [
+        (
+            None,
+            "deadline-cloud-v2 deadline-cloud conda-forge",
+            "deadline-cloud-v2 deadline-cloud",
+            False,
+            "no override: the migration prepends v2 to both the value and the default",
+        ),
+        (
+            "my-channel deadline-cloud",
+            "my-channel deadline-cloud",
+            "deadline-cloud",
+            True,
+            "explicit override wins; the migrated default is restored so no stale v2 leaks, and "
+            "the defeated v2 preference is logged",
+        ),
+        (
+            "deadline-cloud-v2 my-channel",
+            "deadline-cloud-v2 my-channel",
+            "deadline-cloud",
+            False,
+            "override already lists v2: it still wins and the default is restored, but there is no "
+            "defeated-preference log since v2 is present",
+        ),
+    ],
+)
+def test_v2_channel_precedence(
+    qtbot,
+    temp_job_bundle_dir,
+    caplog,
+    override,
+    expected_value,
+    expected_default,
+    expect_precedence_log,
+    reason,
+):
+    """With use_deadline_cloud_v2_channel True, the migration prepends v2 to the queue's
+    CondaChannels unless an explicit override (bundle, --parameter, or pre-GUI hook, all delivered
+    via initial_shared_parameter_values) is present, in which case the override wins and the
+    migrated default is restored."""
     initial_settings = JobBundleSettings(input_job_bundle_dir=temp_job_bundle_dir, name="test-name")
     widget = SharedJobSettingsWidget(
         initial_settings=initial_settings,
-        initial_shared_parameter_values=dict(),
+        initial_shared_parameter_values=(
+            {"CondaChannels": override} if override is not None else {}
+        ),
         use_deadline_cloud_v2_channel=True,
     )
     qtbot.addWidget(widget)
-    return widget
 
-
-def test_v2_channel_migration_applied_when_enabled(
-    v2_channel_settings_tab: SharedJobSettingsWidget,
-):
-    """When use_deadline_cloud_v2_channel is True, the queue's CondaChannels gets v2 prepended."""
-    queue_parameters = [{"name": "CondaChannels", "value": "deadline-cloud conda-forge"}]
-    with patch.object(v2_channel_settings_tab.queue_parameters_box, "rebuild_ui") as mock_rebuild:
-        v2_channel_settings_tab._handle_queue_parameters_update(queue_parameters)
+    queue_parameters = [
+        {
+            "name": "CondaChannels",
+            "default": "deadline-cloud",
+            "value": "deadline-cloud conda-forge",
+        }
+    ]
+    with (
+        patch.object(widget.queue_parameters_box, "rebuild_ui") as mock_rebuild,
+        caplog.at_level(logging.DEBUG, logger="deadline.client.ui.widgets.shared_job_settings_tab"),
+    ):
+        widget._handle_queue_parameters_update(queue_parameters)
 
     rebuilt = mock_rebuild.call_args.kwargs["parameter_definitions"]
     conda_channels = next(p for p in rebuilt if p["name"] == "CondaChannels")
-    assert conda_channels["value"] == "deadline-cloud-v2 deadline-cloud conda-forge"
+    assert conda_channels["value"] == expected_value, reason
+    assert conda_channels["default"] == expected_default, reason
+    assert ("takes precedence" in caplog.text) is expect_precedence_log, reason
 
 
 def test_v2_channel_migration_not_applied_when_deactivated(
@@ -121,3 +168,35 @@ def test_max_worker_count_should_be_integer_within_range(
 ):
     shared_job_settings_tab.shared_job_properties_box.max_worker_count_box.setValue(-1)
     assert shared_job_settings_tab.shared_job_properties_box.max_worker_count_box.value() == 1
+
+
+def test_valid_parameters_payload_reflects_queue_parameter_validity(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    """The forwarded valid_parameters payload is True only when the queue loaded and every
+    queue parameter holds a valid value, so consumers can trust the bool rather than re-query."""
+    validity = MagicMock()
+    shared_job_settings_tab.valid_parameters.connect(validity)
+
+    shared_job_settings_tab._handle_queue_parameters_update(
+        [{"name": "Frames", "type": "RANGE_EXPR", "default": "1-10"}]
+    )
+    assert shared_job_settings_tab.is_queue_valid()
+    assert validity.call_args.args[0] is True
+
+    frames = shared_job_settings_tab.queue_parameters_box.controls["Frames"]
+    frames.edit_control.setText("1-10,")
+    assert shared_job_settings_tab.invalid_parameter_names() == ["Frames"]
+    assert validity.call_args.args[0] is False
+
+    frames.edit_control.setText("1-10,15")
+    assert shared_job_settings_tab.invalid_parameter_names() == []
+    assert validity.call_args.args[0] is True
+
+    # A parameter change while the queue failed to load never reports valid.
+    shared_job_settings_tab._handle_operation_failed("get_queue_parameters", RuntimeError("boom"))
+    shared_job_settings_tab.queue_parameters_box.rebuild_ui(
+        parameter_definitions=[{"name": "Frames", "type": "RANGE_EXPR", "default": "1-10"}]
+    )
+    assert not shared_job_settings_tab.invalid_parameter_names()
+    assert validity.call_args.args[0] is False

@@ -5,6 +5,7 @@ UI widgets for the Scene Settings tab.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -29,13 +30,25 @@ from qtpy.QtWidgets import (  # type: ignore
 )
 
 from ...job_bundle.job_template import ControlType
-from ...job_bundle.parameters import JobParameter, get_ui_control_for_parameter_definition
+from ...job_bundle._range_expr import (
+    MAX_RANGE_EXPR_LENGTH as _MAX_RANGE_EXPR_LENGTH,
+    parse_int_range_expr as _parse_int_range_expr,
+)
+from ...job_bundle.parameters import (
+    JobParameter,
+    get_ui_control_for_parameter_definition,
+)
+from ...job_bundle.parameters import (
+    validate_job_parameter_value as _validate_job_parameter_value,
+)
 from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
     OutputFilePickerWidget,
 )
 from .spinbox_widgets import DecimalMode, FloatDragSpinBox, IntDragSpinBox
+
+_logger = logging.getLogger(__name__)
 
 
 class OpenJDParametersWidget(QWidget):
@@ -48,6 +61,8 @@ class OpenJDParametersWidget(QWidget):
     Signals:
         parameter_changed: This is sent whenever a parameter value in the widget changes. The message
             is a copy of the parameter definition with the "value" key containing the new value.
+        valid_parameters: Sent after each change with whether every parameter's control currently
+            holds a valid value (see invalid_parameter_names).
 
     Args:
         parameter_definitions (List[Dict[str, Any]]): A list of Open Job Description parameter definitions.
@@ -57,6 +72,7 @@ class OpenJDParametersWidget(QWidget):
     """
 
     parameter_changed = Signal(dict)
+    valid_parameters = Signal(bool)
 
     def __init__(
         self,
@@ -155,7 +171,7 @@ class OpenJDParametersWidget(QWidget):
 
             control = control_widget(self, parameter)
             self.controls[control.name()] = control
-            control.connect_parameter_changed(lambda message: self.parameter_changed.emit(message))
+            control.connect_parameter_changed(self._on_control_changed)
 
             if control_type_name != ControlType.HIDDEN.name:
                 if group_label:
@@ -174,6 +190,20 @@ class OpenJDParametersWidget(QWidget):
 
         if need_spacer:
             layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+
+        self.valid_parameters.emit(not self.invalid_parameter_names())
+
+    def _on_control_changed(self, message: dict[str, Any]) -> None:
+        self.parameter_changed.emit(message)
+        self.valid_parameters.emit(not self.invalid_parameter_names())
+
+    def invalid_parameter_names(self) -> list[str]:
+        """
+        Returns the names of parameters whose control holds a value that fails the
+        parameter's constraints, e.g. an incomplete RANGE_EXPR or a STRING shorter
+        than its minLength.
+        """
+        return [name for name, control in self.controls.items() if not control.is_valid()]
 
     def get_parameters(self):
         """
@@ -240,6 +270,39 @@ class _JobTemplateLineEditValidator(QValidator):
         return (QValidator.Acceptable, s, pos)
 
 
+_RANGE_EXPR_CHARACTERS = frozenset("0123456789-:, \t")
+
+
+class _JobTemplateRangeExprValidator(QValidator):
+    """Validates a RANGE_EXPR line edit against the <IntRangeExpr> grammar.
+
+    Characters that can never appear in a range expression are rejected as they
+    are typed, as is text beyond the length the service accepts. Text that is not
+    (yet) a complete range expression is Intermediate so the user can keep editing;
+    only a valid expression is Acceptable.
+    """
+
+    def __init__(self, min_length: Optional[int], max_length: Optional[int]):
+        super().__init__()
+        self.min_length = min_length
+        self.max_length = (
+            min(max_length, _MAX_RANGE_EXPR_LENGTH)
+            if max_length is not None
+            else _MAX_RANGE_EXPR_LENGTH
+        )
+
+    def validate(self, s, pos):
+        if len(s) > self.max_length or not set(s) <= _RANGE_EXPR_CHARACTERS:
+            return (QValidator.Invalid, s, pos)
+        if self.min_length is not None and len(s) < self.min_length:
+            return (QValidator.Intermediate, s, pos)
+        try:
+            _parse_int_range_expr(s)
+        except ValueError:
+            return (QValidator.Intermediate, s, pos)
+        return (QValidator.Acceptable, s, pos)
+
+
 class _JobTemplateWidget(QWidget):
     IS_VERTICAL_EXPANDING: bool = False
 
@@ -288,10 +351,14 @@ class _JobTemplateWidget(QWidget):
     def type(self):
         return self.job_template_parameter["type"]
 
+    def is_valid(self) -> bool:
+        """Whether the control's current value satisfies the parameter's constraints."""
+        return True
+
 
 class _JobTemplateLineEditWidget(_JobTemplateWidget):
     OPENJD_CONTROL_TYPE: ControlType = ControlType.LINE_EDIT
-    OPENJD_TYPES: List[str] = ["STRING"]
+    OPENJD_TYPES: List[str] = ["STRING", "RANGE_EXPR"]
     OPENJD_DEFAULT_VALUE: str = ""
     OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
     OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
@@ -308,7 +375,16 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
         self.setLayout(layout)
 
         # Enable validation if specified
-        if "minLength" in parameter or "maxLength" in parameter or "allowedPattern" in parameter:
+        if parameter["type"] == "RANGE_EXPR":
+            self.edit_control.setValidator(
+                _JobTemplateRangeExprValidator(
+                    parameter.get("minLength", None),
+                    parameter.get("maxLength", None),
+                )
+            )
+            self.edit_control.setPlaceholderText("e.g. 1-100, 1-100:10, 1,3,5")
+            self.edit_control.textChanged.connect(self._update_range_expr_feedback)
+        elif "minLength" in parameter or "maxLength" in parameter or "allowedPattern" in parameter:
             self.edit_control.setValidator(
                 _JobTemplateLineEditValidator(
                     parameter["name"],
@@ -322,6 +398,21 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
         if "description" in parameter:
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
+
+    def _update_range_expr_feedback(self, text: str) -> None:
+        """Highlights the edit and explains the problem when the text is not a valid range expression."""
+        try:
+            _validate_job_parameter_value(self.job_template_parameter, text)
+        except (ValueError, TypeError) as e:
+            self.edit_control.setStyleSheet("QLineEdit { border: 1px solid red; }")
+            self.edit_control.setToolTip(str(e))
+        else:
+            self.edit_control.setStyleSheet("")
+            self.edit_control.setToolTip(self.job_template_parameter.get("description", ""))
+
+    def is_valid(self) -> bool:
+        # True when there is no validator, or the validator reports Acceptable.
+        return self.edit_control.hasAcceptableInput()
 
     def value(self):
         return self.edit_control.text()
@@ -735,9 +826,9 @@ ALLOWED_VALUES_FOR_CHECK_BOX = (["TRUE", "FALSE"], ["YES", "NO"], ["ON", "OFF"],
 
 class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
     OPENJD_CONTROL_TYPE: ControlType = ControlType.CHECK_BOX
-    OPENJD_TYPES: List[str] = ["STRING"]
-    OPENJD_DEFAULT_VALUE: str = "false"
-    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    OPENJD_TYPES: List[str] = ["STRING", "BOOL"]
+    OPENJD_DEFAULT_VALUE: bool = False
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
     OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = [
         "maxValue",
         "minValue",
@@ -753,40 +844,56 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
         layout.addWidget(self.edit_control, Qt.AlignLeft)
         self.setLayout(layout)
 
-        # Validate that 'allowedValues' is correct
-        allowed_values = parameter.get("allowedValues", [])
-        allowed_values_set = set(v.upper() for v in allowed_values)
-        if allowed_values_set not in [set(allowed) for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]:
-            raise RuntimeError(
-                f"Job template parameter {parameter['name']} with CHECK_BOX user interface control requires that 'allowedValues' be "
-                + f"one of {ALLOWED_VALUES_FOR_CHECK_BOX} (case and order insensitive)"
-            )
-
-        # Determine the true/false correspondence
-        true_values = [allowed[0] for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]
-        if allowed_values[0].upper() in true_values:
-            self.true_value = allowed_values[0]
-            self.false_value = allowed_values[1]
+        if parameter["type"] == "BOOL":
+            self.true_value = True
+            self.false_value = False
         else:
-            self.true_value = allowed_values[1]
-            self.false_value = allowed_values[0]
+            # STRING checkboxes represent boolean values through allowedValues.
+            allowed_values = parameter.get("allowedValues", [])
+            allowed_values_set = set(v.upper() for v in allowed_values)
+            if allowed_values_set not in [set(allowed) for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]:
+                raise RuntimeError(
+                    f"Job template parameter {parameter['name']} with CHECK_BOX user interface control requires that 'allowedValues' be "
+                    + f"one of {ALLOWED_VALUES_FOR_CHECK_BOX} (case and order insensitive)"
+                )
 
-        # Add the decription as a tooltip if provided
+            # Determine the true/false correspondence
+            true_values = [allowed[0] for allowed in ALLOWED_VALUES_FOR_CHECK_BOX]
+            if allowed_values[0].upper() in true_values:
+                self.true_value = allowed_values[0]
+                self.false_value = allowed_values[1]
+            else:
+                self.true_value = allowed_values[1]
+                self.false_value = allowed_values[0]
+
+        # Add the description as a tooltip if provided
         if "description" in parameter:
             for widget in (self.label, self.edit_control):
                 widget.setToolTip(parameter["description"])
 
-    def value(self) -> str:
+    def value(self) -> str | bool:
         if self.edit_control.isChecked():
             return self.true_value
         else:
             return self.false_value
 
-    def set_value(self, value: str) -> None:
-        if value == self.true_value:
-            self.edit_control.setChecked(True)
+    def set_value(self, value: str | bool) -> None:
+        if self.job_template_parameter["type"] == "BOOL":
+            try:
+                checked = _validate_job_parameter_value(self.job_template_parameter, value) is True
+            except (ValueError, TypeError):
+                # The value may come from an untrusted job bundle, e.g. a shared queue
+                # bundle's parameter_values.yaml. Degrade gracefully like the other
+                # controls (STRING checkbox, dropdown) instead of breaking the dialog.
+                _logger.warning(
+                    "Job parameter %r has non-boolean value %r; falling back to unchecked.",
+                    self.job_template_parameter["name"],
+                    value,
+                )
+                checked = False
         else:
-            self.edit_control.setChecked(False)
+            checked = value == self.true_value
+        self.edit_control.setChecked(checked)
 
     def _handle_value_changed(self, value, callback):
         message = deepcopy(self.job_template_parameter)
@@ -806,6 +913,8 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         "INT",
         "FLOAT",
         "STRING",
+        "BOOL",
+        "RANGE_EXPR",
     ]
 
     OPENJD_DEFAULT_VALUE: str = ""  # Hidden parameters do not require defaults
@@ -822,6 +931,15 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         return self._value
 
     def set_value(self, value: Any) -> None:
+        if self.job_template_parameter["type"] == "BOOL":
+            if value == self.OPENJD_DEFAULT_VALUE:
+                value = False
+            else:
+                try:
+                    value = _validate_job_parameter_value(self.job_template_parameter, value)
+                except (ValueError, TypeError):
+                    # Keep the value as-is so submission reports it as an error.
+                    pass
         self._value = value
 
     def connect_parameter_changed(self, callback):

@@ -21,6 +21,7 @@ from .._utils import tr
 from ..controllers import AsyncTaskRunner
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
+    QDialog,
     QMessageBox,
     QWidget,
 )
@@ -117,6 +118,14 @@ class DeadlineLoginDialog(QMessageBox):
                 self.login_thread_message.emit(
                     tr("Opening Deadline Cloud monitor. Please log in before returning here.")
                 )
+            elif kwargs["credentials_source"] == AwsCredentialsSource.AWS_CONSOLE_LOGIN:
+                # Deadline Cloud monitor opens the browser for the console sign-in itself.
+                self.login_thread_message.emit(
+                    tr(
+                        "Opening Deadline Cloud monitor to sign in with the AWS Console. "
+                        "Please sign in before returning here."
+                    )
+                )
 
         def on_cancellation_check():
             return self.canceled
@@ -125,6 +134,7 @@ class DeadlineLoginDialog(QMessageBox):
             on_pending_authorization,
             on_cancellation_check,
             config=self.config,
+            from_gui=True,
         )
 
     def _on_login_success(self, success_message: str) -> None:
@@ -197,4 +207,10 @@ class DeadlineLoginDialog(QMessageBox):
         Runs the modal login dialog, returning True if the login was
         successful, False otherwise.
         """
-        return super().exec_() == QMessageBox.Ok
+        # A successful login resolves the dialog one of two ways depending on
+        # close_on_success: with close_on_success=True the success handler calls
+        # self.accept() (QDialog.Accepted); with close_on_success=False it swaps
+        # in an "Ok" button, and clicking a QMessageBox standard button sets the
+        # result to that button's enum (QMessageBox.Ok). Both mean success.
+        result = super().exec_()
+        return result in (QDialog.DialogCode.Accepted, QMessageBox.Ok)

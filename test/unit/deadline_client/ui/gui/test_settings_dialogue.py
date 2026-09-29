@@ -298,6 +298,93 @@ class TestSettingsDialogue:
         assert apply_btn is not None
 
 
+class TestKnownAssetPathEditing:
+    """Regression tests for the known-asset-path edit flow (C11 data loss)."""
+
+    def test_editing_known_path_to_duplicate_does_not_drop_original(self, config_widget):
+        """Editing a known-asset path to a value that already exists must NOT
+        silently delete the original row.
+
+        Regression (C11): ``_on_edit_known_path`` unconditionally staged the
+        rebuilt path list (which excludes the row being edited) even when the
+        re-insert was skipped because the new value duplicated an existing
+        entry. That dropped the original row from the config = data loss. The
+        write/refresh must be guarded on the re-insert actually happening.
+        """
+        import os
+        from qtpy.QtWidgets import QFileDialog
+
+        lw = config_widget.known_paths_list
+        lw.clear()
+        lw.addItems([os.path.normpath("/path/a"), os.path.normpath("/path/b")])
+        lw.setCurrentRow(0)  # editing "/path/a"
+        config_widget.changes.clear()
+
+        # User picks a directory that duplicates the OTHER existing entry.
+        with patch.object(
+            QFileDialog, "getExistingDirectory", return_value=os.path.normpath("/path/b")
+        ):
+            config_widget._on_edit_known_path()
+
+        staged = config_widget.changes.get("settings.known_asset_paths")
+        # The original "/path/a" row must not be silently dropped.
+        assert staged is None or os.path.normpath("/path/a") in staged.split(os.pathsep)
+
+    def test_editing_known_path_to_new_value_updates_config(self, config_widget):
+        """A genuine (non-duplicate) edit still stages the change normally."""
+        import os
+        from qtpy.QtWidgets import QFileDialog
+
+        lw = config_widget.known_paths_list
+        lw.clear()
+        lw.addItems([os.path.normpath("/path/a"), os.path.normpath("/path/b")])
+        lw.setCurrentRow(0)  # editing "/path/a"
+        config_widget.changes.clear()
+
+        with patch.object(
+            QFileDialog, "getExistingDirectory", return_value=os.path.normpath("/path/c")
+        ):
+            config_widget._on_edit_known_path()
+
+        staged = config_widget.changes.get("settings.known_asset_paths")
+        assert staged is not None
+        paths = staged.split(os.pathsep)
+        assert os.path.normpath("/path/c") in paths
+        assert os.path.normpath("/path/b") in paths
+        assert os.path.normpath("/path/a") not in paths
+
+
+class TestCorruptBooleanSetting:
+    """Regression test for corrupt boolean coercion in checkbox refresh."""
+
+    def test_corrupt_boolean_falls_back_to_setting_default(self, config_widget):
+        """A garbage stored boolean must fall back to the setting's declared
+        default, not blindly to False.
+
+        ``settings.submitter_update_notification`` defaults to 'true', so a
+        corrupt stored value must leave the checkbox CHECKED.
+        """
+        import deadline.client.ui.dialogs.deadline_config_dialog as dcd
+
+        # ``dcd.config_file`` is a MagicMock here (patched by the mock_api
+        # fixture); patch.object scopes the corrupt-value side_effect to this
+        # test and restores the fixture's side_effect afterward.
+        with patch.object(
+            dcd.config_file,
+            "get_setting",
+            side_effect=lambda name, config=None: (
+                "notabool"
+                if name == "settings.submitter_update_notification"
+                else "(default)"
+                if name == "defaults.aws_profile_name"
+                else ""
+            ),
+        ):
+            config_widget.refresh()
+
+        assert config_widget.submitter_update_notification.isChecked() is True
+
+
 def test_profile_switch_preserves_each_profiles_farm_queue(fresh_deadline_config):
     """End-to-end regression for the profile-switch clobber bug.
 

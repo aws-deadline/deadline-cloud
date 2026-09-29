@@ -48,6 +48,25 @@ def _checkbox_param(name="EnableFeature", default="True"):
     }
 
 
+def _bool_param(name="EnableFeature", default=True, control="CHECK_BOX"):
+    return {
+        "name": name,
+        "type": "BOOL",
+        "default": default,
+        "userInterface": {"control": control, "label": name},
+    }
+
+
+def _range_expr_param(name="Frames", default="1-100", control="LINE_EDIT", **extra):
+    return {
+        "name": name,
+        "type": "RANGE_EXPR",
+        "default": default,
+        "userInterface": {"control": control, "label": name},
+        **extra,
+    }
+
+
 def _int_spinbox_param(name="Frames", default=10, min_val=1, max_val=1000):
     return {
         "name": name,
@@ -187,6 +206,50 @@ class TestOpenJDParametersWidget:
         widget.set_parameter_value({"name": "Confirm", "value": "No"})
         assert widget.controls["Confirm"].value() == "No"
 
+    def test_native_bool_checkbox(self, qtbot):
+        """Verify BOOL parameters use native boolean checkbox values."""
+        widget = OpenJDParametersWidget(parameter_definitions=[_bool_param()])
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is True
+
+        widget.set_parameter_value({"name": "EnableFeature", "value": False})
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_native_bool_checkbox_coerces_string_values(self, qtbot):
+        """Verify BOOL checkboxes coerce OpenJD's accepted string values."""
+        widget = OpenJDParametersWidget(parameter_definitions=[_bool_param(default="true")])
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is True
+
+        widget.set_parameter_value({"name": "EnableFeature", "value": "false"})
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_native_bool_checkbox_defaults_false(self, qtbot):
+        """Verify a BOOL parameter without a value defaults to false."""
+        parameter = {"name": "EnableFeature", "type": "BOOL"}
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_native_bool_checkbox_invalid_value_degrades_gracefully(self, qtbot):
+        """Verify an invalid BOOL value from an untrusted bundle leaves the box
+        unchecked instead of raising out of widget construction."""
+        parameter = {"name": "EnableFeature", "type": "BOOL", "value": "maybe"}
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+        # Same for set_parameter_value after construction: an invalid value
+        # unchecks the box rather than raising.
+        widget.set_parameter_value({"name": "EnableFeature", "value": True})
+        assert widget.controls["EnableFeature"].value() is True
+        widget.set_parameter_value({"name": "EnableFeature", "value": "maybe"})
+        assert widget.controls["EnableFeature"].value() is False
+
     def test_int_spinbox_creation_and_range(self, qtbot):
         """Verify INT SPIN_BOX respects min/max values."""
         widget = OpenJDParametersWidget(
@@ -214,6 +277,214 @@ class TestOpenJDParametersWidget:
         assert widget.controls["InternalId"].value() == "abc123"
         widget.set_parameter_value({"name": "InternalId", "value": "xyz789"})
         assert widget.controls["InternalId"].value() == "xyz789"
+
+    def test_hidden_bool_widget(self, qtbot):
+        """Verify a hidden BOOL parameter stores a native boolean value."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[_bool_param(default=False, control="HIDDEN")]
+        )
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_hidden_bool_widget_without_default_is_false(self, qtbot):
+        """Verify a hidden BOOL with no value or default holds False, not the string ""."""
+        parameter = {
+            "name": "EnableFeature",
+            "type": "BOOL",
+            "userInterface": {"control": "HIDDEN"},
+        }
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["EnableFeature"].value() is False
+
+    def test_hidden_bool_widget_coerces_values(self, qtbot):
+        """Verify a hidden BOOL coerces valid spellings to bool and keeps invalid
+        values for the submit path to report."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[_bool_param(default=False, control="HIDDEN")]
+        )
+        qtbot.addWidget(widget)
+
+        widget.set_parameter_value({"name": "EnableFeature", "value": "yes"})
+        assert widget.controls["EnableFeature"].value() is True
+        widget.set_parameter_value({"name": "EnableFeature", "value": 0})
+        assert widget.controls["EnableFeature"].value() is False
+        widget.set_parameter_value({"name": "EnableFeature", "value": "maybe"})
+        assert widget.controls["EnableFeature"].value() == "maybe"
+
+    def test_range_expr_line_edit_creation_and_value(self, qtbot):
+        """Verify a RANGE_EXPR parameter uses a line edit holding the expression string."""
+        widget = OpenJDParametersWidget(parameter_definitions=[_range_expr_param()])
+        qtbot.addWidget(widget)
+
+        control = widget.controls["Frames"]
+        assert control.value() == "1-100"
+        assert control.edit_control.hasAcceptableInput()
+
+        widget.set_parameter_value({"name": "Frames", "value": "1-10:2,20,30-40"})
+        assert control.value() == "1-10:2,20,30-40"
+        assert control.edit_control.hasAcceptableInput()
+
+    def test_range_expr_line_edit_is_default_control(self, qtbot):
+        """Verify a RANGE_EXPR parameter without userInterface gets a LINE_EDIT."""
+        parameter = {"name": "Frames", "type": "RANGE_EXPR", "default": "1-5"}
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.controls["Frames"].value() == "1-5"
+        assert widget.controls["Frames"].edit_control.placeholderText()
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("", id="empty"),
+            pytest.param("1-", id="incomplete"),
+            pytest.param("1-10,5-15", id="overlap"),
+            pytest.param("5-1", id="descending"),
+            pytest.param("1-10:0", id="zero-step"),
+        ],
+    )
+    def test_range_expr_line_edit_flags_invalid_text(self, qtbot, text):
+        """Verify text that is not a valid range expression is flagged, kept editable,
+        and still reported as the value so submission can report the error."""
+        widget = OpenJDParametersWidget(parameter_definitions=[_range_expr_param()])
+        qtbot.addWidget(widget)
+        control = widget.controls["Frames"]
+
+        control.edit_control.setText(text)
+
+        assert control.value() == text
+        assert not control.edit_control.hasAcceptableInput()
+        assert "red" in control.edit_control.styleSheet()
+        if text:
+            assert "not a valid range expression" in control.edit_control.toolTip()
+
+    def test_range_expr_line_edit_clears_flag_when_valid(self, qtbot):
+        """Verify the invalid flag is removed once the text becomes valid, restoring
+        the description tooltip."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[_range_expr_param(description="Frames to render")]
+        )
+        qtbot.addWidget(widget)
+        control = widget.controls["Frames"]
+
+        control.edit_control.setText("1-10,5-15")
+        assert "red" in control.edit_control.styleSheet()
+
+        control.edit_control.setText("1-10,15-20")
+        assert control.edit_control.styleSheet() == ""
+        assert control.edit_control.toolTip() == "Frames to render"
+        assert control.edit_control.hasAcceptableInput()
+
+    def test_range_expr_line_edit_rejects_foreign_characters(self, qtbot):
+        """Verify the validator refuses characters that can never be part of a range
+        expression, so typing them has no effect."""
+        widget = OpenJDParametersWidget(parameter_definitions=[_range_expr_param(default="")])
+        qtbot.addWidget(widget)
+        control = widget.controls["Frames"]
+
+        qtbot.keyClicks(control.edit_control, "1a-b5c:x2")
+
+        assert control.value() == "1-5:2"
+        assert control.edit_control.hasAcceptableInput()
+
+    def test_range_expr_line_edit_length_constraints(self, qtbot):
+        """Verify minLength/maxLength are enforced by the validator."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[_range_expr_param(default="1-10", minLength=3, maxLength=6)]
+        )
+        qtbot.addWidget(widget)
+        control = widget.controls["Frames"]
+
+        control.edit_control.setText("1")
+        assert not control.edit_control.hasAcceptableInput()
+
+        control.edit_control.setText("1-100")
+        assert control.edit_control.hasAcceptableInput()
+
+        qtbot.keyClicks(control.edit_control, ":10")
+        # Over maxLength: the extra characters are refused.
+        assert control.value() == "1-100:"
+        assert not control.edit_control.hasAcceptableInput()
+
+    def test_range_expr_line_edit_service_length_cap_is_consistent(self, qtbot):
+        """Verify that with no explicit maxLength, a grammatically valid expression longer than
+        the service's 1024-character limit is reported invalid by both the validator (which
+        disables Submit) and the feedback path (red border and tooltip), so the user is told why."""
+        long_expr = ",".join(str(i) for i in range(0, 1000, 2))
+        assert len(long_expr) > 1024
+        widget = OpenJDParametersWidget(parameter_definitions=[_range_expr_param()])
+        qtbot.addWidget(widget)
+        control = widget.controls["Frames"]
+
+        # setText bypasses the validator's input filtering, like a value loaded from a bundle.
+        control.edit_control.setText(long_expr)
+
+        assert widget.invalid_parameter_names() == ["Frames"]
+        assert "red" in control.edit_control.styleSheet()
+        assert "at most 1024" in control.edit_control.toolTip()
+
+    def test_range_expr_line_edit_emits_parameter_changed(self, qtbot):
+        """Verify edits emit parameter_changed with the RANGE_EXPR definition and text."""
+        widget = OpenJDParametersWidget(parameter_definitions=[_range_expr_param()])
+        qtbot.addWidget(widget)
+        callback = MagicMock()
+        widget.parameter_changed.connect(callback)
+
+        widget.controls["Frames"].edit_control.setText("1-5")
+
+        message = callback.call_args.args[0]
+        assert message["name"] == "Frames"
+        assert message["type"] == "RANGE_EXPR"
+        assert message["value"] == "1-5"
+
+    def test_hidden_range_expr_widget(self, qtbot):
+        """Verify a hidden RANGE_EXPR parameter stores the expression string."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[_range_expr_param(default="1-10:2", control="HIDDEN")]
+        )
+        qtbot.addWidget(widget)
+
+        assert widget.controls["Frames"].value() == "1-10:2"
+        widget.set_parameter_value({"name": "Frames", "value": "1,2,3"})
+        assert widget.controls["Frames"].value() == "1,2,3"
+
+    def test_invalid_parameter_names_tracks_range_expr_validity(self, qtbot):
+        """Verify the widget reports which parameters hold invalid values, and emits
+        valid_parameters as that changes. Controls without validation are always valid."""
+        widget = OpenJDParametersWidget(
+            parameter_definitions=[
+                _range_expr_param(),
+                _line_edit_param(),
+                _bool_param(),
+                _int_spinbox_param(name="Count"),
+            ]
+        )
+        qtbot.addWidget(widget)
+        validity = MagicMock()
+        widget.valid_parameters.connect(validity)
+
+        assert widget.invalid_parameter_names() == []
+
+        widget.controls["Frames"].edit_control.setText("1-10,")
+        assert widget.invalid_parameter_names() == ["Frames"]
+        assert validity.call_args.args[0] is False
+
+        widget.controls["Frames"].edit_control.setText("1-10,15")
+        assert widget.invalid_parameter_names() == []
+        assert validity.call_args.args[0] is True
+
+    def test_invalid_parameter_names_string_min_length(self, qtbot):
+        """Verify a STRING with minLength is reported invalid until it is long enough."""
+        parameter = {**_line_edit_param(default="abc"), "minLength": 3}
+        widget = OpenJDParametersWidget(parameter_definitions=[parameter])  # type: ignore[list-item]
+        qtbot.addWidget(widget)
+
+        assert widget.invalid_parameter_names() == []
+        widget.controls["MyString"].edit_control.setText("ab")
+        assert widget.invalid_parameter_names() == ["MyString"]
 
     def test_directory_picker_creation(self, qtbot):
         """Verify CHOOSE_DIRECTORY widget is created with correct default."""
