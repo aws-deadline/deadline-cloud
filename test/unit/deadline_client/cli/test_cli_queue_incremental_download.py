@@ -4628,3 +4628,48 @@ def test_get_job_sessions_requeued_job_uses_eventual_consistency_window():
 
     expected = t_saved - timedelta(seconds=checkpoint.eventual_consistency_max_seconds)
     assert captured_thresholds["job-a"] == expected, captured_thresholds
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
+)
+def test_incremental_output_download_json_mode_emits_no_debug_lines(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """In --json mode the command must not emit raw DEBUG print() lines that would
+    corrupt the JSON output stream."""
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "READY"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 1}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "VIRTUAL",
+    }
+    del mock_jobs[0]["endedAt"]
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--json",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "DEBUG" not in result.output, result.output
