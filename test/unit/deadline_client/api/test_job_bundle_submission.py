@@ -1115,12 +1115,15 @@ def test_create_job_from_job_bundle_expr_lowercase_parameter_types(
             {"name": "Verbose", "type": "bool", "default": True},
             {"name": "Count", "type": "int", "default": 3},
             {"name": "Message", "type": "String", "default": "hi"},
+            {"name": "Frames", "type": "range_expr", "default": "1-3"},
         ],
         "steps": [
             {
                 "name": "Step",
                 "parameterSpace": {
-                    "taskParameterDefinitions": [{"name": "Frame", "type": "int", "range": "1-3"}]
+                    "taskParameterDefinitions": [
+                        {"name": "Frame", "type": "int", "range": "{{Param.Frames}}"}
+                    ]
                 },
                 "bash": {"script": "echo {{Task.Param.Frame}}"},
             }
@@ -1136,6 +1139,7 @@ def test_create_job_from_job_bundle_expr_lowercase_parameter_types(
                 {"name": "Verbose", "value": "off"},
                 {"name": "Count", "value": "5"},
                 {"name": "Message", "value": "hi"},
+                {"name": "Frames", "value": "1-100:10,200"},
             ],
             queue_parameter_definitions=[],
         )
@@ -1145,8 +1149,40 @@ def test_create_job_from_job_bundle_expr_lowercase_parameter_types(
             "Verbose": {"bool": "false"},
             "Count": {"int": "5"},
             "Message": {"string": "hi"},
+            "Frames": {"rangeExpr": "1-100:10,200"},
         }
         assert json.loads(create_job_kwargs["template"]) == template
+
+
+def test_create_job_from_job_bundle_rejects_invalid_range_expr(
+    fresh_deadline_config,
+    temp_job_bundle_dir,
+):
+    """An invalid RANGE_EXPR value from the CLI is reported as a DeadlineOperationError
+    before CreateJob is called."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    template = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": ["EXPR"],
+        "name": "TestJob",
+        "parameterDefinitions": [{"name": "Frames", "type": "RANGE_EXPR", "default": "1-3"}],
+        "steps": [{"name": "Step", "bash": {"script": "echo hi"}}],
+    }
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        json.dump(template, f)
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        with pytest.raises(
+            exceptions.DeadlineOperationError, match="is not a valid range expression"
+        ):
+            api.create_job_from_job_bundle(
+                temp_job_bundle_dir,
+                job_parameters=[{"name": "Frames", "value": "1-10,5-15"}],
+                queue_parameter_definitions=[],
+            )
+        mock.get_boto3_client().create_job.assert_not_called()
 
 
 get_job_responses = [

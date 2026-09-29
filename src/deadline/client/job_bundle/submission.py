@@ -150,18 +150,25 @@ def split_parameter_args(
                     pass
                 else:
                     parameter_type = parameter["type"].lower()
-                    if parameter_type == "bool":
+                    if parameter_type in ("bool", "range_expr"):
                         from .parameters import validate_job_parameter_value
 
                         try:
-                            bool_value = validate_job_parameter_value(parameter, parameter_value)
+                            validated_value = validate_job_parameter_value(
+                                parameter, parameter_value
+                            )
                         except (ValueError, TypeError) as e:
                             raise DeadlineOperationError(
                                 f"{e}\nFrom job bundle:\n{job_bundle_dir}"
                             ) from e
-                        # CreateJob's JobParameter.bool is a string shape, so normalize
-                        # the accepted spellings (yes/on/1/...) to "true"/"false".
-                        parameter_value = "true" if bool_value else "false"
+                        if parameter_type == "bool":
+                            # CreateJob's JobParameter.bool is a string shape, so normalize
+                            # the accepted spellings (yes/on/1/...) to "true"/"false".
+                            parameter_value = "true" if validated_value else "false"
+                        else:
+                            # CreateJob's JobParameter member for RANGE_EXPR is camelCase.
+                            parameter_type = "rangeExpr"
+                            parameter_value = str(validated_value)
                     else:
                         parameter_value = str(parameter_value)
                     job_parameters[parameter_name] = {parameter_type: parameter_value}

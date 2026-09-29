@@ -1,7 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import logging
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -168,3 +168,35 @@ def test_max_worker_count_should_be_integer_within_range(
 ):
     shared_job_settings_tab.shared_job_properties_box.max_worker_count_box.setValue(-1)
     assert shared_job_settings_tab.shared_job_properties_box.max_worker_count_box.value() == 1
+
+
+def test_valid_parameters_payload_reflects_queue_parameter_validity(
+    shared_job_settings_tab: SharedJobSettingsWidget,
+):
+    """The forwarded valid_parameters payload is True only when the queue loaded and every
+    queue parameter holds a valid value, so consumers can trust the bool rather than re-query."""
+    validity = MagicMock()
+    shared_job_settings_tab.valid_parameters.connect(validity)
+
+    shared_job_settings_tab._handle_queue_parameters_update(
+        [{"name": "Frames", "type": "RANGE_EXPR", "default": "1-10"}]
+    )
+    assert shared_job_settings_tab.is_queue_valid()
+    assert validity.call_args.args[0] is True
+
+    frames = shared_job_settings_tab.queue_parameters_box.controls["Frames"]
+    frames.edit_control.setText("1-10,")
+    assert shared_job_settings_tab.invalid_parameter_names() == ["Frames"]
+    assert validity.call_args.args[0] is False
+
+    frames.edit_control.setText("1-10,15")
+    assert shared_job_settings_tab.invalid_parameter_names() == []
+    assert validity.call_args.args[0] is True
+
+    # A parameter change while the queue failed to load never reports valid.
+    shared_job_settings_tab._handle_operation_failed("get_queue_parameters", RuntimeError("boom"))
+    shared_job_settings_tab.queue_parameters_box.rebuild_ui(
+        parameter_definitions=[{"name": "Frames", "type": "RANGE_EXPR", "default": "1-10"}]
+    )
+    assert not shared_job_settings_tab.invalid_parameter_names()
+    assert validity.call_args.args[0] is False
