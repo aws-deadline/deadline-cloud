@@ -677,7 +677,9 @@ def _display_str(value: Any) -> str:
         try:
             return json.dumps(value, ensure_ascii=False)
         except (TypeError, ValueError):
-            pass
+            # A hostile parameter_values file can hold a list JSON can't encode, e.g. a
+            # self-referencing YAML anchor. The preview must not crash on it.
+            return str(value)
     return str(value)
 
 

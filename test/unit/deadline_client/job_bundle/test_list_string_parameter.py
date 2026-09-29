@@ -553,3 +553,23 @@ def test_bundle_preview_shows_list_values_as_json() -> None:
     )
     display = {p["name"]: p["_display_value"] for p in info.parameters}
     assert display == {"Cameras": '["main", "closeup"]', "Layers": '["a", "ü"]'}
+
+
+@pytest.mark.parametrize(
+    "yaml_value",
+    [
+        pytest.param("&loop [*loop]", id="self-referencing-anchor"),
+        pytest.param("[2026-09-29]", id="yaml-date"),
+    ],
+)
+def test_bundle_preview_survives_lists_json_cannot_encode(yaml_value: str) -> None:
+    """A parameter_values file comes from a possibly untrusted bundle, and YAML can hold
+    lists that JSON can't encode. The preview falls back to str() instead of raising."""
+    import yaml
+
+    value = yaml.safe_load(yaml_value)
+    template = {"parameterDefinitions": [{"name": "Cameras", "type": "LIST[STRING]"}]}
+    info = extract_bundle_info(
+        template, "/bundle", {"parameterValues": [{"name": "Cameras", "value": value}]}
+    )
+    assert info.parameters[0]["_display_value"] == str(value)

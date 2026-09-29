@@ -51,7 +51,7 @@ from ...job_bundle.parameters import (
 from ...job_bundle.parameters import (
     validate_job_parameter_value as _validate_job_parameter_value,
 )
-from .._utils import tr
+from .._utils import tr as _tr
 from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
@@ -525,7 +525,7 @@ class _ListResizeGrip(QWidget):
         self.setFixedSize(extent, extent)
         # Only the height changes; the width follows the dialog.
         self.setCursor(Qt.SizeVerCursor)
-        self.setToolTip(tr("Drag to show more or fewer rows"))
+        self.setToolTip(_tr("Drag to show more or fewer rows"))
 
     def paintEvent(self, event) -> None:
         option = QStyleOptionSizeGrip()
@@ -591,11 +591,11 @@ class _JobTemplateLineEditListWidget(_JobTemplateWidget):
         layout.addWidget(self.label)
 
         button_layout = QHBoxLayout()
-        self.add_button = QPushButton(tr("Add"), self)
+        self.add_button = QPushButton(_tr("Add"), self)
         self.add_button.clicked.connect(self._on_add)
-        self.edit_button = QPushButton(tr("Edit"), self)
+        self.edit_button = QPushButton(_tr("Edit"), self)
         self.edit_button.clicked.connect(self._on_edit)
-        self.remove_button = QPushButton(tr("Remove Selected"), self)
+        self.remove_button = QPushButton(_tr("Remove Selected"), self)
         self.remove_button.clicked.connect(self._on_remove)
         self.count_label = QLabel(self)
         button_layout.addWidget(self.add_button)
@@ -767,7 +767,7 @@ class _JobTemplateLineEditListWidget(_JobTemplateWidget):
         self.add_button.setEnabled(count < self.max_items)
         self.edit_button.setEnabled(has_selection)
         self.remove_button.setEnabled(has_selection)
-        self.count_label.setText(tr("Items: {count}").format(count=count))
+        self.count_label.setText(_tr("Items: {count}").format(count=count))
 
     def _update_feedback(self) -> None:
         """Highlights the list and each invalid item, with tooltips that explain why."""
@@ -814,19 +814,20 @@ class _JobTemplateLineEditListWidget(_JobTemplateWidget):
         return [self.edit_control.item(i).text() for i in range(self.edit_control.count())]
 
     def set_value(self, value: Any) -> None:
+        original_value = value
         if isinstance(value, str):
             # CLI and pre-GUI hook values arrive as a JSON array string.
             try:
                 value = json.loads(value)
             except json.JSONDecodeError:
-                pass
+                value = None
         if not isinstance(value, (list, tuple)) or not all(isinstance(v, str) for v in value):
             # The value may come from an untrusted job bundle. Degrade gracefully like the
             # other controls instead of breaking the dialog.
             _logger.warning(
                 "Job parameter %r has value %r that is not a list of strings; starting with an empty list.",
                 self.name(),
-                value,
+                original_value,
             )
             value = []
         self._pending_new_item = None
