@@ -109,6 +109,8 @@ _VALIDATED_PARAMETER_WIRE_MEMBERS = {
     "BOOL": "bool",
     "RANGE_EXPR": "rangeExpr",
     "LIST[STRING]": "stringList",
+    "LIST[INT]": "intList",
+    "LIST[FLOAT]": "floatList",
 }
 
 
@@ -180,6 +182,11 @@ def split_parameter_args(
                             parameter_value = "true" if validated_value else "false"
                         elif parameter_type == "LIST[STRING]":
                             parameter_value = validated_value
+                        elif parameter_type in ("LIST[INT]", "LIST[FLOAT]"):
+                            # CreateJob's intList and floatList hold numbers as strings.
+                            # repr gives a float's shortest round-trip form, e.g. "0.1" or
+                            # "1e+16", which the FloatString pattern accepts.
+                            parameter_value = [repr(item) for item in validated_value]  # type: ignore[union-attr]
                         else:
                             parameter_value = str(validated_value)
                     job_parameters[parameter_name] = {wire_member: parameter_value}
