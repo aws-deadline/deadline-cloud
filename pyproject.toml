@@ -56,7 +56,7 @@ gui = [
   "PySide6-essentials >= 6.6,< 6.11",
 ]
 mcp = [
-  "mcp >= 1.13.0, < 2",
+  "mcp >= 1.13.0, < 3",
 ]
 # AWS Console sign-in profiles (the `login_session` key in ~/.aws/config) are
 # resolved by botocore's LoginProvider, which needs awscrt to sign the DPoP
