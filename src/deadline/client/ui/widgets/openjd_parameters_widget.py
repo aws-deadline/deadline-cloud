@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from copy import deepcopy
 
-from qtpy.QtCore import QEvent, QRegularExpression, Qt, Signal  # type: ignore
+from qtpy.QtCore import QEvent, QPersistentModelIndex, QPoint, QRegularExpression, Qt, Signal  # type: ignore
 from qtpy.QtGui import QIcon, QPainter, QValidator
 from qtpy.QtWidgets import (  # type: ignore
     QAbstractItemDelegate,
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -33,6 +34,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QStyle,
     QStyledItemDelegate,
     QStyleOptionSizeGrip,
+    QStyleOptionViewItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -50,6 +52,7 @@ from ...job_bundle.parameters import (
     _MAX_LIST_ITEMS,
     _MAX_STRING_LIST_ITEMS,
     _MIN_INT64,
+    _to_bool,
     get_ui_control_for_parameter_definition,
 )
 from ...job_bundle.parameters import (
@@ -155,6 +158,7 @@ class OpenJDParametersWidget(QWidget):
             ControlType.MULTILINE_EDIT.name: _JobTemplateMultiLineEditWidget,
             ControlType.LINE_EDIT_LIST.name: _JobTemplateLineEditListWidget,
             ControlType.SPIN_BOX_LIST.name: _JobTemplateSpinBoxListWidget,
+            ControlType.CHECK_BOX_LIST.name: _JobTemplateCheckBoxListWidget,
             ControlType.DROPDOWN_LIST.name: _JobTemplateDropdownListWidget,
             ControlType.CHOOSE_INPUT_FILE.name: _JobTemplateInputFileWidget,
             ControlType.CHOOSE_OUTPUT_FILE.name: _JobTemplateOutputFileWidget,
@@ -731,7 +735,10 @@ class _JobTemplateListWidgetBase(_JobTemplateWidget):
             self.corner_grip.raise_()
 
     def eventFilter(self, watched, event) -> bool:
-        if watched is self.edit_control and event.type() == QEvent.Resize:
+        # Qt can still deliver events while the control is being destroyed, after its
+        # attributes are gone.
+        edit_control = getattr(self, "edit_control", None)
+        if edit_control is not None and watched is edit_control and event.type() == QEvent.Resize:
             self._place_grip()
         return super().eventFilter(watched, event)
 
@@ -1182,12 +1189,153 @@ class _JobTemplateSpinBoxListWidget(_JobTemplateListWidgetBase):
             spin_box.setToolTip(error or self.job_template_parameter.get("description", ""))
 
     def eventFilter(self, watched, event) -> bool:
-        if event.type() == QEvent.FocusIn and watched.parent() is self.edit_control.viewport():
+        edit_control = getattr(self, "edit_control", None)
+        if (
+            edit_control is not None
+            and event.type() == QEvent.FocusIn
+            and watched.parent() is edit_control.viewport()
+        ):
             for i in range(self.edit_control.count()):
                 if self.spin_box(i) is watched:
                     self.edit_control.setCurrentRow(i)
                     break
         return super().eventFilter(watched, event)
+
+
+class _CheckBoxListDelegate(_FixedRowHeightDelegate):
+    """Draws each row of a CHECK_BOX_LIST right of a strip where the row is grabbed to drag
+    it, and toggles a row when its label is clicked as well as its checkbox."""
+
+    def __init__(self, view: QListWidget, row_height: int, strip_width: int):
+        super().__init__(view, row_height)
+        self._view = view
+        self._strip_width = strip_width
+        # The row whose label the left button was last pressed on. A click toggles only
+        # when it is released on the label of that same row, so a drag or a press that
+        # ends elsewhere does not toggle anything.
+        self._label_pressed_row: Optional[QPersistentModelIndex] = None
+
+    def content_option(self, option: QStyleOptionViewItem) -> QStyleOptionViewItem:
+        """The option for the checkbox and label, which sit right of the drag strip."""
+        content = QStyleOptionViewItem(option)
+        content.rect = option.rect.adjusted(self._strip_width, 0, 0, 0)
+        return content
+
+    def paint(self, painter, option, index):
+        # The selection and hover highlight span the whole row, including the strip.
+        background = QStyleOptionViewItem(option)
+        self.initStyleOption(background, index)
+        style = option.widget.style() if option.widget else QApplication.style()
+        style.drawPrimitive(QStyle.PE_PanelItemViewItem, background, painter, option.widget)
+        super().paint(painter, self.content_option(option), index)
+
+    @staticmethod
+    def _event_pos(event) -> QPoint:
+        # position is Qt 6; pos is its Qt 5 equivalent.
+        if hasattr(event, "position"):
+            return event.position().toPoint()
+        return event.pos()
+
+    def editorEvent(self, event, model, option, index):
+        content = self.content_option(option)
+        # The base class toggles a click on the checkbox, and reports it as handled.
+        handled = super().editorEvent(event, model, content, index)
+        event_type = event.type()
+        if event_type not in (
+            QEvent.MouseButtonPress,
+            QEvent.MouseButtonDblClick,
+            QEvent.MouseButtonRelease,
+        ):
+            return handled
+        on_label = (
+            not handled
+            and event.button() == Qt.LeftButton
+            and content.rect.contains(self._event_pos(event))
+        )
+        if event_type != QEvent.MouseButtonRelease:
+            self._label_pressed_row = QPersistentModelIndex(index) if on_label else None
+            return handled
+        pressed_row, self._label_pressed_row = self._label_pressed_row, None
+        if on_label and pressed_row is not None and pressed_row == index:
+            item = self._view.itemFromIndex(index)
+            item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
+            return True
+        return handled
+
+
+class _JobTemplateCheckBoxListWidget(_JobTemplateListWidgetBase):
+    """A reorderable list of checkboxes for a LIST[BOOL] parameter.
+
+    Each row is a checkable item labelled by its position, "Item 1", "Item 2" and so on,
+    so the labels stay in order when rows are reordered. Clicking a row's checkbox or
+    label, or pressing Space on the current row, toggles it. Like a SPIN_BOX_LIST, a row
+    is dragged by the strip left of its checkbox, and clicking the strip selects the row
+    without toggling it.
+    """
+
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHECK_BOX_LIST
+    OPENJD_TYPES: List[str] = ["LIST[BOOL]"]
+    ITEM_KIND: str = "booleans"
+
+    _ITEM_FLAGS = (
+        Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsDragEnabled
+    )
+
+    def _build_ui(self, parameter):
+        icon_size = self.style().pixelMetric(QStyle.PM_SmallIconSize, None, self)
+        self._strip_width = icon_size + 10
+        super()._build_ui(parameter)
+        self.edit_control.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+    def _create_delegate(self, row_height: int) -> QStyledItemDelegate:
+        return _CheckBoxListDelegate(self.edit_control, row_height, self._strip_width)
+
+    def _min_row_height(self) -> int:
+        probe = self._new_item(True)
+        probe.setText(self._item_label(0))
+        self.edit_control.addItem(probe)
+        height = self.edit_control.sizeHintForRow(self.edit_control.row(probe))
+        self.edit_control.takeItem(self.edit_control.row(probe))
+        return height
+
+    def _new_item(self, value: Any) -> QListWidgetItem:
+        # The label is set from the row's position once it is in the list.
+        item = QListWidgetItem()
+        item.setFlags(self._ITEM_FLAGS)
+        item.setCheckState(Qt.Checked if value else Qt.Unchecked)
+        return item
+
+    @staticmethod
+    def _item_label(row: int) -> str:
+        return _tr("Item {number}").format(number=row + 1)
+
+    def _item_value(self, item: QListWidgetItem) -> bool:
+        return item.checkState() == Qt.Checked
+
+    def _to_item_values(self, value: Any) -> Optional[List[Any]]:
+        if not isinstance(value, (list, tuple)):
+            return None
+        items = [_to_bool(v) for v in value]
+        if any(v is None for v in items):
+            return None
+        return items
+
+    def _on_add(self) -> None:
+        count = self.edit_control.count()
+        value = self._item_value(self.edit_control.item(count - 1)) if count else False
+        item = self._new_item(value)
+        self.edit_control.addItem(item)
+        # The new row is current, so Space toggles it.
+        self.edit_control.setCurrentItem(item)
+        self.edit_control.setFocus()
+
+    def _on_rows_changed(self) -> None:
+        # Number the rows by position, so a row moved by a drag takes its new number.
+        for i in range(self.edit_control.count()):
+            item = self.edit_control.item(i)
+            label = self._item_label(i)
+            if item.text() != label:
+                item.setText(label)
 
 
 class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
@@ -1581,6 +1729,7 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         "LIST[STRING]",
         "LIST[INT]",
         "LIST[FLOAT]",
+        "LIST[BOOL]",
     ]
 
     OPENJD_DEFAULT_VALUE: str = ""  # Hidden parameters do not require defaults

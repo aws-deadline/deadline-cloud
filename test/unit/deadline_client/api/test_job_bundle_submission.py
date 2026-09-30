@@ -1359,6 +1359,42 @@ def test_create_job_from_job_bundle_list_float(fresh_deadline_config, temp_job_b
         mock.get_boto3_client().create_job.assert_not_called()
 
 
+def test_create_job_from_job_bundle_list_bool(fresh_deadline_config, temp_job_bundle_dir):
+    """A LIST[BOOL] value from the CLI -p option is sent to CreateJob in the boolList member,
+    and one that is not a JSON array of booleans is reported before CreateJob is called."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    template = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": ["EXPR"],
+        "name": "TestJob",
+        "parameterDefinitions": [{"name": "Flags", "type": "list[bool]", "default": [True]}],
+        "steps": [{"name": "Step", "bash": {"script": "echo {{Param.Flags}}"}}],
+    }
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        json.dump(template, f)
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir,
+            job_parameters=[{"name": "Flags", "value": '[true, "no", 1]'}],
+            queue_parameter_definitions=[],
+        )
+        create_job_kwargs = mock.get_boto3_client().create_job.call_args.kwargs
+        assert create_job_kwargs["parameters"] == {"Flags": {"boolList": ["true", "false", "true"]}}
+        assert json.loads(create_job_kwargs["template"]) == template
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        with pytest.raises(exceptions.DeadlineOperationError, match="not a JSON array of booleans"):
+            api.create_job_from_job_bundle(
+                temp_job_bundle_dir,
+                job_parameters=[{"name": "Flags", "value": "true,false"}],
+                queue_parameter_definitions=[],
+            )
+        mock.get_boto3_client().create_job.assert_not_called()
+
+
 get_job_responses = [
     pytest.param(
         [
