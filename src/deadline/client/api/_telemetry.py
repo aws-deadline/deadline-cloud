@@ -326,7 +326,7 @@ class TelemetryClient:
                     success = True
             except error.HTTPError as httpe:
                 if httpe.code == 429 or httpe.code == 500:
-                    logger.debug(f"Error received from service. Waiting to retry: {str(httpe)}")
+                    logger.debug(f"Error received from service. Waiting to retry: {httpe!s}")
 
                     attempts += 1
                     if attempts >= TelemetryClient.MAX_RETRY_ATTEMPTS:
@@ -382,7 +382,7 @@ class TelemetryClient:
                 }
                 request_body_encoded = str(json.dumps(request_body)).encode("utf-8")
             except Exception as exc:
-                logger.debug(f"Failed to serialize telemetry data. {str(exc)}")
+                logger.debug(f"Failed to serialize telemetry data. {exc!s}")
                 continue
 
             req = request.Request(url=self.endpoint, data=request_body_encoded, headers=headers)
@@ -391,7 +391,7 @@ class TelemetryClient:
                 self._send_request(req)
             except Exception as exc:
                 # Swallow any kind of uncaught exception and stop sending telemetry
-                logger.debug(f"Error received from service. {str(exc)}")
+                logger.debug(f"Error received from service. {exc!s}")
                 return
             self.event_queue.task_done()
 

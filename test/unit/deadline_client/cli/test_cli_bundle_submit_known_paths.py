@@ -231,7 +231,7 @@ def test_filter_redundant_known_paths_survives_pre_3_11_normpath():
     """A host-level UNC root must still subsume its shares on the interpreters where
     ``normpath`` collapses the leading pair.
 
-    ``os.path.normpath(r"\\host")`` returned ``\host`` before 3.11, moving the root out
+    ``os.path.normpath(r"\\host")`` returned ``\\host`` before 3.11, moving the root out
     of the UNC space so it matched none of its own shares. The filter normalizes with the
     UNC-aware helper instead; injected here so the 3.9 and 3.10 behavior is asserted on
     every interpreter rather than only on those matrix legs.

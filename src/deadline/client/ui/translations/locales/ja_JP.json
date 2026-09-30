@@ -44,6 +44,9 @@
   "Do not ask again": "今後表示しない",
   "Don't remind me again": "今後通知しない",
   "Download installer": "インストーラーをダウンロード",
+  "Drag to show more or fewer rows": "Drag to show more or fewer rows",
+  "Edit": "Edit",
+  "Items: {count}": "Items: {count}",
   "Edit...": "編集...",
   "Error: Timeout cannot be set to zero.": "エラー: タイムアウトをゼロに設定できません。",
   "Save bundle as": "バンドルを保存",
@@ -174,5 +177,8 @@
   "Value": "値",
   "Save to": "保存先",
   "Location": "場所",
-  "Select directory": "ディレクトリを選択"
+  "Select directory": "ディレクトリを選択",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

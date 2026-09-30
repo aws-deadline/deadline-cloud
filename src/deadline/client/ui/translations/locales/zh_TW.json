@@ -44,6 +44,9 @@
   "Do not ask again": "不要再詢問",
   "Don't remind me again": "不再提醒",
   "Download installer": "下載安裝程式",
+  "Drag to show more or fewer rows": "Drag to show more or fewer rows",
+  "Edit": "Edit",
+  "Items: {count}": "Items: {count}",
   "Edit...": "編輯...",
   "Error: Timeout cannot be set to zero.": "錯誤: 逾時不能設定為零。",
   "Save bundle as": "另存套件為",
@@ -174,5 +177,8 @@
   "Value": "值",
   "Save to": "儲存到",
   "Location": "位置",
-  "Select directory": "選擇目錄"
+  "Select directory": "選擇目錄",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

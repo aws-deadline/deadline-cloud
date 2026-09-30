@@ -155,6 +155,98 @@ def test_config_clear_setting_nonexistant(fresh_deadline_config):
     assert "aws_porfile_name" in str(excinfo.value)
 
 
+def test_write_config_mtime_is_not_attributable_to_a_later_external_write(fresh_deadline_config):
+    """
+    Regression test: write_config() must record the mtime it observed at write time, not
+    whatever the file's mtime happens to be by the time it gets around to stat-ing it.
+
+    Stat-ing after os.replace() (as an earlier version of this fix did) leaves a window in
+    which a concurrent external write -- a different process, or a hand edit -- landing
+    between our replace and our stat gets its mtime cached against *our* config contents.
+    Since os.replace doesn't itself change the mtime, that misattribution isn't a rare-race
+    corner case: it happens on every write whenever anything else touches the file in
+    roughly that window. _should_read_config() then sees that external mtime "unchanged" on
+    every future comparison and serves our now-stale cache forever, instead of just the one
+    stale read a concurrent external write should cause.
+
+    Simulates the window deterministically (no sleep, no real race) via os.utime, standing
+    in for an external write landing immediately after our own os.replace call.
+    """
+    external_write_mtime = 1700000000.0  # arbitrary, far-past value the fix must not adopt
+    real_replace = os.replace
+
+    def replace_then_external_write_lands(src, dst):
+        real_replace(src, dst)
+        os.utime(dst, (external_write_mtime, external_write_mtime))
+
+    with patch.object(os, "replace", side_effect=replace_then_external_write_lands):
+        config.set_setting("defaults.aws_profile_name", "ProfileName")
+
+    assert getattr(config_file, "__config_mtime") != external_write_mtime
+    # The property the original Windows fix (1474e3b) added must still hold: our own write
+    # is immediately visible to our own next read, with no re-read needed.
+    assert config.get_setting("defaults.aws_profile_name") == "ProfileName"
+
+
+def test_replace_with_windows_retry_recovers_from_transient_permission_error():
+    """
+    Windows CI observed write_config() fail with PermissionError ("Access is denied") on
+    os.replace, immediately after creating and writing the temp file -- consistent with
+    antivirus/Windows Defender briefly locking a just-created file for a real-time scan.
+    That's transient, so it must be retried rather than surfaced as a real failure.
+    """
+    call_count = {"n": 0}
+
+    def flaky_replace(src, dst):
+        call_count["n"] += 1
+        if call_count["n"] < 3:
+            raise PermissionError("[WinError 5] Access is denied")
+
+    with (
+        patch.object(config_file.platform, "system", return_value="Windows"),
+        patch.object(config_file.os, "replace", side_effect=flaky_replace),
+        patch.object(config_file.time, "sleep"),
+    ):
+        config_file._replace_with_windows_retry("src", Path("dst"))
+
+    assert call_count["n"] == 3
+
+
+def test_replace_with_windows_retry_gives_up_after_repeated_permission_errors():
+    """Not an infinite retry -- a persistent PermissionError must still surface eventually."""
+    with (
+        patch.object(config_file.platform, "system", return_value="Windows"),
+        patch.object(
+            config_file.os, "replace", side_effect=PermissionError("[WinError 5] Access is denied")
+        ),
+        patch.object(config_file.time, "sleep"),
+    ):
+        with pytest.raises(PermissionError):
+            config_file._replace_with_windows_retry("src", Path("dst"))
+
+
+def test_replace_with_windows_retry_does_not_retry_on_other_platforms():
+    """
+    PermissionError means what it says on POSIX -- there's no antivirus-locking failure
+    mode to paper over there, so don't retry (and don't mask a real permissions problem
+    behind a delay that only makes sense for a Windows-specific transient condition).
+    """
+    call_count = {"n": 0}
+
+    def always_fails(src, dst):
+        call_count["n"] += 1
+        raise PermissionError("Permission denied")
+
+    with (
+        patch.object(config_file.platform, "system", return_value="Linux"),
+        patch.object(config_file.os, "replace", side_effect=always_fails),
+    ):
+        with pytest.raises(PermissionError):
+            config_file._replace_with_windows_retry("src", Path("dst"))
+
+    assert call_count["n"] == 1
+
+
 @patch.object(config_file, "_should_read_config", MagicMock(return_value=True))
 def test_config_file_env_var(fresh_deadline_config):
     """Test that setting the env var DEADLINE_CONFIG_FILE_PATH overrides the config path"""

@@ -10,6 +10,7 @@ from unittest.mock import call, patch, MagicMock, ANY
 
 import boto3  # type: ignore[import]
 import botocore.config  # type: ignore[import]
+from botocore.exceptions import MissingDependencyException  # type: ignore[import]
 import pytest
 from deadline.client import api, config
 from deadline.client.api._session import (
@@ -131,6 +132,41 @@ def test_get_check_authentication_status_configuration_error(fresh_deadline_conf
         boto3_client_mock.return_value.list_farms.side_effect = Exception("some uncaught exception")
 
         assert api.check_authentication_status() == api.AwsAuthenticationStatus.CONFIGURATION_ERROR
+
+
+def test_get_check_authentication_status_missing_dependency_is_not_needs_login(
+    fresh_deadline_config, caplog
+):
+    """A missing or broken awscrt makes the `deadline:ListFarms` probe raise
+    MissingDependencyException. Logging in cannot supply the dependency, so the status
+    must be MISSING_DEPENDENCY -- not NEEDS_LOGIN, even for a profile type that supports
+    login, and not the generic CONFIGURATION_ERROR, since callers that poll for login
+    completion key on this value specifically to know the fault can't resolve on retry."""
+    caplog.set_level("ERROR", logger="deadline.client.api._session")
+
+    with (
+        patch.object(api._session, "get_boto3_client") as boto3_client_mock,
+        patch.object(
+            api._session,
+            "get_credentials_source",
+            return_value=api._session.AwsCredentialsSource.AWS_CONSOLE_LOGIN,
+        ),
+        patch.object(api._list_apis, "get_user_and_identity_store_id", return_value=(None, None)),
+    ):
+        config.set_setting("defaults.aws_profile_name", "console-login-profile")
+        # A distinctive marker, not real botocore wording: MISSING_DEPENDENCY_REMEDIATION
+        # (asserted below) also happens to mention "deadline[console]", so a real-looking
+        # message here wouldn't prove the log carries `e`'s own text rather than just the
+        # hardcoded remediation string.
+        boto3_client_mock.return_value.list_farms.side_effect = MissingDependencyException(
+            msg="TEST-ORIGINAL-EXCEPTION-MARKER"
+        )
+
+        assert api.check_authentication_status() == api.AwsAuthenticationStatus.MISSING_DEPENDENCY
+        # The log is the only place a CLI user sees the original botocore error, so the
+        # interpolated cause -- not just the surrounding hard-coded remediation -- must survive.
+        assert "TEST-ORIGINAL-EXCEPTION-MARKER" in caplog.text
+        assert api._session.MISSING_DEPENDENCY_REMEDIATION in caplog.text
 
 
 def test_get_queue_user_boto3_session_no_profile(fresh_deadline_config):
