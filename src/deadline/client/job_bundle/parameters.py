@@ -824,7 +824,7 @@ def validate_user_interface_file_filter(
         for i, pattern in enumerate(patterns):
             if not isinstance(pattern, str):
                 raise TypeError(
-                    f'Job parameter "{parameter_name}" got "{repr(pattern)}" for {field_path} -> "patterns" [{i}] but expected str'
+                    f'Job parameter "{parameter_name}" got "{pattern!r}" for {field_path} -> "patterns" [{i}] but expected str'
                 )
             elif not (0 < len(pattern) <= 20):
                 raise ValueError(
