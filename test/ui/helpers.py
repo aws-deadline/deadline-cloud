@@ -359,21 +359,8 @@ class DeadlineApp:
         return self._app.locator(role).elements()
 
     def tree_contains_text(self, needle: str) -> bool:
-        """True if any element in the tree has *needle* in its name or value.
-
-        On Linux, AT-SPI can drop a node while ``dump()`` is walking the tree
-        (e.g. a combo box repopulating during farm/queue refresh), which surfaces
-        as a ``PlatformError`` for the now-missing object path. That is a
-        transient race with the live UI, so re-walk the tree a few times.
-        """
-        for attempt in range(5):
-            try:
-                return needle in self._app.dump()
-            except xa11y.PlatformError:
-                if attempt == 4:
-                    raise
-                time.sleep(0.1)
-        return False
+        """True if any element in the tree has *needle* in its name or value."""
+        return needle in self._app.dump()
 
     def _tab_locator(self, tab_name: str) -> xa11y.Locator:
         # Qt exposes tabs as ``radio_button`` on macOS and ``page_tab`` or
