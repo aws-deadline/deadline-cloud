@@ -6,7 +6,7 @@ With the AWS Deadline Cloud MCP Server, you can use natural language for various
 
 ## User Guide
 
-1. **Install the server** 
+1. **Install the server** (requires Python 3.10 or later)
   ```bash
    pip install 'deadline[mcp]'
    ```

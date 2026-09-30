@@ -8,11 +8,7 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-try:
-    from mcp.server.mcpserver import MCPServer
-except ImportError:
-    # mcp 1.x names the server class FastMCP; 2.x renamed it to MCPServer
-    from mcp.server.fastmcp import FastMCP as MCPServer  # type: ignore[no-redef,attr-defined,unused-ignore]
+from mcp.server.mcpserver import MCPServer
 
 from .registry import get_all_tool_names, get_tool_definition, ToolDefinition
 from deadline.client.api._telemetry import get_deadline_cloud_library_telemetry_client

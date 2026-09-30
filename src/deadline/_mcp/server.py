@@ -1,6 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from .utils import MCPServer, register_api_tools
+from mcp.server.mcpserver import MCPServer
+
+from .utils import register_api_tools
 
 INSTRUCTIONS = """
 # AWS Deadline Cloud MCP Server
