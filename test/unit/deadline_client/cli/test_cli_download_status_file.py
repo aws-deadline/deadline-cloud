@@ -1673,6 +1673,55 @@ class TestPerTaskTracking:
         assert "task-abc-0" in result["jobs"][MOCK_JOB_ID]["tasks"]
         assert result["jobs"][MOCK_JOB_ID]["tasks"]["task-abc-0"]["download_status"] == "downloaded"
 
+    def test_succeeded_task_cleanup_removes_only_stale_farm_failed_entries(self):
+        """Clearing stale farm_failed rows for tasks that later succeeded leaves every other row.
+
+        The cleanup deletes task entries, so it has to be narrow. A task that succeeded with no
+        files and was recorded as a 0-of-0 download is a legitimate row, not a stale failure;
+        deleting it would drop a finished task from the monitor's progress count.
+        """
+        empty_downloaded_task = {
+            "download_status": "downloaded",
+            "total_files": 0,
+            "downloaded_files": 0,
+            "error_code": None,
+            "error_message": None,
+        }
+        existing_jobs = {
+            MOCK_JOB_ID: {
+                "download_status": "downloaded",
+                "total_files": 1,
+                "downloaded_files": 1,
+                "failed_files": 0,
+                "last_updated": "2026-01-01T00:00:00+00:00",
+                "error_code": None,
+                "error_message": None,
+                "skip_reason": None,
+                "tasks": {
+                    "task-abc-0": empty_downloaded_task,
+                    "task-abc-1": {
+                        "download_status": "farm_failed",
+                        "total_files": 0,
+                        "downloaded_files": 0,
+                        "error_code": None,
+                        "error_message": None,
+                    },
+                },
+            }
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=_make_categorized_job_ids(unchanged={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID, succeeded=2, total=2)},
+            existing_jobs=existing_jobs,
+            task_download_results={},
+            # Both tasks succeeded on the farm this run, and neither had output to download.
+            succeeded_task_ids={MOCK_JOB_ID: {"task-abc-0", "task-abc-1"}},
+        )
+        tasks = result["jobs"][MOCK_JOB_ID]["tasks"]
+        assert tasks == {"task-abc-0": empty_downloaded_task}, tasks
+
     def test_skipped_job_has_empty_tasks(self):
         """Skipped jobs always have an empty tasks dict."""
         cjids = _make_categorized_job_ids(attachments_free={MOCK_JOB_ID})
@@ -2025,6 +2074,116 @@ class TestJobTaskStatusConsistency:
         )
         assert result["jobs"][MOCK_JOB_ID]["download_status"] == "failed", result["jobs"]
         assert result["sync_metadata"]["last_run_status"] == "success", result["sync_metadata"]
+
+    def test_preserved_counts_flip_from_failed_clears_stale_job_error(self):
+        """A no-op run that settles a failed job with clean tasks clears the job's error fields.
+
+        When this run has no file counts for a job, the existing entry is kept and only its
+        status is updated. If that flips it from failed to downloaded, the old error_code,
+        error_message and failed_files have to go with it — otherwise the entry reads
+        "downloaded" and "failed with NETWORK_ERROR" at once.
+        """
+        existing_jobs = {
+            MOCK_JOB_ID: self._existing_entry(
+                "failed",
+                {"task-abc-0": self._downloaded_task(), "task-abc-1": self._downloaded_task()},
+                total_files=3,
+                downloaded_files=2,
+                error_code="NETWORK_ERROR",
+                error_message="connection reset",
+            )
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=_make_categorized_job_ids(unchanged={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID, succeeded=2, total=2)},
+            existing_jobs=existing_jobs,
+            job_download_results={},
+            task_download_results={},
+        )
+        entry = result["jobs"][MOCK_JOB_ID]
+        assert entry["download_status"] == "downloaded", entry
+        assert (entry["error_code"], entry["error_message"], entry["failed_files"]) == (
+            None,
+            None,
+            0,
+        ), entry
+        # The counts from the run that did the downloading are what the monitor shows.
+        assert (entry["total_files"], entry["downloaded_files"]) == (3, 2), entry
+        assert set(entry["tasks"]) == {"task-abc-0", "task-abc-1"}, entry
+
+    def test_inactive_flip_with_downloads_settles_to_downloaded(self):
+        """An in_progress job that drops out of tracking after downloading settles to downloaded.
+
+        Once a job leaves the candidate set its outputs can no longer change, so everything
+        that was going to land has landed. Its clean task rows and counts carry over as-is.
+        """
+        existing_jobs = {
+            MOCK_JOB_ID: self._existing_entry(
+                "in_progress",
+                {"task-abc-0": self._downloaded_task()},
+                downloaded_files=1,
+                failed_files=0,
+            )
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=_make_categorized_job_ids(inactive={MOCK_JOB_ID}),
+            download_candidate_jobs={},
+            existing_jobs=existing_jobs,
+            job_download_results={},
+            task_download_results={},
+        )
+        entry = result["jobs"][MOCK_JOB_ID]
+        assert entry["download_status"] == "downloaded", entry
+        assert (entry["error_code"], entry["error_message"], entry["failed_files"]) == (
+            None,
+            None,
+            0,
+        ), entry
+        assert entry["skip_reason"] is None, entry
+        assert entry["tasks"] == {"task-abc-0": self._downloaded_task()}, entry
+        assert entry["last_updated"] != "2026-01-01T00:00:00+00:00", entry
+
+    def test_inactive_flip_without_downloads_is_skipped_despite_farm_failed_task(self):
+        """A job that stops with nothing downloaded and only farm-failed tasks reports skipped.
+
+        The render failed, so there was never output to fetch. farm_failed carries no
+        error_code, so it must not trigger the skipped-to-failed override — that would send the
+        artist to retry a download when the fix is to re-render.
+        """
+        farm_failed_task = {
+            "download_status": "farm_failed",
+            "total_files": 0,
+            "downloaded_files": 0,
+            "error_code": None,
+            "error_message": None,
+        }
+        existing_jobs = {
+            MOCK_JOB_ID: self._existing_entry(
+                "in_progress",
+                {"task-abc-0": farm_failed_task},
+                total_files=0,
+                downloaded_files=0,
+                failed_files=0,
+            )
+        }
+        result = _build_status_file_content(
+            queue_id=MOCK_QUEUE_ID,
+            storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            categorized_job_ids=_make_categorized_job_ids(inactive={MOCK_JOB_ID}),
+            download_candidate_jobs={},
+            existing_jobs=existing_jobs,
+            job_download_results={},
+            task_download_results={},
+        )
+        entry = result["jobs"][MOCK_JOB_ID]
+        assert entry["download_status"] == "skipped", entry
+        assert entry["error_code"] is None, entry
+        # The farm failure is still recorded, so the monitor can say why nothing arrived.
+        assert entry["tasks"] == {"task-abc-0": farm_failed_task}, entry
 
     def test_no_settled_job_entry_hides_an_errored_task(self):
         """Invariant sweep over a mixed run: no entry claims a settled, no-failure status
