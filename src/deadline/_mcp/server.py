@@ -1,8 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-from mcp.server.fastmcp import FastMCP
-
-from .utils import register_api_tools
+from .utils import MCPServer, register_api_tools
 
 INSTRUCTIONS = """
 # AWS Deadline Cloud MCP Server
@@ -65,7 +63,7 @@ This server uses the Deadline Cloud configuration from `~/.deadline/config`, NOT
 When asked about authentication or which profile/credentials are being used, refer to the Deadline Cloud config file (`~/.deadline/config`) and the `aws_profile_name` setting, not the standard AWS credential chain.
 """
 
-app = FastMCP("deadline-cloud", instructions=INSTRUCTIONS)
+app = MCPServer("deadline-cloud", instructions=INSTRUCTIONS)
 
 register_api_tools(app, prefix="deadline_")
 

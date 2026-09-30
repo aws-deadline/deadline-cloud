@@ -20,6 +20,19 @@ from deadline.client.cli._groups.mcp_server_command import cli_mcp_server
 from click.testing import CliRunner
 
 
+def _tool_content(result):
+    """Return the content blocks from an in-process call_tool result.
+
+    mcp 1.x returns the content blocks directly; 2.x returns a CallToolResult.
+    """
+    return getattr(result, "content", result)
+
+
+def _input_schema(tool):
+    """Return a tool's input schema. mcp 2.x renamed inputSchema to input_schema."""
+    return getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
+
+
 @pytest.fixture(scope="session")
 def get_boto_session():
     """
@@ -51,6 +64,7 @@ async def test_mcp_server_integration(get_boto_session):
         # 2. Call deadline_check_authentication_status tool and verify response
         auth_result = await app.call_tool("deadline_check_authentication_status", {})
         assert auth_result is not None, "Authentication tool call should return a result"
+        auth_result = _tool_content(auth_result)
 
         if auth_result and hasattr(auth_result[0], "text"):  # type: ignore[index]
             try:
@@ -66,6 +80,7 @@ async def test_mcp_server_integration(get_boto_session):
         # 3. Call deadline_list_farms tool and verify response
         farms_result = await app.call_tool("deadline_list_farms", {})
         assert farms_result is not None, "List farms tool call should return a result"
+        farms_result = _tool_content(farms_result)
         if farms_result and hasattr(farms_result[0], "text"):  # type: ignore[index]
             try:
                 farms_data = json.loads(farms_result[0].text)  # type: ignore[index]
@@ -91,11 +106,7 @@ async def test_mcp_server_integration(get_boto_session):
             "list_queues should have parameters defined in TOOL_REGISTRY"
         )
 
-        assert hasattr(list_queues_tool, "inputSchema"), (
-            "deadline_list_queues tool should have an inputSchema"
-        )
-
-        input_schema = list_queues_tool.inputSchema
+        input_schema = _input_schema(list_queues_tool)
         assert input_schema is not None, "inputSchema should not be None"
 
         available_params = []
@@ -386,6 +397,7 @@ async def test_mcp_tool_error_handling():
     def parse_tool_result(result):
         """Helper to parse and validate tool result JSON."""
         assert result is not None, "Tool call should return a result"
+        result = _tool_content(result)
         if result and hasattr(result[0], "text"):
             return json.loads(result[0].text)
         return {}

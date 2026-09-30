@@ -8,7 +8,11 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.mcpserver import MCPServer
+except ImportError:
+    # mcp 1.x names the server class FastMCP; 2.x renamed it to MCPServer
+    from mcp.server.fastmcp import FastMCP as MCPServer  # type: ignore[no-redef,attr-defined,unused-ignore]
 
 from .registry import get_all_tool_names, get_tool_definition, ToolDefinition
 from deadline.client.api._telemetry import get_deadline_cloud_library_telemetry_client
@@ -121,7 +125,7 @@ def _create_wrapper(
 
 
 def register_api_tools(
-    app: FastMCP,
+    app: MCPServer,
     tools: Optional[List[Callable]] = None,
     prefix: str = "",
     error_handler: Optional[Callable] = None,
@@ -130,7 +134,7 @@ def register_api_tools(
     """Register API tools with the MCP server.
 
     Args:
-        app: FastMCP application instance
+        app: MCPServer application instance
         tools: Optional list of specific functions to register. If None, registers all configured tools.
         prefix: Prefix to add to tool names
         error_handler: Optional custom error handler
