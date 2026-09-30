@@ -18,6 +18,7 @@ _QT_TEST_FILES = [
     "test_gui_job_attachments.py",
     "test_gui_job_bundle_submitter.py",
     "test_gui_job_timeouts.py",
+    "test_gui_line_edit_list.py",
     "test_gui_openjd_parameters.py",
     "test_gui_shared_job_properties.py",
     "test_gui_shared_job_settings.py",
