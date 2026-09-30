@@ -130,14 +130,10 @@ CLI Command (sync_output)
 if ignore_storage_profiles:
     local_storage_profile_id = None
 else:
-    local_storage_profile_id = config_file.get_setting(
-        "settings.storage_profile_id", config=config
-    )
+    local_storage_profile_id = config_file.get_setting("settings.storage_profile_id", config=config)
     if not local_storage_profile_id:
-        raise DeadlineOperationError(
-            "The sync-output operation requires a storage profile..."
-        )
-    
+        raise DeadlineOperationError("The sync-output operation requires a storage profile...")
+
     # Validate profile exists
     local_storage_profile = deadline.get_storage_profile_for_queue(
         farmId=farm_id,
@@ -189,22 +185,28 @@ def _generate_path_mapping_rules(
     destination_storage_profile: dict[str, Any],
 ) -> list[PathMappingRule]:
     # If same profile, no mapping needed
-    if source_storage_profile["storageProfileId"] == \
-       destination_storage_profile["storageProfileId"]:
+    if (
+        source_storage_profile["storageProfileId"]
+        == destination_storage_profile["storageProfileId"]
+    ):
         return []
-    
+
     # Match file system locations by NAME
     source_locations = {loc["name"]: loc for loc in source_storage_profile["fileSystemLocations"]}
-    dest_locations = {loc["name"]: loc for loc in destination_storage_profile["fileSystemLocations"]}
-    
+    dest_locations = {
+        loc["name"]: loc for loc in destination_storage_profile["fileSystemLocations"]
+    }
+
     # Generate rules for matching names
     for source_name, source_loc in source_locations.items():
         if source_name in dest_locations:
-            rules.append(PathMappingRule(
-                source_path_format,
-                source_loc["path"],
-                dest_locations[source_name]["path"],
-            ))
+            rules.append(
+                PathMappingRule(
+                    source_path_format,
+                    source_loc["path"],
+                    dest_locations[source_name]["path"],
+                )
+            )
 ```
 
 #### 4.4.2 Rule Application (Trie-based)
@@ -286,8 +288,8 @@ class StorageProfile:
 ```python
 @dataclass
 class FileSystemLocation:
-    name: str   # Logical name (e.g., "ProjectFiles")
-    path: str   # Physical path (e.g., "/mnt/projects" or "X:\\Projects")
+    name: str  # Logical name (e.g., "ProjectFiles")
+    path: str  # Physical path (e.g., "/mnt/projects" or "X:\\Projects")
     type: FileSystemLocationType  # SHARED or LOCAL
 ```
 
@@ -450,8 +452,9 @@ Fetches the local and job storage profiles. Returns `(None, None)` when ignoring
 @dataclass
 class ResolvedStorageProfiles:
     """The result of resolving storage profiles for a download operation."""
-    job_profile: StorageProfile       # profile the job was submitted with (source paths)
-    local_profile: StorageProfile     # profile on this machine (destination paths)
+
+    job_profile: StorageProfile  # profile the job was submitted with (source paths)
+    local_profile: StorageProfile  # profile on this machine (destination paths)
 
 
 def _resolve_storage_profiles(
@@ -473,9 +476,7 @@ def _resolve_storage_profiles(
     if ignore_storage_profiles:
         return None
 
-    local_storage_profile_id = config_file.get_setting(
-        "settings.storage_profile_id", config=config
-    )
+    local_storage_profile_id = config_file.get_setting("settings.storage_profile_id", config=config)
     job_storage_profile_id = job.get("storageProfileId")
 
     if not local_storage_profile_id and not job_storage_profile_id:
@@ -534,9 +535,7 @@ def _generate_path_mapping_rules(
     if source_storage_profile.storageProfileId == destination_storage_profile.storageProfileId:
         return []
 
-    source_locations = {
-        loc.name: loc for loc in source_storage_profile.fileSystemLocations
-    }
+    source_locations = {loc.name: loc for loc in source_storage_profile.fileSystemLocations}
     destination_locations = {
         loc.name: loc for loc in destination_storage_profile.fileSystemLocations
     }
@@ -601,34 +600,28 @@ Wire the helper functions into the existing download flow. The key change is rep
 Insert after `OutputDownloader` construction and `output_paths_by_root` retrieval, replacing the existing OS mismatch block:
 
 ```python
-    # --- Storage profile path mapping (replaces manual OS mismatch prompt) ---
-    resolved = _resolve_storage_profiles(
-        config, deadline, farm_id, queue_id, job, ignore_storage_profiles
-    )
+# --- Storage profile path mapping (replaces manual OS mismatch prompt) ---
+resolved = _resolve_storage_profiles(
+    config, deadline, farm_id, queue_id, job, ignore_storage_profiles
+)
 
-    if resolved:
-        # Automatic path mapping via storage profiles
-        rules = _generate_path_mapping_rules(resolved.job_profile, resolved.local_profile)
-        click.echo(f"Using storage profile: {resolved.local_profile.displayName}")
-        _apply_path_mappings_to_roots(job_output_downloader, output_paths_by_root, rules)
-        output_paths_by_root = job_output_downloader.get_output_paths_by_root()
-    else:
-        # No storage profiles — fall back to manual prompt on OS mismatch
-        # (existing behavior, unchanged)
-        asset_roots = list(output_paths_by_root.keys())
-        for asset_root in asset_roots:
-            root_path_format = root_path_format_mapping.get(asset_root, "")
-            if root_path_format == "":
-                raise DeadlineOperationError(
-                    f"No root path format found for {asset_root}."
-                )
-            if PathFormat.get_host_path_format_string() != root_path_format:
-                click.echo(
-                    _get_mismatch_os_root_warning(
-                        asset_root, root_path_format, is_json_format
-                    )
-                )
-                # ... existing manual prompt code (unchanged) ...
+if resolved:
+    # Automatic path mapping via storage profiles
+    rules = _generate_path_mapping_rules(resolved.job_profile, resolved.local_profile)
+    click.echo(f"Using storage profile: {resolved.local_profile.displayName}")
+    _apply_path_mappings_to_roots(job_output_downloader, output_paths_by_root, rules)
+    output_paths_by_root = job_output_downloader.get_output_paths_by_root()
+else:
+    # No storage profiles — fall back to manual prompt on OS mismatch
+    # (existing behavior, unchanged)
+    asset_roots = list(output_paths_by_root.keys())
+    for asset_root in asset_roots:
+        root_path_format = root_path_format_mapping.get(asset_root, "")
+        if root_path_format == "":
+            raise DeadlineOperationError(f"No root path format found for {asset_root}.")
+        if PathFormat.get_host_path_format_string() != root_path_format:
+            click.echo(_get_mismatch_os_root_warning(asset_root, root_path_format, is_json_format))
+            # ... existing manual prompt code (unchanged) ...
 ```
 
 The rest of `_download_job_output()` (conflict resolution, progress bar, download) remains unchanged.

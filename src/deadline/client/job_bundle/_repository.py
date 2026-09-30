@@ -1583,8 +1583,7 @@ class S3BundleRepository:
         distinct, so hiding one doesn't collaterally hide the others.
         """
         key = self._to_s3_key(path)
-        if key.startswith(self._prefix):
-            key = key[len(self._prefix) :]
+        key = key.removeprefix(self._prefix)
         return _strip_archive_ext(key)
 
     def get_hidden_set(self) -> set[str]:

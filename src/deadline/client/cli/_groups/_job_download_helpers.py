@@ -325,8 +325,7 @@ def _normalize_filters(filters: list[str]) -> list[str]:
     normalized = []
     for f in filters:
         f = f.replace("\\", "/")
-        if f.startswith("./"):
-            f = f[2:]
+        f = f.removeprefix("./")
         while "//" in f:
             f = f.replace("//", "/")
         if f:
