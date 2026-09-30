@@ -62,8 +62,10 @@ deadline job logs --job-id <id>
 import os as _os  # Private import
 from typing import Dict as _Dict  # Private import
 
+
 class PublicClass:  # Public
     pass
+
 
 class _PrivateClass:  # Private
     pass

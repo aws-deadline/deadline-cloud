@@ -267,12 +267,15 @@ New code should reside in private modules (example: `_my_module.py`), which remo
 # _my_module.py
 import os
 
+
 class PublicClass:
     def publicmethod(self):
         pass
+
     # We still need to mark this as private, since the class will be public
     def _privatemethod(self):
         pass
+
 
 class PrivateClass:
     def privatemethod(self):
@@ -297,6 +300,7 @@ A public module (for example `my_module.py`) in this package will be defined wit
 # The os module is not part of this file's external interface
 import os as _os
 
+
 # PublicClass is part of this file's external interface.
 class PublicClass:
     def publicmethod(self):
@@ -304,6 +308,7 @@ class PublicClass:
 
     def _privatemethod(self):
         pass
+
 
 # _PrivateClass is not part of this file's external interface.
 class _PrivateClass:

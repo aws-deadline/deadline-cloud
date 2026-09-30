@@ -40,19 +40,23 @@ To support both local and S3 browsing without coupling the UI to either, introdu
 @dataclass
 class BundleInfo:
     """Metadata extracted from a job bundle's template."""
-    path: str              # Local path, archive path, or s3:// URI
-    name: str              # From template "name" field
-    description: str       # From template "description" field, or ""
+
+    path: str  # Local path, archive path, or s3:// URI
+    name: str  # From template "name" field
+    description: str  # From template "description" field, or ""
     step_names: list[str]  # Names of each step in the template
-    parameters: list[dict] # Parameter definitions from the template
+    parameters: list[dict]  # Parameter definitions from the template
+
 
 @dataclass
 class BrowseEntry:
     """A single item in the browser listing."""
-    name: str              # Display name (folder basename or archive name without extension)
-    path: str              # Full path or S3 URI
-    is_bundle: bool        # True if this is a valid job bundle
-    is_archive: bool       # True if this is an archive file
+
+    name: str  # Display name (folder basename or archive name without extension)
+    path: str  # Full path or S3 URI
+    is_bundle: bool  # True if this is a valid job bundle
+    is_archive: bool  # True if this is an archive file
+
 
 class BundleRepository(Protocol):
     def list_entries(self, path: str) -> list[BrowseEntry]:

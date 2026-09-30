@@ -73,7 +73,7 @@ class DeadlineAuthenticationStatus(QObject):
         return _deadline_authentication_status
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super(DeadlineAuthenticationStatus, self).__init__(parent)
+        super().__init__(parent)
 
         self.__creds_source: Optional[api.AwsCredentialsSource] = None
         self.__auth_status: Optional[api.AwsAuthenticationStatus] = None
