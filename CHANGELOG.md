@@ -1,9 +1,7 @@
 ## 0.60.8 (2026-09-30)
 
 ### Features
-* Job bundles now support `LIST[INT]` and `LIST[FLOAT]` parameter types, allowing you to specify lists of integers or numbers (e.g., frame numbers or scale factors) that can be loaded, validated, edited, and submitted. (#1377)
-* Job bundles now support the `LIST[STRING]` parameter type, allowing you to specify lists of strings (e.g., camera or render layer names) that can be loaded, validated, edited, and submitted. (#1375)
-* Job bundles now support the `RANGE_EXPR` parameter type, allowing you to specify integer range expressions like "1-100" or "1-100:10" (e.g., for frame ranges) that can be loaded, validated, edited, and submitted. (#1370)
+* Job bundles now support the `LIST[INT]`, `LIST[FLOAT]`, `LIST[STRING]`, and `RANGE_EXPR` parameter types, allowing you to specify lists of integers, numbers, or strings (e.g., frame numbers, scale factors, or camera and render layer names) and integer range expressions like "1-100" or "1-100:10" (e.g., for frame ranges) that can be loaded, validated, edited, and submitted. (#1377, #1375, #1370)
 * Job bundles now support `BOOL` parameter types with native boolean handling, including checkbox and hidden GUI controls for boolean parameters in the submission dialog. (#1360)
 * The `deadline queue sync-output` command now displays a cleaner indented plain-ASCII progress report with a closing summary and greppable result line. A new `--verbose` flag is available for detailed output. Box-drawing glyphs that could cause encoding errors on some terminals have been removed. (#1357)
 * `deadline bundle gui-submit` now always prefers the `deadline-cloud-v2` Conda channel (with `deadline-cloud` as a fallback), matching the behavior of all Python DCC submitters. An explicit `CondaChannels` value still takes precedence. (#1358)
