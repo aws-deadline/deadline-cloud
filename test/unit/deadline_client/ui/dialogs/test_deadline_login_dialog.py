@@ -77,7 +77,9 @@ class TestDeadlineLoginDialogReturnValue:
         """
         login_started = threading.Event()
 
-        def blocking_login(on_pending_authorization, on_cancellation_check, config=None):
+        def blocking_login(
+            on_pending_authorization, on_cancellation_check, config=None, from_gui=False
+        ):
             # Emulate the real handshake: keep running until the dialog signals
             # cancellation (via the Cancel button setting dialog.canceled).
             login_started.set()
@@ -85,7 +87,7 @@ class TestDeadlineLoginDialogReturnValue:
                 pass
             return "unused-because-canceled"
 
-        with patch(_API_LOGIN, side_effect=blocking_login):
+        with patch(_API_LOGIN, side_effect=blocking_login) as login_mock:
             dialog = DeadlineLoginDialog(parent=None, close_on_success=True)
             qtbot.addWidget(dialog)
 
@@ -99,6 +101,10 @@ class TestDeadlineLoginDialogReturnValue:
             QTimer.singleShot(10, click_cancel)
 
             assert dialog.exec_() is False
+            # Asserted here rather than inside blocking_login: an AssertionError on the
+            # login thread is routed to the dialog's error path instead of failing the
+            # test, which would hang exec_() instead of reporting.
+            assert login_mock.call_args.kwargs["from_gui"] is True
 
     def test_exec_returns_false_on_login_error(self, qtbot):
         """
@@ -138,7 +144,7 @@ class TestPendingAuthorizationMessage:
         then blocks until cancelled, and returns the text the dialog settled on.
         """
 
-        def login(on_pending_authorization, on_cancellation_check, config=None):
+        def login(on_pending_authorization, on_cancellation_check, config=None, from_gui=False):
             on_pending_authorization(credentials_source=credentials_source)
             while not on_cancellation_check():
                 pass

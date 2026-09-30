@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from email.header import decode_header
 from logging import getLogger
-from typing import Callable, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 import yaml
 
@@ -671,6 +671,18 @@ def _parse_template(raw: str, filename: str) -> Optional[dict]:
         return None
 
 
+def _display_str(value: Any) -> str:
+    """Formats a parameter value for the preview, showing lists as JSON like the CLI accepts."""
+    if isinstance(value, list):
+        try:
+            return json.dumps(value, ensure_ascii=False)
+        except (TypeError, ValueError):
+            # A hostile parameter_values file can hold a list JSON can't encode, e.g. a
+            # self-referencing YAML anchor. The preview must not crash on it.
+            return str(value)
+    return str(value)
+
+
 def extract_bundle_info(
     template: dict, path: str, parameter_values: Optional[dict] = None
 ) -> BundleInfo:
@@ -714,9 +726,9 @@ def extract_bundle_info(
             capped["type"] = str(capped["type"])[:PREVIEW_MAX_PARAM_NAME_LEN]
         # Attach resolved value: parameter_values > default > (unset)
         if name in pv_map:
-            capped["_display_value"] = str(pv_map[name])[:PREVIEW_MAX_PARAM_VALUE_LEN]
+            capped["_display_value"] = _display_str(pv_map[name])[:PREVIEW_MAX_PARAM_VALUE_LEN]
         elif "default" in capped:
-            capped["_display_value"] = str(capped["default"])[:PREVIEW_MAX_PARAM_VALUE_LEN]
+            capped["_display_value"] = _display_str(capped["default"])[:PREVIEW_MAX_PARAM_VALUE_LEN]
         params.append(capped)
 
     raw_steps = template.get("steps", [])

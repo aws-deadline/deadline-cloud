@@ -103,6 +103,15 @@ class AssetReferences:
         }
 
 
+# The CreateJob JobParameter union member for each type whose values are validated and
+# converted before submission. Other types are sent as a string in their lower-cased type name.
+_VALIDATED_PARAMETER_WIRE_MEMBERS = {
+    "BOOL": "bool",
+    "RANGE_EXPR": "rangeExpr",
+    "LIST[STRING]": "stringList",
+}
+
+
 def split_parameter_args(
     parameters: list[JobParameter],
     job_bundle_dir: str,
@@ -149,21 +158,30 @@ def split_parameter_args(
                     # Drop application-specific parameters from other applications
                     pass
                 else:
-                    parameter_type = parameter["type"].lower()
-                    if parameter_type == "bool":
+                    parameter_type = parameter["type"].upper()
+                    wire_member = _VALIDATED_PARAMETER_WIRE_MEMBERS.get(parameter_type)
+                    if wire_member is None:
+                        wire_member = parameter_type.lower()
+                        parameter_value = str(parameter_value)
+                    else:
                         from .parameters import validate_job_parameter_value
 
                         try:
-                            bool_value = validate_job_parameter_value(parameter, parameter_value)
+                            validated_value = validate_job_parameter_value(
+                                parameter, parameter_value
+                            )
                         except (ValueError, TypeError) as e:
                             raise DeadlineOperationError(
                                 f"{e}\nFrom job bundle:\n{job_bundle_dir}"
                             ) from e
-                        # CreateJob's JobParameter.bool is a string shape, so normalize
-                        # the accepted spellings (yes/on/1/...) to "true"/"false".
-                        parameter_value = "true" if bool_value else "false"
-                    else:
-                        parameter_value = str(parameter_value)
-                    job_parameters[parameter_name] = {parameter_type: parameter_value}
+                        if parameter_type == "BOOL":
+                            # CreateJob's JobParameter.bool is a string shape, so normalize
+                            # the accepted spellings (yes/on/1/...) to "true"/"false".
+                            parameter_value = "true" if validated_value else "false"
+                        elif parameter_type == "LIST[STRING]":
+                            parameter_value = validated_value
+                        else:
+                            parameter_value = str(validated_value)
+                    job_parameters[parameter_name] = {wire_member: parameter_value}
 
     return app_parameters, job_parameters

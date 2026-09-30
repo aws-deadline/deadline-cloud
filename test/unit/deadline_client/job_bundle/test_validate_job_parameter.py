@@ -279,7 +279,7 @@ def test_validate_job_parameter_nonvalid_type(
         when()
     assert (
         str(ctx.value)
-        == f'Job parameter "foo" had "type" {typ} but expected one of ("STRING", "PATH", "INT", "FLOAT", "BOOL")'
+        == f'Job parameter "foo" had "type" {typ} but expected one of ("STRING", "PATH", "INT", "FLOAT", "BOOL", "RANGE_EXPR", "LIST[STRING]")'
     )
 
 
@@ -442,6 +442,95 @@ def test_validate_job_parameter_bool_with_constraint_fields(field: str, field_va
     assert (
         str(ctx.value) == f'Job parameter "foo" has "{field}" but type "BOOL" does not support it'
     )
+
+
+@pytest.mark.parametrize(
+    argnames="job_parameter",
+    argvalues=(
+        pytest.param({"name": "foo", "type": "RANGE_EXPR"}, id="no-default"),
+        pytest.param({"name": "foo", "type": "RANGE_EXPR", "default": "1-100"}, id="range"),
+        pytest.param({"name": "foo", "type": "RANGE_EXPR", "default": "1-100:10"}, id="stepped"),
+        pytest.param({"name": "foo", "type": "RANGE_EXPR", "default": "1,3,5,7,10-20"}, id="mixed"),
+        pytest.param(
+            {"name": "foo", "type": "RANGE_EXPR", "default": "1-5", "minLength": 1},
+            id="minLength",
+        ),
+        pytest.param(
+            {"name": "foo", "type": "RANGE_EXPR", "default": "1-5", "maxLength": 1024},
+            id="maxLength",
+        ),
+        pytest.param(
+            {
+                "name": "foo",
+                "type": "RANGE_EXPR",
+                "default": "1-5",
+                "userInterface": {"control": "LINE_EDIT", "label": "Frames"},
+            },
+            id="line-edit",
+        ),
+        pytest.param(
+            {"name": "foo", "type": "RANGE_EXPR", "userInterface": {"control": "HIDDEN"}},
+            id="hidden",
+        ),
+    ),
+)
+def test_validate_job_parameter_range_expr_valid(job_parameter: Any) -> None:
+    assert parameters.validate_job_parameter(job_parameter) == job_parameter
+
+
+@pytest.mark.parametrize(
+    argnames=("field", "field_value"),
+    argvalues=(
+        pytest.param("allowedValues", ["1-5", "6-10"], id="allowedValues"),
+        pytest.param("minValue", 0, id="minValue"),
+        pytest.param("maxValue", 1, id="maxValue"),
+    ),
+)
+def test_validate_job_parameter_range_expr_with_disallowed_fields(
+    field: str, field_value: Any
+) -> None:
+    """Tests that a RANGE_EXPR job parameter rejects fields OpenJD does not permit on it."""
+    job_parameter: Any = {"name": "foo", "type": "RANGE_EXPR", "default": "1-5", field: field_value}
+
+    with pytest.raises(ValueError) as ctx:
+        parameters.validate_job_parameter(job_parameter)
+    assert (
+        str(ctx.value)
+        == f'Job parameter "foo" has "{field}" but type "RANGE_EXPR" does not support it'
+    )
+
+
+@pytest.mark.parametrize(
+    argnames="default",
+    argvalues=(
+        pytest.param("not-a-range", id="non-numeric"),
+        pytest.param("", id="empty"),
+        pytest.param("1-10,5-15", id="overlap"),
+        pytest.param("5-1", id="descending"),
+        pytest.param("1-10:0", id="zero-step"),
+    ),
+)
+def test_validate_job_parameter_range_expr_invalid_default(default: str) -> None:
+    """Tests that a RANGE_EXPR job parameter's default must itself be a valid range expression."""
+    job_parameter: Any = {"name": "foo", "type": "RANGE_EXPR", "default": default}
+
+    with pytest.raises(ValueError, match='"default" that is not a valid range expression'):
+        parameters.validate_job_parameter(job_parameter)
+
+
+@pytest.mark.parametrize(
+    argnames="default",
+    argvalues=(
+        pytest.param(5, id="int"),
+        pytest.param([1, 2, 3], id="list"),
+        pytest.param(True, id="bool"),
+    ),
+)
+def test_validate_job_parameter_range_expr_non_string_default(default: Any) -> None:
+    job_parameter: Any = {"name": "foo", "type": "RANGE_EXPR", "default": default}
+
+    with pytest.raises(TypeError, match='type "RANGE_EXPR" expects str'):
+        parameters.validate_job_parameter(job_parameter)
 
 
 def test_validate_job_parameter_valid_no_data_flow(

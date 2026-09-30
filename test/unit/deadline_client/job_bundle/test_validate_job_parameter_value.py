@@ -120,6 +120,86 @@ def test_bool_parameter_validation_invalid_values(input_value: Any) -> None:
         parameters.validate_job_parameter_value(BASE_BOOL_PARAM, input_value)
 
 
+BASE_RANGE_EXPR_PARAM: parameters.JobParameter = {
+    "name": "test_range_expr_param",
+    "type": "RANGE_EXPR",
+}
+
+
+@pytest.mark.parametrize(
+    "input_value",
+    [
+        pytest.param("1", id="single"),
+        pytest.param("-5", id="single_negative"),
+        pytest.param("1-100", id="range"),
+        pytest.param("1-100:10", id="stepped"),
+        pytest.param("10-1:-1", id="descending"),
+        pytest.param("1,3,5,7", id="values"),
+        pytest.param("1-10,20-30:2,42", id="mixed"),
+        pytest.param(" 1 - 10 , 20 ", id="whitespace"),
+    ],
+)
+def test_range_expr_parameter_validation_valid_values(input_value: str) -> None:
+    # The value is returned as the original string; the service expands it.
+    result = parameters.validate_job_parameter_value(BASE_RANGE_EXPR_PARAM, input_value)
+    assert result == input_value
+
+
+@pytest.mark.parametrize(
+    "input_value",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("1-abc", id="non_numeric"),
+        pytest.param("1.5", id="float_string"),
+        pytest.param("1-10,5-15", id="overlap"),
+        pytest.param("5-1", id="descending_no_step"),
+        pytest.param("1-10:0", id="zero_step"),
+        pytest.param("1,2,3,", id="trailing_comma"),
+    ],
+)
+def test_range_expr_parameter_validation_invalid_values(input_value: str) -> None:
+    with pytest.raises(ValueError, match="is not a valid range expression"):
+        parameters.validate_job_parameter_value(BASE_RANGE_EXPR_PARAM, input_value)
+
+
+@pytest.mark.parametrize(
+    "input_value",
+    [
+        pytest.param(5, id="int"),
+        pytest.param(1.5, id="float"),
+        pytest.param(True, id="bool"),
+        pytest.param(None, id="none"),
+        pytest.param([1, 2], id="list"),
+    ],
+)
+def test_range_expr_parameter_validation_non_string(input_value: Any) -> None:
+    with pytest.raises(TypeError, match="has type RANGE_EXPR"):
+        parameters.validate_job_parameter_value(BASE_RANGE_EXPR_PARAM, input_value)
+
+
+def test_range_expr_parameter_validation_length_constraints() -> None:
+    param: parameters.JobParameter = {
+        "name": "frames",
+        "type": "RANGE_EXPR",
+        "minLength": 3,
+        "maxLength": 6,
+    }
+    assert parameters.validate_job_parameter_value(param, "1-100") == "1-100"
+    with pytest.raises(ValueError, match="shorter than minLength"):
+        parameters.validate_job_parameter_value(param, "1")
+    with pytest.raises(ValueError, match="longer than maxLength"):
+        parameters.validate_job_parameter_value(param, "1-100:2")
+
+
+def test_range_expr_parameter_validation_service_length_cap() -> None:
+    """Without an explicit maxLength, the CreateJob rangeExpr limit of 1024 still applies so the
+    CLI rejects what the service would."""
+    long_expr = ",".join(str(i) for i in range(0, 1000, 2))
+    assert len(long_expr) > 1024
+    with pytest.raises(ValueError, match="at most 1024"):
+        parameters.validate_job_parameter_value(BASE_RANGE_EXPR_PARAM, long_expr)
+
+
 INT_PARAM_WITH_ALLOWED_VALUES: parameters.JobParameter = {
     "name": "int_with_allowed_values",
     "type": "INT",

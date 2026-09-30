@@ -123,3 +123,46 @@ def test_on_load_bundle_invalid_bundle_shows_warning(
 
     mock_warning.assert_called_once()
     parent_dialog.refresh.assert_not_called()
+
+
+RANGE_EXPR_TEMPLATE = """
+specificationVersion: 'jobtemplate-2023-09'
+extensions: [EXPR]
+name: Range Bundle
+parameterDefinitions:
+- name: Frames
+  type: RANGE_EXPR
+  default: "1-10"
+steps:
+- name: NoOp
+  script:
+    actions:
+      onRun:
+        command: "echo hi"
+"""
+
+
+def test_valid_parameters_forwarded_and_survives_refresh(qtbot, temp_job_bundle_dir):
+    """The tab reports parameter validity from its OpenJD parameters widget, including
+    after refresh_ui replaces that widget with a new one."""
+    from deadline.client.job_bundle.parameters import read_job_bundle_parameters
+
+    _write_bundle(temp_job_bundle_dir, RANGE_EXPR_TEMPLATE)
+    settings = JobBundleSettings(input_job_bundle_dir=temp_job_bundle_dir, name="Range Bundle")
+    settings.parameters = read_job_bundle_parameters(temp_job_bundle_dir)
+    widget = JobBundleSettingsWidget(initial_settings=settings)
+    qtbot.addWidget(widget)
+    validity = MagicMock()
+    widget.valid_parameters.connect(validity)
+
+    widget.parameters_widget.controls["Frames"].edit_control.setText("1-")
+    assert widget.invalid_parameter_names() == ["Frames"]
+    assert validity.call_args.args[0] is False
+
+    # Rebuilding the parameters widget re-evaluates validity and stays connected.
+    widget.refresh_ui(settings)
+    assert validity.call_args.args[0] is True
+    assert widget.invalid_parameter_names() == []
+    widget.parameters_widget.controls["Frames"].edit_control.setText("5-1")
+    assert validity.call_args.args[0] is False
+    assert widget.invalid_parameter_names() == ["Frames"]

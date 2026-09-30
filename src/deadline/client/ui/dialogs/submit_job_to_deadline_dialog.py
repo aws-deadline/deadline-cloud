@@ -271,15 +271,31 @@ class SubmitJobToDeadlineDialog(QDialog):
 
         self.lyt.addWidget(self.button_box)
 
+    def _invalid_parameter_names(self) -> list[str]:
+        """Names of job template and queue parameters whose current value is invalid."""
+        names: list[str] = []
+        if hasattr(self.job_settings, "invalid_parameter_names"):
+            names.extend(self.job_settings.invalid_parameter_names())
+        names.extend(self.shared_job_settings.invalid_parameter_names())
+        return names
+
     def _set_submit_button_state(self):
         # Enable/disable the Submit button based on whether the
-        # AWS Deadline Cloud API is accessible and the farm+queue are configured.
+        # AWS Deadline Cloud API is accessible, the farm+queue are configured,
+        # and every parameter holds a valid value.
         api_available = self.deadline_authentication_status.api_availability is True
         farm_configured = get_setting(_SETTING_FARM_ID) != ""
         queue_configured = get_setting(_SETTING_QUEUE_ID) != ""
         queue_valid = self.shared_job_settings.is_queue_valid()
+        invalid_parameters = self._invalid_parameter_names()
 
-        enable = api_available and farm_configured and queue_configured and queue_valid
+        enable = (
+            api_available
+            and farm_configured
+            and queue_configured
+            and queue_valid
+            and not invalid_parameters
+        )
 
         self.submit_button.setEnabled(enable)
 
@@ -302,6 +318,12 @@ class SubmitJobToDeadlineDialog(QDialog):
             if farm_configured and queue_configured and not queue_valid:
                 issues.append(
                     tr("Queue parameters are not valid. Check Shared job settings tab for details.")
+                )
+            if invalid_parameters:
+                issues.append(
+                    tr("These parameters have invalid values: {names}").format(
+                        names=", ".join(invalid_parameters)
+                    )
                 )
 
             self.submit_button.setToolTip(
@@ -378,6 +400,8 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.job_settings_tab.setWidget(self.job_settings)
         if hasattr(self.job_settings, "parameter_changed"):
             self.job_settings.parameter_changed.connect(self.on_job_template_parameter_changed)
+        if hasattr(self.job_settings, "valid_parameters"):
+            self.job_settings.valid_parameters.connect(self._set_submit_button_state)
 
     def _build_job_attachments_tab(
         self, auto_detected_attachments: AssetReferences, attachments: AssetReferences
@@ -439,7 +463,7 @@ class SubmitJobToDeadlineDialog(QDialog):
         self.deadline_authentication_status.refresh_status()
 
     def on_logout(self):
-        api.logout()
+        api.logout(from_gui=True)
         self.refresh_deadline_settings()
         # This widget watches the auth files, but that does
         # not always catch a change so force a refresh here.

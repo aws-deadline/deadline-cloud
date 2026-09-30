@@ -1115,12 +1115,15 @@ def test_create_job_from_job_bundle_expr_lowercase_parameter_types(
             {"name": "Verbose", "type": "bool", "default": True},
             {"name": "Count", "type": "int", "default": 3},
             {"name": "Message", "type": "String", "default": "hi"},
+            {"name": "Frames", "type": "range_expr", "default": "1-3"},
         ],
         "steps": [
             {
                 "name": "Step",
                 "parameterSpace": {
-                    "taskParameterDefinitions": [{"name": "Frame", "type": "int", "range": "1-3"}]
+                    "taskParameterDefinitions": [
+                        {"name": "Frame", "type": "int", "range": "{{Param.Frames}}"}
+                    ]
                 },
                 "bash": {"script": "echo {{Task.Param.Frame}}"},
             }
@@ -1136,6 +1139,7 @@ def test_create_job_from_job_bundle_expr_lowercase_parameter_types(
                 {"name": "Verbose", "value": "off"},
                 {"name": "Count", "value": "5"},
                 {"name": "Message", "value": "hi"},
+                {"name": "Frames", "value": "1-100:10,200"},
             ],
             queue_parameter_definitions=[],
         )
@@ -1145,8 +1149,125 @@ def test_create_job_from_job_bundle_expr_lowercase_parameter_types(
             "Verbose": {"bool": "false"},
             "Count": {"int": "5"},
             "Message": {"string": "hi"},
+            "Frames": {"rangeExpr": "1-100:10,200"},
         }
         assert json.loads(create_job_kwargs["template"]) == template
+
+
+def test_create_job_from_job_bundle_rejects_invalid_range_expr(
+    fresh_deadline_config,
+    temp_job_bundle_dir,
+):
+    """An invalid RANGE_EXPR value from the CLI is reported as a DeadlineOperationError
+    before CreateJob is called."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    template = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": ["EXPR"],
+        "name": "TestJob",
+        "parameterDefinitions": [{"name": "Frames", "type": "RANGE_EXPR", "default": "1-3"}],
+        "steps": [{"name": "Step", "bash": {"script": "echo hi"}}],
+    }
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        json.dump(template, f)
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        with pytest.raises(
+            exceptions.DeadlineOperationError, match="is not a valid range expression"
+        ):
+            api.create_job_from_job_bundle(
+                temp_job_bundle_dir,
+                job_parameters=[{"name": "Frames", "value": "1-10,5-15"}],
+                queue_parameter_definitions=[],
+            )
+        mock.get_boto3_client().create_job.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("cli_value", "expected"),
+    [
+        pytest.param('["wide", "top"]', ["wide", "top"], id="cli-json-array"),
+        # The service applies template defaults, so none are sent.
+        pytest.param(None, None, id="default"),
+    ],
+)
+def test_create_job_from_job_bundle_list_string(
+    fresh_deadline_config,
+    temp_job_bundle_dir,
+    cli_value,
+    expected,
+):
+    """A LIST[STRING] value, given as a JSON array string like the CLI -p option passes, is
+    sent to CreateJob as a list in the stringList member."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    template = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": ["EXPR"],
+        "name": "TestJob",
+        "parameterDefinitions": [
+            {"name": "Cameras", "type": "list[string]", "default": ["main", "closeup"]}
+        ],
+        "steps": [
+            {
+                "name": "Step",
+                "parameterSpace": {
+                    "taskParameterDefinitions": [
+                        {"name": "Camera", "type": "STRING", "range": "{{Param.Cameras}}"}
+                    ]
+                },
+                "bash": {"script": "echo {{Task.Param.Camera}}"},
+            }
+        ],
+    }
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        json.dump(template, f)
+
+    job_parameters = [] if cli_value is None else [{"name": "Cameras", "value": cli_value}]
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir,
+            job_parameters=job_parameters,
+            queue_parameter_definitions=[],
+        )
+
+        create_job_kwargs = mock.get_boto3_client().create_job.call_args.kwargs
+        if expected is None:
+            assert "parameters" not in create_job_kwargs
+        else:
+            assert create_job_kwargs["parameters"] == {"Cameras": {"stringList": expected}}
+        assert json.loads(create_job_kwargs["template"]) == template
+
+
+def test_create_job_from_job_bundle_rejects_invalid_list_string(
+    fresh_deadline_config,
+    temp_job_bundle_dir,
+):
+    """A LIST[STRING] value that is not a JSON array is reported before CreateJob is called."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    template = {
+        "specificationVersion": "jobtemplate-2023-09",
+        "extensions": ["EXPR"],
+        "name": "TestJob",
+        "parameterDefinitions": [{"name": "Cameras", "type": "LIST[STRING]", "default": ["a"]}],
+        "steps": [{"name": "Step", "bash": {"script": "echo hi"}}],
+    }
+    with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
+        json.dump(template, f)
+
+    with patch_calls_for_create_job_from_job_bundle() as mock:
+        with pytest.raises(exceptions.DeadlineOperationError, match="not a JSON array of strings"):
+            api.create_job_from_job_bundle(
+                temp_job_bundle_dir,
+                job_parameters=[{"name": "Cameras", "value": "main,closeup"}],
+                queue_parameter_definitions=[],
+            )
+        mock.get_boto3_client().create_job.assert_not_called()
 
 
 get_job_responses = [
@@ -1481,3 +1602,44 @@ def test_create_job_from_job_bundle_debug_snapshot_with_attachments(
         submit_script = f.read()
     assert "aws s3 cp" in submit_script
     assert "aws deadline create-job" in submit_script
+
+
+def test_create_job_from_job_bundle_skips_confirmation_for_referenced_paths_only(
+    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir
+):
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    referenced_path = os.path.join(temp_assets_dir, "reference")
+    upload_group = AssetUploadGroup(
+        asset_groups=[AssetRootGroup(root_path=temp_assets_dir, references={Path(referenced_path)})]
+    )
+
+    with (
+        patch_calls_for_create_job_from_job_bundle() as mock,
+        patch.object(S3AssetManager, "prepare_paths_for_upload", return_value=upload_group),
+    ):
+        mock.hash_attachments.return_value = (None, [])
+        job_template_type, job_template = MOCK_JOB_TEMPLATE_CASES["MINIMAL_JSON"]
+        with open(
+            os.path.join(temp_job_bundle_dir, f"template.{job_template_type.lower()}"),
+            "w",
+            encoding="utf8",
+        ) as template_file:
+            template_file.write(job_template)
+        with open(
+            os.path.join(temp_job_bundle_dir, "asset_references.json"),
+            "w",
+            encoding="utf8",
+        ) as references_file:
+            json.dump(
+                {"assetReferences": {"referencedPaths": [referenced_path]}},
+                references_file,
+            )
+
+        api.create_job_from_job_bundle(
+            temp_job_bundle_dir,
+            queue_parameter_definitions=[],
+        )
+
+    mock.generate_message_for_asset_paths.assert_not_called()
+    mock.hash_attachments.assert_called_once()

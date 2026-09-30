@@ -100,6 +100,9 @@ _FRIENDLY_PARAM_TYPES = {
     "PATH": "Path",
     "INT": "Number",
     "FLOAT": "Number",
+    "BOOL": "Checkbox",
+    "RANGE_EXPR": "Frame range",
+    "LIST[STRING]": "List",
 }
 
 

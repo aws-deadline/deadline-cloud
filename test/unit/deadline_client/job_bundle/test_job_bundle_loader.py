@@ -204,6 +204,9 @@ parameterDefinitions:
 - name: Verbose
   type: bool
   default: true
+- name: Frames
+  type: range_expr
+  default: "1-10:2"
 steps:
 - name: Step
   parameterSpace:
@@ -232,7 +235,21 @@ def test_read_job_bundle_parameters_expr_type_names_are_case_insensitive(
         "Scale": "FLOAT",
         "InputDir": "PATH",
         "Verbose": "BOOL",
+        "Frames": "RANGE_EXPR",
     }
+
+
+def test_read_job_bundle_parameters_range_expr_invalid_default(
+    fresh_deadline_config, temp_job_bundle_dir
+):
+    """A RANGE_EXPR parameter whose default is not a valid range expression is rejected
+    at bundle load."""
+    template = EXPR_LOWERCASE_TYPES_TEMPLATE.replace('default: "1-10:2"', 'default: "not-a-range"')
+    with open(os.path.join(temp_job_bundle_dir, "template.yaml"), "w", encoding="utf8") as f:
+        f.write(template)
+
+    with pytest.raises(ValueError, match='"Frames" has "default" that is not a valid range'):
+        read_job_bundle_parameters(temp_job_bundle_dir)
 
 
 def test_read_job_bundle_parameters_type_names_are_case_sensitive_without_expr(
