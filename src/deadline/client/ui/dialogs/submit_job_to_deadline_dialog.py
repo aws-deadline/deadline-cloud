@@ -1,4 +1,3 @@
-# coding: utf-8
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """UI Components for the Render Submitter"""
@@ -487,7 +486,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             QMessageBox.critical(
                 self,
                 "Error",
-                f"Failed to display Help dialog: {str(e)}",
+                f"Failed to display Help dialog: {e!s}",
             )
 
     def _on_load_bundle(self):

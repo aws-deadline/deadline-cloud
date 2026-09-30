@@ -132,8 +132,37 @@ line-length = 100
 # can't silently regress if a future ruff drops it from the defaults; it is
 # build-failing via `hatch run lint`.
 # TID251 bans path helpers that raise on Windows UNC paths; see banned-api below.
-extend-select = ["RUF022", "E402", "TID251"]
-ignore = ["E501"]
+# ruff 0.16 dropped these pycodestyle/pyflakes rules from its defaults; they were enforced
+# before the upgrade, so keep enforcing them.
+extend-select = [
+    "RUF022", "E402", "TID251",
+    "E401", "E701", "E702", "E703", "E711", "E712", "E713", "E714", "E721", "E731",
+    "E741", "E742", "E743", "F403", "F405", "F406", "F722",
+]
+ignore = [
+    "E501",
+    # Rules added to ruff 0.16's defaults that this codebase does not pass yet. Every rule
+    # here either needs changes across many files or has no behavior-preserving autofix.
+    # Remove an entry once the code is fixed.
+    # Typing modernization; wide, and the py3.9 floor makes several of these unsafe.
+    "FA100", "FA102", "UP006", "UP007", "UP035", "UP037", "UP045", "PYI019", "PYI041", "RUF013",
+    # Import sorting; touches 213 files.
+    "I001",
+    # Exception handling; changing these changes what gets caught or raised.
+    "BLE001", "S110", "TRY002", "TRY004", "B017", "LOG014", "G201",
+    # getattr() with a constant is used on purpose to keep mypy quiet about dynamic attributes.
+    "B009",
+    # Fixes change runtime behavior and need a per-site decision.
+    "B006", "B008", "B019", "DTZ001", "DTZ002", "DTZ005", "DTZ011", "PLW1510", "RUF012",
+    "RUF015", "SIM115", "PLW0602", "PLR1704", "PLR1722", "UP036",
+    # Style rewrites without a safe autofix.
+    "C401", "C405", "C408", "C414", "C417", "C419", "FLY002", "ISC004", "PERF102", "PIE810",
+    "RUF046", "RUF059", "SIM102", "SIM103", "SIM113", "SIM114", "SIM117", "SIM118", "SIM210",
+    # Would delete noqa comments for rules ignored above (BLE001) or not enabled (N802).
+    "RUF100",
+    # Shebangs on files that are not executable.
+    "EXE001", "EXE005",
+]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # commonpath raises ValueError on Windows UNC paths (issue #1321): callers that catch it

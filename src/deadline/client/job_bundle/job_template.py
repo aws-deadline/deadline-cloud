@@ -22,3 +22,5 @@ class ControlType(enum.Enum):
     CHOOSE_DIRECTORY = enum.auto()
     CHECK_BOX = enum.auto()
     HIDDEN = enum.auto()
+    LINE_EDIT_LIST = enum.auto()
+    SPIN_BOX_LIST = enum.auto()

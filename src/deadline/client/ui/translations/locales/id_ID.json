@@ -44,6 +44,9 @@
   "Do not ask again": "Jangan tanya lagi",
   "Don't remind me again": "Jangan ingatkan lagi",
   "Download installer": "Unduh installer",
+  "Drag to show more or fewer rows": "Drag to show more or fewer rows",
+  "Edit": "Edit",
+  "Items: {count}": "Items: {count}",
   "Edit...": "Edit...",
   "Error: Timeout cannot be set to zero.": "Kesalahan: Timeout tidak dapat diatur ke nol.",
   "Save bundle as": "Simpan bundel sebagai",
@@ -174,5 +177,8 @@
   "Value": "Nilai",
   "Save to": "Simpan ke",
   "Location": "Lokasi",
-  "Select directory": "Pilih direktori"
+  "Select directory": "Pilih direktori",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

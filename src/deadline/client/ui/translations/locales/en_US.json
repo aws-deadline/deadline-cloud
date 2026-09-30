@@ -44,6 +44,9 @@
   "Do not ask again": "Do not ask again",
   "Don't remind me again": "Don't remind me again",
   "Download installer": "Download installer",
+  "Drag to show more or fewer rows": "Drag to show more or fewer rows",
+  "Edit": "Edit",
+  "Items: {count}": "Items: {count}",
   "Edit...": "Edit...",
   "Error: Timeout cannot be set to zero.": "Error: Timeout cannot be set to zero.",
   "Save bundle as": "Save bundle as",
@@ -174,5 +177,8 @@
   "Value": "Value",
   "Save to": "Save to",
   "Location": "Location",
-  "Select directory": "Select directory"
+  "Select directory": "Select directory",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

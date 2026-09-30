@@ -44,6 +44,9 @@
   "Do not ask again": "다시 묻지 않음",
   "Don't remind me again": "다시 알리지 않음",
   "Download installer": "설치 프로그램 다운로드",
+  "Drag to show more or fewer rows": "Drag to show more or fewer rows",
+  "Edit": "Edit",
+  "Items: {count}": "Items: {count}",
   "Edit...": "편집...",
   "Error: Timeout cannot be set to zero.": "오류: 제한 시간을 0으로 설정할 수 없습니다.",
   "Save bundle as": "번들 다른 이름으로 저장",
@@ -174,5 +177,8 @@
   "Value": "값",
   "Save to": "저장 위치",
   "Location": "위치",
-  "Select directory": "디렉터리 선택"
+  "Select directory": "디렉터리 선택",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }

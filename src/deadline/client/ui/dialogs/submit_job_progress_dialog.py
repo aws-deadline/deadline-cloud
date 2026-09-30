@@ -202,7 +202,6 @@ class SubmitJobProgressDialog(QDialog):
             The actual handling is done in _handle_confirmation_requested.
         """
         # This is now handled by _handle_confirmation_requested
-        pass
 
     def handle_print(self, message: str) -> None:
         """
@@ -264,7 +263,7 @@ class SubmitJobProgressDialog(QDialog):
         thrown.
         """
         self.button_box.setStandardButtons(QDialogButtonBox.Close)
-        self.submission_log.append(f"Error occurred: {str(e)}\n")
+        self.submission_log.append(f"Error occurred: {e!s}\n")
         logger.exception(e, exc_info=(type(e), e, e.__traceback__))
 
     def closeEvent(self, event: QCloseEvent) -> None:

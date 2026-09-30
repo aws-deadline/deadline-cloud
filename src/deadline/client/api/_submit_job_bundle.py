@@ -560,7 +560,6 @@ def _save_debug_snapshot(
     if storage_profile_id and storage_profile is not None:
         with open(os.path.join(debug_snapshot_dir, "storage_profile.json"), "w") as fh:
             json.dump(storage_profile.to_dict(), fh, indent=1)
-    return None
 
 
 @api.record_function_latency_telemetry_event()

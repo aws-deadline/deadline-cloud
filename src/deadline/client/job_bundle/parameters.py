@@ -10,6 +10,8 @@ __all__ = [
     "read_job_bundle_parameters",
 ]
 
+import json
+import math
 import os
 from collections import namedtuple
 from typing import Any, TYPE_CHECKING, cast, Union
@@ -35,6 +37,9 @@ _VALID_PARAMETER_TYPES = (
     "FLOAT",
     "BOOL",
     "RANGE_EXPR",
+    "LIST[STRING]",
+    "LIST[INT]",
+    "LIST[FLOAT]",
 )
 _BOOL_DISALLOWED_FIELDS = (
     "allowedValues",
@@ -48,6 +53,39 @@ _RANGE_EXPR_DISALLOWED_FIELDS = (
     "minValue",
     "maxValue",
 )
+# The list types constrain their items through the nested "item" object instead.
+_LIST_DISALLOWED_FIELDS = (
+    "allowedValues",
+    "minValue",
+    "maxValue",
+    "objectType",
+    "dataFlow",
+)
+_LIST_ITEM_FIELDS = {
+    "LIST[STRING]": ("allowedValues", "minLength", "maxLength"),
+    "LIST[INT]": ("allowedValues", "minValue", "maxValue"),
+    "LIST[FLOAT]": ("allowedValues", "minValue", "maxValue"),
+}
+_LIST_TYPES = tuple(_LIST_ITEM_FIELDS)
+# CreateJob's JobParameter.stringList is a list of 0-64 ParameterString, each 0-1024 characters.
+_MAX_STRING_LIST_ITEMS = 64
+_MAX_STRING_LIST_ITEM_LENGTH = 1024
+# CreateJob's JobParameter.intList and floatList each hold 0-512 items.
+_MAX_NUMBER_LIST_ITEMS = 512
+_MAX_LIST_ITEMS = {
+    "LIST[STRING]": _MAX_STRING_LIST_ITEMS,
+    "LIST[INT]": _MAX_NUMBER_LIST_ITEMS,
+    "LIST[FLOAT]": _MAX_NUMBER_LIST_ITEMS,
+}
+# OpenJD ints are 64-bit.
+_MIN_INT64 = -(2**63)
+_MAX_INT64 = 2**63 - 1
+# How each list type describes its items in error messages, with an example value.
+_LIST_ITEM_DESCRIPTIONS = {
+    "LIST[STRING]": ("strings", '["a", "b"]'),
+    "LIST[INT]": ("integers", "[1, 2]"),
+    "LIST[FLOAT]": ("numbers", "[0.5, 2]"),
+}
 _VALID_UI_CONTROLS = (
     "CHECK_BOX",
     "CHOOSE_DIRECTORY",
@@ -55,8 +93,10 @@ _VALID_UI_CONTROLS = (
     "CHOOSE_OUTPUT_FILE",
     "DROPDOWN_LIST",
     "LINE_EDIT",
+    "LINE_EDIT_LIST",
     "MULTILINE_EDIT",
     "SPIN_BOX",
+    "SPIN_BOX_LIST",
     "HIDDEN",
 )
 
@@ -76,6 +116,14 @@ class UserInterfaceSpec(TypedDict):
     fileFilterDefault: NotRequired[UserInterfaceFileFilter]
 
 
+class JobParameterItemConstraints(TypedDict):
+    allowedValues: NotRequired[Union[list[str], list[int], list[float]]]
+    minLength: NotRequired[int]
+    maxLength: NotRequired[int]
+    minValue: NotRequired[Union[int, float]]
+    maxValue: NotRequired[Union[int, float]]
+
+
 class JobParameter(TypedDict):
     name: str
     type: NotRequired[str]
@@ -89,6 +137,7 @@ class JobParameter(TypedDict):
     minLength: NotRequired[int]
     maxValue: NotRequired[Union[int, float, str]]
     minValue: NotRequired[Union[int, float, str]]
+    item: NotRequired[JobParameterItemConstraints]
     userInterface: NotRequired[UserInterfaceSpec]
 
 
@@ -118,8 +167,10 @@ def validate_job_parameter(
     default_required: bool = False,
 ) -> JobParameter:
     """Validates a job parameter as defined by Open Job Description. The validation allows for the
-    union of all possible fields but does not do per-type validation (e.g. minValue only allowed
-    on parameters of type "INT" / "FLOAT")
+    union of all possible fields. Per-type checks are applied for BOOL, RANGE_EXPR and
+    the LIST[STRING], LIST[INT] and LIST[FLOAT] types, whose constraint fields and defaults
+    differ from the other types; the other types are not checked per type (e.g. minValue
+    is not limited to "INT" / "FLOAT").
 
     name: <Identifier>
     type: "PATH"
@@ -226,6 +277,25 @@ def validate_job_parameter(
                     f'Job parameter "{name}" has "default" that is not a valid range expression: {e}'
                 ) from e
 
+    if input.get("type") in _LIST_TYPES:
+        list_type = input["type"]
+        for field in _LIST_DISALLOWED_FIELDS:
+            if field in input:
+                raise ValueError(
+                    f'Job parameter "{name}" has "{field}" but type "{list_type}" does not support it'
+                )
+        if "item" in input:
+            if list_type == "LIST[STRING]":
+                _validate_list_string_item_constraints(input["item"], parameter_name=name)
+            else:
+                _validate_list_number_item_constraints(
+                    input["item"], list_type=list_type, parameter_name=name
+                )
+    elif "item" in input:
+        raise ValueError(
+            f'Job parameter "{name}" has "item" but type "{input.get("type")}" does not support it'
+        )
+
     if "allowedValues" in input:
         allowed_values = input["allowedValues"]
         if not isinstance(allowed_values, list):
@@ -310,16 +380,298 @@ def validate_job_parameter(
             parameter_name=name,
         )
 
+    # Checked last so the list and item constraints it applies are already validated.
+    if input.get("type") in _LIST_TYPES:
+        list_type = input["type"]
+        _validate_list_length_range(input, parameter_name=name)
+        if "default" in input:
+            default = input["default"]
+            # Unlike a submitted value, a template default must be a native list, not a JSON string.
+            if not isinstance(default, list):
+                raise TypeError(
+                    f'Job parameter "{name}" got {type(default).__name__} for "default" but type "{list_type}" expects list'
+                )
+            try:
+                validate_job_parameter_value(cast(JobParameter, input), default)
+            except (ValueError, TypeError) as e:
+                raise type(e)(f'In "default": {e}') from e
+
     return cast(JobParameter, input)
+
+
+def _validate_list_string_item_constraints(item: Any, *, parameter_name: str) -> None:
+    """Validates the "item" object of a LIST[STRING] job parameter definition."""
+    if not isinstance(item, dict):
+        raise TypeError(
+            f'Job parameter "{parameter_name}" got {type(item).__name__} for "item" but expected dict'
+        )
+    for field in item:
+        if field not in _LIST_ITEM_FIELDS["LIST[STRING]"]:
+            quoted = ", ".join(f'"{f}"' for f in _LIST_ITEM_FIELDS["LIST[STRING]"])
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has "item" -> "{field}" but type "LIST[STRING]" only supports ({quoted})'
+            )
+    if "allowedValues" in item:
+        allowed_values = item["allowedValues"]
+        if not isinstance(allowed_values, list):
+            raise TypeError(
+                f'Job parameter "{parameter_name}" got {type(allowed_values).__name__} for "item" -> "allowedValues" but expected list'
+            )
+        if not allowed_values:
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has an empty "item" -> "allowedValues" list'
+            )
+        for i, allowed_value in enumerate(allowed_values):
+            if not isinstance(allowed_value, str):
+                raise TypeError(
+                    f'Job parameter "{parameter_name}" got {type(allowed_value).__name__} for "item" -> "allowedValues" [{i}] but expected str'
+                )
+    for field in ("minLength", "maxLength"):
+        if field in item:
+            length = item[field]
+            if type(length) is not int:  # noqa: E721
+                raise TypeError(
+                    f'Job parameter "{parameter_name}" got {type(length).__name__} for "item" -> "{field}" but expected int'
+                )
+            if length < 0:
+                raise ValueError(
+                    f'Job parameter "{parameter_name}" got {length} for "item" -> "{field}" but the value must be non-negative'
+                )
+
+    # Reject constraints no item could satisfy, so the author learns at bundle load rather
+    # than from a GUI that can never be submitted.
+    item_min = item.get("minLength", 0)
+    item_max = min(
+        item.get("maxLength", _MAX_STRING_LIST_ITEM_LENGTH), _MAX_STRING_LIST_ITEM_LENGTH
+    )
+    if item_min > item_max:
+        raise ValueError(
+            f'Job parameter "{parameter_name}" has "item" -> "minLength" {item_min} greater than '
+            f"the maximum item length of {item_max}"
+        )
+    for i, allowed_value in enumerate(item.get("allowedValues", [])):
+        if not item_min <= len(allowed_value) <= item_max:
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has "item" -> "allowedValues" [{i}] of length '
+                f"{len(allowed_value)}, outside the item length range {item_min}-{item_max}"
+            )
+
+
+def _check_list_number_constraint(
+    value: Any, *, list_type: str, parameter_name: str, field_path: str
+) -> None:
+    """Checks one number from the "item" object of a LIST[INT] or LIST[FLOAT] definition."""
+    expected: Any = int if list_type == "LIST[INT]" else (int, float)
+    if isinstance(value, bool) or not isinstance(value, expected):
+        expected_name = "int" if list_type == "LIST[INT]" else "int or float"
+        raise TypeError(
+            f'Job parameter "{parameter_name}" got {type(value).__name__} for "item" -> {field_path} but expected {expected_name}'
+        )
+    if list_type == "LIST[INT]":
+        if not _MIN_INT64 <= value <= _MAX_INT64:
+            raise ValueError(
+                f'Job parameter "{parameter_name}" got {value} for "item" -> {field_path} which is outside the 64-bit integer range'
+            )
+    elif not _is_finite_float(value):
+        raise ValueError(
+            f'Job parameter "{parameter_name}" got {value!r} for "item" -> {field_path} which is not a finite number'
+        )
+
+
+def _is_finite_float(value: int | float) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return False
+
+
+def _validate_list_number_item_constraints(
+    item: Any, *, list_type: str, parameter_name: str
+) -> None:
+    """Validates the "item" object of a LIST[INT] or LIST[FLOAT] job parameter definition."""
+    if not isinstance(item, dict):
+        raise TypeError(
+            f'Job parameter "{parameter_name}" got {type(item).__name__} for "item" but expected dict'
+        )
+    item_fields = _LIST_ITEM_FIELDS[list_type]
+    for field in item:
+        if field not in item_fields:
+            quoted = ", ".join(f'"{f}"' for f in item_fields)
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has "item" -> "{field}" but type "{list_type}" only supports ({quoted})'
+            )
+    if "allowedValues" in item:
+        allowed_values = item["allowedValues"]
+        if not isinstance(allowed_values, list):
+            raise TypeError(
+                f'Job parameter "{parameter_name}" got {type(allowed_values).__name__} for "item" -> "allowedValues" but expected list'
+            )
+        if not allowed_values:
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has an empty "item" -> "allowedValues" list'
+            )
+        for i, allowed_value in enumerate(allowed_values):
+            _check_list_number_constraint(
+                allowed_value,
+                list_type=list_type,
+                parameter_name=parameter_name,
+                field_path=f'"allowedValues" [{i}]',
+            )
+    for field in ("minValue", "maxValue"):
+        if field in item:
+            _check_list_number_constraint(
+                item[field],
+                list_type=list_type,
+                parameter_name=parameter_name,
+                field_path=f'"{field}"',
+            )
+
+    # Reject constraints no item could satisfy, so the author learns at bundle load rather
+    # than from a GUI that can never be submitted.
+    item_min, item_max = item.get("minValue"), item.get("maxValue")
+    if item_min is not None and item_max is not None and item_min > item_max:
+        raise ValueError(
+            f'Job parameter "{parameter_name}" has "item" -> "minValue" {item_min} greater than '
+            f'"item" -> "maxValue" {item_max}'
+        )
+    for i, allowed_value in enumerate(item.get("allowedValues", [])):
+        if (item_min is not None and allowed_value < item_min) or (
+            item_max is not None and allowed_value > item_max
+        ):
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has "item" -> "allowedValues" [{i}] {allowed_value} '
+                f"outside the item value range {item_min}-{item_max}"
+            )
+
+
+def _validate_list_length_range(input: dict[str, Any], *, parameter_name: str) -> None:
+    """Rejects a list parameter minLength that no list could satisfy."""
+    max_items_cap = _MAX_LIST_ITEMS[input["type"]]
+    min_items = input.get("minLength", 0)
+    max_items = min(input.get("maxLength", max_items_cap), max_items_cap)
+    if min_items > max_items:
+        raise ValueError(
+            f'Job parameter "{parameter_name}" has "minLength" {min_items} greater than the '
+            f"maximum item count of {max_items}"
+        )
+
+
+def _check_list_item_type(list_type: str, name: str, i: int, item: Any) -> None:
+    """Raises TypeError if a list item is not of the list's item type. Items are not
+    converted between types, e.g. "5" is not an item of a LIST[INT]."""
+    if list_type == "LIST[STRING]":
+        is_item_type = isinstance(item, str)
+    elif list_type == "LIST[INT]":
+        is_item_type = isinstance(item, int) and not isinstance(item, bool)
+    else:
+        is_item_type = isinstance(item, (int, float)) and not isinstance(item, bool)
+    if not is_item_type:
+        raise TypeError(
+            f"Job parameter {name!r} has type {list_type} but item {i} is {item!r} of type {type(item)}."
+        )
+    if list_type == "LIST[INT]" and not _MIN_INT64 <= item <= _MAX_INT64:
+        raise ValueError(
+            f"Job parameter {name!r} item {i} {item} is outside the 64-bit integer range."
+        )
+    if list_type == "LIST[FLOAT]" and not _is_finite_float(item):
+        raise ValueError(f"Job parameter {name!r} item {i} {item!r} is not a finite number.")
+
+
+def _check_string_list_item(name: str, i: int, item: str, item_constraints: dict) -> None:
+    item_min_length = item_constraints.get("minLength")
+    item_max_length = min(
+        item_constraints.get("maxLength", _MAX_STRING_LIST_ITEM_LENGTH),
+        _MAX_STRING_LIST_ITEM_LENGTH,
+    )
+    if item_min_length is not None and len(item) < item_min_length:
+        raise ValueError(
+            f"Job parameter {name!r} item {i} {item!r} is shorter than item minLength {item_min_length}."
+        )
+    if len(item) > item_max_length:
+        shown = item if len(item) <= 40 else item[:40] + "..."
+        raise ValueError(
+            f"Job parameter {name!r} item {i} {shown!r} is longer than the maximum of {item_max_length} characters."
+        )
+
+
+def _check_number_list_item(name: str, i: int, item: int | float, item_constraints: dict) -> None:
+    item_min_value = item_constraints.get("minValue")
+    if item_min_value is not None and item < item_min_value:
+        raise ValueError(
+            f"Job parameter {name!r} item {i} {item!r} is less than item minValue {item_min_value}."
+        )
+    item_max_value = item_constraints.get("maxValue")
+    if item_max_value is not None and item > item_max_value:
+        raise ValueError(
+            f"Job parameter {name!r} item {i} {item!r} is greater than item maxValue {item_max_value}."
+        )
+
+
+def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
+    """Converts a LIST[STRING], LIST[INT] or LIST[FLOAT] value, a list or a string holding
+    a JSON array, to a list and checks it against the definition's list and item constraints.
+    LIST[FLOAT] items are returned as float."""
+    name = job_parameter["name"]
+    list_type = job_parameter["type"]
+    item_kind, example = _LIST_ITEM_DESCRIPTIONS[list_type]
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            raise ValueError(
+                f"Job parameter {name!r} has type {list_type} but got value {value!r} which is not a JSON array of {item_kind}, such as {example}."
+            ) from None
+        if not isinstance(value, list):
+            raise ValueError(
+                f"Job parameter {name!r} has type {list_type} but got value {json.dumps(value)} which is not a JSON array."
+            )
+    elif not isinstance(value, list):
+        raise TypeError(
+            f"Job parameter {name!r} has type {list_type} but got value {value!r} of type {type(value)}."
+        )
+
+    for i, item in enumerate(value):
+        _check_list_item_type(list_type, name, i, item)
+
+    min_length = job_parameter.get("minLength")
+    if min_length is not None and len(value) < min_length:
+        raise ValueError(
+            f"Job parameter {name!r} has {len(value)} items but minLength is {min_length}."
+        )
+    max_items_cap = _MAX_LIST_ITEMS[list_type]
+    max_length = min(job_parameter.get("maxLength", max_items_cap), max_items_cap)
+    if len(value) > max_length:
+        raise ValueError(
+            f"Job parameter {name!r} has {len(value)} items but at most {max_length} are allowed."
+        )
+
+    item_constraints: dict = dict(job_parameter.get("item", {}))
+    item_allowed_values = item_constraints.get("allowedValues")
+    for i, item in enumerate(value):
+        if list_type == "LIST[STRING]":
+            _check_string_list_item(name, i, item, item_constraints)
+        else:
+            _check_number_list_item(name, i, item, item_constraints)
+        if item_allowed_values is not None and item not in item_allowed_values:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} {item!r} is not an allowed value from {tuple(item_allowed_values)!r}."
+            )
+
+    if list_type == "LIST[FLOAT]":
+        return [float(item) for item in value]
+    return list(value)
 
 
 def validate_job_parameter_value(
     job_parameter: JobParameter,
-    value: str | int | float | bool,
-) -> str | int | float | bool:
+    value: str | int | float | bool | list[str] | list[int] | list[float],
+) -> str | int | float | bool | list[str] | list[int] | list[float]:
     """
     Validates a value for the specified parameter definition, returning the value with the correct type,
-    e.g. a string "19" for an INT parameter is returned as the integer 19.
+    e.g. a string "19" for an INT parameter is returned as the integer 19, and a string
+    '["a", "b"]' for a LIST[STRING] parameter is returned as the list ["a", "b"]. LIST[INT]
+    and LIST[FLOAT] values are also accepted as a JSON array string, and LIST[FLOAT] items
+    are returned as float.
     Raises a ValueError if validation fails.
 
     See https://github.com/OpenJobDescription/openjd-specifications/wiki/2023-09-Template-Schemas#2-jobparameterdefinition
@@ -370,7 +722,12 @@ def validate_job_parameter_value(
             raise ValueError(
                 f"Job parameter {name!r} has type RANGE_EXPR but got value {value!r} which is not a valid range expression: {e}"
             ) from e
+    elif param_type in _LIST_TYPES:
+        # The list and per-item constraints differ from the scalar ones applied below.
+        return _to_list(job_parameter, value)
     elif param_type == "INT":
+        if isinstance(value, list):
+            raise TypeError(f"Job parameter {name!r} has type INT but got list value {value!r}.")
         original_value = value
         try:
             if isinstance(value, str):
@@ -387,6 +744,8 @@ def validate_job_parameter_value(
                 f"Job parameter {name!r} has type INT but got value {value!r} which is not an integer."
             )
     elif param_type == "FLOAT":
+        if isinstance(value, list):
+            raise TypeError(f"Job parameter {name!r} has type FLOAT but got list value {value!r}.")
         try:
             value = float(value)
         except ValueError:
@@ -634,7 +993,7 @@ def validate_user_interface_file_filter(
         for i, pattern in enumerate(patterns):
             if not isinstance(pattern, str):
                 raise TypeError(
-                    f'Job parameter "{parameter_name}" got "{repr(pattern)}" for {field_path} -> "patterns" [{i}] but expected str'
+                    f'Job parameter "{parameter_name}" got "{pattern!r}" for {field_path} -> "patterns" [{i}] but expected str'
                 )
             elif not (0 < len(pattern) <= 20):
                 raise ValueError(
@@ -948,6 +1307,9 @@ _SUPPORTED_CONTROLS_FOR_TYPE = {
     "FLOAT": {"SPIN_BOX", "DROPDOWN_LIST", "HIDDEN"},
     "BOOL": {"CHECK_BOX", "HIDDEN"},
     "RANGE_EXPR": {"LINE_EDIT", "HIDDEN"},
+    "LIST[STRING]": {"LINE_EDIT_LIST", "HIDDEN"},
+    "LIST[INT]": {"SPIN_BOX_LIST", "HIDDEN"},
+    "LIST[FLOAT]": {"SPIN_BOX_LIST", "HIDDEN"},
 }
 
 
@@ -964,6 +1326,10 @@ def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
             return "LINE_EDIT"
         elif param_type == "RANGE_EXPR":
             return "LINE_EDIT"
+        elif param_type == "LIST[STRING]":
+            return "LINE_EDIT_LIST"
+        elif param_type in ("LIST[INT]", "LIST[FLOAT]"):
+            return "SPIN_BOX_LIST"
         elif param_type == "PATH":
             if param_def.get("objectType", "DIRECTORY") == "FILE":
                 if param_def.get("dataFlow", "NONE") == "OUT":
@@ -1055,4 +1421,23 @@ def parameter_definition_difference(
             continue
         if not _parameter_definition_fields_equivalent(lhs, rhs, name, set_comparison=True):
             differences.append(name)
+    if not (ignore_missing and ("item" not in lhs or "item" not in rhs)):
+        if not _item_constraints_equivalent(lhs.get("item"), rhs.get("item")):
+            differences.append("item")
     return differences
+
+
+def _item_constraints_equivalent(lhs: Any, rhs: Any) -> bool:
+    """Compares list parameter "item" constraints, with allowedValues compared as sets like
+    the top-level allowedValues. An absent "item" is the same as one with no constraints."""
+    lhs = {} if lhs is None else lhs
+    rhs = {} if rhs is None else rhs
+    if not isinstance(lhs, dict) or not isinstance(rhs, dict):
+        return lhs == rhs
+    for field in ("minLength", "maxLength", "minValue", "maxValue"):
+        if lhs.get(field) != rhs.get(field):
+            return False
+    lhs_allowed, rhs_allowed = lhs.get("allowedValues"), rhs.get("allowedValues")
+    if lhs_allowed is None or rhs_allowed is None:
+        return lhs_allowed == rhs_allowed
+    return set(lhs_allowed) == set(rhs_allowed)

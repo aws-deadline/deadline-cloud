@@ -18,12 +18,14 @@ _QT_TEST_FILES = [
     "test_gui_job_attachments.py",
     "test_gui_job_bundle_submitter.py",
     "test_gui_job_timeouts.py",
+    "test_gui_line_edit_list.py",
     "test_gui_openjd_parameters.py",
     "test_gui_shared_job_properties.py",
     "test_gui_shared_job_settings.py",
     "test_gui_submitter_bundles.py",
     "test_gui_utils_and_widgets.py",
     "test_settings_dialogue.py",
+    "test_gui_spin_box_list.py",
 ]
 
 collect_ignore = [f for f in _QT_TEST_FILES] if not _has_pyside6 else []

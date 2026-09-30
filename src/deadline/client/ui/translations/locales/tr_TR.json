@@ -44,6 +44,9 @@
   "Do not ask again": "Bir daha sorma",
   "Don't remind me again": "Bir daha hatırlatma",
   "Download installer": "Installer'ı indir",
+  "Drag to show more or fewer rows": "Drag to show more or fewer rows",
+  "Edit": "Edit",
+  "Items: {count}": "Items: {count}",
   "Edit...": "Düzenle...",
   "Error: Timeout cannot be set to zero.": "Hata: Zaman aşımı sıfıra ayarlanamaz.",
   "Save bundle as": "Paketi farklı kaydet",
@@ -174,5 +177,8 @@
   "Value": "Değer",
   "Save to": "Kaydet",
   "Location": "Konum",
-  "Select directory": "Dizin seçin"
+  "Select directory": "Dizin seçin",
+  "A required dependency is missing for the profile '{profile}'.": "A required dependency is missing for the profile '{profile}'.",
+  "Missing Dependency": "Missing Dependency",
+  "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}": "There is a missing dependency issue with the profile '{profile}'.\n\n{remediation}"
 }
