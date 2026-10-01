@@ -806,6 +806,10 @@ class SubmitJobToDeadlineDialog(QDialog):
             _total_bytes = [0]
             _phase = ["Archiving"]
             _finished = [False]
+            # Set when exec_() returns. Signals the worker sent before it stopped, and a
+            # timer _on_finished started, can still arrive after that, when the progress
+            # dialog is deleted or about to be.
+            _closed = [False]
 
             def _format_size(b):
                 if b >= 1024 * 1024 * 1024:
@@ -817,12 +821,14 @@ class SubmitJobToDeadlineDialog(QDialog):
                 return f"{b} B"
 
             def _on_status(msg):
+                if _closed[0]:
+                    return
                 _progress_label.setText(msg)
                 if "Upload" in msg:
                     _phase[0] = "Uploading"
 
             def _on_progress(n, total):
-                if _finished[0]:
+                if _finished[0] or _closed[0]:
                     return
                 if total > 0:
                     _total_bytes[0] = total * 1024
@@ -842,6 +848,8 @@ class SubmitJobToDeadlineDialog(QDialog):
                 QTimer.singleShot(0, _show_complete)
 
             def _show_complete():
+                if _closed[0]:
+                    return
                 _progress_bar.setVisible(False)
                 _progress_label.setText("Bundle saved to queue")
                 _cancel_btn.setText("Close")
@@ -849,6 +857,8 @@ class SubmitJobToDeadlineDialog(QDialog):
                 _cancel_btn.clicked.connect(progress_dialog.accept)
 
             def _on_error(msg):
+                if _closed[0]:
+                    return
                 upload_error.append(msg)
                 progress_dialog.close()
 
@@ -863,6 +873,7 @@ class SubmitJobToDeadlineDialog(QDialog):
             worker.start()
 
             progress_dialog.exec_()
+            _closed[0] = True
             worker.cancel()
             worker.wait()
             worker.deleteLater()

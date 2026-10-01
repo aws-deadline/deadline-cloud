@@ -292,6 +292,48 @@ class TestGuiSubmitterBundles:
         # equals the true archive size in KB.
         assert captured.get("max") == expected_kb
 
+    def test_export_to_queue_finishing_as_the_dialog_closes(
+        self, qtbot, mock_auth_status, submitter_dialog, tmp_path
+    ):
+        """The upload can finish just as the user closes the progress dialog. Its "done"
+        signal is then delivered after the dialog was scheduled for deletion, and must
+        not touch the dialog's deleted widgets."""
+        import time
+        from typing import Any
+
+        from qtpy.QtCore import QThread
+
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        (bundle / "template.yaml").write_text("name: Bundle\nsteps: []\n")
+
+        def _upload_after_close(buf, name, metadata=None, progress_callback=None):
+            # Finish only once the dialog is closed and the worker canceled, without
+            # calling the progress callback that would abort the upload.
+            worker: Any = QThread.currentThread()
+            deadline = time.monotonic() + 10
+            while not worker._cancelled and time.monotonic() < deadline:
+                time.sleep(0.01)
+            return f"s3://bucket/prefix/{name}.ojd"
+
+        queue_repo = MagicMock(spec=S3BundleRepository)
+        queue_repo.bundle_exists.return_value = False
+        queue_repo.upload_archive.side_effect = _upload_after_close
+
+        def _reject_progress_dialog():
+            for widget in QApplication.topLevelWidgets():
+                if isinstance(widget, QDialog) and widget.windowTitle() == "Save Bundle to Queue":
+                    widget.reject()
+                    return
+            QTimer.singleShot(20, _reject_progress_dialog)
+
+        QTimer.singleShot(20, _reject_progress_dialog)
+        submitter_dialog._export_to_queue(queue_repo, "bundle", str(bundle))
+
+        # Deliver the late "done", the dialog's deletion, and any timer either starts.
+        qtbot.wait(200)
+        assert submitter_dialog.findChildren(QThread) == []
+
     def test_generate_export_bundle_aborts_and_notifies_on_failure(self, qtbot, mock_auth_status):
         """A failed bundle generation is surfaced and reported as a failure.
 
