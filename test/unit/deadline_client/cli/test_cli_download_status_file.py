@@ -839,6 +839,60 @@ class TestStatusFileTelemetryGrowthAndCost:
         assert details["location_count"] == 1
         assert details["jobs_added"] == 1
 
+    def test_write_measures_the_read_rather_than_reporting_zero(self, tmp_path, monkeypatch):
+        """Delay the read, because an assertion of merely non-negative passes on a hardcoded 0."""
+        import deadline.client.cli._download_status_file as mod
+
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        real_read = mod._read_existing_status_file
+
+        def _slow_read(path):
+            time.sleep(0.05)
+            return real_read(path)
+
+        monkeypatch.setattr(mod, "_read_existing_status_file", _slow_read)
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        assert events[0]["event_details"]["read_duration_ms"] >= 40
+
+    def test_write_measures_the_write_rather_than_reporting_zero(self, tmp_path, monkeypatch):
+        """Delay the write, because an assertion of merely non-negative passes on a hardcoded 0."""
+        import deadline.client.cli._download_status_file as mod
+
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        real_write = mod._atomic_write_json
+
+        def _slow_write(path, data):
+            time.sleep(0.05)
+            return real_write(path, data)
+
+        monkeypatch.setattr(mod, "_atomic_write_json", _slow_write)
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        assert events[0]["event_details"]["write_duration_ms"] >= 40
+
     def test_write_reports_the_location_count_on_every_event(self, tmp_path, monkeypatch):
         events = self._capture_events(monkeypatch)
         first = tmp_path / "one"
