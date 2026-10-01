@@ -567,6 +567,72 @@ class TestDeadlineUIController:
         mock_api.list_storage_profiles_for_queue.assert_not_called()
         mock_api.get_queue_parameter_definitions.assert_not_called()
 
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_queue_params_success_emits_load_succeeded(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """A successful fetch emits queue_parameters_load_succeeded with the parameters,
+        even when the queue genuinely has zero queue parameters."""
+        controller = DeadlineUIController.getInstance()
+        mock_api.get_queue_parameter_definitions.return_value = []
+
+        succeeded = []
+        updated = []
+        controller.queue_parameters_load_succeeded.connect(
+            lambda x: succeeded.append(x), _QueuedConnection
+        )
+        controller.queue_parameters_updated.connect(lambda x: updated.append(x), _QueuedConnection)
+
+        controller.refresh_queue_parameters(farm_id="farm-123", queue_id="queue-456")
+
+        qtbot.waitUntil(lambda: len(succeeded) > 0, timeout=2000)
+        assert succeeded[0] == []
+        assert updated[0] == []
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_queue_params_error_does_not_emit_load_succeeded(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """A failed fetch emits queue_parameters_updated([]) but NOT load_succeeded, so
+        success-only consumers can distinguish an error from an empty-but-real load."""
+        controller = DeadlineUIController.getInstance()
+        mock_api.get_queue_parameter_definitions.side_effect = RuntimeError("boom")
+
+        succeeded = []
+        updated = []
+        controller.queue_parameters_load_succeeded.connect(
+            lambda x: succeeded.append(x), _QueuedConnection
+        )
+        controller.queue_parameters_updated.connect(lambda x: updated.append(x), _QueuedConnection)
+
+        controller.refresh_queue_parameters(farm_id="farm-123", queue_id="queue-456")
+
+        qtbot.waitUntil(lambda: len(updated) > 0, timeout=2000)
+        assert updated[0] == []
+        assert succeeded == []
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_clearing_emission_does_not_emit_load_succeeded(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """refresh with no farm/queue selected clears via queue_parameters_updated([]) without
+        emitting load_succeeded."""
+        controller = DeadlineUIController.getInstance()
+
+        succeeded = []
+        updated = []
+        controller.queue_parameters_load_succeeded.connect(
+            lambda x: succeeded.append(x), _QueuedConnection
+        )
+        controller.queue_parameters_updated.connect(lambda x: updated.append(x), _QueuedConnection)
+
+        controller.refresh_queue_parameters(farm_id="", queue_id="")
+
+        qtbot.waitUntil(lambda: len(updated) > 0, timeout=2000)
+        assert updated[0] == []
+        assert succeeded == []
+        mock_api.get_queue_parameter_definitions.assert_not_called()
+
     def test_shutdown_cancels_operations(self, qtbot):
         """Test that shutdown cancels pending operations."""
         controller = DeadlineUIController.getInstance()
