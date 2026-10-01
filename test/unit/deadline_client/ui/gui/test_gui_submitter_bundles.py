@@ -40,8 +40,12 @@ class MockJobSettingsWidget(QWidget):
 
 
 @pytest.fixture
-def mock_auth_status():
-    """Mock DeadlineAuthenticationStatus to prevent real API calls."""
+def mock_auth_status(fresh_deadline_config):
+    """Mock DeadlineAuthenticationStatus to prevent real API calls.
+
+    A blank Deadline config goes with it, so the dialog has no configured farm or
+    queue and starts no background calls to fetch them.
+    """
     mock_instance = MagicMock()
     type(mock_instance).api_availability = PropertyMock(return_value=None)
     type(mock_instance).creds_source = PropertyMock(return_value=None)
@@ -268,6 +272,18 @@ class TestGuiSubmitterBundles:
 
         QTimer.singleShot(20, _poll)
         submitter_dialog._export_to_queue(queue_repo, "big-bundle", str(bundle))
+
+        # The upload thread is owned by the dialog, and deleted once it has finished,
+        # so a garbage collection on another thread can't destroy it.
+        from qtpy.QtCore import QThread
+
+        workers = submitter_dialog.findChildren(QThread)
+        assert [type(w).__name__ for w in workers] == ["_UploadWorker"]
+        assert workers[0].isFinished()
+        destroyed = []
+        workers[0].destroyed.connect(lambda *_: destroyed.append(True))
+        qtbot.waitUntil(lambda: bool(destroyed), timeout=5000)
+        assert submitter_dialog.findChildren(QThread) == []
 
         assert queue_repo.upload_archive.called
         expected_kb = uploaded["size"] // 1024

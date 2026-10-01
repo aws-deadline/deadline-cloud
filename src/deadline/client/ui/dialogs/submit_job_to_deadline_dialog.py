@@ -714,8 +714,10 @@ class SubmitJobToDeadlineDialog(QDialog):
                 done = _Signal()
                 error = _Signal(str)
 
-                def __init__(self, repo, bundle_name, source_dir, metadata):
-                    super().__init__()
+                def __init__(self, repo, bundle_name, source_dir, metadata, parent):
+                    # A parent keeps Qt, not a garbage collection on whichever
+                    # thread runs it, in charge of destroying this QThread.
+                    super().__init__(parent)
                     self._repo = repo
                     self._bundle_name = bundle_name
                     self._source_dir = source_dir
@@ -796,6 +798,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 bundle_name,
                 source_dir,
                 bundle_metadata if bundle_metadata else None,
+                self,
             )
 
             upload_error = []
@@ -862,6 +865,8 @@ class SubmitJobToDeadlineDialog(QDialog):
             progress_dialog.exec_()
             worker.cancel()
             worker.wait()
+            worker.deleteLater()
+            progress_dialog.deleteLater()
 
             if upload_error:
                 raise RuntimeError(upload_error[0])

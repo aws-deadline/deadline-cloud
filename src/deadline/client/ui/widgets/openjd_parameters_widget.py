@@ -323,6 +323,13 @@ class _JobTemplateRangeExprValidator(QValidator):
 class _JobTemplateWidget(QWidget):
     IS_VERTICAL_EXPANDING: bool = False
 
+    # Reports a change as a copy of the parameter definition with "value" set. Controls
+    # report changes through this Qt signal, connected to their own bound method, rather
+    # than through Python closures or containers that capture the parent's callbacks:
+    # those form reference cycles or leaks, so the widget could only be freed by the
+    # garbage collector, on whichever thread it happens to run.
+    _value_changed = Signal(dict)
+
     def __init__(self, parent, parameter):
         super().__init__(parent)
 
@@ -361,6 +368,23 @@ class _JobTemplateWidget(QWidget):
         # Set the initial value to the first of the value, default or a type default
         value = parameter.get("value", parameter.get("default", self.OPENJD_DEFAULT_VALUE))
         self.set_value(value)
+
+        # Connected after the initial value is set, so setting it reports no change.
+        change_signal = self._change_signal()
+        if change_signal is not None:
+            change_signal.connect(self._emit_value_changed)
+
+    def _change_signal(self) -> Any:
+        """The child widget's signal that reports a user edit, or None."""
+        return None
+
+    def _emit_value_changed(self, *args) -> None:
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = self.value()
+        self._value_changed.emit(message)
+
+    def connect_parameter_changed(self, callback) -> None:
+        self._value_changed.connect(callback)
 
     def name(self):
         return self.job_template_parameter["name"]
@@ -437,15 +461,8 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setText(value.as_posix() if isinstance(value, Path) else str(value))
 
-    def _handle_text_changed(self, text, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = text
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.textChanged.connect(
-            lambda text: self._handle_text_changed(text, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.textChanged
 
 
 class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
@@ -491,15 +508,8 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setPlainText(value.as_posix() if isinstance(value, Path) else str(value))
 
-    def _handle_text_changed(self, text, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = text
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.textChanged.connect(
-            lambda: self._handle_text_changed(self.value(), callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.textChanged
 
 
 class _FixedRowHeightDelegate(QStyledItemDelegate):
@@ -583,7 +593,6 @@ class _JobTemplateListWidgetBase(_JobTemplateWidget):
 
     def _build_ui(self, parameter):
         self._suppress_changes = False
-        self._change_callbacks: List[Any] = []
         max_items_cap = _MAX_LIST_ITEMS[parameter["type"]]
         self.max_items = min(parameter.get("maxLength", max_items_cap), max_items_cap)
 
@@ -748,10 +757,7 @@ class _JobTemplateListWidgetBase(_JobTemplateWidget):
             self._update_buttons()
         finally:
             self._suppress_changes = False
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = self.value()
-        for callback in self._change_callbacks:
-            callback(message)
+        self._emit_value_changed()
 
     def _update_buttons(self) -> None:
         count = self.edit_control.count()
@@ -831,9 +837,6 @@ class _JobTemplateListWidgetBase(_JobTemplateWidget):
 
     def _before_set_value(self) -> None:
         """Called before set_value replaces the items."""
-
-    def connect_parameter_changed(self, callback):
-        self._change_callbacks.append(callback)
 
 
 class _JobTemplateLineEditListWidget(_JobTemplateListWidgetBase):
@@ -1255,15 +1258,8 @@ class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setValue(value)
 
-    def _handle_value_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.valueChanged.connect(
-            lambda value: self._handle_value_changed(value, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.valueChanged
 
 
 class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
@@ -1341,15 +1337,8 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setValue(value)
 
-    def _handle_value_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.valueChanged.connect(
-            lambda value: self._handle_value_changed(value, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.valueChanged
 
 
 class _JobTemplateDropdownListWidget(_JobTemplateWidget):
@@ -1394,15 +1383,8 @@ class _JobTemplateDropdownListWidget(_JobTemplateWidget):
         if index >= 0:
             self.edit_control.setCurrentIndex(index)
 
-    def _handle_index_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.currentIndexChanged.connect(
-            lambda _: self._handle_index_changed(self.value(), callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.currentIndexChanged
 
 
 class _JobTemplateBaseFileWidget(_JobTemplateWidget):
@@ -1458,15 +1440,8 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setText(value)
 
-    def _handle_path_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.path_changed.connect(
-            lambda path: self._handle_path_changed(path, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.path_changed
 
 
 class _JobTemplateInputFileWidget(_JobTemplateBaseFileWidget):
@@ -1510,15 +1485,8 @@ class _JobTemplateDirectoryWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setText(value)
 
-    def _handle_path_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.path_changed.connect(
-            lambda path: self._handle_path_changed(path, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.path_changed
 
 
 # These are the permitted sets of values that can be in a string job parameter 'allowedValues'
@@ -1597,15 +1565,8 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
             checked = value == self.true_value
         self.edit_control.setChecked(checked)
 
-    def _handle_value_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.stateChanged.connect(
-            lambda _: self._handle_value_changed(self.value(), callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.stateChanged
 
 
 class _JobTemplateHiddenWidget(_JobTemplateWidget):
@@ -1655,9 +1616,6 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
                     # Keep the value as-is so submission reports it as an error.
                     pass
         self._value = value
-
-    def connect_parameter_changed(self, callback):
-        pass
 
 
 class _JobTemplateGroupLayout(QGroupBox):
