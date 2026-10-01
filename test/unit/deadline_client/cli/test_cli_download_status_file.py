@@ -20,7 +20,9 @@ from deadline.client.cli._download_status_file import (
     _determine_job_download_status,
     _get_status_file_paths,
     _record_status_file_telemetry,
+    _LockOutcome,
     _status_file_lock,
+    _WriteMeasurements,
     write_download_status_file,
 )
 from deadline.client.cli._incremental_download import (
@@ -584,7 +586,9 @@ class TestRecordStatusFileTelemetry:
         file_path = str(tmp_path / "status.json")
         written = _atomic_write_json(file_path, content)
 
-        _record_status_file_telemetry(file_path, content, written)
+        _record_status_file_telemetry(
+            file_path, content, {}, _WriteMeasurements(file_size_bytes=written)
+        )
 
         assert len(events) == 1
         assert events[0]["event_type"] == "com.amazon.rum.deadline.queue_sync_output_status_file"
@@ -592,6 +596,13 @@ class TestRecordStatusFileTelemetry:
             "file_size_bytes": os.path.getsize(file_path),
             "job_count": 2,
             "task_record_count": 3,
+            "jobs_added": 2,
+            "task_records_added": 3,
+            "read_duration_ms": 0,
+            "write_duration_ms": 0,
+            "lock_wait_ms": 0,
+            "lock_abandoned": False,
+            "location_count": 1,
         }
 
     def test_reports_zero_counts_for_an_empty_file(self, tmp_path, monkeypatch):
@@ -599,7 +610,9 @@ class TestRecordStatusFileTelemetry:
         file_path = str(tmp_path / "status.json")
         written = _atomic_write_json(file_path, {"jobs": {}})
 
-        _record_status_file_telemetry(file_path, {"jobs": {}}, written)
+        _record_status_file_telemetry(
+            file_path, {"jobs": {}}, {}, _WriteMeasurements(file_size_bytes=written)
+        )
 
         assert events[0]["event_details"]["job_count"] == 0
         assert events[0]["event_details"]["task_record_count"] == 0
@@ -613,7 +626,9 @@ class TestRecordStatusFileTelemetry:
         written = _atomic_write_json(file_path, content)
         _atomic_write_json(file_path, {"status_file_path": "/elsewhere"})
 
-        _record_status_file_telemetry(file_path, content, written)
+        _record_status_file_telemetry(
+            file_path, content, {}, _WriteMeasurements(file_size_bytes=written)
+        )
 
         assert events[0]["event_details"]["file_size_bytes"] == written
         assert events[0]["event_details"]["file_size_bytes"] != os.path.getsize(file_path)
@@ -625,7 +640,9 @@ class TestRecordStatusFileTelemetry:
         written = _atomic_write_json(file_path, content)
         os.unlink(file_path)
 
-        _record_status_file_telemetry(file_path, content, written)
+        _record_status_file_telemetry(
+            file_path, content, {}, _WriteMeasurements(file_size_bytes=written)
+        )
 
         assert events[0]["event_details"]["task_record_count"] == 2
         assert events[0]["event_details"]["file_size_bytes"] == written
@@ -640,7 +657,9 @@ class TestRecordStatusFileTelemetry:
         file_path = str(tmp_path / "status.json")
         written = _atomic_write_json(file_path, {"jobs": {}})
 
-        _record_status_file_telemetry(file_path, {"jobs": {}}, written)
+        _record_status_file_telemetry(
+            file_path, {"jobs": {}}, {}, _WriteMeasurements(file_size_bytes=written)
+        )
 
     def test_write_reports_the_file_it_just_wrote(self, tmp_path, monkeypatch):
         events = self._capture_events(monkeypatch)
@@ -711,6 +730,168 @@ class TestRecordStatusFileTelemetry:
         status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
         assert status_file.exists()
         assert not any("failed to write status file" in m for m in messages)
+
+
+class TestStatusFileTelemetryGrowthAndCost:
+    """Tests for the growth, timing, lock and location fields on the telemetry event."""
+
+    @staticmethod
+    def _capture_events(monkeypatch) -> list[dict[str, Any]]:
+        return TestRecordStatusFileTelemetry._capture_events(monkeypatch)
+
+    def test_added_counts_report_growth_not_totals(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        existing: dict[str, Any] = {"job-a": {"tasks": {"1-1": {}, "1-2": {}}}}
+        content: dict[str, Any] = {
+            "jobs": {
+                "job-a": {"tasks": {"1-1": {}, "1-2": {}, "1-3": {}}},
+                "job-b": {"tasks": {"2-1": {}}},
+            }
+        }
+        file_path = str(tmp_path / "status.json")
+        written = _atomic_write_json(file_path, content)
+
+        _record_status_file_telemetry(
+            file_path, content, existing, _WriteMeasurements(file_size_bytes=written)
+        )
+
+        details = events[0]["event_details"]
+        assert details["job_count"] == 2
+        assert details["task_record_count"] == 4
+        assert details["jobs_added"] == 1
+        assert details["task_records_added"] == 2
+
+    def test_added_counts_are_zero_when_a_run_changes_nothing(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        jobs: dict[str, Any] = {"job-a": {"tasks": {"1-1": {}}}}
+        content: dict[str, Any] = {"jobs": jobs}
+        file_path = str(tmp_path / "status.json")
+        written = _atomic_write_json(file_path, content)
+
+        _record_status_file_telemetry(
+            file_path, content, dict(jobs), _WriteMeasurements(file_size_bytes=written)
+        )
+
+        assert events[0]["event_details"]["jobs_added"] == 0
+        assert events[0]["event_details"]["task_records_added"] == 0
+
+    def test_added_counts_tolerate_a_malformed_existing_entry(self, tmp_path, monkeypatch):
+        """An existing file can carry entries this version never wrote."""
+        events = self._capture_events(monkeypatch)
+        content: dict[str, Any] = {"jobs": {"job-a": {"tasks": {"1-1": {}}}}}
+        file_path = str(tmp_path / "status.json")
+        written = _atomic_write_json(file_path, content)
+
+        _record_status_file_telemetry(
+            file_path,
+            content,
+            {"job-a": "not a dict", "job-b": {"tasks": None}},
+            _WriteMeasurements(file_size_bytes=written),
+        )
+
+        assert events[0]["event_details"]["task_records_added"] == 1
+        assert events[0]["event_details"]["jobs_added"] == -1
+
+    def test_measurements_pass_through_to_the_event(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        file_path = str(tmp_path / "status.json")
+
+        _record_status_file_telemetry(
+            file_path,
+            {"jobs": {}},
+            {},
+            _WriteMeasurements(
+                file_size_bytes=7,
+                read_duration_ms=11,
+                write_duration_ms=13,
+                location_count=3,
+                lock=_LockOutcome(wait_ms=17, abandoned=True),
+            ),
+        )
+
+        details = events[0]["event_details"]
+        assert details["read_duration_ms"] == 11
+        assert details["write_duration_ms"] == 13
+        assert details["lock_wait_ms"] == 17
+        assert details["lock_abandoned"] is True
+        assert details["location_count"] == 3
+
+    def test_write_reports_durations_and_a_single_location(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        details = events[0]["event_details"]
+        assert details["read_duration_ms"] >= 0
+        assert details["write_duration_ms"] >= 0
+        assert details["lock_wait_ms"] >= 0
+        assert details["lock_abandoned"] is False
+        assert details["location_count"] == 1
+        assert details["jobs_added"] == 1
+
+    def test_write_reports_the_location_count_on_every_event(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        first = tmp_path / "one"
+        second = tmp_path / "two"
+        first.mkdir()
+        second.mkdir()
+        profile = {
+            "fileSystemLocations": [
+                {"name": "one", "path": str(first)},
+                {"name": "two", "path": str(second)},
+            ]
+        }
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        assert [e["event_details"]["location_count"] for e in events] == [2, 2]
+
+    def test_write_reports_an_abandoned_lock(self, tmp_path, monkeypatch):
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        status_file.parent.mkdir(parents=True)
+        with open(str(status_file) + ".lock", "w") as f:
+            json.dump({"hostname": "peer", "time": time.time()}, f)
+
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file._STATUS_FILE_LOCK_MAX_WAIT_SECONDS", 0.05
+        )
+        monkeypatch.setattr(
+            "deadline.client.cli._download_status_file._STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS",
+            0.01,
+        )
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        assert events[0]["event_details"]["lock_abandoned"] is True
+        assert events[0]["event_details"]["lock_wait_ms"] > 0
 
 
 class TestWriteDownloadStatusFile:

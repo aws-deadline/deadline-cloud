@@ -10,6 +10,7 @@ import socket
 import tempfile
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Generator, Optional
 
@@ -28,8 +29,16 @@ _STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS = 1
 _STATUS_FILE_LOCK_MAX_WAIT_SECONDS = 90
 
 
+@dataclass
+class _LockOutcome:
+    """How the lock behaved, so telemetry can report contention the writer silently tolerates."""
+
+    wait_ms: int = 0
+    abandoned: bool = False
+
+
 @contextmanager
-def _status_file_lock(status_file_path: str) -> Generator[None, None, None]:
+def _status_file_lock(status_file_path: str) -> Generator[_LockOutcome, None, None]:
     """Cooperative cross-machine lock for the shared NAS status file.
 
     Creates a sentinel lock file next to the status file. Both machines agree
@@ -42,8 +51,10 @@ def _status_file_lock(status_file_path: str) -> Generator[None, None, None]:
     dir_path = os.path.dirname(status_file_path)
     os.makedirs(dir_path, exist_ok=True)
 
+    outcome = _LockOutcome()
     acquired = False
-    deadline_time = time.monotonic() + _STATUS_FILE_LOCK_MAX_WAIT_SECONDS
+    wait_started = time.monotonic()
+    deadline_time = wait_started + _STATUS_FILE_LOCK_MAX_WAIT_SECONDS
     while time.monotonic() < deadline_time:
         # Check if a lock exists and whether it is stale.
         # Read the timestamp from the lock file content rather than the NAS mtime to avoid
@@ -83,12 +94,15 @@ def _status_file_lock(status_file_path: str) -> Generator[None, None, None]:
         except OSError:
             time.sleep(_STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS)
     else:
+        outcome.abandoned = True
         logger.warning(
             f"Could not acquire status file lock at {lock_path} after {_STATUS_FILE_LOCK_MAX_WAIT_SECONDS}s — proceeding without lock."
         )
 
+    outcome.wait_ms = int((time.monotonic() - wait_started) * 1000)
+
     try:
-        yield
+        yield outcome
     finally:
         if acquired:
             # Verify we still own the lock before deleting — if our hold exceeded the TTL,
@@ -421,18 +435,42 @@ def _count_task_records(jobs: dict[str, Any]) -> int:
     return total
 
 
+@dataclass
+class _WriteMeasurements:
+    """Per-location measurements gathered while writing one status file."""
+
+    file_size_bytes: int = 0
+    read_duration_ms: int = 0
+    write_duration_ms: int = 0
+    location_count: int = 1
+    lock: _LockOutcome = field(default_factory=_LockOutcome)
+
+
 def _record_status_file_telemetry(
-    status_file_path: str, status_content: dict[str, Any], file_size_bytes: int
+    status_file_path: str,
+    status_content: dict[str, Any],
+    existing_jobs: dict[str, Any],
+    measurements: _WriteMeasurements,
 ) -> None:
     """Best-effort: the file is already written, so a telemetry failure must not fail the write."""
     try:
         jobs = status_content.get("jobs", {})
+        task_record_count = _count_task_records(jobs)
         api.get_deadline_cloud_library_telemetry_client().record_event(
             event_type="com.amazon.rum.deadline.queue_sync_output_status_file",
             event_details={
-                "file_size_bytes": file_size_bytes,
+                "file_size_bytes": measurements.file_size_bytes,
                 "job_count": len(jobs),
-                "task_record_count": _count_task_records(jobs),
+                "task_record_count": task_record_count,
+                # Growth per run, because nothing in the event identifies which file a
+                # sample came from, so a reader cannot difference two samples itself.
+                "jobs_added": len(jobs) - len(existing_jobs),
+                "task_records_added": task_record_count - _count_task_records(existing_jobs),
+                "read_duration_ms": measurements.read_duration_ms,
+                "write_duration_ms": measurements.write_duration_ms,
+                "lock_wait_ms": measurements.lock.wait_ms,
+                "lock_abandoned": measurements.lock.abandoned,
+                "location_count": measurements.location_count,
             },
         )
     except Exception as e:
@@ -602,8 +640,13 @@ def write_download_status_file(
     written_paths: list[str] = []
     for status_file_path in status_file_paths:
         try:
-            with _status_file_lock(status_file_path):
+            measurements = _WriteMeasurements(location_count=len(status_file_paths))
+            with _status_file_lock(status_file_path) as lock_outcome:
+                measurements.lock = lock_outcome
+
+                read_started = time.monotonic()
                 existing_jobs = _read_existing_status_file(status_file_path)
+                measurements.read_duration_ms = int((time.monotonic() - read_started) * 1000)
 
                 status_content = _build_status_file_content(
                     queue_id=queue_id,
@@ -616,10 +659,14 @@ def write_download_status_file(
                     succeeded_task_ids=succeeded_task_ids,
                 )
 
-                written_bytes = _atomic_write_json(status_file_path, status_content)
+                write_started = time.monotonic()
+                measurements.file_size_bytes = _atomic_write_json(status_file_path, status_content)
+                measurements.write_duration_ms = int((time.monotonic() - write_started) * 1000)
             written_paths.append(status_file_path)
             # Outside the lock: it is contended by every machine syncing this queue.
-            _record_status_file_telemetry(status_file_path, status_content, written_bytes)
+            _record_status_file_telemetry(
+                status_file_path, status_content, existing_jobs, measurements
+            )
             if not fmt.suppressed:
                 fmt.summary_row("status file", _format_path(status_file_path))
         except Exception as e:
