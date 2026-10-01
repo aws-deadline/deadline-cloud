@@ -415,3 +415,103 @@ class TestStreamingAsyncTask:
         assert deleted_signals.progress.emit.call_count == 2
         deleted_signals.result.emit.assert_called_once_with(None)
         deleted_signals.finished.emit.assert_called_once_with()
+
+
+class TestWorkerSignalsLifetime:
+    """A task's WorkerSignals is a QObject created on the main thread, so Qt requires
+    that it is also destroyed there, never on the pool thread that ran the task."""
+
+    @staticmethod
+    def _run_in_pool_and_record_destroying_thread(qtbot, task_type, fn):
+        import threading
+
+        from qtpy.QtCore import Qt
+
+        from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
+
+        destroyed_on = []
+        task = task_type(fn)
+        task.signals.destroyed.connect(
+            lambda *_: destroyed_on.append(threading.get_ident()),
+            Qt.ConnectionType.DirectConnection,
+        )
+        pool = DeadlineThreadPool.instance()
+        pool.start(task)
+        # Only the pool now holds the task, as when the runner drops it on finished.
+        del task
+        assert pool.waitForDone(10000)
+        qtbot.waitUntil(lambda: bool(destroyed_on), timeout=5000)
+        return destroyed_on
+
+    @pytest.mark.parametrize(
+        ("task_type", "fn"),
+        [
+            pytest.param("AsyncTask", lambda: "result", id="result"),
+            pytest.param("AsyncTask", Mock(side_effect=ValueError("boom")), id="error"),
+            pytest.param("StreamingAsyncTask", lambda: iter([1, 2]), id="streaming"),
+        ],
+    )
+    def test_signals_are_destroyed_on_the_main_thread(self, qtbot, task_type, fn):
+        import threading
+
+        task_class = {"AsyncTask": AsyncTask, "StreamingAsyncTask": StreamingAsyncTask}
+        destroyed_on = self._run_in_pool_and_record_destroying_thread(
+            qtbot, task_class[task_type], fn
+        )
+        assert destroyed_on == [threading.main_thread().ident]
+
+    def test_signals_of_a_canceled_task_are_destroyed_on_the_main_thread(self, qtbot):
+        import threading
+
+        from qtpy.QtCore import Qt
+
+        from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
+
+        destroyed_on = []
+        task = AsyncTask(Mock(return_value="result"))
+        task.signals.destroyed.connect(
+            lambda *_: destroyed_on.append(threading.get_ident()),
+            Qt.ConnectionType.DirectConnection,
+        )
+        task.cancel()
+        pool = DeadlineThreadPool.instance()
+        pool.start(task)
+        del task
+        assert pool.waitForDone(10000)
+        qtbot.waitUntil(lambda: bool(destroyed_on), timeout=5000)
+        assert destroyed_on == [threading.main_thread().ident]
+
+    def test_queued_results_are_delivered_before_the_signals_are_destroyed(self, qtbot):
+        from qtpy.QtCore import Qt
+
+        from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
+
+        events: list[tuple] = []
+        task = AsyncTask(Mock(return_value="value"))
+        task.signals.result.connect(
+            lambda r: events.append(("result", r)), Qt.ConnectionType.QueuedConnection
+        )
+        task.signals.finished.connect(
+            lambda: events.append(("finished",)), Qt.ConnectionType.QueuedConnection
+        )
+        task.signals.destroyed.connect(lambda *_: events.append(("destroyed",)))
+        DeadlineThreadPool.instance().start(task)
+        del task
+        qtbot.waitUntil(lambda: ("destroyed",) in events, timeout=5000)
+        assert events == [("result", "value"), ("finished",), ("destroyed",)]
+
+    def test_dropping_the_python_reference_does_not_destroy_the_signals(self, qtbot):
+        """Qt owns the signals, so a garbage collection on any thread that frees the
+        Python wrapper leaves the Qt object to be deleted by the task."""
+        import gc
+
+        from qtpy.QtWidgets import QApplication
+
+        destroyed = []
+        task = AsyncTask(Mock())
+        assert task.signals.parent() is QApplication.instance()
+        task.signals.destroyed.connect(lambda *_: destroyed.append(True))
+        del task
+        gc.collect()
+        QApplication.processEvents()
+        assert destroyed == []

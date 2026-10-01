@@ -577,3 +577,94 @@ class TestOpenJDParametersWidget:
 
         with pytest.raises(KeyError):
             widget.set_parameter_value({"name": "NonExistent", "value": "x"})
+
+
+# One parameter definition for every control the widget can build.
+_EVERY_CONTROL = [
+    pytest.param({"type": "STRING"}, id="LINE_EDIT"),
+    pytest.param(
+        {"type": "STRING", "userInterface": {"control": "MULTILINE_EDIT"}}, id="MULTILINE_EDIT"
+    ),
+    pytest.param({"type": "RANGE_EXPR", "default": "1-3"}, id="RANGE_EXPR"),
+    pytest.param({"type": "INT"}, id="INT_SPIN_BOX"),
+    pytest.param({"type": "FLOAT"}, id="FLOAT_SPIN_BOX"),
+    pytest.param({"type": "STRING", "allowedValues": ["a", "b"]}, id="DROPDOWN_LIST"),
+    pytest.param({"type": "PATH", "objectType": "FILE"}, id="CHOOSE_INPUT_FILE"),
+    pytest.param(
+        {"type": "PATH", "objectType": "FILE", "dataFlow": "OUT"}, id="CHOOSE_OUTPUT_FILE"
+    ),
+    pytest.param({"type": "PATH"}, id="CHOOSE_DIRECTORY"),
+    pytest.param(
+        {
+            "type": "STRING",
+            "allowedValues": ["TRUE", "FALSE"],
+            "userInterface": {"control": "CHECK_BOX"},
+        },
+        id="STRING_CHECK_BOX",
+    ),
+    pytest.param({"type": "BOOL"}, id="BOOL_CHECK_BOX"),
+    pytest.param({"type": "LIST[STRING]"}, id="LINE_EDIT_LIST"),
+    pytest.param({"type": "LIST[INT]"}, id="INT_SPIN_BOX_LIST"),
+    pytest.param({"type": "LIST[FLOAT]"}, id="FLOAT_SPIN_BOX_LIST"),
+    pytest.param(
+        {"type": "STRING", "default": "x", "userInterface": {"control": "HIDDEN"}}, id="HIDDEN"
+    ),
+]
+
+
+class TestControlsAreNotInReferenceCycles:
+    """Qt widgets must only be destroyed on the GUI thread. A widget that only the cyclic
+    garbage collector can free, or that is never freed, may instead be destroyed on
+    whichever thread the collector runs, such as a background task's thread. Every
+    control must therefore be freed by reference counting alone."""
+
+    @pytest.mark.parametrize("definition", _EVERY_CONTROL)
+    def test_dropped_widget_is_freed_without_the_garbage_collector(self, qtbot, definition):
+        import gc
+        import weakref
+
+        gc.collect()
+        gc.disable()
+        try:
+            widget = OpenJDParametersWidget(parameter_definitions=[{"name": "Value", **definition}])
+            widget.parameter_changed.connect(lambda message: None)
+            ref = weakref.ref(widget)
+            del widget
+            assert ref() is None
+        finally:
+            gc.enable()
+
+    @pytest.mark.parametrize(
+        ("definition", "edit", "expected"),
+        [
+            pytest.param(
+                {"type": "STRING"}, lambda c: c.edit_control.setText("hi"), "hi", id="LINE_EDIT"
+            ),
+            pytest.param({"type": "INT"}, lambda c: c.edit_control.setValue(7), 7, id="INT"),
+            pytest.param(
+                {"type": "FLOAT"}, lambda c: c.edit_control.setValue(2.5), 2.5, id="FLOAT"
+            ),
+            pytest.param(
+                {"type": "STRING", "allowedValues": ["a", "b"]},
+                lambda c: c.edit_control.setCurrentIndex(1),
+                "b",
+                id="DROPDOWN_LIST",
+            ),
+            pytest.param(
+                {"type": "BOOL"}, lambda c: c.edit_control.setChecked(True), True, id="BOOL"
+            ),
+            pytest.param(
+                {"type": "PATH"}, lambda c: c.edit_control.setText("out"), "out", id="PATH"
+            ),
+        ],
+    )
+    def test_each_edit_reports_one_change_with_the_value(self, qtbot, definition, edit, expected):
+        widget = OpenJDParametersWidget(parameter_definitions=[{"name": "Value", **definition}])
+        qtbot.addWidget(widget)
+        changed = MagicMock()
+        widget.parameter_changed.connect(changed)
+        edit(widget.controls["Value"])
+        assert changed.call_count == 1
+        message = changed.call_args.args[0]
+        assert message["name"] == "Value"
+        assert message["value"] == expected

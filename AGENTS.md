@@ -171,6 +171,16 @@ Never call AWS APIs from the main Qt thread. Use:
 
 See `deadline_config_dialog.py` for examples.
 
+Qt objects must only be destroyed on the GUI thread. Python's garbage collector can run
+on any thread, so (see "Qt object ownership and lifetime" in DEVELOPMENT.md):
+1. Give every QObject a parent, or add it to a layout right away.
+2. Report changes from a widget with a Qt Signal. Never keep Python lists of callbacks,
+   or connect lambdas that capture `self`, which make reference cycles or leaks.
+3. Delete objects used by background work with `deleteLater()`, never by dropping the
+   last reference in the worker. Delete a QThread only after `wait()`.
+4. GUI tests must not use the real Deadline config: use `fresh_deadline_config`.
+5. Add new job parameter controls to `TestControlsAreNotInReferenceCycles`.
+
 ## Dependencies
 
 Minimize new dependencies. This library is used from embedded Python within

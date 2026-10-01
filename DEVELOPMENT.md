@@ -635,6 +635,40 @@ class MyCustomWidget(QWidget):
             self._worker.wait()
         super().closeEvent(event)
 ```
+### Qt object ownership and lifetime
+
+> TL;DR Every QObject must be owned by Qt (have a parent), or be freed by Python reference
+> counting on the GUI thread. Never let a Qt object be reachable only through a Python
+> reference cycle, and never let its last reference be dropped on a worker thread.
+
+In PySide, a QObject without a Qt parent is owned by its Python object, and is destroyed on
+whichever thread drops the last reference to it. Python's cyclic garbage collector runs on
+whichever thread happens to trigger it, often a background thread doing boto3 work. Qt
+objects destroyed off the GUI thread can crash the process, rarely and at random, so these
+bugs are hard to find from a crash report.
+
+Rules:
+
+1. Give every QObject a parent when you create it, or add it to a layout right away. This
+   includes QThread, workers, signal holders, models, validators and timers.
+2. Don't store a widget's bound methods, or lambdas and closures that capture `self`, in
+   Python containers or in connections to another object's signals. To report a change to
+   whoever is listening, define a Qt Signal on the widget, connect your own child widgets'
+   signals to a bound method, and emit from it. `_JobTemplateWidget._value_changed` in
+   `openjd_parameters_widget.py` is an example.
+3. A QObject created on the GUI thread for background work, such as a task's signals
+   object, is deleted with `deleteLater()`, which is safe to call from any thread. Don't
+   rely on the worker dropping the last reference.
+4. Delete a QThread only after it has finished: `wait()`, then `deleteLater()`.
+5. Subclasses of `AsyncTask` override `_execute()`, not `run()`.
+6. GUI unit tests must not read the developer's Deadline config, or a dialog may start
+   real AWS calls in background threads. Use the `fresh_deadline_config` fixture.
+
+To check a widget, drop it with garbage collection disabled and confirm it is freed. See
+`TestControlsAreNotInReferenceCycles` in `test/unit/deadline_client/ui/gui/test_gui_openjd_parameters.py`,
+and add any new job parameter control to it.
+
+
 
 # Profiling in Deadline Cloud
 
