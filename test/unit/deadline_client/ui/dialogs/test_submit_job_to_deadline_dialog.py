@@ -10,7 +10,9 @@ try:
     from deadline.client.ui.dataclasses import JobBundleSettings
     from deadline.client.job_bundle.submission import AssetReferences
 except ImportError:
-    pytest.importorskip("deadline.client.ui.dialogs.submit_job_to_deadline_dialog")
+    pytest.importorskip(
+        "deadline.client.ui.dialogs.submit_job_to_deadline_dialog", exc_type=ImportError
+    )
 
 
 class MockJobSettingsWidget(QWidget):

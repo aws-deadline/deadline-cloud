@@ -14,7 +14,7 @@ try:
         WorkerSignals,
     )
 except ImportError:
-    pytest.importorskip("deadline.client.ui.controllers._async_task")
+    pytest.importorskip("deadline.client.ui.controllers._async_task", exc_type=ImportError)
 
 
 class TestWorkerSignals:

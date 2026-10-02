@@ -11,7 +11,7 @@ import pytest
 # importorskip, not a try/except: it binds the module when Qt is available and skips the
 # file when it is not, where the except branch would leave the name unbound and every case
 # would fail with NameError instead.
-_path_widgets = pytest.importorskip("deadline.client.ui.widgets.path_widgets")
+_path_widgets = pytest.importorskip("deadline.client.ui.widgets.path_widgets", exc_type=ImportError)
 _collapse_user_dir = _path_widgets._collapse_user_dir
 DirectoryPickerWidget = _path_widgets.DirectoryPickerWidget
 InputFilePickerWidget = _path_widgets.InputFilePickerWidget
