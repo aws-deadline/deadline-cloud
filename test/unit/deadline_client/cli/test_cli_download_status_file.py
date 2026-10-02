@@ -603,6 +603,7 @@ class TestRecordStatusFileTelemetry:
             "lock_wait_ms": 0,
             "lock_abandoned": False,
             "location_count": 1,
+            "write_succeeded": False,
         }
 
     def test_reports_zero_counts_for_an_empty_file(self, tmp_path, monkeypatch):
@@ -732,6 +733,18 @@ class TestRecordStatusFileTelemetry:
         assert not any("failed to write status file" in m for m in messages)
 
 
+_TRACKED_ENTRY: dict[str, Any] = {
+    "download_status": "downloaded",
+    "total_files": 3,
+    "downloaded_files": 3,
+    "failed_files": 0,
+    "last_updated": "2026-09-30T18:22:41.123456+00:00",
+    "error_code": None,
+    "error_message": None,
+    "skip_reason": None,
+}
+
+
 class TestStatusFileTelemetryGrowthAndCost:
     """Tests for the growth, timing, lock and location fields on the telemetry event."""
 
@@ -789,12 +802,36 @@ class TestStatusFileTelemetryGrowthAndCost:
         assert second["task_records_added"] == 1
         assert second["jobs_added"] == 0
 
-    @pytest.mark.parametrize("corrupt_jobs", [None, [], "nope", 7])
-    def test_a_file_with_a_non_dict_jobs_value_is_still_repaired(
-        self, tmp_path, monkeypatch, corrupt_jobs
+    @pytest.mark.parametrize(
+        "corrupt_file",
+        [
+            None,
+            [],
+            "not an object",
+            7,
+            {"schema_version": 1, "jobs": {MOCK_JOB_ID: "not a dict"}},
+            {"schema_version": 1, "jobs": {MOCK_JOB_ID: ["also", "not"]}},
+            {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": None}}},
+            {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": "nope"}}},
+            {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": [1, 2]}}},
+        ],
+        ids=[
+            "top-level-null",
+            "top-level-list",
+            "top-level-string",
+            "top-level-number",
+            "entry-is-a-string",
+            "entry-is-a-list",
+            "tasks-is-null",
+            "tasks-is-a-string",
+            "tasks-is-a-list",
+        ],
+    )
+    def test_a_corrupt_file_is_repaired_rather_than_failing_forever(
+        self, tmp_path, monkeypatch, corrupt_file
     ):
-        """Counting records before the write must not throw, or the bad file is abandoned
-        forever: every later run would read it, raise again, and never rewrite it."""
+        """The merge and the record counting both raise on these shapes. A raise skips the
+        location, so the file would keep its bad contents and every later run would repeat."""
         events = self._capture_events(monkeypatch)
         renders_dir = tmp_path / "renders"
         renders_dir.mkdir()
@@ -802,7 +839,7 @@ class TestStatusFileTelemetryGrowthAndCost:
         status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
         status_file.parent.mkdir(parents=True)
         with open(status_file, "w") as f:
-            json.dump({"schema_version": 1, "jobs": corrupt_jobs}, f)
+            json.dump(corrupt_file, f)
 
         messages: list[str] = []
         write_download_status_file(
@@ -817,8 +854,69 @@ class TestStatusFileTelemetryGrowthAndCost:
 
         assert not any("failed to write status file" in m for m in messages)
         with open(status_file) as f:
-            assert isinstance(json.load(f)["jobs"], dict)
-        assert events[0]["event_details"]["jobs_added"] == 1
+            written = json.load(f)
+        assert MOCK_JOB_ID in written["jobs"]
+        assert events[0]["event_details"]["write_succeeded"] is True
+
+    def test_a_failed_write_still_reports_telemetry(self, tmp_path, monkeypatch):
+        """A run that loses the lock is also the run most likely to fail the write, so dropping
+        failed runs would understate contention in the one field added to measure it."""
+        import deadline.client.cli._download_status_file as mod
+
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+
+        def _explode(path, data):
+            raise OSError("share went away")
+
+        monkeypatch.setattr(mod, "_atomic_write_json", _explode)
+
+        messages: list[str] = []
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+            print_function_callback=messages.append,
+        )
+
+        assert any("failed to write status file" in m for m in messages)
+        assert len(events) == 1
+        details = events[0]["event_details"]
+        assert details["write_succeeded"] is False
+        assert details["file_size_bytes"] == 0
+        assert details["job_count"] == 1
+
+    def test_a_failure_before_the_content_is_built_reports_no_growth(self, tmp_path, monkeypatch):
+        import deadline.client.cli._download_status_file as mod
+
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+
+        def _explode(**kwargs):
+            raise RuntimeError("cannot build")
+
+        monkeypatch.setattr(mod, "_build_status_file_content", _explode)
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        details = events[0]["event_details"]
+        assert details["write_succeeded"] is False
+        assert details["jobs_added"] == 0
+        assert details["task_records_added"] == 0
 
     def test_added_counts_report_growth_not_totals(self, tmp_path, monkeypatch):
         events = self._capture_events(monkeypatch)

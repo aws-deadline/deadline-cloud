@@ -387,15 +387,27 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
     Reads an existing status file and returns its jobs dict.
     Returns empty dict if file doesn't exist or is invalid.
 
-    Always a dict, even when the file holds a null or a list under "jobs". Callers that would
-    raise on anything else would abandon the write, leaving a corrupt file nothing can repair.
+    Guarantees the shape every consumer downstream assumes: a dict of job IDs to dicts, each
+    with a dict under "tasks". A file can parse cleanly and still hold any of those as a null,
+    a list or a string, and the merge and the record counting both raise on that. The raise
+    escapes to the caller's handler, which skips the location, so the offending file is never
+    rewritten and every later run fails on it identically.
     """
     try:
         if os.path.exists(file_path):
             with open(file_path, "r") as f:
                 data = json.load(f)
-            jobs = data.get("jobs")
-            return jobs if isinstance(jobs, dict) else {}
+            jobs = data.get("jobs") if isinstance(data, dict) else None
+            if not isinstance(jobs, dict):
+                return {}
+            normalized: dict[str, Any] = {}
+            for job_id, entry in jobs.items():
+                if not isinstance(entry, dict):
+                    continue
+                if not isinstance(entry.get("tasks"), dict):
+                    entry["tasks"] = {}
+                normalized[job_id] = entry
+            return normalized
     except (json.JSONDecodeError, OSError, KeyError):
         pass  # Gracefully handle corrupt or inaccessible status files
     return {}
@@ -454,33 +466,46 @@ class _WriteMeasurements:
     location_count: int = 1
     job_count_before: int = 0
     task_record_count_before: int = 0
+    write_succeeded: bool = False
     lock: _LockOutcome = field(default_factory=_LockOutcome)
 
 
 def _record_status_file_telemetry(
     status_file_path: str,
-    status_content: dict[str, Any],
+    status_content: Optional[dict[str, Any]],
     measurements: _WriteMeasurements,
 ) -> None:
-    """Best-effort: the file is already written, so a telemetry failure must not fail the write."""
+    """Best-effort: the file is already written, so a telemetry failure must not fail the write.
+
+    status_content is None when the run never got as far as building it. Reporting the counts
+    read from disk keeps the growth fields at zero for that case, rather than making every
+    failed run look like the file lost all its records.
+    """
     try:
-        jobs = status_content.get("jobs", {})
-        task_record_count = _count_task_records(jobs)
+        if status_content is None:
+            jobs: dict[str, Any] = {}
+            job_count = measurements.job_count_before
+            task_record_count = measurements.task_record_count_before
+        else:
+            jobs = status_content.get("jobs", {})
+            job_count = len(jobs)
+            task_record_count = _count_task_records(jobs)
         api.get_deadline_cloud_library_telemetry_client().record_event(
             event_type="com.amazon.rum.deadline.queue_sync_output_status_file",
             event_details={
                 "file_size_bytes": measurements.file_size_bytes,
-                "job_count": len(jobs),
+                "job_count": job_count,
                 "task_record_count": task_record_count,
                 # Growth per run, because nothing in the event identifies which file a
                 # sample came from, so a reader cannot difference two samples itself.
-                "jobs_added": len(jobs) - measurements.job_count_before,
+                "jobs_added": job_count - measurements.job_count_before,
                 "task_records_added": task_record_count - measurements.task_record_count_before,
                 "read_duration_ms": measurements.read_duration_ms,
                 "write_duration_ms": measurements.write_duration_ms,
                 "lock_wait_ms": measurements.lock.wait_ms,
                 "lock_abandoned": measurements.lock.abandoned,
                 "location_count": measurements.location_count,
+                "write_succeeded": measurements.write_succeeded,
             },
         )
     except Exception as e:
@@ -649,8 +674,9 @@ def write_download_status_file(
 
     written_paths: list[str] = []
     for status_file_path in status_file_paths:
+        measurements = _WriteMeasurements(location_count=len(status_file_paths))
+        status_content: Optional[dict[str, Any]] = None
         try:
-            measurements = _WriteMeasurements(location_count=len(status_file_paths))
             with _status_file_lock(status_file_path) as lock_outcome:
                 measurements.lock = lock_outcome
 
@@ -675,13 +701,17 @@ def write_download_status_file(
                 measurements.file_size_bytes = _atomic_write_json(status_file_path, status_content)
                 measurements.write_duration_ms = int((time.monotonic() - write_started) * 1000)
             written_paths.append(status_file_path)
-            # Outside the lock: it is contended by every machine syncing this queue.
-            _record_status_file_telemetry(status_file_path, status_content, measurements)
+            measurements.write_succeeded = True
             if not fmt.suppressed:
                 fmt.summary_row("status file", _format_path(status_file_path))
         except Exception as e:
             logger.warning(f"Failed to write download status file to {status_file_path}: {e}")
             fmt.warning(f"failed to write status file to {_format_path(status_file_path)}: {e}")
+        finally:
+            # Reporting failures too, because a run that loses the lock is also the run most
+            # likely to fail the write, and dropping those samples understates contention.
+            # Outside the lock either way: it is contended by every machine syncing this queue.
+            _record_status_file_telemetry(status_file_path, status_content, measurements)
 
     # When --ignore-storage-profiles is used, the FE has no API-derivable location for the
     # status file. Write a pointer at the well-known default path so the FE can always find
