@@ -1,3 +1,19 @@
+## 0.60.8 (2026-10-02)
+
+### Features
+* Added support for BOOL job parameters. You can now use boolean parameter values in job bundles, with checkbox and hidden GUI controls for editing them. (#1360)
+* Added support for RANGE_EXPR job parameters. You can now use range expression values like "1-100" or "1-100:10" to describe lists of integers (e.g., frame ranges) in job bundles. (#1370)
+* Added support for LIST[STRING], LIST[INT], LIST[FLOAT], and LIST[BOOL] job parameter types. You can now use list-typed parameters in job bundles for things like camera names, frame lists, scale factors, or per-layer enable flags. (#1375, #1377, #1380)
+* Restructured `deadline queue sync-output` progress reporting with indented plain-ASCII sections, a closing summary, one greppable result line, and a new `--verbose` flag. Color is now reserved for problems only (yellow for WARNING, red for ERROR/FAILED), and box-drawing glyphs that could cause encoding errors on some terminals have been removed. (#1357)
+* `deadline bundle gui-submit` now always prepends the `deadline-cloud-v2` Conda channel, matching the behavior of all Python DCC submitters. An explicit CondaChannels value in the bundle template, `--parameter`, or pre-GUI hook still takes precedence. (#1358)
+* The per-queue download status file is now written without JSON indentation, reducing its size by roughly 40% for large downloads. The file remains valid JSON and is fully compatible with existing readers. (#1361)
+
+### Bug Fixes
+* Fixed a crash where `deadline bundle gui-submit --parameter` would fail with an `AttributeError` before the dialog could appear, due to a stale signal connection for CLI-parameter validation. (#1288)
+* Fixed several issues in `deadline queue sync-output` where stale per-job state caused corrupted checkpoint timestamps (leading to missed or redundant downloads) and incorrect JSON output. (#1287)
+* Fixed random GUI crashes on Windows ("access violation") caused by Qt objects being destroyed on background threads. Qt objects are now properly prevented from release outside the GUI thread. (#1381)
+* When the `awscrt` package is missing or fails to import, the client now correctly reports a configuration error instead of misleadingly prompting for login. (#1362)
+* Improved the clarity of the job attachments confirmation popup message. (`ba3a2a5`)
 ## 0.60.7 (2026-09-07)
 
 ### Bug Fixes
