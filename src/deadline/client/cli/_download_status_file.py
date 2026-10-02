@@ -10,9 +10,11 @@ import socket
 import tempfile
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Generator, Optional
 
+from .. import api
 from ..config.config_file import DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR
 from ._incremental_download import CategorizedJobIds
 from ._sync_output_format import _SyncOutputFormatter, _format_path
@@ -27,8 +29,16 @@ _STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS = 1
 _STATUS_FILE_LOCK_MAX_WAIT_SECONDS = 90
 
 
+@dataclass
+class _LockOutcome:
+    """How the lock behaved, so telemetry can report contention the writer silently tolerates."""
+
+    wait_ms: int = 0
+    abandoned: bool = False
+
+
 @contextmanager
-def _status_file_lock(status_file_path: str) -> Generator[None, None, None]:
+def _status_file_lock(status_file_path: str) -> Generator[_LockOutcome, None, None]:
     """Cooperative cross-machine lock for the shared NAS status file.
 
     Creates a sentinel lock file next to the status file. Both machines agree
@@ -41,8 +51,10 @@ def _status_file_lock(status_file_path: str) -> Generator[None, None, None]:
     dir_path = os.path.dirname(status_file_path)
     os.makedirs(dir_path, exist_ok=True)
 
+    outcome = _LockOutcome()
     acquired = False
-    deadline_time = time.monotonic() + _STATUS_FILE_LOCK_MAX_WAIT_SECONDS
+    wait_started = time.monotonic()
+    deadline_time = wait_started + _STATUS_FILE_LOCK_MAX_WAIT_SECONDS
     while time.monotonic() < deadline_time:
         # Check if a lock exists and whether it is stale.
         # Read the timestamp from the lock file content rather than the NAS mtime to avoid
@@ -82,12 +94,15 @@ def _status_file_lock(status_file_path: str) -> Generator[None, None, None]:
         except OSError:
             time.sleep(_STATUS_FILE_LOCK_RETRY_INTERVAL_SECONDS)
     else:
+        outcome.abandoned = True
         logger.warning(
             f"Could not acquire status file lock at {lock_path} after {_STATUS_FILE_LOCK_MAX_WAIT_SECONDS}s — proceeding without lock."
         )
 
+    outcome.wait_ms = int((time.monotonic() - wait_started) * 1000)
+
     try:
-        yield
+        yield outcome
     finally:
         if acquired:
             # Verify we still own the lock before deleting — if our hold exceeded the TTL,
@@ -371,20 +386,60 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
     """
     Reads an existing status file and returns its jobs dict.
     Returns empty dict if file doesn't exist or is invalid.
+
+    Guarantees the shape every consumer downstream assumes: a dict of job IDs to dicts, each
+    with a dict under "tasks" whose own values are dicts, a string status, and whole numbers
+    for the two counters the merge compares. A file can parse cleanly and still hold any of
+    those as a null, a list, a string or a missing key, and the merge, the status reconciliation
+    and the record counting raise on them. The raise escapes to the caller's handler, which
+    skips the location, so the offending file is never rewritten and every later run fails on
+    it identically.
     """
     try:
         if os.path.exists(file_path):
             with open(file_path, "r") as f:
                 data = json.load(f)
-            return data.get("jobs", {})
-    except (json.JSONDecodeError, OSError, KeyError):
+            jobs = data.get("jobs") if isinstance(data, dict) else None
+            if not isinstance(jobs, dict):
+                return {}
+            normalized: dict[str, Any] = {}
+            for job_id, entry in jobs.items():
+                if not isinstance(entry, dict):
+                    continue
+                tasks = entry.get("tasks")
+                entry["tasks"] = (
+                    {k: v for k, v in tasks.items() if isinstance(v, dict)}
+                    if isinstance(tasks, dict)
+                    else {}
+                )
+                if not isinstance(entry.get("download_status"), str):
+                    # "skipped" because an entry for a job that has aged out of tracking is
+                    # carried through every later run untouched, so whatever goes here is
+                    # permanent. It is terminal, and the status reconciliation acts on it, so a
+                    # failed task still drags the job back to "failed".
+                    entry["download_status"] = "skipped"
+                for target in (entry, *entry["tasks"].values()):
+                    for counter in ("total_files", "downloaded_files"):
+                        # bool is an int subclass, and True would count as 1 rather than a count.
+                        value = target.get(counter)
+                        if not isinstance(value, int) or isinstance(value, bool):
+                            target[counter] = 0
+                normalized[job_id] = entry
+            return normalized
+    except (ValueError, OSError, KeyError):
+        # ValueError rather than JSONDecodeError, which it subclasses: a file holding bytes that
+        # are not valid UTF-8 fails in the decode before the parse, raising UnicodeDecodeError.
         pass  # Gracefully handle corrupt or inaccessible status files
     return {}
 
 
-def _atomic_write_json(file_path: str, data: dict[str, Any]) -> None:
+def _atomic_write_json(file_path: str, data: dict[str, Any]) -> int:
     """
     Writes JSON data atomically using a temp file + rename to prevent partial reads.
+
+    Returns the byte count from our own descriptor: another machine syncing this queue can
+    replace file_path the moment the lock is released, so stat'ing it afterwards can size
+    someone else's write.
     """
     dir_path = os.path.dirname(file_path)
     os.makedirs(dir_path, exist_ok=True)
@@ -392,14 +447,91 @@ def _atomic_write_json(file_path: str, data: dict[str, Any]) -> None:
     fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=2)
+            # Grows unbounded and the Monitor re-parses all of it per poll.
+            json.dump(data, f, separators=(",", ":"))
+            f.flush()
+            size = os.fstat(f.fileno()).st_size
         os.replace(tmp_path, file_path)
+        return size
     except Exception:
         try:
             os.unlink(tmp_path)
         except OSError:
             pass  # Best-effort cleanup of temp file
         raise
+
+
+def _count_task_records(jobs: dict[str, Any]) -> int:
+    """Tolerates malformed entries carried forward from an existing status file."""
+    total = 0
+    for entry in jobs.values():
+        tasks = entry.get("tasks") if isinstance(entry, dict) else None
+        if isinstance(tasks, dict):
+            total += len(tasks)
+    return total
+
+
+@dataclass
+class _WriteMeasurements:
+    """Per-location measurements gathered while writing one status file.
+
+    The two "before" counts are snapshots rather than the dict they came from, because
+    _build_status_file_content writes through to the entry dicts it was handed, so counting
+    them after the build would report post-merge totals and understate growth as zero.
+    """
+
+    file_size_bytes: int = 0
+    read_duration_ms: int = 0
+    write_duration_ms: int = 0
+    location_count: int = 1
+    job_count_before: int = 0
+    task_record_count_before: int = 0
+    write_succeeded: bool = False
+    lock: _LockOutcome = field(default_factory=_LockOutcome)
+
+
+def _record_status_file_telemetry(
+    status_file_path: str,
+    status_content: Optional[dict[str, Any]],
+    measurements: _WriteMeasurements,
+) -> None:
+    """Best-effort: the file is already written, so a telemetry failure must not fail the write.
+
+    Any run that did not write reports the counts read from disk, which is what the file still
+    holds, so the growth fields stay at zero. A share that drops mid-sync fails the write on
+    every run while the content builds fine each time, and reporting the intended delta there
+    would count the same growth once per failed attempt. Nothing in the event identifies which
+    file a sample came from, so a reader summing the deltas cannot correct for that.
+    """
+    try:
+        if status_content is None or not measurements.write_succeeded:
+            jobs: dict[str, Any] = {}
+            job_count = measurements.job_count_before
+            task_record_count = measurements.task_record_count_before
+        else:
+            jobs = status_content.get("jobs", {})
+            job_count = len(jobs)
+            task_record_count = _count_task_records(jobs)
+        api.get_deadline_cloud_library_telemetry_client().record_event(
+            event_type="com.amazon.rum.deadline.queue_sync_output_status_file",
+            event_details={
+                "file_size_bytes": measurements.file_size_bytes,
+                "job_count": job_count,
+                "task_record_count": task_record_count,
+                # Growth per run, because nothing in the event identifies which file a
+                # sample came from, so a reader cannot difference two samples itself.
+                "jobs_added": job_count - measurements.job_count_before,
+                "task_records_added": task_record_count - measurements.task_record_count_before,
+                "read_duration_ms": measurements.read_duration_ms,
+                "write_duration_ms": measurements.write_duration_ms,
+                "lock_wait_ms": measurements.lock.wait_ms,
+                "lock_abandoned": measurements.lock.abandoned,
+                "location_count": measurements.location_count,
+                "write_succeeded": measurements.write_succeeded,
+            },
+        )
+    except Exception as e:
+        logger.debug(f"Failed to record status file telemetry for {status_file_path}: {e}")
 
 
 def _get_status_file_paths(
@@ -564,9 +696,17 @@ def write_download_status_file(
 
     written_paths: list[str] = []
     for status_file_path in status_file_paths:
+        measurements = _WriteMeasurements(location_count=len(status_file_paths))
+        status_content: Optional[dict[str, Any]] = None
         try:
-            with _status_file_lock(status_file_path):
+            with _status_file_lock(status_file_path) as lock_outcome:
+                measurements.lock = lock_outcome
+
+                read_started = time.monotonic()
                 existing_jobs = _read_existing_status_file(status_file_path)
+                measurements.read_duration_ms = int((time.monotonic() - read_started) * 1000)
+                measurements.job_count_before = len(existing_jobs)
+                measurements.task_record_count_before = _count_task_records(existing_jobs)
 
                 status_content = _build_status_file_content(
                     queue_id=queue_id,
@@ -579,13 +719,21 @@ def write_download_status_file(
                     succeeded_task_ids=succeeded_task_ids,
                 )
 
-                _atomic_write_json(status_file_path, status_content)
+                write_started = time.monotonic()
+                measurements.file_size_bytes = _atomic_write_json(status_file_path, status_content)
+                measurements.write_duration_ms = int((time.monotonic() - write_started) * 1000)
             written_paths.append(status_file_path)
+            measurements.write_succeeded = True
             if not fmt.suppressed:
                 fmt.summary_row("status file", _format_path(status_file_path))
         except Exception as e:
             logger.warning(f"Failed to write download status file to {status_file_path}: {e}")
             fmt.warning(f"failed to write status file to {_format_path(status_file_path)}: {e}")
+        finally:
+            # Reporting failures too, because a run that loses the lock is also the run most
+            # likely to fail the write, and dropping those samples understates contention.
+            # Outside the lock either way: it is contended by every machine syncing this queue.
+            _record_status_file_telemetry(status_file_path, status_content, measurements)
 
     # When --ignore-storage-profiles is used, the FE has no API-derivable location for the
     # status file. Write a pointer at the well-known default path so the FE can always find
