@@ -910,6 +910,37 @@ class TestStatusFileTelemetryGrowthAndCost:
         assert MOCK_JOB_ID in written["jobs"]
         assert events[0]["event_details"]["write_succeeded"] is True
 
+    @pytest.mark.parametrize(
+        "raw_bytes",
+        [b'{"schema_version": 1, "jobs": {"job-a": {"name": "\xff\xfe"}}}', b"\x80\x81\x82", b""],
+        ids=["invalid-utf8-inside-valid-json", "invalid-utf8-only", "empty-file"],
+    )
+    def test_a_file_that_does_not_decode_is_repaired(self, tmp_path, monkeypatch, raw_bytes):
+        """json.load decodes before it parses, so bad bytes raise UnicodeDecodeError, which is a
+        ValueError and not a JSONDecodeError. A half-written file on a share hits this."""
+        self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        status_file.parent.mkdir(parents=True)
+        status_file.write_bytes(raw_bytes)
+
+        messages: list[str] = []
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+            print_function_callback=messages.append,
+        )
+
+        assert not any("failed to write status file" in m for m in messages)
+        with open(status_file) as f:
+            assert MOCK_JOB_ID in json.load(f)["jobs"]
+
     def test_a_non_numeric_count_on_an_inactive_job_is_repaired(self, tmp_path, monkeypatch):
         """The downloaded_files comparison only runs on the inactive pass, so reaching it needs
         a job that is inactive and still reads as in progress."""

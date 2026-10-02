@@ -426,7 +426,9 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
                             target[counter] = 0
                 normalized[job_id] = entry
             return normalized
-    except (json.JSONDecodeError, OSError, KeyError):
+    except (ValueError, OSError, KeyError):
+        # ValueError rather than JSONDecodeError, which it subclasses: a file holding bytes that
+        # are not valid UTF-8 fails in the decode before the parse, raising UnicodeDecodeError.
         pass  # Gracefully handle corrupt or inaccessible status files
     return {}
 
