@@ -277,6 +277,30 @@ class TestAsyncTask:
 
         task._safe_emit("result", "value")  # must not raise
 
+    @pytest.mark.parametrize(
+        "message",
+        [
+            pytest.param("Signal source has been deleted", id="PySide6"),
+            pytest.param("wrapped C/C++ object of type WorkerSignals has been deleted", id="PyQt5"),
+            pytest.param("Internal C++ object (WorkerSignals) already deleted.", id="PySide2"),
+        ],
+    )
+    def test_run_swallows_deleted_source_for_each_binding(self, message):
+        """Each supported Qt binding's deleted-source message is swallowed through the
+        whole result -> error -> finished cascade, so nothing escapes run()."""
+        task = AsyncTask(Mock(return_value="result"))
+        signals = Mock()
+        signals.result.emit.side_effect = RuntimeError(message)
+        signals.error.emit.side_effect = RuntimeError(message)
+        signals.finished.emit.side_effect = RuntimeError(message)
+        task.signals = signals
+
+        task.run()  # must not raise
+
+        signals.result.emit.assert_called_once_with("result")
+        signals.error.emit.assert_not_called()
+        signals.finished.emit.assert_called_once_with()
+
     def test_safe_emit_reraises_real_slot_error(self):
         """A RuntimeError from a slot body (DirectConnection runs slots inside
         emit()) must surface rather than be downgraded to a debug log."""
