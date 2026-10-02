@@ -5165,3 +5165,45 @@ def test_incremental_output_download_cross_os_path_mapping_with_per_task_attribu
     for task_id in tasks:
         assert entry["tasks"][task_id]["downloaded_files"] == 1, entry["tasks"]
         assert entry["tasks"][task_id]["error_code"] is None, entry["tasks"]
+
+
+def test_update_checkpoint_jobs_list_keeps_each_jobs_own_session_ended_timestamp():
+    """Each job's session_ended_timestamp is the max endedAt of its own sessions, not
+    the value computed for whichever job happened to be processed last.
+
+    Regression test for https://github.com/aws-deadline/deadline-cloud/issues/1373
+    """
+    early = datetime.fromisoformat(ISO_FREEZE_TIME_MINUS_5MIN)
+    late = datetime.fromisoformat(ISO_FREEZE_TIME_MINUS_1MIN)
+    checkpoint = IncrementalDownloadState(
+        local_storage_profile_id=None,
+        downloads_started_timestamp=early - timedelta(hours=1),
+    )
+    download_candidate_jobs: dict[str, dict] = {
+        job_id: {"jobId": job_id, "name": job_id, "attachments": {}}
+        for job_id in ("job-early", "job-late", "job-running")
+    }
+    job_sessions: dict[str, list] = {
+        "job-early": [
+            {"sessionId": "session-e", "endedAt": early, "sessionActions": []},
+        ],
+        "job-late": [
+            {"sessionId": "session-l", "endedAt": late, "sessionActions": []},
+        ],
+        # A session that is still running has no endedAt
+        "job-running": [
+            {"sessionId": "session-r", "sessionActions": []},
+        ],
+    }
+
+    categorized_job_ids = _make_categorized_job_ids(added=set(download_candidate_jobs))
+
+    _update_checkpoint_jobs_list(
+        checkpoint, download_candidate_jobs, categorized_job_ids, job_sessions
+    )
+
+    assert {job.job_id: job.session_ended_timestamp for job in checkpoint.jobs} == {
+        "job-early": early,
+        "job-late": late,
+        "job-running": None,
+    }
