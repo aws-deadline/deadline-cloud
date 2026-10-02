@@ -413,14 +413,17 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
                     else {}
                 )
                 if not isinstance(entry.get("download_status"), str):
-                    # "in_progress" rather than a value the Monitor has never seen: it claims
-                    # nothing, and the inactive pass below moves it to a terminal state.
-                    entry["download_status"] = "in_progress"
-                for counter in ("total_files", "downloaded_files"):
-                    # bool is an int subclass, and True would compare as 1 rather than a count.
-                    value = entry.get(counter)
-                    if not isinstance(value, int) or isinstance(value, bool):
-                        entry[counter] = 0
+                    # "skipped" because an entry for a job that has aged out of tracking is
+                    # carried through every later run untouched, so whatever goes here is
+                    # permanent. It is terminal, and the status reconciliation acts on it, so a
+                    # failed task still drags the job back to "failed".
+                    entry["download_status"] = "skipped"
+                for target in (entry, *entry["tasks"].values()):
+                    for counter in ("total_files", "downloaded_files"):
+                        # bool is an int subclass, and True would count as 1 rather than a count.
+                        value = target.get(counter)
+                        if not isinstance(value, int) or isinstance(value, bool):
+                            target[counter] = 0
                 normalized[job_id] = entry
             return normalized
     except (json.JSONDecodeError, OSError, KeyError):
@@ -492,12 +495,14 @@ def _record_status_file_telemetry(
 ) -> None:
     """Best-effort: the file is already written, so a telemetry failure must not fail the write.
 
-    status_content is None when the run never got as far as building it. Reporting the counts
-    read from disk keeps the growth fields at zero for that case, rather than making every
-    failed run look like the file lost all its records.
+    Any run that did not write reports the counts read from disk, which is what the file still
+    holds, so the growth fields stay at zero. A share that drops mid-sync fails the write on
+    every run while the content builds fine each time, and reporting the intended delta there
+    would count the same growth once per failed attempt. Nothing in the event identifies which
+    file a sample came from, so a reader summing the deltas cannot correct for that.
     """
     try:
-        if status_content is None:
+        if status_content is None or not measurements.write_succeeded:
             jobs: dict[str, Any] = {}
             job_count = measurements.job_count_before
             task_record_count = measurements.task_record_count_before

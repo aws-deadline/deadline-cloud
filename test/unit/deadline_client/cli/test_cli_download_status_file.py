@@ -587,7 +587,7 @@ class TestRecordStatusFileTelemetry:
         written = _atomic_write_json(file_path, content)
 
         _record_status_file_telemetry(
-            file_path, content, _WriteMeasurements(file_size_bytes=written)
+            file_path, content, _WriteMeasurements(file_size_bytes=written, write_succeeded=True)
         )
 
         assert len(events) == 1
@@ -603,7 +603,7 @@ class TestRecordStatusFileTelemetry:
             "lock_wait_ms": 0,
             "lock_abandoned": False,
             "location_count": 1,
-            "write_succeeded": False,
+            "write_succeeded": True,
         }
 
     def test_reports_zero_counts_for_an_empty_file(self, tmp_path, monkeypatch):
@@ -612,7 +612,9 @@ class TestRecordStatusFileTelemetry:
         written = _atomic_write_json(file_path, {"jobs": {}})
 
         _record_status_file_telemetry(
-            file_path, {"jobs": {}}, _WriteMeasurements(file_size_bytes=written)
+            file_path,
+            {"jobs": {}},
+            _WriteMeasurements(file_size_bytes=written, write_succeeded=True),
         )
 
         assert events[0]["event_details"]["job_count"] == 0
@@ -628,7 +630,7 @@ class TestRecordStatusFileTelemetry:
         _atomic_write_json(file_path, {"status_file_path": "/elsewhere"})
 
         _record_status_file_telemetry(
-            file_path, content, _WriteMeasurements(file_size_bytes=written)
+            file_path, content, _WriteMeasurements(file_size_bytes=written, write_succeeded=True)
         )
 
         assert events[0]["event_details"]["file_size_bytes"] == written
@@ -642,7 +644,7 @@ class TestRecordStatusFileTelemetry:
         os.unlink(file_path)
 
         _record_status_file_telemetry(
-            file_path, content, _WriteMeasurements(file_size_bytes=written)
+            file_path, content, _WriteMeasurements(file_size_bytes=written, write_succeeded=True)
         )
 
         assert events[0]["event_details"]["task_record_count"] == 2
@@ -659,7 +661,9 @@ class TestRecordStatusFileTelemetry:
         written = _atomic_write_json(file_path, {"jobs": {}})
 
         _record_status_file_telemetry(
-            file_path, {"jobs": {}}, _WriteMeasurements(file_size_bytes=written)
+            file_path,
+            {"jobs": {}},
+            _WriteMeasurements(file_size_bytes=written, write_succeeded=True),
         )
 
     def test_write_reports_the_file_it_just_wrote(self, tmp_path, monkeypatch):
@@ -826,6 +830,26 @@ class TestStatusFileTelemetryGrowthAndCost:
                 "schema_version": 1,
                 "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": {"task-abc-0": [1]}}},
             },
+            {
+                "schema_version": 1,
+                "jobs": {
+                    MOCK_JOB_ID: {
+                        **_TRACKED_ENTRY,
+                        # An error_code is what puts the record in the set whose counters the
+                        # status reconciliation subtracts.
+                        "tasks": {"task-abc-0": {"error_code": "X", "total_files": "3"}},
+                    }
+                },
+            },
+            {
+                "schema_version": 1,
+                "jobs": {
+                    MOCK_JOB_ID: {
+                        **_TRACKED_ENTRY,
+                        "tasks": {"task-abc-0": {"error_code": "X", "downloaded_files": None}},
+                    }
+                },
+            },
             {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "total_files": "3"}}},
             {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "total_files": None}}},
             {
@@ -848,6 +872,8 @@ class TestStatusFileTelemetryGrowthAndCost:
             "a-task-value-is-a-string",
             "a-task-value-is-null",
             "a-task-value-is-a-list",
+            "a-task-counter-is-a-string",
+            "a-task-counter-is-null",
             "total-files-is-a-string",
             "total-files-is-null",
             "download-status-is-missing",
@@ -942,7 +968,8 @@ class TestStatusFileTelemetryGrowthAndCost:
 
         with open(status_file) as f:
             carried = json.load(f)["jobs"][other_job]
-        assert isinstance(carried["download_status"], str)
+        # Terminal, because an entry for a job that has aged out of tracking is never revisited.
+        assert carried["download_status"] == "skipped"
 
     def test_a_failed_write_still_reports_telemetry(self, tmp_path, monkeypatch):
         """A run that loses the lock is also the run most likely to fail the write, so dropping
@@ -975,7 +1002,11 @@ class TestStatusFileTelemetryGrowthAndCost:
         details = events[0]["event_details"]
         assert details["write_succeeded"] is False
         assert details["file_size_bytes"] == 0
-        assert details["job_count"] == 1
+        # Nothing reached disk, so the file still holds what the read found and no growth
+        # happened. Reporting the intended delta would recount it on every retry.
+        assert details["job_count"] == 0
+        assert details["jobs_added"] == 0
+        assert details["task_records_added"] == 0
 
     def test_a_failure_before_the_content_is_built_reports_no_growth(self, tmp_path, monkeypatch):
         import deadline.client.cli._download_status_file as mod
@@ -1021,6 +1052,7 @@ class TestStatusFileTelemetryGrowthAndCost:
             content,
             _WriteMeasurements(
                 file_size_bytes=written,
+                write_succeeded=True,
                 job_count_before=len(existing),
                 task_record_count_before=_count_task_records(existing),
             ),
@@ -1044,6 +1076,7 @@ class TestStatusFileTelemetryGrowthAndCost:
             content,
             _WriteMeasurements(
                 file_size_bytes=written,
+                write_succeeded=True,
                 job_count_before=len(jobs),
                 task_record_count_before=_count_task_records(jobs),
             ),
@@ -1064,6 +1097,7 @@ class TestStatusFileTelemetryGrowthAndCost:
             content,
             _WriteMeasurements(
                 file_size_bytes=written,
+                write_succeeded=True,
                 job_count_before=2,
                 task_record_count_before=0,
             ),
