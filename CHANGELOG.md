@@ -1,3 +1,18 @@
+## 0.60.8 (2026-10-02)
+
+### Features
+* Added support for `LIST[STRING]`, `LIST[INT]`, `LIST[FLOAT]`, and `LIST[BOOL]` job parameter types. You can now load, validate, edit, and submit job bundles that use list-typed parameters, including `minLength`/`maxLength` constraints and nested `item` validation where applicable. (#1375, #1377, #1380)
+* Added support for the `RANGE_EXPR` job parameter type. You can now use range expression values like `"1-100"`, `"1-100:10"`, or `"1,3,5,10-20"` in job bundles to describe integer lists (e.g., frame ranges). (#1370)
+* Added support for `BOOL` job parameters. Boolean values are now accepted and preserved as native booleans in CreateJob requests, with checkbox and hidden GUI controls in the submitter dialog. `allowedValues` is correctly rejected on BOOL parameters. (#1360)
+* `deadline queue sync-output` now outputs a restructured plain-ASCII progress report with indented sections, a closing summary, and one greppable result line per job. A new `--verbose` flag is available for additional detail. Box-drawing glyphs that could cause `UnicodeEncodeError` on some terminals have been removed. (#1357)
+* `deadline bundle gui-submit` now always prepends the `deadline-cloud-v2` Conda channel ahead of `deadline-cloud`, matching the behavior of all Python DCC submitters. An explicit `CondaChannels` value in the bundle template, `--parameter`, or pre-GUI hook still takes precedence. (#1358)
+
+### Bug Fixes
+* Fixed a crash in `deadline bundle gui-submit --parameter` where the CLI-parameter validation callback was connected to a signal that no longer existed, causing an `AttributeError` before the dialog could open. (#1288)
+* Fixed several defects in `deadline queue sync-output`: a stale `max_session_ended_timestamp` from the previous job was incorrectly written onto every job in subsequent loops (corrupting checkpoint timestamps), and JSON output could contain incorrect state. These issues could cause missed or redundant downloads. (#1287)
+* Fixed random GUI crashes on Windows (`access violation`) caused by Qt objects being destroyed on background threads. Qt objects are now properly prevented from moving to non-GUI threads. (#1381)
+* When `awscrt` is missing or fails to import, the client now correctly reports a configuration error instead of incorrectly prompting for login credentials. (#1362)
+* Improved the clarity of the job attachments popup message shown during submission. (`ba3a2a5`)
 ## 0.60.7 (2026-09-07)
 
 ### Bug Fixes
