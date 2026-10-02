@@ -47,6 +47,7 @@
   "Drag to show more or fewer rows": "Drag to show more or fewer rows",
   "Edit": "Edit",
   "Items: {count}": "Items: {count}",
+  "Item {number}": "Item {number}",
   "Edit...": "편집...",
   "Error: Timeout cannot be set to zero.": "오류: 제한 시간을 0으로 설정할 수 없습니다.",
   "Save bundle as": "번들 다른 이름으로 저장",

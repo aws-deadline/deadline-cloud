@@ -24,3 +24,4 @@ class ControlType(enum.Enum):
     HIDDEN = enum.auto()
     LINE_EDIT_LIST = enum.auto()
     SPIN_BOX_LIST = enum.auto()
+    CHECK_BOX_LIST = enum.auto()

@@ -47,6 +47,7 @@
   "Drag to show more or fewer rows": "Drag to show more or fewer rows",
   "Edit": "Edit",
   "Items: {count}": "Items: {count}",
+  "Item {number}": "Item {number}",
   "Edit...": "Düzenle...",
   "Error: Timeout cannot be set to zero.": "Hata: Zaman aşımı sıfıra ayarlanamaz.",
   "Save bundle as": "Paketi farklı kaydet",

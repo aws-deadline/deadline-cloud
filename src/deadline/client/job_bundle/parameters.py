@@ -40,6 +40,7 @@ _VALID_PARAMETER_TYPES = (
     "LIST[STRING]",
     "LIST[INT]",
     "LIST[FLOAT]",
+    "LIST[BOOL]",
 )
 _BOOL_DISALLOWED_FIELDS = (
     "allowedValues",
@@ -61,22 +62,28 @@ _LIST_DISALLOWED_FIELDS = (
     "objectType",
     "dataFlow",
 )
+# LIST[BOOL] has no "item" object, since a boolean has nothing to constrain.
 _LIST_ITEM_FIELDS = {
     "LIST[STRING]": ("allowedValues", "minLength", "maxLength"),
     "LIST[INT]": ("allowedValues", "minValue", "maxValue"),
     "LIST[FLOAT]": ("allowedValues", "minValue", "maxValue"),
 }
-_LIST_TYPES = tuple(_LIST_ITEM_FIELDS)
+_LIST_TYPES = (*_LIST_ITEM_FIELDS, "LIST[BOOL]")
 # CreateJob's JobParameter.stringList is a list of 0-64 ParameterString, each 0-1024 characters.
 _MAX_STRING_LIST_ITEMS = 64
 _MAX_STRING_LIST_ITEM_LENGTH = 1024
-# CreateJob's JobParameter.intList and floatList each hold 0-512 items.
+# CreateJob's JobParameter.intList, floatList and boolList each hold 0-512 items.
 _MAX_NUMBER_LIST_ITEMS = 512
+_MAX_BOOL_LIST_ITEMS = 512
 _MAX_LIST_ITEMS = {
     "LIST[STRING]": _MAX_STRING_LIST_ITEMS,
     "LIST[INT]": _MAX_NUMBER_LIST_ITEMS,
     "LIST[FLOAT]": _MAX_NUMBER_LIST_ITEMS,
+    "LIST[BOOL]": _MAX_BOOL_LIST_ITEMS,
 }
+# The case-insensitive strings that a BOOL or LIST[BOOL] value accepts.
+_TRUE_STRINGS = ("true", "yes", "on", "1")
+_FALSE_STRINGS = ("false", "no", "off", "0")
 # OpenJD ints are 64-bit.
 _MIN_INT64 = -(2**63)
 _MAX_INT64 = 2**63 - 1
@@ -85,9 +92,11 @@ _LIST_ITEM_DESCRIPTIONS = {
     "LIST[STRING]": ("strings", '["a", "b"]'),
     "LIST[INT]": ("integers", "[1, 2]"),
     "LIST[FLOAT]": ("numbers", "[0.5, 2]"),
+    "LIST[BOOL]": ("booleans", "[true, false]"),
 }
 _VALID_UI_CONTROLS = (
     "CHECK_BOX",
+    "CHECK_BOX_LIST",
     "CHOOSE_DIRECTORY",
     "CHOOSE_INPUT_FILE",
     "CHOOSE_OUTPUT_FILE",
@@ -168,9 +177,9 @@ def validate_job_parameter(
 ) -> JobParameter:
     """Validates a job parameter as defined by Open Job Description. The validation allows for the
     union of all possible fields. Per-type checks are applied for BOOL, RANGE_EXPR and
-    the LIST[STRING], LIST[INT] and LIST[FLOAT] types, whose constraint fields and defaults
-    differ from the other types; the other types are not checked per type (e.g. minValue
-    is not limited to "INT" / "FLOAT").
+    the LIST[STRING], LIST[INT], LIST[FLOAT] and LIST[BOOL] types, whose constraint fields
+    and defaults differ from the other types; the other types are not checked per type
+    (e.g. minValue is not limited to "INT" / "FLOAT").
 
     name: <Identifier>
     type: "PATH"
@@ -285,7 +294,11 @@ def validate_job_parameter(
                     f'Job parameter "{name}" has "{field}" but type "{list_type}" does not support it'
                 )
         if "item" in input:
-            if list_type == "LIST[STRING]":
+            if list_type not in _LIST_ITEM_FIELDS:
+                raise ValueError(
+                    f'Job parameter "{name}" has "item" but type "{list_type}" does not support it'
+                )
+            elif list_type == "LIST[STRING]":
                 _validate_list_string_item_constraints(input["item"], parameter_name=name)
             else:
                 _validate_list_number_item_constraints(
@@ -556,6 +569,28 @@ def _validate_list_length_range(input: dict[str, Any], *, parameter_name: str) -
         )
 
 
+def _to_bool(value: Any) -> bool | None:
+    """Converts a value that OpenJD accepts for a boolean to bool, or returns None if it
+    is not one: a bool, exactly 0 or 1, or a case-insensitive true/yes/on/1 or
+    false/no/off/0 string."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        # Only exactly 0 or 1, not C-style truthiness where any non-zero is true.
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+        return None
+    if isinstance(value, str):
+        normalized = value.lower()
+        if normalized in _TRUE_STRINGS:
+            return True
+        if normalized in _FALSE_STRINGS:
+            return False
+    return None
+
+
 def _check_list_item_type(list_type: str, name: str, i: int, item: Any) -> None:
     """Raises TypeError if a list item is not of the list's item type. Items are not
     converted between types, e.g. "5" is not an item of a LIST[INT]."""
@@ -607,10 +642,20 @@ def _check_number_list_item(name: str, i: int, item: int | float, item_constrain
         )
 
 
+def _to_bool_list_item(name: str, i: int, item: Any) -> bool:
+    converted = _to_bool(item)
+    if converted is None:
+        error_type = ValueError if isinstance(item, (int, float, str)) else TypeError
+        raise error_type(
+            f"Job parameter {name!r} has type LIST[BOOL] but item {i} is {item!r} which is not boolean."
+        )
+    return converted
+
+
 def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
-    """Converts a LIST[STRING], LIST[INT] or LIST[FLOAT] value, a list or a string holding
-    a JSON array, to a list and checks it against the definition's list and item constraints.
-    LIST[FLOAT] items are returned as float."""
+    """Converts a LIST[STRING], LIST[INT], LIST[FLOAT] or LIST[BOOL] value, a list or a
+    string holding a JSON array, to a list and checks it against the definition's list and
+    item constraints. LIST[FLOAT] items are returned as float, and LIST[BOOL] items as bool."""
     name = job_parameter["name"]
     list_type = job_parameter["type"]
     item_kind, example = _LIST_ITEM_DESCRIPTIONS[list_type]
@@ -630,8 +675,12 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
             f"Job parameter {name!r} has type {list_type} but got value {value!r} of type {type(value)}."
         )
 
-    for i, item in enumerate(value):
-        _check_list_item_type(list_type, name, i, item)
+    if list_type == "LIST[BOOL]":
+        # Unlike the other list types, an item accepts every spelling of a BOOL value.
+        value = [_to_bool_list_item(name, i, item) for i, item in enumerate(value)]
+    else:
+        for i, item in enumerate(value):
+            _check_list_item_type(list_type, name, i, item)
 
     min_length = job_parameter.get("minLength")
     if min_length is not None and len(value) < min_length:
@@ -650,7 +699,7 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
     for i, item in enumerate(value):
         if list_type == "LIST[STRING]":
             _check_string_list_item(name, i, item, item_constraints)
-        else:
+        elif list_type in ("LIST[INT]", "LIST[FLOAT]"):
             _check_number_list_item(name, i, item, item_constraints)
         if item_allowed_values is not None and item not in item_allowed_values:
             raise ValueError(
@@ -664,14 +713,15 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
 
 def validate_job_parameter_value(
     job_parameter: JobParameter,
-    value: str | int | float | bool | list[str] | list[int] | list[float],
-) -> str | int | float | bool | list[str] | list[int] | list[float]:
+    value: str | int | float | bool | list[str] | list[int] | list[float] | list[bool],
+) -> str | int | float | bool | list[str] | list[int] | list[float] | list[bool]:
     """
     Validates a value for the specified parameter definition, returning the value with the correct type,
     e.g. a string "19" for an INT parameter is returned as the integer 19, and a string
-    '["a", "b"]' for a LIST[STRING] parameter is returned as the list ["a", "b"]. LIST[INT]
-    and LIST[FLOAT] values are also accepted as a JSON array string, and LIST[FLOAT] items
-    are returned as float.
+    '["a", "b"]' for a LIST[STRING] parameter is returned as the list ["a", "b"]. LIST[INT],
+    LIST[FLOAT] and LIST[BOOL] values are also accepted as a JSON array string. LIST[FLOAT]
+    items are returned as float, and LIST[BOOL] items, which accept the same values as a BOOL
+    parameter such as "yes" or 0, are returned as bool.
     Raises a ValueError if validation fails.
 
     See https://github.com/OpenJobDescription/openjd-specifications/wiki/2023-09-Template-Schemas#2-jobparameterdefinition
@@ -692,25 +742,12 @@ def validate_job_parameter_value(
                 f"Job parameter {name!r} has type {param_type} but got value {value!r} of type {type(value)}."
             )
     elif param_type == "BOOL":
-        if isinstance(value, bool):
-            pass
-        elif isinstance(value, (int, float)) and (value == 0 or value == 1):
-            # Only exactly 0 or 1, not C-style truthiness where any non-zero is true.
-            value = value == 1
-        elif isinstance(value, str):
-            normalized = value.lower()
-            if normalized in ("true", "yes", "on", "1"):
-                value = True
-            elif normalized in ("false", "no", "off", "0"):
-                value = False
-            else:
-                raise ValueError(
-                    f"Job parameter {name!r} has type BOOL but got value {value!r} which is not boolean."
-                )
-        else:
+        converted = _to_bool(value)
+        if converted is None:
             raise ValueError(
                 f"Job parameter {name!r} has type BOOL but got value {value!r} which is not boolean."
             )
+        value = converted
     elif param_type == "RANGE_EXPR":
         if not isinstance(value, str):
             raise TypeError(
@@ -1310,6 +1347,7 @@ _SUPPORTED_CONTROLS_FOR_TYPE = {
     "LIST[STRING]": {"LINE_EDIT_LIST", "HIDDEN"},
     "LIST[INT]": {"SPIN_BOX_LIST", "HIDDEN"},
     "LIST[FLOAT]": {"SPIN_BOX_LIST", "HIDDEN"},
+    "LIST[BOOL]": {"CHECK_BOX_LIST", "HIDDEN"},
 }
 
 
@@ -1330,6 +1368,8 @@ def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
             return "LINE_EDIT_LIST"
         elif param_type in ("LIST[INT]", "LIST[FLOAT]"):
             return "SPIN_BOX_LIST"
+        elif param_type == "LIST[BOOL]":
+            return "CHECK_BOX_LIST"
         elif param_type == "PATH":
             if param_def.get("objectType", "DIRECTORY") == "FILE":
                 if param_def.get("dataFlow", "NONE") == "OUT":
