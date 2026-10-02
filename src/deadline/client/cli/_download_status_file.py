@@ -437,19 +437,25 @@ def _count_task_records(jobs: dict[str, Any]) -> int:
 
 @dataclass
 class _WriteMeasurements:
-    """Per-location measurements gathered while writing one status file."""
+    """Per-location measurements gathered while writing one status file.
+
+    The two "before" counts are snapshots rather than the dict they came from, because
+    _build_status_file_content writes through to the entry dicts it was handed, so counting
+    them after the build would report post-merge totals and understate growth as zero.
+    """
 
     file_size_bytes: int = 0
     read_duration_ms: int = 0
     write_duration_ms: int = 0
     location_count: int = 1
+    job_count_before: int = 0
+    task_record_count_before: int = 0
     lock: _LockOutcome = field(default_factory=_LockOutcome)
 
 
 def _record_status_file_telemetry(
     status_file_path: str,
     status_content: dict[str, Any],
-    existing_jobs: dict[str, Any],
     measurements: _WriteMeasurements,
 ) -> None:
     """Best-effort: the file is already written, so a telemetry failure must not fail the write."""
@@ -464,8 +470,8 @@ def _record_status_file_telemetry(
                 "task_record_count": task_record_count,
                 # Growth per run, because nothing in the event identifies which file a
                 # sample came from, so a reader cannot difference two samples itself.
-                "jobs_added": len(jobs) - len(existing_jobs),
-                "task_records_added": task_record_count - _count_task_records(existing_jobs),
+                "jobs_added": len(jobs) - measurements.job_count_before,
+                "task_records_added": task_record_count - measurements.task_record_count_before,
                 "read_duration_ms": measurements.read_duration_ms,
                 "write_duration_ms": measurements.write_duration_ms,
                 "lock_wait_ms": measurements.lock.wait_ms,
@@ -647,6 +653,8 @@ def write_download_status_file(
                 read_started = time.monotonic()
                 existing_jobs = _read_existing_status_file(status_file_path)
                 measurements.read_duration_ms = int((time.monotonic() - read_started) * 1000)
+                measurements.job_count_before = len(existing_jobs)
+                measurements.task_record_count_before = _count_task_records(existing_jobs)
 
                 status_content = _build_status_file_content(
                     queue_id=queue_id,
@@ -664,9 +672,7 @@ def write_download_status_file(
                 measurements.write_duration_ms = int((time.monotonic() - write_started) * 1000)
             written_paths.append(status_file_path)
             # Outside the lock: it is contended by every machine syncing this queue.
-            _record_status_file_telemetry(
-                status_file_path, status_content, existing_jobs, measurements
-            )
+            _record_status_file_telemetry(status_file_path, status_content, measurements)
             if not fmt.suppressed:
                 fmt.summary_row("status file", _format_path(status_file_path))
         except Exception as e:

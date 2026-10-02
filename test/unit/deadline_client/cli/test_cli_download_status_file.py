@@ -587,7 +587,7 @@ class TestRecordStatusFileTelemetry:
         written = _atomic_write_json(file_path, content)
 
         _record_status_file_telemetry(
-            file_path, content, {}, _WriteMeasurements(file_size_bytes=written)
+            file_path, content, _WriteMeasurements(file_size_bytes=written)
         )
 
         assert len(events) == 1
@@ -611,7 +611,7 @@ class TestRecordStatusFileTelemetry:
         written = _atomic_write_json(file_path, {"jobs": {}})
 
         _record_status_file_telemetry(
-            file_path, {"jobs": {}}, {}, _WriteMeasurements(file_size_bytes=written)
+            file_path, {"jobs": {}}, _WriteMeasurements(file_size_bytes=written)
         )
 
         assert events[0]["event_details"]["job_count"] == 0
@@ -627,7 +627,7 @@ class TestRecordStatusFileTelemetry:
         _atomic_write_json(file_path, {"status_file_path": "/elsewhere"})
 
         _record_status_file_telemetry(
-            file_path, content, {}, _WriteMeasurements(file_size_bytes=written)
+            file_path, content, _WriteMeasurements(file_size_bytes=written)
         )
 
         assert events[0]["event_details"]["file_size_bytes"] == written
@@ -641,7 +641,7 @@ class TestRecordStatusFileTelemetry:
         os.unlink(file_path)
 
         _record_status_file_telemetry(
-            file_path, content, {}, _WriteMeasurements(file_size_bytes=written)
+            file_path, content, _WriteMeasurements(file_size_bytes=written)
         )
 
         assert events[0]["event_details"]["task_record_count"] == 2
@@ -658,7 +658,7 @@ class TestRecordStatusFileTelemetry:
         written = _atomic_write_json(file_path, {"jobs": {}})
 
         _record_status_file_telemetry(
-            file_path, {"jobs": {}}, {}, _WriteMeasurements(file_size_bytes=written)
+            file_path, {"jobs": {}}, _WriteMeasurements(file_size_bytes=written)
         )
 
     def test_write_reports_the_file_it_just_wrote(self, tmp_path, monkeypatch):
@@ -739,6 +739,56 @@ class TestStatusFileTelemetryGrowthAndCost:
     def _capture_events(monkeypatch) -> list[dict[str, Any]]:
         return TestRecordStatusFileTelemetry._capture_events(monkeypatch)
 
+    def test_a_second_run_adding_a_task_to_a_tracked_job_reports_growth(
+        self, tmp_path, monkeypatch
+    ):
+        """_build_status_file_content writes through to the entry dicts it is handed, so counting
+        them after the build sees the merged tasks and reports no growth at all."""
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        checkpoint_dir = str(tmp_path / "checkpoint")
+
+        def _run(task_results, job_results):
+            write_download_status_file(
+                queue_id=MOCK_QUEUE_ID,
+                categorized_job_ids=_make_categorized_job_ids(updated={MOCK_JOB_ID}),
+                download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID, succeeded=2, total=2)},
+                local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+                local_storage_profile=profile,
+                checkpoint_dir=checkpoint_dir,
+                job_download_results=job_results,
+                task_download_results=task_results,
+            )
+
+        def _task(name):
+            return {
+                name: {
+                    "total_files": 3,
+                    "downloaded_files": 3,
+                    "error_code": None,
+                    "error_message": None,
+                }
+            }
+
+        _run(
+            {MOCK_JOB_ID: _task("task-abc-0")},
+            {MOCK_JOB_ID: {"total_files": 3, "downloaded_files": 3, "failed_files": 0}},
+        )
+        first = events[0]["event_details"]
+        assert first["task_records_added"] == 1
+
+        # No job-level file counts this run, which is the branch that merges tasks into the
+        # entry the read handed back instead of building a fresh one.
+        events.clear()
+        _run({MOCK_JOB_ID: _task("task-abc-1")}, None)
+
+        second = events[0]["event_details"]
+        assert second["task_record_count"] == 2
+        assert second["task_records_added"] == 1
+        assert second["jobs_added"] == 0
+
     def test_added_counts_report_growth_not_totals(self, tmp_path, monkeypatch):
         events = self._capture_events(monkeypatch)
         existing: dict[str, Any] = {"job-a": {"tasks": {"1-1": {}, "1-2": {}}}}
@@ -752,7 +802,13 @@ class TestStatusFileTelemetryGrowthAndCost:
         written = _atomic_write_json(file_path, content)
 
         _record_status_file_telemetry(
-            file_path, content, existing, _WriteMeasurements(file_size_bytes=written)
+            file_path,
+            content,
+            _WriteMeasurements(
+                file_size_bytes=written,
+                job_count_before=len(existing),
+                task_record_count_before=_count_task_records(existing),
+            ),
         )
 
         details = events[0]["event_details"]
@@ -769,7 +825,13 @@ class TestStatusFileTelemetryGrowthAndCost:
         written = _atomic_write_json(file_path, content)
 
         _record_status_file_telemetry(
-            file_path, content, dict(jobs), _WriteMeasurements(file_size_bytes=written)
+            file_path,
+            content,
+            _WriteMeasurements(
+                file_size_bytes=written,
+                job_count_before=len(jobs),
+                task_record_count_before=_count_task_records(jobs),
+            ),
         )
 
         assert events[0]["event_details"]["jobs_added"] == 0
@@ -785,8 +847,11 @@ class TestStatusFileTelemetryGrowthAndCost:
         _record_status_file_telemetry(
             file_path,
             content,
-            {"job-a": "not a dict", "job-b": {"tasks": None}},
-            _WriteMeasurements(file_size_bytes=written),
+            _WriteMeasurements(
+                file_size_bytes=written,
+                job_count_before=2,
+                task_record_count_before=0,
+            ),
         )
 
         assert events[0]["event_details"]["task_records_added"] == 1
@@ -799,7 +864,6 @@ class TestStatusFileTelemetryGrowthAndCost:
         _record_status_file_telemetry(
             file_path,
             {"jobs": {}},
-            {},
             _WriteMeasurements(
                 file_size_bytes=7,
                 read_duration_ms=11,
