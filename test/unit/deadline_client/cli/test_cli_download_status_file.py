@@ -826,6 +826,14 @@ class TestStatusFileTelemetryGrowthAndCost:
                 "schema_version": 1,
                 "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": {"task-abc-0": [1]}}},
             },
+            {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "total_files": "3"}}},
+            {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "total_files": None}}},
+            {
+                "schema_version": 1,
+                "jobs": {
+                    MOCK_JOB_ID: {k: v for k, v in _TRACKED_ENTRY.items() if k != "download_status"}
+                },
+            },
         ],
         ids=[
             "top-level-null",
@@ -840,6 +848,9 @@ class TestStatusFileTelemetryGrowthAndCost:
             "a-task-value-is-a-string",
             "a-task-value-is-null",
             "a-task-value-is-a-list",
+            "total-files-is-a-string",
+            "total-files-is-null",
+            "download-status-is-missing",
         ],
     )
     def test_a_corrupt_file_is_repaired_rather_than_failing_forever(
@@ -872,6 +883,66 @@ class TestStatusFileTelemetryGrowthAndCost:
             written = json.load(f)
         assert MOCK_JOB_ID in written["jobs"]
         assert events[0]["event_details"]["write_succeeded"] is True
+
+    def test_a_non_numeric_count_on_an_inactive_job_is_repaired(self, tmp_path, monkeypatch):
+        """The downloaded_files comparison only runs on the inactive pass, so reaching it needs
+        a job that is inactive and still reads as in progress."""
+        self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        status_file.parent.mkdir(parents=True)
+        entry = {**_TRACKED_ENTRY, "download_status": "in_progress", "downloaded_files": "3"}
+        with open(status_file, "w") as f:
+            json.dump({"schema_version": 1, "jobs": {MOCK_JOB_ID: entry}}, f)
+
+        messages: list[str] = []
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(inactive={MOCK_JOB_ID}),
+            download_candidate_jobs={},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+            print_function_callback=messages.append,
+        )
+
+        assert not any("failed to write status file" in m for m in messages)
+        with open(status_file) as f:
+            assert isinstance(json.load(f)["jobs"][MOCK_JOB_ID]["downloaded_files"], int)
+
+    def test_a_non_string_status_is_written_back_as_a_string(self, tmp_path, monkeypatch):
+        """A null status does not raise, so the only thing worth checking is that the guarantee
+        the read makes actually reaches the file."""
+        self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        status_file.parent.mkdir(parents=True)
+        other_job = "job-ffffffffffffffffffffffffffffffff"
+        with open(status_file, "w") as f:
+            json.dump(
+                {
+                    "schema_version": 1,
+                    "jobs": {other_job: {**_TRACKED_ENTRY, "download_status": None}},
+                },
+                f,
+            )
+
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+        )
+
+        with open(status_file) as f:
+            carried = json.load(f)["jobs"][other_job]
+        assert isinstance(carried["download_status"], str)
 
     def test_a_failed_write_still_reports_telemetry(self, tmp_path, monkeypatch):
         """A run that loses the lock is also the run most likely to fail the write, so dropping

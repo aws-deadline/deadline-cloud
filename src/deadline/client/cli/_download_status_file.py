@@ -388,9 +388,10 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
     Returns empty dict if file doesn't exist or is invalid.
 
     Guarantees the shape every consumer downstream assumes: a dict of job IDs to dicts, each
-    with a dict under "tasks" whose own values are dicts. A file can parse cleanly and still
-    hold any of those as a null, a list or a string, and the merge, the status reconciliation
-    and the record counting all raise on that. The raise escapes to the caller's handler, which
+    with a dict under "tasks" whose own values are dicts, a string status, and whole numbers
+    for the two counters the merge compares. A file can parse cleanly and still hold any of
+    those as a null, a list, a string or a missing key, and the merge, the status reconciliation
+    and the record counting raise on them. The raise escapes to the caller's handler, which
     skips the location, so the offending file is never rewritten and every later run fails on
     it identically.
     """
@@ -411,6 +412,15 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
                     if isinstance(tasks, dict)
                     else {}
                 )
+                if not isinstance(entry.get("download_status"), str):
+                    # "in_progress" rather than a value the Monitor has never seen: it claims
+                    # nothing, and the inactive pass below moves it to a terminal state.
+                    entry["download_status"] = "in_progress"
+                for counter in ("total_files", "downloaded_files"):
+                    # bool is an int subclass, and True would compare as 1 rather than a count.
+                    value = entry.get(counter)
+                    if not isinstance(value, int) or isinstance(value, bool):
+                        entry[counter] = 0
                 normalized[job_id] = entry
             return normalized
     except (json.JSONDecodeError, OSError, KeyError):
