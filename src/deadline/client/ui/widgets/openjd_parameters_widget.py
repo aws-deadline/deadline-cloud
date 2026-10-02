@@ -1222,9 +1222,12 @@ class _CheckBoxListDelegate(_FixedRowHeightDelegate):
         return content
 
     def paint(self, painter, option, index):
-        # The selection and hover highlight span the whole row, including the strip.
+        # The selection and hover highlight span the whole row, including the strip. A style
+        # whose ShowDecorationSelected hint is false for a list view would otherwise fill
+        # only the text rectangle.
         background = QStyleOptionViewItem(option)
         self.initStyleOption(background, index)
+        background.showDecorationSelected = True
         style = option.widget.style() if option.widget else QApplication.style()
         style.drawPrimitive(QStyle.PE_PanelItemViewItem, background, painter, option.widget)
         super().paint(painter, self.content_option(option), index)
