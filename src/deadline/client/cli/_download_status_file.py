@@ -388,10 +388,11 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
     Returns empty dict if file doesn't exist or is invalid.
 
     Guarantees the shape every consumer downstream assumes: a dict of job IDs to dicts, each
-    with a dict under "tasks". A file can parse cleanly and still hold any of those as a null,
-    a list or a string, and the merge and the record counting both raise on that. The raise
-    escapes to the caller's handler, which skips the location, so the offending file is never
-    rewritten and every later run fails on it identically.
+    with a dict under "tasks" whose own values are dicts. A file can parse cleanly and still
+    hold any of those as a null, a list or a string, and the merge, the status reconciliation
+    and the record counting all raise on that. The raise escapes to the caller's handler, which
+    skips the location, so the offending file is never rewritten and every later run fails on
+    it identically.
     """
     try:
         if os.path.exists(file_path):
@@ -404,8 +405,12 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
             for job_id, entry in jobs.items():
                 if not isinstance(entry, dict):
                     continue
-                if not isinstance(entry.get("tasks"), dict):
-                    entry["tasks"] = {}
+                tasks = entry.get("tasks")
+                entry["tasks"] = (
+                    {k: v for k, v in tasks.items() if isinstance(v, dict)}
+                    if isinstance(tasks, dict)
+                    else {}
+                )
                 normalized[job_id] = entry
             return normalized
     except (json.JSONDecodeError, OSError, KeyError):

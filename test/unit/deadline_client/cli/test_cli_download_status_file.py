@@ -814,6 +814,18 @@ class TestStatusFileTelemetryGrowthAndCost:
             {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": None}}},
             {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": "nope"}}},
             {"schema_version": 1, "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": [1, 2]}}},
+            {
+                "schema_version": 1,
+                "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": {"task-abc-0": "downloaded"}}},
+            },
+            {
+                "schema_version": 1,
+                "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": {"task-abc-0": None}}},
+            },
+            {
+                "schema_version": 1,
+                "jobs": {MOCK_JOB_ID: {**_TRACKED_ENTRY, "tasks": {"task-abc-0": [1]}}},
+            },
         ],
         ids=[
             "top-level-null",
@@ -825,6 +837,9 @@ class TestStatusFileTelemetryGrowthAndCost:
             "tasks-is-null",
             "tasks-is-a-string",
             "tasks-is-a-list",
+            "a-task-value-is-a-string",
+            "a-task-value-is-null",
+            "a-task-value-is-a-list",
         ],
     )
     def test_a_corrupt_file_is_repaired_rather_than_failing_forever(
