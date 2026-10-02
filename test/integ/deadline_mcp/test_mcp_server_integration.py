@@ -12,6 +12,7 @@ from unittest.mock import patch, MagicMock
 # Skip all tests in this module if MCP dependencies are not available
 pytest.importorskip("mcp", reason="MCP dependencies not available")
 
+from mcp.types import CallToolResult
 from deadline._mcp import server
 from deadline._mcp.registry import TOOL_REGISTRY, get_tool_definition
 
@@ -41,8 +42,7 @@ async def test_mcp_server_integration(get_boto_session):
         app = server.app
 
         # 1. Check if all tools in TOOL_REGISTRY are available
-        tools_result = await app.list_tools()
-        tools = tools_result if isinstance(tools_result, list) else tools_result.tools
+        tools = await app.list_tools()
         available_tool_names = [tool.name for tool in tools]
         expected_tools = [f"deadline_{tool_name}" for tool_name in TOOL_REGISTRY.keys()]
         missing_tools = [tool for tool in expected_tools if tool not in available_tool_names]
@@ -51,30 +51,34 @@ async def test_mcp_server_integration(get_boto_session):
         # 2. Call deadline_check_authentication_status tool and verify response
         auth_result = await app.call_tool("deadline_check_authentication_status", {})
         assert auth_result is not None, "Authentication tool call should return a result"
+        assert isinstance(auth_result, CallToolResult)
+        auth_content = auth_result.content
 
-        if auth_result and hasattr(auth_result[0], "text"):  # type: ignore[index]
+        if auth_content and hasattr(auth_content[0], "text"):
             try:
-                auth_data = json.loads(auth_result[0].text)  # type: ignore[index]
+                auth_data = json.loads(auth_content[0].text)
                 assert "error" not in auth_data, (
                     f"Authentication check failed with error: {auth_data.get('error')}"
                 )
             except json.JSONDecodeError as e:
                 pytest.fail(
-                    f"Check authentication tool returned non-JSON response: {auth_result[0].text[:200]}... (JSONDecodeError: {e})"  # type: ignore[index]
+                    f"Check authentication tool returned non-JSON response: {auth_content[0].text[:200]}... (JSONDecodeError: {e})"
                 )
 
         # 3. Call deadline_list_farms tool and verify response
         farms_result = await app.call_tool("deadline_list_farms", {})
         assert farms_result is not None, "List farms tool call should return a result"
-        if farms_result and hasattr(farms_result[0], "text"):  # type: ignore[index]
+        assert isinstance(farms_result, CallToolResult)
+        farms_content = farms_result.content
+        if farms_content and hasattr(farms_content[0], "text"):
             try:
-                farms_data = json.loads(farms_result[0].text)  # type: ignore[index]
+                farms_data = json.loads(farms_content[0].text)
                 assert "error" not in farms_data, (
                     f"List farms failed with error: {farms_data.get('error')}"
                 )
             except json.JSONDecodeError as e:
                 pytest.fail(
-                    f"List farms returned non-JSON response: {farms_result[0].text[:200]}... (JSONDecodeError: {e})"  # type: ignore[index]
+                    f"List farms returned non-JSON response: {farms_content[0].text[:200]}... (JSONDecodeError: {e})"
                 )
 
         # 4. Check metadata on deadline_list_queues tool
@@ -91,12 +95,8 @@ async def test_mcp_server_integration(get_boto_session):
             "list_queues should have parameters defined in TOOL_REGISTRY"
         )
 
-        assert hasattr(list_queues_tool, "inputSchema"), (
-            "deadline_list_queues tool should have an inputSchema"
-        )
-
-        input_schema = list_queues_tool.inputSchema
-        assert input_schema is not None, "inputSchema should not be None"
+        input_schema = list_queues_tool.input_schema
+        assert input_schema is not None, "input_schema should not be None"
 
         available_params = []
         if isinstance(input_schema, dict) and "properties" in input_schema:
@@ -126,8 +126,7 @@ async def test_tool_description_extraction(get_boto_session):
     """Test that tool descriptions are properly extracted from original function docstrings."""
     app = server.app
 
-    tools_result = await app.list_tools()
-    tools = tools_result if isinstance(tools_result, list) else tools_result.tools
+    tools = await app.list_tools()
 
     list_farms_tool = None
     for tool in tools:
@@ -386,8 +385,10 @@ async def test_mcp_tool_error_handling():
     def parse_tool_result(result):
         """Helper to parse and validate tool result JSON."""
         assert result is not None, "Tool call should return a result"
-        if result and hasattr(result[0], "text"):
-            return json.loads(result[0].text)
+        assert isinstance(result, CallToolResult)
+        content = result.content
+        if content and hasattr(content[0], "text"):
+            return json.loads(content[0].text)
         return {}
 
     mock_session = MagicMock()
