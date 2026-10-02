@@ -789,6 +789,37 @@ class TestStatusFileTelemetryGrowthAndCost:
         assert second["task_records_added"] == 1
         assert second["jobs_added"] == 0
 
+    @pytest.mark.parametrize("corrupt_jobs", [None, [], "nope", 7])
+    def test_a_file_with_a_non_dict_jobs_value_is_still_repaired(
+        self, tmp_path, monkeypatch, corrupt_jobs
+    ):
+        """Counting records before the write must not throw, or the bad file is abandoned
+        forever: every later run would read it, raise again, and never rewrite it."""
+        events = self._capture_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        profile = {"fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]}
+        status_file = renders_dir / ".deadline" / f"{MOCK_QUEUE_ID}_download_status.json"
+        status_file.parent.mkdir(parents=True)
+        with open(status_file, "w") as f:
+            json.dump({"schema_version": 1, "jobs": corrupt_jobs}, f)
+
+        messages: list[str] = []
+        write_download_status_file(
+            queue_id=MOCK_QUEUE_ID,
+            categorized_job_ids=_make_categorized_job_ids(completed={MOCK_JOB_ID}),
+            download_candidate_jobs={MOCK_JOB_ID: _make_job(MOCK_JOB_ID)},
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile=profile,
+            checkpoint_dir=str(tmp_path / "checkpoint"),
+            print_function_callback=messages.append,
+        )
+
+        assert not any("failed to write status file" in m for m in messages)
+        with open(status_file) as f:
+            assert isinstance(json.load(f)["jobs"], dict)
+        assert events[0]["event_details"]["jobs_added"] == 1
+
     def test_added_counts_report_growth_not_totals(self, tmp_path, monkeypatch):
         events = self._capture_events(monkeypatch)
         existing: dict[str, Any] = {"job-a": {"tasks": {"1-1": {}, "1-2": {}}}}

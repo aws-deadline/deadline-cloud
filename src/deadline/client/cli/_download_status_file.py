@@ -386,12 +386,16 @@ def _read_existing_status_file(file_path: str) -> dict[str, Any]:
     """
     Reads an existing status file and returns its jobs dict.
     Returns empty dict if file doesn't exist or is invalid.
+
+    Always a dict, even when the file holds a null or a list under "jobs". Callers that would
+    raise on anything else would abandon the write, leaving a corrupt file nothing can repair.
     """
     try:
         if os.path.exists(file_path):
             with open(file_path, "r") as f:
                 data = json.load(f)
-            return data.get("jobs", {})
+            jobs = data.get("jobs")
+            return jobs if isinstance(jobs, dict) else {}
     except (json.JSONDecodeError, OSError, KeyError):
         pass  # Gracefully handle corrupt or inaccessible status files
     return {}
