@@ -1,0 +1,1606 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/deadline-cloud/design/proxy-and-ca-bundle-integration-tests/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Design: Proxy and CA Bundle Integration Tests - AWS Deadline Cloud - Client Library Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#design-proxy-and-ca-bundle-integration-tests" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-header__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud - Client Library Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Design: Proxy and CA Bundle Integration Tests
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AWS Deadline Cloud - Client Library Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cli_reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_attachment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    attachment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    auth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_farm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    farm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_fleet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fleet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_handle-web-url/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    handle-web-url
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_job/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_manifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    manifest
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mcp-server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_queue/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli_reference/deadline_worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Library Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    deadline.client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    deadline.client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    api
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cli
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_job_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job_bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ui
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../submission-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Submission Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How It Works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#key-insight-unix-sockets-cross-namespace-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Insight: Unix Sockets Cross Namespace Boundaries
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#aws-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AWS Credentials
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ca-bundle-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CA Bundle Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implementation Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connect-proxy-connect_proxypy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CONNECT Proxy (connect_proxy.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#namespace-runner-scriptsrun_proxy_integ_testssh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespace Runner (scripts/run_proxy_integ_tests.sh)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-actions-codebuild-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitHub Actions / CodeBuild Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-behaviors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Behaviors
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Known Behaviors">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#socat-connection-reset-by-peer-messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        socat "Connection reset by peer" Messages
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dependencies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Dependencies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#system-packages-installed-in-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System packages (installed in CI):
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python packages:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#platform-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform Behavior
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running Tests
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-ci-codebuild-github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In CI (CodeBuild / GitHub Actions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#locally-on-linux" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Locally on Linux
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#macwindows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mac/Windows
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#success-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Success Criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="design-proxy-and-ca-bundle-integration-tests">Design: Proxy and CA Bundle Integration Tests<a class="headerlink" href="#design-proxy-and-ca-bundle-integration-tests" title="Permanent link">&para;</a></h1>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>Run <strong>existing integration tests</strong> through an HTTP CONNECT proxy inside a Linux network
+namespace. This verifies that the deadline-cloud package correctly respects <code>HTTPS_PROXY</code>
+and <code>AWS_CA_BUNDLE</code> environment variables — any code that bypasses the proxy fails
+immediately with "Network is unreachable" because no other route to the internet exists.</p>
+<h2 id="problem-statement">Problem Statement<a class="headerlink" href="#problem-statement" title="Permanent link">&para;</a></h2>
+<p>The deadline-cloud package relies on boto3 for AWS API calls, which should respect standard
+AWS SDK environment variables like <code>AWS_CA_BUNDLE</code> and <code>HTTPS_PROXY</code>. However, there are
+currently no automated tests to verify:</p>
+<ol>
+<li>That these environment variables are properly honored across all AWS API calls</li>
+<li>That new code additions continue to respect these settings</li>
+<li>That the package works correctly in environments requiring custom CA certificates and proxies</li>
+</ol>
+<p>Without these tests, regressions could be introduced where new functionality bypasses proxy
+settings or fails to use custom CA bundles, breaking deployments in corporate or restricted
+network environments.</p>
+<h2 id="goals">Goals<a class="headerlink" href="#goals" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Reuse existing integration tests</strong> — no new test code, just infrastructure</li>
+<li><strong>Linux-only</strong> — Mac/Windows run tests normally without proxy</li>
+<li><strong>Make HTTPS_PROXY bypass impossible</strong> — network namespace has no internet routes</li>
+<li><strong>Verify CA bundle usage</strong> — <code>AWS_CA_BUNDLE</code> points to the system CA bundle</li>
+<li><strong>Fail fast on regressions</strong> — direct connections fail instantly</li>
+<li><strong>CI/CD integration</strong> — runs automatically in GitHub Actions</li>
+</ol>
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│  Host Network Namespace (has internet)                  │
+│                                                         │
+│  ┌─────────────────────────┐                            │
+│  │ Python CONNECT Proxy    │                            │
+│  │ listening on Unix socket│──── connects to ──── AWS   │
+│  │ /tmp/deadline_proxy.sock│      real internet         │
+│  └────────────▲────────────┘                            │
+│               │                                         │
+│  ┌────────────┴────────────┐                            │
+│  │ socat (cred bridge)     │                            │
+│  │ Unix socket ──── TCP ───┼──── 127.0.0.1:1338        │
+│  │ /tmp/deadline_cred.sock │     (credential endpoint)  │
+│  └────────────▲────────────┘                            │
+│               │ (unix sockets cross namespace           │
+│               │  boundary via shared filesystem)        │
+├───────────────┼─────────────────────────────────────────┤
+│  Network Namespace (no internet, loopback only)         │
+│               │                                         │
+│  ┌────────────┴────────────┐  ┌────────────────────┐   │
+│  │ socat (proxy bridge)    │  │ socat (cred bridge) │   │
+│  │ TCP 127.0.0.1:8888  ───┘  │ TCP 127.0.0.1:1338 ─┘  │
+│  └────────────▲────────────┘  └─────────▲──────────┘   │
+│               │                         │               │
+│  ┌────────────┴─────────────────────────┴──────────┐   │
+│  │ pytest (integration tests + boto3 calls)        │   │
+│  │  HTTPS_PROXY=http://127.0.0.1:8888             │   │
+│  │  AWS creds refresh via 127.0.0.1:1338          │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ❌ Direct connections to internet → &quot;Network is        │
+│     unreachable&quot; (no routes exist in this namespace)    │
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>Host side</strong>: A lightweight Python HTTP CONNECT proxy starts, listening on a <strong>Unix domain
+   socket</strong> (<code>/tmp/deadline_proxy.sock</code>). It runs in the host network namespace and has full
+   internet access to forward requests to AWS.</p>
+</li>
+<li>
+<p><strong>Namespace creation</strong>: <code>sudo unshare --net</code> creates a new network namespace. Inside this
+   namespace only the loopback interface exists — there are no routes to the internet.</p>
+</li>
+<li>
+<p><strong>Bridge</strong>: <code>socat</code> runs inside the namespace, listening on <code>TCP 127.0.0.1:8888</code> and
+   forwarding connections to the Unix socket. The Unix socket crosses the namespace boundary
+   because the filesystem is shared.</p>
+</li>
+<li>
+<p><strong>Environment</strong>: <code>HTTPS_PROXY=http://127.0.0.1:8888</code> and <code>AWS_CA_BUNDLE</code> are set.
+   boto3/botocore will use the proxy for all HTTPS connections.</p>
+</li>
+<li>
+<p><strong>Enforcement</strong>: If any code bypasses <code>HTTPS_PROXY</code> and tries to connect directly to AWS
+   on port 443, it gets <code>OSError: [Errno 101] Network is unreachable</code> — the test fails
+   immediately.</p>
+</li>
+<li>
+<p><strong>Pre-flight checks</strong>: Before running tests, the script verifies that direct internet
+   access is blocked (connect to <code>1.1.1.1:443</code> must fail) and the proxy is reachable
+   (connect to <code>127.0.0.1:8888</code> must succeed).</p>
+</li>
+</ol>
+<h3 id="key-insight-unix-sockets-cross-namespace-boundaries">Key Insight: Unix Sockets Cross Namespace Boundaries<a class="headerlink" href="#key-insight-unix-sockets-cross-namespace-boundaries" title="Permanent link">&para;</a></h3>
+<p><code>unshare --net</code> only isolates the <em>network</em> namespace. The filesystem is shared. This means
+a Unix domain socket created in the host namespace is accessible from inside the network
+namespace — this is how the proxy bridge works without any complex networking setup.</p>
+<h3 id="aws-credentials">AWS Credentials<a class="headerlink" href="#aws-credentials" title="Permanent link">&para;</a></h3>
+<p>OIDC credentials from <code>configure-aws-credentials</code> are short-lived and may need refreshing
+via a local credential endpoint on loopback. Since the network namespace has its own loopback,
+credential endpoints on the host's <code>127.0.0.1</code> are NOT accessible from inside the namespace.</p>
+<p>We bridge credential endpoints using additional socat instances. On the host side, socat
+forwards from a Unix socket to the real TCP endpoint. Inside the namespace, socat listens
+on the same TCP port and forwards to that Unix socket:</p>
+<pre><code class="language-bash"># Host side: TCP credential endpoint → Unix socket
+socat UNIX-LISTEN:/tmp/deadline_cred_bridge.sock,fork TCP:127.0.0.1:${CRED_PORT} &amp;
+
+# Inside namespace: Unix socket → TCP on namespace loopback
+socat TCP-LISTEN:${CRED_PORT},fork,reuseaddr,bind=127.0.0.1 \
+      UNIX-CONNECT:/tmp/deadline_cred_bridge.sock &amp;
+</code></pre>
+<h3 id="ca-bundle-verification">CA Bundle Verification<a class="headerlink" href="#ca-bundle-verification" title="Permanent link">&para;</a></h3>
+<p>Since the CONNECT proxy is a tunneling proxy (not MITM), TLS verification happens directly
+between boto3 and AWS through the tunnel. We set <code>AWS_CA_BUNDLE</code> to the system CA bundle
+(<code>/etc/ssl/certs/ca-certificates.crt</code>). This proves the env var is respected — if boto3
+ignored it and used no CA bundle, TLS would fail.</p>
+<h2 id="file-structure">File Structure<a class="headerlink" href="#file-structure" title="Permanent link">&para;</a></h2>
+<pre><code>scripts/
+└── run_proxy_integ_tests.sh           # Self-contained proxy test wrapper
+
+test/integ/
+├── conftest.py                        # Session fixtures (job templates, etc.)
+└── proxy_ca_bundle/
+    ├── __init__.py
+    └── connect_proxy.py               # Python HTTP CONNECT proxy (unix socket)
+</code></pre>
+<h2 id="implementation-details">Implementation Details<a class="headerlink" href="#implementation-details" title="Permanent link">&para;</a></h2>
+<h3 id="connect-proxy-connect_proxypy">CONNECT Proxy (<code>connect_proxy.py</code>)<a class="headerlink" href="#connect-proxy-connect_proxypy" title="Permanent link">&para;</a></h3>
+<p>A minimal (~100 line) Python HTTP CONNECT proxy that:
+- Listens on a Unix domain socket
+- Accepts <code>CONNECT host:port</code> requests
+- Opens a TCP connection to the target (using host network)
+- Relays bytes bidirectionally using <code>select()</code>
+- Uses blocking <code>sendall()</code> for reliable data transfer</p>
+<p>No TLS termination, no certificate generation, no MITM.</p>
+<h3 id="namespace-runner-scriptsrun_proxy_integ_testssh">Namespace Runner (<code>scripts/run_proxy_integ_tests.sh</code>)<a class="headerlink" href="#namespace-runner-scriptsrun_proxy_integ_testssh" title="Permanent link">&para;</a></h3>
+<p>Self-contained wrapper script that any CI system can call:
+1. Starts the CONNECT proxy on a Unix socket (host namespace)
+2. Bridges credential endpoints via socat (host side)
+3. Creates a network namespace with <code>unshare --net</code>
+4. Inside the namespace: starts socat bridges, runs pre-flight checks, runs pytest
+5. Prints proxy report after tests complete</p>
+<p>Can be invoked directly or via hatch:</p>
+<pre><code class="language-bash"># Via hatch
+hatch run integ:proxy-test
+
+# Directly
+sudo -E env &quot;PATH=$PATH&quot; bash scripts/run_proxy_integ_tests.sh [pytest args...]
+</code></pre>
+<h3 id="github-actions-codebuild-integration">GitHub Actions / CodeBuild Integration<a class="headerlink" href="#github-actions-codebuild-integration" title="Permanent link">&para;</a></h3>
+<p>No special workflow changes needed. CI systems just call the wrapper script
+instead of (or in addition to) the normal <code>hatch run integ:test</code>. The script
+is self-contained — it handles proxy startup, namespace creation, bridging,
+and cleanup.</p>
+<h2 id="known-behaviors">Known Behaviors<a class="headerlink" href="#known-behaviors" title="Permanent link">&para;</a></h2>
+<h3 id="socat-connection-reset-by-peer-messages">socat "Connection reset by peer" Messages<a class="headerlink" href="#socat-connection-reset-by-peer-messages" title="Permanent link">&para;</a></h3>
+<p>During test runs you may see socat log lines like:</p>
+<pre><code>socat[3325] E read(6, 0x55eda2826000, 8192): Connection reset by peer
+</code></pre>
+<p>These are <strong>harmless and expected</strong>. When a TLS connection through the proxy completes, one
+side closes the TCP connection. The socat bridge tries one more read on the now-closed socket
+and gets <code>ECONNRESET</code>. The actual data transfer completed successfully before the reset —
+socat just logs socket cleanup at error level by default.</p>
+<h2 id="dependencies">Dependencies<a class="headerlink" href="#dependencies" title="Permanent link">&para;</a></h2>
+<h3 id="system-packages-installed-in-ci">System packages (installed in CI):<a class="headerlink" href="#system-packages-installed-in-ci" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>socat</code> — TCP-to-Unix-socket bridge</li>
+</ul>
+<h3 id="python-packages">Python packages:<a class="headerlink" href="#python-packages" title="Permanent link">&para;</a></h3>
+<ul>
+<li>None beyond what's already in <code>requirements-integ-testing.txt</code></li>
+</ul>
+<h2 id="platform-behavior">Platform Behavior<a class="headerlink" href="#platform-behavior" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Linux (CI)</strong>: Tests run inside network namespace, proxy enforced</li>
+<li><strong>Mac/Windows</strong>: Proxy testing not applicable, tests run normally</li>
+</ul>
+<h2 id="running-tests">Running Tests<a class="headerlink" href="#running-tests" title="Permanent link">&para;</a></h2>
+<h3 id="in-ci-codebuild-github-actions">In CI (CodeBuild / GitHub Actions)<a class="headerlink" href="#in-ci-codebuild-github-actions" title="Permanent link">&para;</a></h3>
+<p>CI calls the wrapper script which handles everything:</p>
+<pre><code class="language-bash">sudo -E env &quot;PATH=$PATH&quot; bash scripts/run_proxy_integ_tests.sh test/integ/cli/
+</code></pre>
+<h3 id="locally-on-linux">Locally on Linux<a class="headerlink" href="#locally-on-linux" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># Install socat
+sudo apt-get install -y socat
+
+# Run with proxy enforcement
+hatch run integ:proxy-test
+
+# Or run without proxy
+hatch run integ:test
+</code></pre>
+<h3 id="macwindows">Mac/Windows<a class="headerlink" href="#macwindows" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># No proxy testing — run tests normally
+hatch run integ:test
+</code></pre>
+<h2 id="success-criteria">Success Criteria<a class="headerlink" href="#success-criteria" title="Permanent link">&para;</a></h2>
+<ol>
+<li>✅ All existing integration tests pass through the proxy inside the namespace</li>
+<li>✅ Any code that bypasses HTTPS_PROXY fails immediately with "Network is unreachable"</li>
+<li>✅ Pre-flight checks verify isolation before tests run</li>
+<li>✅ Tests run normally on Mac/Windows without proxy</li>
+<li>✅ Tests run reliably in GitHub Actions without timeouts or resource exhaustion</li>
+<li>✅ Cleanup is automatic (namespace destroyed when unshare exits)</li>
+</ol>
+<h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Linux-only</strong> — network namespaces are a Linux kernel feature</li>
+<li><strong>Requires sudo</strong> — <code>unshare --net</code> needs <code>CAP_SYS_ADMIN</code> on GitHub Actions runners</li>
+<li><strong>Requires socat</strong> — must be installed (trivial via apt)</li>
+<li><strong>Loopback services must be bridged</strong> — any host loopback endpoint the tests need
+   (credential endpoints, metadata services) must have a socat bridge pair</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    </div>
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,1611 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/deadline-cloud/cli_reference/deadline_bundle/">
+      
+      
+        <link rel="prev" href="../deadline_auth/">
+      
+      
+        <link rel="next" href="../deadline_config/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>bundle - AWS Deadline Cloud - Client Library Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#deadline-cli-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-header__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud - Client Library Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              bundle
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud - Client Library Documentation" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud - Client Library Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    AWS Deadline Cloud - Client Library Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/aws-deadline/deadline-cloud" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    aws-deadline/deadline-cloud
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_attachment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    attachment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    auth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    bundle
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#deadline-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deadline bundle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="deadline bundle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        download
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gui-submit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gui-submit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        info
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#submit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        submit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unhide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unhide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        upload
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_farm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    farm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_fleet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fleet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_handle-web-url/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    handle-web-url
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_job/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_manifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    manifest
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_mcp-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mcp-server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_queue/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deadline_worker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    worker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Library Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    deadline.client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    deadline.client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    api
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cli
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_job_bundle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    job_bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../code_reference/client_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ui
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../submission-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Submission Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mcp_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#deadline-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        deadline bundle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="deadline bundle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#download" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        download
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gui-submit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gui-submit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        info
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#submit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        submit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unhide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unhide
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#upload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        upload
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="deadline-cli-reference">Deadline CLI Reference<a class="headerlink" href="#deadline-cli-reference" title="Permanent link">&para;</a></h1>
+<h2 id="deadline-bundle">deadline bundle<a class="headerlink" href="#deadline-bundle" title="Permanent link">&para;</a></h2>
+<p>Submit Open Job Description job bundles to a Deadline Cloud queue.</p>
+<p>Use <code>submit</code> for headless/scripted submission, or <code>gui-submit</code> to
+review and edit parameters in a GUI before submitting.</p>
+<p>Learn more about <a href="https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html">job bundles</a></p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle [OPTIONS] COMMAND [ARGS]...
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  --help  Show this message and exit.
+</code></pre>
+<h3 id="download">download<a class="headerlink" href="#download" title="Permanent link">&para;</a></h3>
+<p>Download a shared job bundle from the queue.</p>
+<p>BUNDLE_NAME is the name of the bundle (e.g. 'blender-render').</p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle download [OPTIONS] BUNDLE_NAME
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  --profile TEXT           The AWS profile to use.
+  --farm-id TEXT           The farm to use.
+  --queue-id TEXT          The queue to use.
+  -o, --output-dir TEXT    Local directory to copy the bundle to. If not
+                           specified, uses the local cache.
+  --yes                    Overwrite the destination directory if it already
+                           exists (for non-interactive use).
+  --output [verbose|json]  Specifies the output format of the messages printed
+                           to stdout. VERBOSE: Displays messages in a human-
+                           readable text format. JSON: Displays messages in
+                           JSON line format, so that the info can be easily
+                           parsed/consumed by custom scripts. When this option
+                           is not specified, the format is chosen
+                           automatically: VERBOSE when stdout is an
+                           interactive terminal, and JSON otherwise (for
+                           example when the output is piped, redirected, or
+                           run without a TTY such as in CI or by an agent).
+  --help                   Show this message and exit.
+</code></pre>
+<h3 id="gui-submit">gui-submit<a class="headerlink" href="#gui-submit" title="Permanent link">&para;</a></h3>
+<p>Opens a GUI to submit an Open Job Description job bundle to a Deadline
+Cloud queue. You can provide options to set the initial parameter values
+shown in the GUI.</p>
+<p>Learn more about <a href="https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html">job bundles</a></p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle gui-submit [OPTIONS] [JOB_BUNDLE_DIR]
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  -p, --parameter TEXT     Initial values in the GUI for the job template's
+                           parameters. Can be provided as key-value pairs,
+                           inline JSON strings, or as paths to a JSON or YAML
+                           document. Later values for repeated parameter names
+                           take precedence. Examples: --parameter MyParam=5 -p
+                           file://parameter_file.json -p '{&quot;OtherParam&quot;:
+                           &quot;10&quot;}'
+  --browse                 Opens a folder browser to select a bundle.
+  --install-gui            Installs GUI dependencies if they are not installed
+                           already
+  --submitter-name TEXT    [DEPRECATED] Use --submitter-info
+                           submitter_name=&lt;name&gt; instead. Name of the
+                           application submitting the bundle. If a name is
+                           specified, the GUI will automatically close after
+                           submitting the job.
+  --output [verbose|json]  Specifies the output format of the messages printed
+                           to stdout. VERBOSE: Displays messages in a human-
+                           readable text format. JSON: Displays messages in
+                           JSON line format, so that the info can be easily
+                           parsed/consumed by custom scripts. When this option
+                           is not specified, the format is chosen
+                           automatically: VERBOSE when stdout is an
+                           interactive terminal, and JSON otherwise (for
+                           example when the output is piped, redirected, or
+                           run without a TTY such as in CI or by an agent).
+  --known-asset-path TEXT  Path that should not generate warnings when outside
+                           storage profile locations. Can be specified
+                           multiple times for different paths.
+  --submitter-info TEXT    Submitter and environment information. Supports
+                           key=value pairs, inline JSON strings, and file
+                           paths (JSON or YAML). Later values for repeated
+                           fields take precedence. Examples: --submitter-info
+                           submitter_name=MyApp --submitter-info
+                           host_application_name=Maya OR --submitter-info
+                           '{&quot;submitter_name&quot;: &quot;MyApp&quot;, &quot;additional_info&quot;:
+                           {&quot;render_engine&quot;: &quot;Cycles&quot;}}' OR --submitter-info
+                           file://path/to/submitter.json
+  --name TEXT              The job name to use in place of the one in the job
+                           bundle.
+  --help                   Show this message and exit.
+</code></pre>
+<h3 id="hide">hide<a class="headerlink" href="#hide" title="Permanent link">&para;</a></h3>
+<p>Hide a shared queue bundle from your own listings.</p>
+<p>Hiding is a private, per-user view preference stored in a local file — it
+never changes anything on S3 and does not affect what other users see. The
+bundle is simply no longer shown in the browser or <code>deadline bundle list</code>
+by default; use <code>deadline bundle list --show-hidden</code> to see it again.</p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle hide [OPTIONS] BUNDLE_NAME
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  --profile TEXT   The AWS profile to use.
+  --farm-id TEXT   The farm to use.
+  --queue-id TEXT  The queue to use.
+  --help           Show this message and exit.
+</code></pre>
+<h3 id="info">info<a class="headerlink" href="#info" title="Permanent link">&para;</a></h3>
+<p>Show details about a job bundle (name, description, steps, parameters).</p>
+<p>BUNDLE_NAME is either a local path to a job bundle directory, or the name
+of a shared bundle on the queue (when used with --queue). For local bundles,
+if the path doesn't exist, searches by name in the current directory and then
+the configured job bundle default directory.</p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle info [OPTIONS] BUNDLE_NAME
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  --queue                  Inspect a bundle shared on the queue.
+  --output [verbose|json]  Specifies the output format of the messages printed
+                           to stdout. VERBOSE: Displays messages in a human-
+                           readable text format. JSON: Displays messages in
+                           JSON line format, so that the info can be easily
+                           parsed/consumed by custom scripts. When this option
+                           is not specified, the format is chosen
+                           automatically: VERBOSE when stdout is an
+                           interactive terminal, and JSON otherwise (for
+                           example when the output is piped, redirected, or
+                           run without a TTY such as in CI or by an agent).
+  --profile TEXT           The AWS profile to use.
+  --farm-id TEXT           The farm to use.
+  --queue-id TEXT          The queue to use.
+  --help                   Show this message and exit.
+</code></pre>
+<h3 id="list">list<a class="headerlink" href="#list" title="Permanent link">&para;</a></h3>
+<p>List job bundles.</p>
+<p>With no arguments, lists bundles in the configured default local directory
+(settings.job_bundle_default_directory, or home if not set).
+With PATH, lists bundles in that local directory.
+With --queue, lists bundles shared on the queue.</p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle list [OPTIONS] [PATH]
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  --queue                  List bundles shared on the queue.
+  --show-hidden            Include hidden bundles in the output (queue only).
+  --no-archives            Skip archive files when listing local bundles.
+  --profile TEXT           The AWS profile to use.
+  --farm-id TEXT           The farm to use.
+  --queue-id TEXT          The queue to use.
+  --output [verbose|json]  Specifies the output format of the messages printed
+                           to stdout. VERBOSE: Displays messages in a human-
+                           readable text format. JSON: Displays messages in
+                           JSON line format, so that the info can be easily
+                           parsed/consumed by custom scripts. When this option
+                           is not specified, the format is chosen
+                           automatically: VERBOSE when stdout is an
+                           interactive terminal, and JSON otherwise (for
+                           example when the output is piped, redirected, or
+                           run without a TTY such as in CI or by an agent).
+  --help                   Show this message and exit.
+</code></pre>
+<h3 id="submit">submit<a class="headerlink" href="#submit" title="Permanent link">&para;</a></h3>
+<p>Submits an Open Job Description job bundle to a Deadline Cloud queue.
+You can provide options to set parameter values, the job name, priority,
+and more.</p>
+<p>JOB_BUNDLE_DIR is a DIRECTORY (not a file) that must contain a <code>template.yaml</code>
+(or <code>template.json</code>) -- the OpenJD job template. It may optionally contain
+<code>parameter_values</code> and <code>asset_references</code> files (also either .yaml or .json).</p>
+<p>Example:
+  deadline bundle submit ./my_job --yes</p>
+<p>The command returns a job id (job-xxxx). Use <code>deadline job get --job-id &lt;id&gt;</code>
+to see its current taskRunStatus, or <code>deadline job wait --job-id &lt;id&gt;</code> to
+block until the job reaches a terminal state (SUCCEEDED / FAILED / CANCELED).</p>
+<p>Learn more about <a href="https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html">job bundles</a></p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle submit [OPTIONS] JOB_BUNDLE_DIR
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  -p, --parameter TEXT            The values for the job template's
+                                  parameters. Can be provided as key-value
+                                  pairs, inline JSON strings, or as paths to a
+                                  JSON or YAML document. Later values for
+                                  repeated parameter names take precedence.
+                                  Examples: --parameter MyParam=5 -p
+                                  file://parameter_file.json -p
+                                  '{&quot;OtherParam&quot;: &quot;10&quot;}'
+  --profile TEXT                  The AWS profile to use.
+  --farm-id TEXT                  The farm to use.
+  --region TEXT                   The AWS region of the farm.
+  --queue-id TEXT                 The queue to use.
+  --storage-profile-id TEXT       The storage profile to use.
+  --name TEXT                     Override the job name. Defaults to the
+                                  `name` field in the bundle's job template.
+  --priority INTEGER              Job priority, 0-100 (default 50). Jobs with
+                                  a higher priority run first.
+  --max-failed-tasks-count INTEGER
+                                  The maximum number of failed tasks before
+                                  the job is marked as failed.
+  --max-retries-per-task INTEGER  The maximum number of times to retry a task
+                                  before it is marked as failed.
+  --max-worker-count INTEGER      The max worker count of the job.
+  --target-task-run-status [ready|suspended]
+                                  The target task run status for the job.
+                                  READY means tasks will start immediately,
+                                  SUSPENDED means tasks will be created but
+                                  not start until manually resumed.
+  --job-attachments-file-system [COPIED|VIRTUAL]
+                                  The method workers use to access job
+                                  attachments. COPIED means to copy files to
+                                  the worker and VIRTUAL means to load files
+                                  as needed from a virtual file system. If
+                                  VIRTUAL is selected but not supported by a
+                                  worker, it will fallback to COPIED.
+  --yes                           Skip the interactive confirmation prompt.
+                                  Required for non-interactive/scripted use.
+  --require-paths-exist           Return an error if any input files are
+                                  missing.
+  --submitter-name TEXT           Name of the application submitting the
+                                  bundle.
+  --known-asset-path TEXT         Path that should not generate warnings when
+                                  outside storage profile locations. Can be
+                                  specified multiple times for different
+                                  paths.
+  --save-debug-snapshot TEXT      EXPERIMENTAL - Instead of submitting the
+                                  job, generate a debug snapshot as a
+                                  directory or a zip file if the extension is
+                                  .zip. It includes the job attachments and
+                                  parameters for creating the job. You can
+                                  later run the bash script in the snapshot to
+                                  submit the job using AWS CLI commands.
+  --force-s3-check / --no-force-s3-check
+                                  Force verification that job attachments
+                                  exist in S3 before skipping upload. Use when
+                                  S3 bucket contents may be out of sync with
+                                  local caches. Overrides the
+                                  'settings.force_s3_check' config setting.
+  --help                          Show this message and exit.
+</code></pre>
+<h3 id="unhide">unhide<a class="headerlink" href="#unhide" title="Permanent link">&para;</a></h3>
+<p>Unhide a previously hidden queue bundle in your own listings.</p>
+<p>Clears the local, per-user hidden preference so the bundle is shown again
+in the browser and <code>deadline bundle list</code>. No S3 changes are made.</p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle unhide [OPTIONS] BUNDLE_NAME
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  --profile TEXT   The AWS profile to use.
+  --farm-id TEXT   The farm to use.
+  --queue-id TEXT  The queue to use.
+  --help           Show this message and exit.
+</code></pre>
+<h3 id="upload">upload<a class="headerlink" href="#upload" title="Permanent link">&para;</a></h3>
+<p>Upload a job bundle to share on the queue as an .ojd archive.</p>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-text">deadline bundle upload [OPTIONS] JOB_BUNDLE_DIR
+</code></pre>
+<p><strong>Options:</strong></p>
+<pre><code class="language-text">  --profile TEXT   The AWS profile to use.
+  --farm-id TEXT   The farm to use.
+  --queue-id TEXT  The queue to use.
+  --name TEXT      Name for the shared archive on the queue. Defaults to the
+                   bundle directory name.
+  --yes            Overwrite an existing shared bundle without prompting (for
+                   non-interactive use).
+  --help           Show this message and exit.
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    </div>
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
