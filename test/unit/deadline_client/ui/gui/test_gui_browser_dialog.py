@@ -601,3 +601,119 @@ class TestRelativeKeyHiding:
             name=".secret", path=base + ".secret.ojd", is_bundle=True, is_archive=True
         )
         assert dialog._entry_hidden(dotfile) is True
+
+
+class TestLocalFolderPicker:
+    """For the Local source, the Path row is a directory picker that re-roots the
+    tree for this dialog only, without writing the configured default directory.
+    Queue and History keep the read-only path label."""
+
+    _DIALOG_FN = "deadline.client.ui.widgets.path_widgets.QFileDialog.getExistingDirectory"
+
+    @staticmethod
+    def _root_paths(dialog):
+        root = dialog._model.invisibleRootItem()
+        return {root.child(row).data(ROLE_PATH) for row in range(root.rowCount())}
+
+    @staticmethod
+    def _make_bundle(parent, name):
+        bundle = parent / name
+        bundle.mkdir(parents=True)
+        (bundle / "template.yaml").write_text(f"name: {name}\nsteps: []\n")
+        return bundle
+
+    def test_picker_starts_at_local_root(self, qtbot, tmp_path):
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+
+        assert dialog._local_folder_picker.text() == str(tmp_path)
+
+    def test_choosing_folder_repopulates_local_tree(self, qtbot, tmp_path):
+        first_bundle = self._make_bundle(tmp_path / "first", "a-bundle")
+        second_bundle = self._make_bundle(tmp_path / "second", "b-bundle")
+
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path / "first"))
+        qtbot.addWidget(dialog)
+        assert self._root_paths(dialog) == {str(first_bundle)}
+
+        with (
+            patch(self._DIALOG_FN, return_value=str(tmp_path / "second")),
+            patch("deadline.client.config.config_file.set_setting") as set_setting,
+        ):
+            dialog._local_folder_picker.choose_directory_button.click()
+
+        assert dialog._local_repo.root_path() == str(tmp_path / "second")
+        assert dialog._current_repo is dialog._local_repo
+        assert self._root_paths(dialog) == {str(second_bundle)}
+        set_setting.assert_not_called()
+
+    def test_typed_path_with_tilde_repopulates_local_tree(self, qtbot, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        bundle = self._make_bundle(tmp_path / "bundles", "a-bundle")
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+
+        dialog._local_folder_picker.directory_edit.setText("~/bundles")
+        dialog._local_folder_picker.directory_edit.editingFinished.emit()
+
+        assert dialog._local_repo.root_path() == str(tmp_path / "bundles")
+        assert self._root_paths(dialog) == {str(bundle)}
+
+    def test_cancelling_picker_keeps_current_folder(self, qtbot, tmp_path):
+        bundle = self._make_bundle(tmp_path, "a-bundle")
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+
+        with patch(self._DIALOG_FN, return_value=""):
+            dialog._local_folder_picker.choose_directory_button.click()
+
+        assert dialog._local_repo.root_path() == str(tmp_path)
+        assert self._root_paths(dialog) == {str(bundle)}
+
+    def test_picker_replaces_path_display_only_for_local(self, qtbot, tmp_path):
+        history = tmp_path / "history"
+        history.mkdir()
+        dialog = JobBundleBrowserDialog(
+            local_source=str(tmp_path),
+            history_source=str(history),
+            queue_loading=True,
+        )
+        qtbot.addWidget(dialog)
+
+        assert dialog._radio_s3.isChecked()
+        assert dialog._local_folder_picker.isHidden()
+        assert not dialog._path_display.isHidden()
+
+        dialog._radio_local.setChecked(True)
+        assert not dialog._local_folder_picker.isHidden()
+        assert dialog._path_display.isHidden()
+
+        dialog._radio_history.setChecked(True)
+        assert dialog._local_folder_picker.isHidden()
+        assert not dialog._path_display.isHidden()
+        assert dialog._path_display.text() == str(history)
+
+    def test_picker_is_in_full_width_path_row(self, qtbot, tmp_path):
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path))
+        qtbot.addWidget(dialog)
+
+        # Sits in the dialog-level Path row above the splitter, not inside the tree pane.
+        assert dialog._local_folder_picker.parentWidget() is dialog
+        assert dialog._local_folder_picker.parentWidget() is dialog._path_display.parentWidget()
+
+    def test_tree_does_not_shift_when_switching_sources(self, qtbot, tmp_path):
+        history = tmp_path / "history"
+        history.mkdir()
+        dialog = JobBundleBrowserDialog(local_source=str(tmp_path), history_source=str(history))
+        qtbot.addWidget(dialog)
+        dialog.show()
+        qtbot.waitExposed(dialog)
+
+        def tree_top():
+            QApplication.processEvents()
+            return dialog._tree.mapTo(dialog, dialog._tree.rect().topLeft()).y()
+
+        local_top = tree_top()
+        dialog._radio_history.setChecked(True)
+        assert tree_top() == local_top

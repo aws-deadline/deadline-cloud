@@ -46,6 +46,7 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from .._utils import tr, warning_banner_qss
 from ..widgets.expandable_section import ExpandableSection as _ExpandableSection
+from ..widgets.path_widgets import DirectoryPickerWidget as _DirectoryPickerWidget
 from ...job_bundle._repository import (
     BrowseEntry as _BrowseEntry,
     BundleRepository as _BundleRepository,
@@ -518,6 +519,18 @@ class JobBundleBrowserDialog(QDialog):
         self._path_display.setFocusPolicy(Qt.ClickFocus)
         self._path_display.setStyleSheet("QLineEdit { background: transparent; border: none; }")
         path_row.addWidget(self._path_display)
+        # Replaces the read-only display for the Local source. It holds the Local
+        # root (not the tree selection) and overrides the configured folder for
+        # this dialog only; the config setting is left untouched.
+        self._local_folder_picker = _DirectoryPickerWidget(
+            initial_directory=self._local_repo.root_path(),
+            directory_label=tr("Job bundle directory"),
+            parent=self,
+        )
+        self._local_folder_picker.path_changed.connect(self._on_local_folder_changed)
+        path_row.addWidget(self._local_folder_picker)
+        # Match the picker's height so the layout doesn't shift when switching sources.
+        self._path_display.setFixedHeight(self._local_folder_picker.sizeHint().height())
         layout.addLayout(path_row)
 
         # Default to Queue if available or loading, otherwise Local
@@ -529,6 +542,7 @@ class JobBundleBrowserDialog(QDialog):
                 self._current_repo = None  # Will be set by set_queue_source
         else:
             self._radio_local.setChecked(True)
+        self._update_path_row()
 
         # Main splitter: tree on left, preview on right
         splitter = QSplitter(Qt.Horizontal)
@@ -1287,9 +1301,30 @@ class JobBundleBrowserDialog(QDialog):
 
         return _search(self._model.invisibleRootItem())
 
+    def _update_path_row(self):
+        is_local = self._radio_local.isChecked()
+        self._local_folder_picker.setVisible(is_local)
+        self._path_display.setVisible(not is_local)
+
+    def _on_local_folder_changed(self, directory: str):
+        if not directory.strip():
+            return
+        root = os.path.normpath(os.path.expanduser(directory.strip()))
+        if root == os.path.normpath(self._local_repo.root_path()):
+            return
+        self._save_tree_state()
+        self._local_repo = _LocalBundleRepository(root=root, include_archives=True)
+        self._current_repo = self._local_repo
+        self._selected_path = None
+        self._select_button.setEnabled(False)
+        self._clear_preview()
+        self._populate_root()
+        self._restore_tree_state()
+
     def _on_source_changed(self, checked: bool):
         if not self._ready:
             return
+        self._update_path_row()
         # Save expanded paths for the current source before switching
         self._save_tree_state()
 
