@@ -714,6 +714,28 @@ def test_apply_job_parameters_uri_items_kept_and_not_attached(
         assert "is a URI, so job attachments do not transfer it" in caplog.text
 
 
+def test_apply_job_parameters_drive_path_with_double_slash_is_not_a_uri(temp_cwd) -> None:
+    """With the EXPR extension, a one-letter scheme such as C://scenes/a.ma is a Windows
+    drive path, not a URI, so it is joined and given to job attachments like any path."""
+    value = "C://scenes/a.ma"
+    joined = os.path.normpath(os.path.join(os.getcwd(), value))
+    path_param: Any = {"name": "One", "type": "PATH", "objectType": "FILE", "dataFlow": "IN"}
+    list_param: Any = {"name": "Many", "type": "LIST[PATH]", "objectType": "FILE", "dataFlow": "IN"}
+    asset_references = AssetReferences()
+
+    apply_job_parameters(
+        [{"name": "One", "value": value}, {"name": "Many", "value": [value]}],
+        "bundle",
+        [path_param, list_param],
+        asset_references,
+        allow_uri_path_values=True,
+    )
+
+    assert path_param["value"] == joined
+    assert list_param["value"] == [joined]
+    assert asset_references.input_filenames == {joined}
+
+
 def test_apply_job_parameters_uri_without_expr_is_a_path(temp_cwd) -> None:
     """URI values are an EXPR feature; without it, PATH values keep their old handling."""
     param: Any = {"name": "One", "type": "PATH", "dataFlow": "IN"}

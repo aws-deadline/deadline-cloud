@@ -39,8 +39,9 @@ __all__ = [
 ]
 
 # OpenJD's EXPR extension reads a path value with this scheme:// prefix as a URI, such as
-# s3://bucket/key. See RFC 0006, "Path Functions".
-_URI_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+# s3://bucket/key. See RFC 0006, "Path Functions". The scheme needs at least two characters
+# so that a Windows drive path written with a doubled separator, C://scenes/a.ma, is a path.
+_URI_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]+://")
 
 
 def is_uri(path: Any) -> bool:

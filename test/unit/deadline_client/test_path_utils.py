@@ -748,8 +748,8 @@ def test_bare_unc_anchor_contains_nothing_and_is_contained_by_nothing_real():
         "S3://bucket",
         # Every character the scheme allows after its leading letter.
         "a1+b.c-d://x",
-        # A one-letter scheme matches the RFC 0006 pattern even though it looks like a drive.
-        "c://x",
+        # The shortest scheme, two characters.
+        "s3://x",
     ],
 )
 def test_is_uri(path: str) -> None:
@@ -777,6 +777,9 @@ def test_is_uri(path: str) -> None:
         # The prefix must be at the start.
         "dir/s3://bucket",
         " s3://bucket",
+        # A one-letter scheme is a Windows drive written with a doubled separator.
+        "c://x",
+        "C://scenes/a.ma",
         None,
         42,
     ],
