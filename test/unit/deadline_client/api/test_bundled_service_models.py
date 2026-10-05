@@ -137,6 +137,7 @@ def _model_files(root: str) -> dict:
         )
         for dirpath, _, filenames in os.walk(root)
         for name in filenames
+        if name.endswith((".json", ".json.gz"))
     }
 
 
@@ -162,9 +163,16 @@ def test_bundled_models_match_installed_botocore():
     ]
     assert service_names
     for service_name in service_names:
-        assert _model_files(os.path.join(bundled_root, service_name)) == _model_files(
-            os.path.join(botocore_root, service_name)
-        ), (
-            f"The bundled {service_name} model differs from botocore {botocore.__version__}. "
-            "Run `python scripts/update_bundled_service_models.py` and commit the result."
+        bundled = _model_files(os.path.join(bundled_root, service_name))
+        installed = _model_files(os.path.join(botocore_root, service_name))
+        # Report only file names: the decompressed models are too large for a useful diff.
+        differing = sorted(
+            name
+            for name in bundled.keys() | installed.keys()
+            if bundled.get(name) != installed.get(name)
+        )
+        assert not differing, (
+            f"The bundled {service_name} model differs from botocore {botocore.__version__} "
+            f"in {differing}. Run `python scripts/update_bundled_service_models.py` and "
+            "commit the result."
         )

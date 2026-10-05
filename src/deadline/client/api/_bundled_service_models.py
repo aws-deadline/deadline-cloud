@@ -1,8 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 """
-botocore stopped releasing for Python 3.9 on 2026-04-29, so on 3.9 its Deadline Cloud
-model is frozen and lacks newer APIs. On those Pythons, clients load a copy of the
+botocore no longer releases for Python 3.9, so on 3.9 its Deadline Cloud model is
+frozen and lacks newer APIs. On those Pythons, clients load a copy of the
 model from the latest botocore instead (see scripts/update_bundled_service_models.py).
 """
 
