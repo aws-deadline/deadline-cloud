@@ -934,3 +934,111 @@ steps:
             assert saved["parameterValues"][0]["value"] == [False, True]
             (reloaded,) = read_job_bundle_parameters(str(history_dir))
             assert reloaded["value"] == [False, True]
+
+
+class TestListPathParametersInSubmitDialog:
+    """LIST[PATH] job parameters in the submit dialog gate Submit and save as lists."""
+
+    MODULE = "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
+
+    TEMPLATE = """
+specificationVersion: 'jobtemplate-2023-09'
+extensions: [EXPR]
+name: Path List Bundle
+parameterDefinitions:
+- name: Scenes
+  type: list[path]
+  objectType: FILE
+  dataFlow: IN
+  default: ["scenes/a.blend"]
+  minLength: 1
+- name: OutDirs
+  type: list[path]
+  dataFlow: OUT
+steps:
+- name: NoOp
+  script:
+    actions:
+      onRun:
+        command: "echo hi"
+"""
+
+    def test_list_path_validity_and_saved_values(
+        self, qtbot, mock_auth_status, tmp_path, fresh_deadline_config
+    ):
+        from deadline.client.job_bundle.parameters import read_job_bundle_parameters
+        from deadline.client.ui.widgets.job_bundle_settings_tab import JobBundleSettingsWidget
+        from deadline.client.ui.widgets.openjd_parameters_widget import (
+            _JobTemplateDirectoryListWidget,
+            _JobTemplateInputFileListWidget,
+        )
+
+        (tmp_path / "template.yaml").write_text(self.TEMPLATE, encoding="utf8")
+        type(mock_auth_status).api_availability = PropertyMock(return_value=True)
+        settings = JobBundleSettings(input_job_bundle_dir=str(tmp_path), name="Path List Bundle")
+        settings.parameters = read_job_bundle_parameters(str(tmp_path))
+
+        with (
+            patch(
+                "deadline.client.ui.widgets.deadline_authentication_status_widget"
+                ".DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            patch(
+                f"{self.MODULE}.DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            patch(f"{self.MODULE}.get_setting", return_value="configured"),
+        ):
+            dialog = SubmitJobToDeadlineDialog(
+                job_setup_widget_type=JobBundleSettingsWidget,
+                initial_job_settings=settings,
+                initial_shared_parameter_values={},
+                auto_detected_attachments=AssetReferences(),
+                attachments=AssetReferences(),
+                on_create_job_bundle_callback=MagicMock(return_value={}),
+            )
+            qtbot.addWidget(dialog)
+            controls = dialog.job_settings.parameters_widget.controls
+            scenes, out_dirs = controls["Scenes"], controls["OutDirs"]
+            assert isinstance(scenes, _JobTemplateInputFileListWidget)
+            assert isinstance(out_dirs, _JobTemplateDirectoryListWidget)
+            # The default item is resolved against the job bundle directory.
+            bundle_scene = os.path.normpath(str(tmp_path / "scenes" / "a.blend"))
+            assert scenes.value() == [bundle_scene]
+            with patch.object(dialog.shared_job_settings, "is_queue_valid", return_value=True):
+                dialog._set_submit_button_state()
+                assert dialog.submit_button.isEnabled()
+
+                scenes.set_value([])
+                assert not dialog.submit_button.isEnabled()
+                assert "invalid values: Scenes" in dialog.submit_button.toolTip()
+
+                scenes.set_value([bundle_scene])
+                # Add opens the row's dialog; picking a path in it fills the new row.
+                with patch(
+                    "deadline.client.ui.widgets.path_widgets.QFileDialog.getOpenFileName",
+                    return_value=(str(tmp_path / "b.blend"), ""),
+                ):
+                    scenes.add_button.click()
+                with patch(
+                    "deadline.client.ui.widgets.path_widgets.QFileDialog.getExistingDirectory",
+                    return_value=str(tmp_path / "out"),
+                ):
+                    out_dirs.add_button.click()
+                assert dialog.submit_button.isEnabled()
+
+            history_dir = tmp_path / "history"
+            history_dir.mkdir()
+            (history_dir / "template.yaml").write_text(self.TEMPLATE, encoding="utf8")
+            dialog.save_job_parameters_to_job_bundle(
+                str(history_dir), dialog.job_settings.parameters_widget.get_parameters()
+            )
+            saved = json.loads((history_dir / "parameter_values.json").read_text("utf8"))
+            expected = {
+                "Scenes": [bundle_scene, os.path.normpath(str(tmp_path / "b.blend"))],
+                "OutDirs": [os.path.normpath(str(tmp_path / "out"))],
+            }
+            assert {p["name"]: p["value"] for p in saved["parameterValues"]} == expected
+            reloaded = read_job_bundle_parameters(str(history_dir))
+            assert {p["name"]: p["value"] for p in reloaded} == expected

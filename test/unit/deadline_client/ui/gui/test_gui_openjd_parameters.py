@@ -607,6 +607,15 @@ _EVERY_CONTROL = [
     pytest.param({"type": "LIST[INT]"}, id="INT_SPIN_BOX_LIST"),
     pytest.param({"type": "LIST[FLOAT]"}, id="FLOAT_SPIN_BOX_LIST"),
     pytest.param(
+        {"type": "LIST[PATH]", "objectType": "FILE", "default": ["a"]},
+        id="CHOOSE_INPUT_FILE_LIST",
+    ),
+    pytest.param(
+        {"type": "LIST[PATH]", "objectType": "FILE", "dataFlow": "OUT", "default": ["a"]},
+        id="CHOOSE_OUTPUT_FILE_LIST",
+    ),
+    pytest.param({"type": "LIST[PATH]", "default": ["a"]}, id="CHOOSE_DIRECTORY_LIST"),
+    pytest.param(
         {"type": "STRING", "default": "x", "userInterface": {"control": "HIDDEN"}}, id="HIDDEN"
     ),
 ]

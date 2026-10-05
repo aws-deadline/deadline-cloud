@@ -24,6 +24,7 @@ whether a path is trusted.
 from __future__ import annotations
 
 import os
+import re
 import string
 from typing import Any, Iterable
 
@@ -32,9 +33,21 @@ __all__ = [
     "is_any_path_contained",
     "is_bare_unc_anchor",
     "is_path_contained",
+    "is_uri",
     "normalized_path",
     "path_components",
 ]
+
+# OpenJD's EXPR extension reads a path value with this scheme:// prefix as a URI, such as
+# s3://bucket/key. See RFC 0006, "Path Functions".
+_URI_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+
+
+def is_uri(path: Any) -> bool:
+    """Whether a path value is a URI rather than a filesystem path. A URI is opaque: it is
+    never joined with a directory, normalized, or transferred with job attachments."""
+    return isinstance(path, str) and _URI_PATTERN.match(path) is not None
+
 
 # Anchors the UNC path space. It names no server on its own, so unlike POSIX '/' it is not
 # a directory and contains nothing.

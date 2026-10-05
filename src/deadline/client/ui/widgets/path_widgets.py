@@ -14,7 +14,7 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
-from ..._path_utils import is_path_contained
+from ..._path_utils import is_path_contained, is_uri
 from .._utils import block_signals, tr
 
 
@@ -37,6 +37,16 @@ def _collapse_user_dir(path: str, *, path_module: Any = None) -> str:
     if relative == path_module.curdir:
         return "~"
     return path_module.join("~", relative)
+
+
+def _normalize_path_text(path: str, *, collapse_user_dir: bool = False) -> str:
+    """The text a path picker shows for a path it is given, as opposed to one typed into it.
+    A URI, which OpenJD's EXPR extension allows as a path value, is kept as it is."""
+    if path and not is_uri(path):
+        path = os.path.normpath(path)
+        if collapse_user_dir:
+            path = _collapse_user_dir(path, path_module=os.path)
+    return path
 
 
 class _FileWidget(QWidget):
@@ -81,10 +91,7 @@ class _FileWidget(QWidget):
 
     def setText(self, filename):
         """Sets the current directory value"""
-        if filename:
-            filename = os.path.normpath(filename)
-            if self.collapse_user_dir:
-                filename = _collapse_user_dir(filename, path_module=os.path)
+        filename = _normalize_path_text(filename, collapse_user_dir=self.collapse_user_dir)
 
         with block_signals(self.filename_edit):
             self.filename_edit.setText(filename)
@@ -95,7 +102,9 @@ class _FileWidget(QWidget):
         self.path_changed.emit(self.text())
 
     def on_choose_file(self):
-        filename = os.path.expanduser(self.filename_edit.text()) or "."
+        filename = self.filename_edit.text()
+        # The dialog cannot browse a URI, so it starts in the current directory instead.
+        filename = "." if is_uri(filename) else os.path.expanduser(filename) or "."
 
         filename = self.file_dialog(self, f"Choose {self.file_label}", filename)
 
@@ -252,10 +261,7 @@ class DirectoryPickerWidget(QWidget):
 
     def setText(self, directory):
         """Sets the current directory value"""
-        if directory:
-            directory = os.path.normpath(directory)
-            if self.collapse_user_dir:
-                directory = _collapse_user_dir(directory, path_module=os.path)
+        directory = _normalize_path_text(directory, collapse_user_dir=self.collapse_user_dir)
 
         with block_signals(self.directory_edit):
             self.directory_edit.setText(directory)
@@ -266,7 +272,9 @@ class DirectoryPickerWidget(QWidget):
         self.path_changed.emit(self.text())
 
     def on_choose_directory(self):
-        directory = os.path.expanduser(self.directory_edit.text()) or "."
+        directory = self.directory_edit.text()
+        # The dialog cannot browse a URI, so it starts in the current directory instead.
+        directory = "." if is_uri(directory) else os.path.expanduser(directory) or "."
 
         # If the directory is missing, create it so the dir chooser starts there
         if not os.path.isdir(directory):

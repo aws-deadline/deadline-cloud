@@ -223,27 +223,27 @@ def test_validate_job_parameter_list_string_invalid_item(
         ),
         pytest.param(
             {"item": {"minLength": 5, "maxLength": 4}},
-            '"item" -> "minLength" 5 greater than the maximum item length of 4',
+            '"item" -> "minLength" 5 greater than the maximum length of 4',
             id="item-min-over-max",
         ),
         pytest.param(
             {"item": {"minLength": 1025}},
-            '"item" -> "minLength" 1025 greater than the maximum item length of 1024',
+            '"item" -> "minLength" 1025 greater than the maximum length of 1024',
             id="item-min-over-cap",
         ),
         pytest.param(
             {"item": {"allowedValues": ["ok", "toolong"], "maxLength": 4}},
-            '"item" -> "allowedValues" \\[1\\] of length 7, outside the item length range 0-4',
+            '"item" -> "allowedValues" \\[1\\] of length 7, outside the length range 0-4',
             id="allowed-too-long",
         ),
         pytest.param(
             {"item": {"allowedValues": ["a", "abc"], "minLength": 2}},
-            '"item" -> "allowedValues" \\[0\\] of length 1, outside the item length range 2-1024',
+            '"item" -> "allowedValues" \\[0\\] of length 1, outside the length range 2-1024',
             id="allowed-too-short",
         ),
         pytest.param(
             {"item": {"allowedValues": ["x" * 1025]}},
-            '"item" -> "allowedValues" \\[0\\] of length 1025, outside the item length range 0-1024',
+            '"item" -> "allowedValues" \\[0\\] of length 1025, outside the length range 0-1024',
             id="allowed-over-cap",
         ),
     ],
@@ -288,7 +288,7 @@ LIST_PARAM: JobParameter = {"name": "Cameras", "type": "LIST[STRING]"}
     [
         pytest.param(["main", "closeup"], ["main", "closeup"], id="list"),
         pytest.param([], [], id="empty-list"),
-        pytest.param(["", "a b", "ü"], ["", "a b", "ü"], id="unusual-items"),
+        pytest.param(["", "a b", "Ã¼"], ["", "a b", "Ã¼"], id="unusual-items"),
         pytest.param(["dup", "dup"], ["dup", "dup"], id="duplicates-kept"),
         pytest.param('["main", "closeup"]', ["main", "closeup"], id="json-string"),
         pytest.param("[]", [], id="json-empty"),
@@ -549,10 +549,10 @@ def test_bundle_preview_shows_list_values_as_json() -> None:
         ]
     }
     info = extract_bundle_info(
-        template, "/bundle", {"parameterValues": [{"name": "Layers", "value": ["a", "ü"]}]}
+        template, "/bundle", {"parameterValues": [{"name": "Layers", "value": ["a", "Ã¼"]}]}
     )
     display = {p["name"]: p["_display_value"] for p in info.parameters}
-    assert display == {"Cameras": '["main", "closeup"]', "Layers": '["a", "ü"]'}
+    assert display == {"Cameras": '["main", "closeup"]', "Layers": '["a", "Ã¼"]'}
 
 
 @pytest.mark.parametrize(

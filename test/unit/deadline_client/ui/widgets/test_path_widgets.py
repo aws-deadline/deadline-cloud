@@ -1,10 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Tests for the path picker widgets' home-directory collapsing."""
+"""Tests for the path picker widgets' home-directory collapsing and URI handling."""
 
 import ntpath
 import os
 import posixpath
+from unittest.mock import patch
 
 import pytest
 
@@ -138,3 +139,62 @@ class TestWidgetsCollapseOnSetText:
 
         widget.setText(os.path.join(home, "projects"))
         assert widget.text() == os.path.join(home, "projects")
+
+
+def _pickers():
+    return [
+        DirectoryPickerWidget(initial_directory="", directory_label="Test Dir"),
+        InputFilePickerWidget(
+            initial_filename="", file_label="Test File", filter="*", selected_filter="*"
+        ),
+        _path_widgets.OutputFilePickerWidget(
+            initial_filename="", file_label="Test File", filter="*", selected_filter="*"
+        ),
+    ]
+
+
+class TestPickersKeepUris:
+    """OpenJD's EXPR extension allows a URI as a PATH value. Normalizing it as a local path
+    would corrupt it, e.g. to s3:\\bucket\\key on Windows."""
+
+    @pytest.mark.parametrize("uri", ["s3://bucket/a//b/../c.exr", "https://example.com/x"])
+    def test_set_text_keeps_a_uri(self, qtbot, uri):
+        for picker in _pickers():
+            qtbot.addWidget(picker)
+            emitted: list[str] = []
+            picker.path_changed.connect(emitted.append)
+            picker.setText(uri)
+            assert picker.text() == uri
+            assert emitted == [uri]
+
+    def test_set_text_still_normalizes_a_path(self, qtbot):
+        for picker in _pickers():
+            qtbot.addWidget(picker)
+            picker.setText("a/./b")
+            assert picker.text() == os.path.normpath("a/b")
+
+    def test_choose_file_starts_in_the_current_directory_for_a_uri(self, qtbot):
+        picker = InputFilePickerWidget(
+            initial_filename="", file_label="Test File", filter="*", selected_filter="*"
+        )
+        qtbot.addWidget(picker)
+        picker.setText("s3://bucket/key.exr")
+        with patch.object(picker, "file_dialog", return_value="") as dialog:
+            picker.on_choose_file()
+        assert dialog.call_args.args[2] == "."
+        assert picker.text() == "s3://bucket/key.exr"
+
+    def test_choose_directory_does_not_create_a_uri_directory(self, qtbot, tmp_path, monkeypatch):
+        """The directory picker creates a missing directory to start the dialog in. For a URI
+        that would make a local directory named after it."""
+        monkeypatch.chdir(tmp_path)
+        picker = DirectoryPickerWidget(initial_directory="", directory_label="Test Dir")
+        qtbot.addWidget(picker)
+        picker.setText("s3://bucket/dir")
+        with patch.object(
+            _path_widgets.QFileDialog, "getExistingDirectory", return_value=""
+        ) as dialog:
+            picker.on_choose_directory()
+        assert dialog.call_args.args[2] == "."
+        assert list(tmp_path.iterdir()) == []
+        assert picker.text() == "s3://bucket/dir"

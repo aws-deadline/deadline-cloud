@@ -28,6 +28,7 @@ from deadline.client._path_utils import (
     is_any_path_contained,
     is_bare_unc_anchor,
     is_path_contained,
+    is_uri,
     normalized_path,
     path_components,
 )
@@ -735,3 +736,50 @@ def test_bare_unc_anchor_contains_nothing_and_is_contained_by_nothing_real():
     # Reflexive, and still its own path space rather than the rooted-driveless one.
     assert is_path_contained("\\\\", "\\\\", path_module=ntpath) is True
     assert is_path_contained("\\\\", "\\", path_module=ntpath) is False
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "s3://bucket/key",
+        "s3://bucket/a//b/../c",
+        "https://example.com/x.exr",
+        "file:///mnt/share/x",
+        "S3://bucket",
+        # Every character the scheme allows after its leading letter.
+        "a1+b.c-d://x",
+        # A one-letter scheme matches the RFC 0006 pattern even though it looks like a drive.
+        "c://x",
+    ],
+)
+def test_is_uri(path: str) -> None:
+    assert is_uri(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "",
+        "relative/scene.ma",
+        "/mnt/share/scene.ma",
+        r"C:\scene.ma",
+        "C:/scene.ma",
+        r"\\host\share\scene.ma",
+        # Not a scheme:// prefix.
+        "s3:/bucket/key",
+        "s3:bucket",
+        "://bucket",
+        # The scheme must start with a letter and hold only letters, digits, + . and -.
+        "1s3://bucket",
+        "+s3://bucket",
+        "s_3://bucket",
+        "s 3://bucket",
+        # The prefix must be at the start.
+        "dir/s3://bucket",
+        " s3://bucket",
+        None,
+        42,
+    ],
+)
+def test_is_not_uri(path: Any) -> None:
+    assert not is_uri(path)
