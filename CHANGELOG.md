@@ -1,3 +1,7 @@
+## 0.60.9 (2026-10-05)
+
+### Bug Fixes
+* Fixed a bug in `sync-output` where the checkpoint incorrectly stamped all jobs with the same session timestamp, causing subsequent sync-output runs to either re-fetch already-handled sessions or skip unprocessed ones. Each job now correctly retains its own session ended timestamp. (#1376)
 ## 0.60.8 (2026-10-02)
 
 ### Features
