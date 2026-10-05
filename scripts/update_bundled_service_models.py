@@ -36,6 +36,8 @@ def main() -> None:
         shutil.rmtree(destination, ignore_errors=True)
         shutil.copytree(os.path.join(source_root, service_name), destination)
         print(f"Copied {service_name} from botocore {botocore.__version__} to {destination}")
+    with open(os.path.join(DESTINATION, "BOTOCORE_VERSION"), "w") as f:
+        f.write(f"{botocore.__version__}\n")
 
 
 if __name__ == "__main__":

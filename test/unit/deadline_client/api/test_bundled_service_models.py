@@ -5,11 +5,14 @@ Tests for the Deadline Cloud service model bundled for Python versions that
 botocore no longer releases for.
 """
 
+import gzip
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import boto3  # type: ignore[import]
+import botocore  # type: ignore[import]
 import pytest
 from botocore.stub import Stubber  # type: ignore[import]
 
@@ -118,3 +121,50 @@ def test_use_bundled_service_models_is_idempotent():
     _bundled_service_models._use_bundled_service_models(session)
 
     assert session._loader.search_paths.count(_bundled_service_models._BUNDLED_DATA_PATH) == 1
+
+
+def _read_model_file(path: str) -> bytes:
+    # Compare decompressed bytes: gzip headers embed a timestamp.
+    with open(path, "rb") as f:
+        data = f.read()
+    return gzip.decompress(data) if path.endswith(".gz") else data
+
+
+def _model_files(root: str) -> dict:
+    return {
+        os.path.relpath(os.path.join(dirpath, name), root): _read_model_file(
+            os.path.join(dirpath, name)
+        )
+        for dirpath, _, filenames in os.walk(root)
+        for name in filenames
+    }
+
+
+def _version_tuple(version: str) -> tuple:
+    return tuple(int(part) for part in version.strip().split("."))
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10), reason="botocore no longer releases for this Python"
+)
+def test_bundled_models_match_installed_botocore():
+    bundled_root = _bundled_service_models._BUNDLED_DATA_PATH
+    with open(os.path.join(bundled_root, "BOTOCORE_VERSION")) as f:
+        bundled_version = f.read().strip()
+    if _version_tuple(botocore.__version__) < _version_tuple(bundled_version):
+        pytest.skip(
+            f"Installed botocore {botocore.__version__} is older than the bundled {bundled_version}"
+        )
+
+    botocore_root = os.path.join(os.path.dirname(botocore.__file__), "data")
+    service_names = [
+        name for name in os.listdir(bundled_root) if os.path.isdir(os.path.join(bundled_root, name))
+    ]
+    assert service_names
+    for service_name in service_names:
+        assert _model_files(os.path.join(bundled_root, service_name)) == _model_files(
+            os.path.join(botocore_root, service_name)
+        ), (
+            f"The bundled {service_name} model differs from botocore {botocore.__version__}. "
+            "Run `python scripts/update_bundled_service_models.py` and commit the result."
+        )
