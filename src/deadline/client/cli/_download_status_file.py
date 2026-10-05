@@ -503,6 +503,10 @@ def _record_status_file_telemetry(
     every run while the content builds fine each time, and reporting the intended delta there
     would count the same growth once per failed attempt. Nothing in the event identifies which
     file a sample came from, so a reader summing the deltas cannot correct for that.
+
+    `location_count` and `missing_location_count` describe the run rather than the location, so
+    both repeat unchanged on every sample the run emits. Read them from any one sample; summing
+    either across a run's samples multiplies it by the number of locations that wrote.
     """
     try:
         if status_content is None or not measurements.write_succeeded:
@@ -658,6 +662,7 @@ def _write_pointer_if_needed(
     written is never silently absent from the samples.
     """
     measurements = _PointerMeasurements()
+    superseded_path: Optional[str] = None
     try:
         if actual_status_file_path is None:
             # Settled before the lock, and before the default-directory comparison: a run with
@@ -688,7 +693,6 @@ def _write_pointer_if_needed(
                 measurements.lock = lock_outcome
                 measurements.lock_attempted = True
 
-                superseded_path: Optional[str] = None
                 read_started = time.monotonic()
                 try:
                     # If the real status file and the pointer path resolve to the same physical file
@@ -742,18 +746,6 @@ def _write_pointer_if_needed(
                 # already on disk gets reported as written.
                 measurements.outcome = "written"
                 measurements.superseded_real_data = superseded_path is not None
-
-                # Only once the write has happened: a failed write leaves the previous file
-                # intact, and telling someone their job history is gone when it is still there
-                # is worse than telling them nothing.
-                if superseded_path:
-                    warning = (
-                        f"Previous job history at {pointer_path} has been replaced by a pointer to "
-                        f"{actual_status_file_path}. Job statuses will repopulate in the Monitor as "
-                        f"future syncs run."
-                    )
-                    logger.warning(warning)
-                    _SyncOutputFormatter(print_function_callback).warning(warning)
         except Exception as e:
             measurements.exception_type = type(e).__name__
             logger.warning(
@@ -761,6 +753,23 @@ def _write_pointer_if_needed(
                 f"The status file was written to {actual_status_file_path} but the monitor "
                 f"may not be able to locate it automatically."
             )
+
+        # Told only once the write has happened, because a failed write leaves the previous file
+        # intact and reporting history as gone when it is still there is worse than saying
+        # nothing. Outside the handler above and swallowing its own errors, so a closed output
+        # pipe cannot report an already-written pointer as a failed write, and cannot abort the
+        # run before the caller saves its checkpoint.
+        if measurements.outcome == "written" and superseded_path:
+            warning = (
+                f"Previous job history at {superseded_path} has been replaced by a pointer to "
+                f"{actual_status_file_path}. Job statuses will repopulate in the Monitor as "
+                f"future syncs run."
+            )
+            try:
+                logger.warning(warning)
+                _SyncOutputFormatter(print_function_callback).warning(warning)
+            except Exception as e:
+                logger.debug(f"Could not surface the superseded job history warning: {e}")
     finally:
         _record_pointer_telemetry(measurements)
 

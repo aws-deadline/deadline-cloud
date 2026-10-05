@@ -3833,6 +3833,48 @@ class TestPointerTelemetry:
 
         assert any("has been replaced by a pointer" in msg for msg in messages), messages
 
+    def test_a_closed_output_pipe_does_not_turn_a_written_pointer_into_a_failure(
+        self, tmp_path, monkeypatch
+    ):
+        """`deadline queue sync-output | head` closes stdout, so surfacing the superseded-history
+        warning can raise after the pointer is already on disk."""
+        default_dir = tmp_path / "default"
+        default_dir.mkdir()
+        self._use_default_dir(monkeypatch, str(default_dir))
+        events = _capture_pointer_events(monkeypatch)
+        pointer_path = os.path.join(
+            str(default_dir), f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        with open(pointer_path, "w") as f:
+            json.dump({"schema_version": 1, "jobs": {MOCK_JOB_ID: {}}}, f)
+
+        from deadline.client.cli._download_status_file import _write_pointer_if_needed
+
+        def _closed_pipe(msg):
+            raise BrokenPipeError(32, "Broken pipe")
+
+        # Called directly: the status file write surfaces its own summary line through the same
+        # callback, so driving the whole run would raise there before reaching the pointer.
+        custom_dir = str(tmp_path / "custom")
+        real_path = os.path.join(
+            custom_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_status.json"
+        )
+        with caplog_at_warning() as records:
+            _write_pointer_if_needed(
+                MOCK_QUEUE_ID, custom_dir, real_path, print_function_callback=_closed_pipe
+            )
+
+        details = _pointer_events(events)
+        assert len(details) == 1
+        assert details[0]["outcome"] == "written"
+        # A sample carrying both "written" and an exception type would contradict itself.
+        assert details[0]["exception_type"] == ""
+        assert details[0]["superseded_real_data"] is True
+        # The pointer is on disk, so the write-failure message would be false.
+        assert not any("Failed to write status file pointer" in r for r in records), records
+        with open(pointer_path) as f:
+            assert json.load(f)["status_file_path"].endswith("_download_status.json")
+
     def test_superseded_real_data_undercounts_a_corrupt_prior_file(self, tmp_path, monkeypatch):
         """A file too corrupt to parse may still have held history, so the field is a floor."""
         default_dir = tmp_path / "default"
