@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from copy import deepcopy
 
 from qtpy.QtCore import QEvent, QPersistentModelIndex, QPoint, QRegularExpression, Qt, Signal  # type: ignore
-from qtpy.QtGui import QIcon, QPainter, QValidator
+from qtpy.QtGui import QFontDatabase, QIcon, QPainter, QValidator
 from qtpy.QtWidgets import (  # type: ignore
     QAbstractItemDelegate,
     QAbstractItemView,
@@ -27,6 +27,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QPlainTextEdit,
     QPushButton,
     QSizePolicy,
     QSpacerItem,
@@ -189,6 +190,8 @@ class OpenJDParametersWidget(QWidget):
                 control_widget = _JobTemplateIntSpinBoxWidget
             elif parameter["type"] == "FLOAT" and control_type_name == "SPIN_BOX":
                 control_widget = _JobTemplateFloatSpinBoxWidget
+            elif parameter["type"] == "LIST[LIST[INT]]" and control_type_name == "MULTILINE_EDIT":
+                control_widget = _JobTemplateJsonEditWidget
             else:
                 control_widget = control_map[control_type_name]
 
@@ -515,6 +518,126 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
 
     def set_value(self, value):
         self.edit_control.setPlainText(value.as_posix() if isinstance(value, Path) else str(value))
+
+    def _change_signal(self):
+        return self.edit_control.textChanged
+
+
+class _JobTemplateJsonEditWidget(_JobTemplateWidget):
+    """A multiline JSON text edit for a LIST[LIST[INT]] parameter, which OpenJD gives no
+    editing control. The text is validated as it is typed. The value is the parsed list while
+    the text is valid, and the text itself otherwise.
+    """
+
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.MULTILINE_EDIT
+    OPENJD_TYPES: List[str] = ["LIST[LIST[INT]]"]
+    OPENJD_DEFAULT_VALUE: List[Any] = []
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    VISIBLE_LINES: int = 4
+
+    def _build_ui(self, parameter):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        label_layout = QHBoxLayout()
+        self.label = QLabel(_get_parameter_label(parameter), self)
+        self.warning_icon = QLabel(self)
+        icon_size = self.style().pixelMetric(QStyle.PM_SmallIconSize, None, self)
+        self.warning_icon.setPixmap(
+            self.style().standardIcon(QStyle.SP_MessageBoxWarning).pixmap(icon_size, icon_size)
+        )
+        self.warning_icon.setVisible(False)
+        label_layout.addWidget(self.label)
+        label_layout.addWidget(self.warning_icon)
+        label_layout.addStretch()
+        layout.addLayout(label_layout)
+
+        self.edit_control = QPlainTextEdit(self)
+        self.edit_control.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        self.edit_control.setPlaceholderText("e.g. [[1, 2], [3]]")
+        self.edit_control.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        margins = self.edit_control.contentsMargins()
+        self.edit_control.setFixedHeight(
+            int(
+                self.edit_control.fontMetrics().lineSpacing() * self.VISIBLE_LINES
+                + 2 * self.edit_control.document().documentMargin()
+                + 2 * self.edit_control.frameWidth()
+                + margins.top()
+                + margins.bottom()
+            )
+        )
+        layout.addWidget(self.edit_control)
+        self.setLayout(layout)
+
+        if "description" in parameter:
+            for widget in (self.label, self.edit_control):
+                widget.setToolTip(parameter["description"])
+
+        # Connected before the base class connects the change report, so the feedback is
+        # current when the change is reported.
+        self.edit_control.textChanged.connect(self._update_feedback)
+
+    def _validation_error(self) -> str:
+        text = self.edit_control.toPlainText()
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as e:
+            return (
+                f"The text is not valid JSON ({e}). Enter a list of lists of integers, "
+                "such as [[1, 2], [3]]."
+            )
+        if not isinstance(parsed, list):
+            # Not passed on for validation, which would parse a JSON string a second time.
+            return (
+                "The text is JSON but not a list. Enter a list of lists of integers, "
+                "such as [[1, 2], [3]]."
+            )
+        try:
+            _validate_job_parameter_value(self.job_template_parameter, parsed)
+        except (ValueError, TypeError) as e:
+            return str(e)
+        return ""
+
+    def _update_feedback(self) -> None:
+        error = self._validation_error()
+        self.warning_icon.setVisible(bool(error))
+        self.warning_icon.setToolTip(error)
+        if error:
+            self.edit_control.setStyleSheet("QPlainTextEdit { border: 1px solid red; }")
+            self.edit_control.setToolTip(error)
+        else:
+            self.edit_control.setStyleSheet("")
+            self.edit_control.setToolTip(self.job_template_parameter.get("description", ""))
+
+    def is_valid(self) -> bool:
+        return not self._validation_error()
+
+    def value(self) -> Any:
+        text = self.edit_control.toPlainText()
+        if not self._validation_error():
+            return json.loads(text)
+        # Kept as typed, so submission and the saved bundle report it rather than lose it.
+        # Nor could a parameter_changed signal carry an integer beyond 64 bits.
+        return text
+
+    def set_value(self, value: Any) -> None:
+        if isinstance(value, str):
+            # CLI and pre-GUI hook values arrive as JSON text. Text that is not a JSON list is
+            # shown as written, marked invalid, for the user to correct.
+            text = value
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                text = json.dumps(parsed)
+        else:
+            try:
+                text = json.dumps(value)
+            except (TypeError, ValueError):
+                text = str(value)
+        self.edit_control.setPlainText(text)
+        self._update_feedback()
 
     def _change_signal(self):
         return self.edit_control.textChanged
@@ -1930,6 +2053,7 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         "LIST[INT]",
         "LIST[FLOAT]",
         "LIST[BOOL]",
+        "LIST[LIST[INT]]",
     ]
 
     OPENJD_DEFAULT_VALUE: str = ""  # Hidden parameters do not require defaults
