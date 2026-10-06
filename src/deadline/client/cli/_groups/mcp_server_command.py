@@ -31,8 +31,8 @@ def cli_mcp_server():
         from ...._mcp.server import main as mcp_main
     except ImportError:
         click.echo(
-            "Error: MCP dependencies not installed.\n"
-            "Please install them with: pip install 'deadline[mcp]'",
+            "Error: MCP dependencies are not installed or are out of date (mcp 2.x is required).\n"
+            "Please install them with: pip install --upgrade 'deadline[mcp]'",
             err=True,
         )
         sys.exit(1)
