@@ -288,7 +288,7 @@ LIST_PARAM: JobParameter = {"name": "Cameras", "type": "LIST[STRING]"}
     [
         pytest.param(["main", "closeup"], ["main", "closeup"], id="list"),
         pytest.param([], [], id="empty-list"),
-        pytest.param(["", "a b", "Ã¼"], ["", "a b", "Ã¼"], id="unusual-items"),
+        pytest.param(["", "a b", "ü"], ["", "a b", "ü"], id="unusual-items"),
         pytest.param(["dup", "dup"], ["dup", "dup"], id="duplicates-kept"),
         pytest.param('["main", "closeup"]', ["main", "closeup"], id="json-string"),
         pytest.param("[]", [], id="json-empty"),
@@ -549,10 +549,10 @@ def test_bundle_preview_shows_list_values_as_json() -> None:
         ]
     }
     info = extract_bundle_info(
-        template, "/bundle", {"parameterValues": [{"name": "Layers", "value": ["a", "Ã¼"]}]}
+        template, "/bundle", {"parameterValues": [{"name": "Layers", "value": ["a", "ü"]}]}
     )
     display = {p["name"]: p["_display_value"] for p in info.parameters}
-    assert display == {"Cameras": '["main", "closeup"]', "Layers": '["a", "Ã¼"]'}
+    assert display == {"Cameras": '["main", "closeup"]', "Layers": '["a", "ü"]'}
 
 
 @pytest.mark.parametrize(
