@@ -280,7 +280,7 @@ def test_validate_job_parameter_nonvalid_type(
         when()
     assert (
         str(ctx.value)
-        == f'Job parameter "foo" had "type" {typ} but expected one of ("STRING", "PATH", "INT", "FLOAT", "BOOL", "RANGE_EXPR", "LIST[STRING]", "LIST[PATH]", "LIST[INT]", "LIST[FLOAT]", "LIST[BOOL]")'
+        == f'Job parameter "foo" had "type" {typ} but expected one of ("STRING", "PATH", "INT", "FLOAT", "BOOL", "RANGE_EXPR", "LIST[STRING]", "LIST[PATH]", "LIST[INT]", "LIST[FLOAT]", "LIST[BOOL]", "LIST[LIST[INT]]")'
     )
 
 

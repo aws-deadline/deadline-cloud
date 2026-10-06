@@ -615,6 +615,7 @@ _EVERY_CONTROL = [
         id="CHOOSE_OUTPUT_FILE_LIST",
     ),
     pytest.param({"type": "LIST[PATH]", "default": ["a"]}, id="CHOOSE_DIRECTORY_LIST"),
+    pytest.param({"type": "LIST[LIST[INT]]", "default": [[1, 2], [3]]}, id="JSON_EDIT"),
     pytest.param(
         {"type": "STRING", "default": "x", "userInterface": {"control": "HIDDEN"}}, id="HIDDEN"
     ),
@@ -664,6 +665,12 @@ class TestControlsAreNotInReferenceCycles:
             ),
             pytest.param(
                 {"type": "PATH"}, lambda c: c.edit_control.setText("out"), "out", id="PATH"
+            ),
+            pytest.param(
+                {"type": "LIST[LIST[INT]]"},
+                lambda c: c.edit_control.setPlainText("[[1], [2, 3]]"),
+                [[1], [2, 3]],
+                id="LIST[LIST[INT]]",
             ),
         ],
     )

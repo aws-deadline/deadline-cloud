@@ -45,6 +45,7 @@ _VALID_PARAMETER_TYPES = (
     "LIST[INT]",
     "LIST[FLOAT]",
     "LIST[BOOL]",
+    "LIST[LIST[INT]]",
 )
 _BOOL_DISALLOWED_FIELDS = (
     "allowedValues",
@@ -75,6 +76,8 @@ _LIST_ITEM_FIELDS = {
     "LIST[PATH]": ("allowedValues", "minLength", "maxLength"),
     "LIST[INT]": ("allowedValues", "minValue", "maxValue"),
     "LIST[FLOAT]": ("allowedValues", "minValue", "maxValue"),
+    # Constrains each inner list, whose own "item" constrains each integer as LIST[INT]'s does.
+    "LIST[LIST[INT]]": ("minLength", "maxLength", "item"),
 }
 _LIST_TYPES = (*_LIST_ITEM_FIELDS, "LIST[BOOL]")
 # The list types whose items are strings, constrained by length.
@@ -86,12 +89,16 @@ _MAX_STRING_LIST_ITEM_LENGTH = 1024
 # CreateJob's JobParameter.intList, floatList and boolList each hold 0-512 items.
 _MAX_NUMBER_LIST_ITEMS = 512
 _MAX_BOOL_LIST_ITEMS = 512
+# CreateJob's JobParameter.intListList holds 0-512 inner lists of 0-64 integers each.
+_MAX_INT_LIST_LIST_ITEMS = 512
+_MAX_INNER_INT_LIST_ITEMS = 64
 _MAX_LIST_ITEMS = {
     "LIST[STRING]": _MAX_STRING_LIST_ITEMS,
     "LIST[PATH]": _MAX_STRING_LIST_ITEMS,
     "LIST[INT]": _MAX_NUMBER_LIST_ITEMS,
     "LIST[FLOAT]": _MAX_NUMBER_LIST_ITEMS,
     "LIST[BOOL]": _MAX_BOOL_LIST_ITEMS,
+    "LIST[LIST[INT]]": _MAX_INT_LIST_LIST_ITEMS,
 }
 # The case-insensitive strings that a BOOL or LIST[BOOL] value accepts.
 _TRUE_STRINGS = ("true", "yes", "on", "1")
@@ -106,6 +113,7 @@ _LIST_ITEM_DESCRIPTIONS = {
     "LIST[INT]": ("integers", "[1, 2]"),
     "LIST[FLOAT]": ("numbers", "[0.5, 2]"),
     "LIST[BOOL]": ("booleans", "[true, false]"),
+    "LIST[LIST[INT]]": ("lists of integers", "[[1, 2], [3]]"),
 }
 _VALID_UI_CONTROLS = (
     "CHECK_BOX",
@@ -147,6 +155,8 @@ class JobParameterItemConstraints(TypedDict):
     maxLength: NotRequired[int]
     minValue: NotRequired[Union[int, float]]
     maxValue: NotRequired[Union[int, float]]
+    # Only for LIST[LIST[INT]], where it constrains each integer of an inner list.
+    item: NotRequired[JobParameterItemConstraints]
 
 
 class JobParameter(TypedDict):
@@ -200,9 +210,9 @@ def validate_job_parameter(
 ) -> JobParameter:
     """Validates a job parameter as defined by Open Job Description. The validation allows for the
     union of all possible fields. Per-type checks are applied for BOOL, RANGE_EXPR and
-    the LIST[STRING], LIST[PATH], LIST[INT], LIST[FLOAT] and LIST[BOOL] types, whose constraint
-    fields and defaults differ from the other types; the other types are not checked per type
-    (e.g. minValue is not limited to "INT" / "FLOAT").
+    the LIST[STRING], LIST[PATH], LIST[INT], LIST[FLOAT], LIST[BOOL] and LIST[LIST[INT]] types,
+    whose constraint fields and defaults differ from the other types; the other types are not
+    checked per type (e.g. minValue is not limited to "INT" / "FLOAT").
 
     name: <Identifier>
     type: "PATH"
@@ -328,6 +338,8 @@ def validate_job_parameter(
                 _validate_list_string_item_constraints(
                     input["item"], list_type=list_type, parameter_name=name
                 )
+            elif list_type == "LIST[LIST[INT]]":
+                _validate_list_list_int_item_constraints(input["item"], parameter_name=name)
             else:
                 _validate_list_number_item_constraints(
                     input["item"], list_type=list_type, parameter_name=name
@@ -526,23 +538,30 @@ def _validate_string_constraints(
 
 
 def _check_list_number_constraint(
-    value: Any, *, list_type: str, parameter_name: str, field_path: str
+    value: Any,
+    *,
+    list_type: str,
+    parameter_name: str,
+    field_path: str,
+    item_path: str = '"item"',
 ) -> None:
-    """Checks one number from the "item" object of a LIST[INT] or LIST[FLOAT] definition."""
-    expected: Any = int if list_type == "LIST[INT]" else (int, float)
+    """Checks one number from the "item" object of a LIST[INT] or LIST[FLOAT] definition, or
+    from the "item" -> "item" object of a LIST[LIST[INT]] definition."""
+    is_int = list_type in ("LIST[INT]", "LIST[LIST[INT]]")
+    expected: Any = int if is_int else (int, float)
     if isinstance(value, bool) or not isinstance(value, expected):
-        expected_name = "int" if list_type == "LIST[INT]" else "int or float"
+        expected_name = "int" if is_int else "int or float"
         raise TypeError(
-            f'Job parameter "{parameter_name}" got {type(value).__name__} for "item" -> {field_path} but expected {expected_name}'
+            f'Job parameter "{parameter_name}" got {type(value).__name__} for {item_path} -> {field_path} but expected {expected_name}'
         )
-    if list_type == "LIST[INT]":
+    if is_int:
         if not _MIN_INT64 <= value <= _MAX_INT64:
             raise ValueError(
-                f'Job parameter "{parameter_name}" got {value} for "item" -> {field_path} which is outside the 64-bit integer range'
+                f'Job parameter "{parameter_name}" got {value} for {item_path} -> {field_path} which is outside the 64-bit integer range'
             )
     elif not _is_finite_float(value):
         raise ValueError(
-            f'Job parameter "{parameter_name}" got {value!r} for "item" -> {field_path} which is not a finite number'
+            f'Job parameter "{parameter_name}" got {value!r} for {item_path} -> {field_path} which is not a finite number'
         )
 
 
@@ -554,9 +573,71 @@ def _is_finite_float(value: int | float) -> bool:
 
 
 def _validate_list_number_item_constraints(
-    item: Any, *, list_type: str, parameter_name: str
+    item: Any, *, list_type: str, parameter_name: str, item_path: str = '"item"'
 ) -> None:
-    """Validates the "item" object of a LIST[INT] or LIST[FLOAT] job parameter definition."""
+    """Validates the "item" object of a LIST[INT] or LIST[FLOAT] job parameter definition, or
+    with ``item_path='"item" -> "item"'`` the integer constraints of a LIST[LIST[INT]]."""
+    if not isinstance(item, dict):
+        raise TypeError(
+            f'Job parameter "{parameter_name}" got {type(item).__name__} for {item_path} but expected dict'
+        )
+    item_fields = _LIST_ITEM_FIELDS["LIST[INT]" if list_type == "LIST[LIST[INT]]" else list_type]
+    for field in item:
+        if field not in item_fields:
+            quoted = ", ".join(f'"{f}"' for f in item_fields)
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has {item_path} -> "{field}" but type "{list_type}" only supports ({quoted})'
+            )
+    if "allowedValues" in item:
+        allowed_values = item["allowedValues"]
+        if not isinstance(allowed_values, list):
+            raise TypeError(
+                f'Job parameter "{parameter_name}" got {type(allowed_values).__name__} for {item_path} -> "allowedValues" but expected list'
+            )
+        if not allowed_values:
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has an empty {item_path} -> "allowedValues" list'
+            )
+        for i, allowed_value in enumerate(allowed_values):
+            _check_list_number_constraint(
+                allowed_value,
+                list_type=list_type,
+                parameter_name=parameter_name,
+                field_path=f'"allowedValues" [{i}]',
+                item_path=item_path,
+            )
+    for field in ("minValue", "maxValue"):
+        if field in item:
+            _check_list_number_constraint(
+                item[field],
+                list_type=list_type,
+                parameter_name=parameter_name,
+                field_path=f'"{field}"',
+                item_path=item_path,
+            )
+
+    # Reject constraints no item could satisfy, so the author learns at bundle load rather
+    # than from a GUI that can never be submitted.
+    item_min, item_max = item.get("minValue"), item.get("maxValue")
+    if item_min is not None and item_max is not None and item_min > item_max:
+        raise ValueError(
+            f'Job parameter "{parameter_name}" has {item_path} -> "minValue" {item_min} greater than '
+            f'{item_path} -> "maxValue" {item_max}'
+        )
+    for i, allowed_value in enumerate(item.get("allowedValues", [])):
+        if (item_min is not None and allowed_value < item_min) or (
+            item_max is not None and allowed_value > item_max
+        ):
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has {item_path} -> "allowedValues" [{i}] {allowed_value} '
+                f"outside the item value range {item_min}-{item_max}"
+            )
+
+
+def _validate_list_list_int_item_constraints(item: Any, *, parameter_name: str) -> None:
+    """Validates the "item" object of a LIST[LIST[INT]] job parameter definition, which
+    constrains the length of each inner list, and through its own "item" each integer."""
+    list_type = "LIST[LIST[INT]]"
     if not isinstance(item, dict):
         raise TypeError(
             f'Job parameter "{parameter_name}" got {type(item).__name__} for "item" but expected dict'
@@ -568,48 +649,31 @@ def _validate_list_number_item_constraints(
             raise ValueError(
                 f'Job parameter "{parameter_name}" has "item" -> "{field}" but type "{list_type}" only supports ({quoted})'
             )
-    if "allowedValues" in item:
-        allowed_values = item["allowedValues"]
-        if not isinstance(allowed_values, list):
-            raise TypeError(
-                f'Job parameter "{parameter_name}" got {type(allowed_values).__name__} for "item" -> "allowedValues" but expected list'
-            )
-        if not allowed_values:
-            raise ValueError(
-                f'Job parameter "{parameter_name}" has an empty "item" -> "allowedValues" list'
-            )
-        for i, allowed_value in enumerate(allowed_values):
-            _check_list_number_constraint(
-                allowed_value,
-                list_type=list_type,
-                parameter_name=parameter_name,
-                field_path=f'"allowedValues" [{i}]',
-            )
-    for field in ("minValue", "maxValue"):
+    for field in ("minLength", "maxLength"):
         if field in item:
-            _check_list_number_constraint(
-                item[field],
-                list_type=list_type,
-                parameter_name=parameter_name,
-                field_path=f'"{field}"',
-            )
-
-    # Reject constraints no item could satisfy, so the author learns at bundle load rather
-    # than from a GUI that can never be submitted.
-    item_min, item_max = item.get("minValue"), item.get("maxValue")
-    if item_min is not None and item_max is not None and item_min > item_max:
+            length = item[field]
+            if type(length) is not int:  # noqa: E721
+                raise TypeError(
+                    f'Job parameter "{parameter_name}" got {type(length).__name__} for "item" -> "{field}" but expected int'
+                )
+            if length < 0:
+                raise ValueError(
+                    f'Job parameter "{parameter_name}" got {length} for "item" -> "{field}" but the value must be non-negative'
+                )
+    min_length = item.get("minLength", 0)
+    max_length = min(item.get("maxLength", _MAX_INNER_INT_LIST_ITEMS), _MAX_INNER_INT_LIST_ITEMS)
+    if min_length > max_length:
         raise ValueError(
-            f'Job parameter "{parameter_name}" has "item" -> "minValue" {item_min} greater than '
-            f'"item" -> "maxValue" {item_max}'
+            f'Job parameter "{parameter_name}" has "item" -> "minLength" {min_length} greater than '
+            f"the maximum inner list item count of {max_length}"
         )
-    for i, allowed_value in enumerate(item.get("allowedValues", [])):
-        if (item_min is not None and allowed_value < item_min) or (
-            item_max is not None and allowed_value > item_max
-        ):
-            raise ValueError(
-                f'Job parameter "{parameter_name}" has "item" -> "allowedValues" [{i}] {allowed_value} '
-                f"outside the item value range {item_min}-{item_max}"
-            )
+    if "item" in item:
+        _validate_list_number_item_constraints(
+            item["item"],
+            list_type=list_type,
+            parameter_name=parameter_name,
+            item_path='"item" -> "item"',
+        )
 
 
 def _validate_list_length_range(input: dict[str, Any], *, parameter_name: str) -> None:
@@ -707,10 +771,62 @@ def _to_bool_list_item(name: str, i: int, item: Any) -> bool:
     return converted
 
 
+def _check_int_list_list_item_type(name: str, i: int, item: Any) -> None:
+    """Raises if an item of a LIST[LIST[INT]] is not a list of 64-bit integers. As for a
+    LIST[INT], elements are not converted, e.g. "5" and true are not integers."""
+    if not isinstance(item, list):
+        raise TypeError(
+            f"Job parameter {name!r} has type LIST[LIST[INT]] but item {i} is {item!r} of type {type(item)}, not a list of integers."
+        )
+    for j, element in enumerate(item):
+        if isinstance(element, bool) or not isinstance(element, int):
+            raise TypeError(
+                f"Job parameter {name!r} has type LIST[LIST[INT]] but item {i} element {j} is {element!r} of type {type(element)}."
+            )
+        if not _MIN_INT64 <= element <= _MAX_INT64:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} element {j} {element} is outside the 64-bit integer range."
+            )
+
+
+def _check_int_list_list_item(name: str, i: int, item: list, item_constraints: dict) -> None:
+    """Checks one inner list of a LIST[LIST[INT]] against the definition's "item" constraints."""
+    min_length = item_constraints.get("minLength")
+    if min_length is not None and len(item) < min_length:
+        raise ValueError(
+            f"Job parameter {name!r} item {i} has {len(item)} elements but item minLength is {min_length}."
+        )
+    max_length = min(
+        item_constraints.get("maxLength", _MAX_INNER_INT_LIST_ITEMS), _MAX_INNER_INT_LIST_ITEMS
+    )
+    if len(item) > max_length:
+        raise ValueError(
+            f"Job parameter {name!r} item {i} has {len(item)} elements but at most {max_length} are allowed."
+        )
+    element_constraints: dict = item_constraints.get("item", {})
+    min_value = element_constraints.get("minValue")
+    max_value = element_constraints.get("maxValue")
+    allowed_values = element_constraints.get("allowedValues")
+    for j, element in enumerate(item):
+        if min_value is not None and element < min_value:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} element {j} {element} is less than item -> item minValue {min_value}."
+            )
+        if max_value is not None and element > max_value:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} element {j} {element} is greater than item -> item maxValue {max_value}."
+            )
+        if allowed_values is not None and element not in allowed_values:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} element {j} {element} is not an allowed value from {tuple(allowed_values)!r}."
+            )
+
+
 def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
-    """Converts a LIST[STRING], LIST[PATH], LIST[INT], LIST[FLOAT] or LIST[BOOL] value, a list
-    or a string holding a JSON array, to a list and checks it against the definition's list and
-    item constraints. LIST[FLOAT] items are returned as float, and LIST[BOOL] items as bool."""
+    """Converts a LIST[STRING], LIST[PATH], LIST[INT], LIST[FLOAT], LIST[BOOL] or
+    LIST[LIST[INT]] value, a list or a string holding a JSON array, to a list and checks it
+    against the definition's list and item constraints. LIST[FLOAT] items are returned as
+    float, LIST[BOOL] items as bool, and LIST[LIST[INT]] items as new lists."""
     name = job_parameter["name"]
     list_type = job_parameter["type"]
     item_kind, example = _LIST_ITEM_DESCRIPTIONS[list_type]
@@ -733,6 +849,9 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
     if list_type == "LIST[BOOL]":
         # Unlike the other list types, an item accepts every spelling of a BOOL value.
         value = [_to_bool_list_item(name, i, item) for i, item in enumerate(value)]
+    elif list_type == "LIST[LIST[INT]]":
+        for i, item in enumerate(value):
+            _check_int_list_list_item_type(name, i, item)
     else:
         for i, item in enumerate(value):
             _check_list_item_type(list_type, name, i, item)
@@ -750,6 +869,10 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
         )
 
     item_constraints: dict = dict(job_parameter.get("item", {}))
+    if list_type == "LIST[LIST[INT]]":
+        for i, item in enumerate(value):
+            _check_int_list_list_item(name, i, item, item_constraints)
+        return [list(item) for item in value]
     item_allowed_values = item_constraints.get("allowedValues")
     for i, item in enumerate(value):
         if list_type in _STRING_ITEM_LIST_TYPES:
@@ -768,13 +891,24 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
 
 def validate_job_parameter_value(
     job_parameter: JobParameter,
-    value: str | int | float | bool | list[str] | list[int] | list[float] | list[bool],
-) -> str | int | float | bool | list[str] | list[int] | list[float] | list[bool]:
+    value: (
+        str
+        | int
+        | float
+        | bool
+        | list[str]
+        | list[int]
+        | list[float]
+        | list[bool]
+        | list[list[int]]
+    ),
+) -> str | int | float | bool | list[str] | list[int] | list[float] | list[bool] | list[list[int]]:
     """
     Validates a value for the specified parameter definition, returning the value with the correct type,
     e.g. a string "19" for an INT parameter is returned as the integer 19, and a string
     '["a", "b"]' for a LIST[STRING] parameter is returned as the list ["a", "b"]. LIST[PATH],
-    LIST[INT], LIST[FLOAT] and LIST[BOOL] values are also accepted as a JSON array string.
+    LIST[INT], LIST[FLOAT], LIST[BOOL] and LIST[LIST[INT]] values are also accepted as a JSON
+    array string, e.g. '[[1, 2], [3]]' for a LIST[LIST[INT]].
     LIST[PATH] items are not made absolute. LIST[FLOAT]
     items are returned as float, and LIST[BOOL] items, which accept the same values as a BOOL
     parameter such as "yes" or 0, are returned as bool.
@@ -1554,12 +1688,17 @@ _SUPPORTED_CONTROLS_FOR_TYPE = {
     "LIST[INT]": {"SPIN_BOX_LIST", "HIDDEN"},
     "LIST[FLOAT]": {"SPIN_BOX_LIST", "HIDDEN"},
     "LIST[BOOL]": {"CHECK_BOX_LIST", "HIDDEN"},
+    # OpenJD defines no editing control for this type.
+    "LIST[LIST[INT]]": {"HIDDEN"},
 }
 
 
 def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
     """Returns the UI control for the given parameter definition, determining
-    the default if not explicitly set."""
+    the default if not explicitly set.
+
+    A LIST[LIST[INT]] parameter may only set the HIDDEN control. Without it, this returns
+    MULTILINE_EDIT, where the client edits the value as JSON text."""
     # If it's explicitly provided, return that
     control = param_def.get("userInterface", {}).get("control")
     param_type = param_def["type"]
@@ -1576,6 +1715,8 @@ def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
             return "SPIN_BOX_LIST"
         elif param_type == "LIST[BOOL]":
             return "CHECK_BOX_LIST"
+        elif param_type == "LIST[LIST[INT]]":
+            return "MULTILINE_EDIT"
         elif param_type == "PATH":
             if param_def.get("objectType", "DIRECTORY") == "FILE":
                 if param_def.get("dataFlow", "NONE") == "OUT":
@@ -1683,7 +1824,8 @@ def parameter_definition_difference(
 
 def _item_constraints_equivalent(lhs: Any, rhs: Any) -> bool:
     """Compares list parameter "item" constraints, with allowedValues compared as sets like
-    the top-level allowedValues. An absent "item" is the same as one with no constraints."""
+    the top-level allowedValues, and a nested "item" compared the same way. An absent "item"
+    is the same as one with no constraints."""
     lhs = {} if lhs is None else lhs
     rhs = {} if rhs is None else rhs
     if not isinstance(lhs, dict) or not isinstance(rhs, dict):
@@ -1691,6 +1833,10 @@ def _item_constraints_equivalent(lhs: Any, rhs: Any) -> bool:
     for field in ("minLength", "maxLength", "minValue", "maxValue"):
         if lhs.get(field) != rhs.get(field):
             return False
+    if ("item" in lhs or "item" in rhs) and not _item_constraints_equivalent(
+        lhs.get("item"), rhs.get("item")
+    ):
+        return False
     lhs_allowed, rhs_allowed = lhs.get("allowedValues"), rhs.get("allowedValues")
     if lhs_allowed is None or rhs_allowed is None:
         return lhs_allowed == rhs_allowed
