@@ -43,6 +43,8 @@ from ..job_bundle._hooks import (
     collect_submission_hook_sources,
 )
 from ..job_bundle.parameters import (
+    _has_expr_extension,
+    _parse_path_list,
     apply_job_parameters,
     merge_queue_job_parameters,
     read_job_bundle_parameters,
@@ -73,6 +75,7 @@ from .._path_utils import (
     is_absolute_path,
     is_bare_unc_anchor,
     is_any_path_contained,
+    is_uri,
     normalized_path,
     path_components,
 )
@@ -101,14 +104,18 @@ def _reject_relative_hook_path_values(
     job_bundle_parameters: Iterable[Mapping[str, Any]],
     *,
     path_module: Any = os.path,
+    allow_uri_path_values: bool = False,
 ) -> None:
-    """Raise if a hook emitted a PATH value that is not absolute.
+    """Raise if a hook emitted a PATH value, or a LIST[PATH] item, that is not absolute.
 
     A hook's stdout parameters are layered as job_parameters overrides, which follow CLI
     ``--parameter`` semantics: a relative PATH resolves against the current working
     directory. A hook does not run from -- and does not control -- the submitting shell's
     cwd, so a relative PATH from a hook is ambiguous (unlike an on-disk
     parameter_values.yaml rewrite, which resolves against the bundle dir).
+
+    With ``allow_uri_path_values``, for a template that uses the EXPR extension, a URI such
+    as ``s3://bucket/key`` is accepted, since it is never resolved against a directory.
 
     Not ``os.path.isabs``: before Python 3.11 it reads a UNC path naming a share as
     relative, rejecting a valid value on the very setup #1321 reports.
@@ -117,19 +124,25 @@ def _reject_relative_hook_path_values(
         p.get("name"): p.get("type") for p in job_bundle_parameters if "name" in p
     }
     for name, value in hook_stdout_parameters.items():
-        if (
-            bundle_parameter_types.get(name) == "PATH"
-            and isinstance(value, str)
-            and value != ""
-            and not is_absolute_path(value, path_module=path_module)
-        ):
-            raise DeadlineOperationError(
-                f"Pre-submission hook emitted a relative PATH value for parameter "
-                f"'{name}': '{value}'. Hooks must emit absolute paths for PATH "
-                f"parameters on stdout, since a hook does not run from the submitting "
-                f"working directory. Use an absolute path (e.g. join with "
-                f"DEADLINE_JOB_BUNDLE_DIR) or rewrite parameter_values.yaml on disk."
-            )
+        parameter_type = bundle_parameter_types.get(name)
+        if parameter_type == "PATH" and isinstance(value, str):
+            paths = [value]
+        elif parameter_type == "LIST[PATH]":
+            paths = _parse_path_list(value) or []
+        else:
+            continue
+        for index, path in enumerate(paths):
+            if allow_uri_path_values and is_uri(path):
+                continue
+            if path != "" and not is_absolute_path(path, path_module=path_module):
+                what = "PATH value" if parameter_type == "PATH" else f"LIST[PATH] item {index}"
+                raise DeadlineOperationError(
+                    f"Pre-submission hook emitted a relative {what} for parameter "
+                    f"'{name}': '{path}'. Hooks must emit absolute paths for PATH "
+                    f"parameters on stdout, since a hook does not run from the submitting "
+                    f"working directory. Use an absolute path (e.g. join with "
+                    f"DEADLINE_JOB_BUNDLE_DIR) or rewrite parameter_values.yaml on disk."
+                )
 
 
 def _classify_asset_paths(
@@ -721,6 +734,10 @@ def create_job_from_job_bundle(
 
     # Read in the job template
     file_contents, file_type = read_yaml_or_json(job_bundle_dir, "template", required=True)
+    # With OpenJD's EXPR extension, a PATH value may be a URI that is not a local path.
+    allow_uri_path_values = _has_expr_extension(
+        parse_yaml_or_json_content(file_contents, file_type, job_bundle_dir, "template")
+    )
 
     # If requested, substitute the job name in the template
     if name is not None:
@@ -802,6 +819,7 @@ def create_job_from_job_bundle(
             job_bundle_dir,
             resolved,
             target_asset_references,
+            allow_uri_path_values=allow_uri_path_values,
         )
         return resolved, split_parameter_args(resolved, job_bundle_dir)
 
@@ -847,9 +865,18 @@ def create_job_from_job_bundle(
         ``resolved_parameters`` (values that were explicitly provided in job_parameters)."""
         contributed: list[str] = []
         for job_param in resolved_parameters:
-            if job_param.get("type") == "PATH" and job_param.get("name") in known_parameter_names:
-                job_param_value = job_param.get("value")
-                if job_param_value:
+            if job_param.get("name") not in known_parameter_names:
+                continue
+            if job_param.get("type") == "PATH":
+                paths = [job_param.get("value")]
+            elif job_param.get("type") == "LIST[PATH]":
+                # Each item of a LIST[PATH] counts as known, as a PATH value does.
+                paths = _parse_path_list(job_param.get("value")) or []
+            else:
+                continue
+            for job_param_value in paths:
+                # A URI is not a local path, so it cannot mark a local path as known.
+                if job_param_value and not (allow_uri_path_values and is_uri(job_param_value)):
                     if job_param.get("objectType") == "FILE":
                         # If the job parameter is a file, use its directory as the known
                         # path. When collecting outputs for upload, only that directory is
@@ -933,7 +960,10 @@ def create_job_from_job_bundle(
             # on-disk parameter_values.yaml rewrite, which resolves against the bundle dir).
             # Reject relative PATH values here and require hooks to emit absolute paths.
             _reject_relative_hook_path_values(
-                hook_stdout_parameters, job_bundle_parameters, path_module=os.path
+                hook_stdout_parameters,
+                job_bundle_parameters,
+                path_module=os.path,
+                allow_uri_path_values=allow_uri_path_values,
             )
             hook_parameter_overrides = [
                 {"name": name, "value": value}

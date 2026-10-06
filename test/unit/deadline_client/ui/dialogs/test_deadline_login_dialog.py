@@ -14,7 +14,7 @@ try:
     from deadline.client.ui._utils import tr
     from deadline.client.ui.dialogs.deadline_login_dialog import DeadlineLoginDialog
 except ImportError:
-    pytest.importorskip("deadline.client.ui.dialogs.deadline_login_dialog")
+    pytest.importorskip("deadline.client.ui.dialogs.deadline_login_dialog", exc_type=ImportError)
 
 
 # Where DeadlineLoginDialog looks up the login backend. The dialog calls
