@@ -29,6 +29,7 @@ from botocore.session import get_session as get_botocore_session
 
 from .. import version
 from ._agent_detection import detect_invoking_agent
+from ._bundled_service_models import _use_bundled_service_models
 from ..config import get_setting, set_setting, config_file
 from ..exceptions import DeadlineOperationError
 from ...job_attachments._aws.aws_clients import get_s3_client
@@ -122,7 +123,9 @@ def get_boto3_session(
 
 @lru_cache
 def _get_boto3_session_for_profile(profile_name: str, region: Optional[str] = None):
-    session = boto3.Session(profile_name=profile_name, region_name=region)
+    session = _use_bundled_service_models(
+        boto3.Session(profile_name=profile_name, region_name=region)
+    )
 
     # By default, DCM returns creds that expire after 15 minutes, and boto3's RefreshableCredentials
     # class refreshes creds that are within 15 minutes of expiring, so credentials would never be reused.
@@ -342,6 +345,7 @@ def get_session_client(
     Returns:
         A boto3 client for the specified service
     """
+    _use_bundled_service_models(session)
     resolved_config = get_default_client_config()
     if client_config is not None:
         resolved_config = resolved_config.merge(client_config)
@@ -569,10 +573,12 @@ def _get_queue_user_boto3_session(
     if base_session.profile_name != "default":
         aws_profile_name = base_session.profile_name
 
-    return boto3.Session(
-        botocore_session=botocore_session,
-        profile_name=aws_profile_name,
-        region_name=region if region is not None else base_session.region_name,
+    return _use_bundled_service_models(
+        boto3.Session(
+            botocore_session=botocore_session,
+            profile_name=aws_profile_name,
+            region_name=region if region is not None else base_session.region_name,
+        )
     )
 
 
