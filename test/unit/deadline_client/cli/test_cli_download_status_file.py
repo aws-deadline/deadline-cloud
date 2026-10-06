@@ -655,11 +655,13 @@ class TestRecordStatusFileTelemetry:
             "task_records_added": 3,
             "read_duration_ms": 0,
             "write_duration_ms": 0,
+            "lock_attempted": False,
             "lock_wait_ms": 0,
             "lock_abandoned": False,
             "location_count": 1,
             "missing_location_count": 0,
             "write_succeeded": True,
+            "exception_type": "",
         }
 
     def test_reports_zero_counts_for_an_empty_file(self, tmp_path, monkeypatch):
@@ -4035,3 +4037,160 @@ class TestMissingLocationTelemetry:
         assert len(details) == 1
         assert details[0]["location_count"] == 1
         assert details[0]["missing_location_count"] == 0
+
+
+class TestStatusFileFailureReason:
+    """A failed status file write has to say what kind of failure it was."""
+
+    @staticmethod
+    def _status_file_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            e["event_details"]
+            for e in events
+            if e["event_type"] == "com.amazon.rum.deadline.queue_sync_output_status_file"
+        ]
+
+    def test_a_failed_write_reports_the_exception_class(self, tmp_path, monkeypatch):
+        events = _capture_pointer_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+
+        def _boom(file_path, data):
+            raise PermissionError(13, "Permission denied", file_path)
+
+        monkeypatch.setattr("deadline.client.cli._download_status_file._atomic_write_json", _boom)
+
+        _run_sync(
+            tmp_path,
+            str(tmp_path / "checkpoint"),
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile={
+                "fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]
+            },
+        )
+
+        details = self._status_file_events(events)
+        assert len(details) == 1
+        assert details[0]["write_succeeded"] is False
+        assert details[0]["exception_type"] == "PermissionError"
+
+    def test_a_successful_write_reports_no_exception(self, tmp_path, monkeypatch):
+        events = _capture_pointer_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+
+        _run_sync(
+            tmp_path,
+            str(tmp_path / "checkpoint"),
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile={
+                "fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]
+            },
+        )
+
+        details = self._status_file_events(events)
+        assert details[0]["write_succeeded"] is True
+        assert details[0]["exception_type"] == ""
+
+    def test_reaching_the_lock_is_reported(self, tmp_path, monkeypatch):
+        events = _capture_pointer_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+
+        _run_sync(
+            tmp_path,
+            str(tmp_path / "checkpoint"),
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile={
+                "fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]
+            },
+        )
+
+        assert self._status_file_events(events)[0]["lock_attempted"] is True
+
+    def test_a_lock_that_fails_before_it_yields_does_not_report_a_healthy_lock(
+        self, tmp_path, monkeypatch
+    ):
+        """The lock creates the containing directory, so an unwritable root dies in its setup and
+        the zero wait must not read as a clean acquisition."""
+        events = _capture_pointer_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+        # A file where the .deadline directory belongs fails the lock's makedirs.
+        (renders_dir / ".deadline").write_text("not a directory")
+
+        _run_sync(
+            tmp_path,
+            str(tmp_path / "checkpoint"),
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile={
+                "fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]
+            },
+        )
+
+        details = self._status_file_events(events)
+        assert len(details) == 1
+        assert details[0]["write_succeeded"] is False
+        assert details[0]["lock_attempted"] is False
+        assert details[0]["lock_wait_ms"] == 0
+        assert details[0]["exception_type"] != ""
+
+    def test_the_payload_carries_no_path_or_exception_message(self, tmp_path, monkeypatch):
+        """OSError carries the filename in its string form, so only the class name may be sent."""
+        events = _capture_pointer_events(monkeypatch)
+        secret_dir = tmp_path / "acme-studios-confidential-film"
+        secret_dir.mkdir()
+
+        def _boom(file_path, data):
+            raise PermissionError(13, "Permission denied", file_path)
+
+        monkeypatch.setattr("deadline.client.cli._download_status_file._atomic_write_json", _boom)
+
+        _run_sync(
+            tmp_path,
+            str(tmp_path / "checkpoint"),
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile={
+                "fileSystemLocations": [{"name": "renders", "path": str(secret_dir)}]
+            },
+        )
+
+        details = self._status_file_events(events)
+        assert len(details) == 1
+        payload = json.dumps(details[0])
+        assert "acme-studios-confidential-film" not in payload
+        assert "Permission denied" not in payload
+        assert str(tmp_path) not in payload
+        assert socket.gethostname() not in payload
+
+    def test_the_payload_key_set_is_pinned(self, tmp_path, monkeypatch):
+        """A new field must not reach the payload without a test noticing."""
+        events = _capture_pointer_events(monkeypatch)
+        renders_dir = tmp_path / "renders"
+        renders_dir.mkdir()
+
+        _run_sync(
+            tmp_path,
+            str(tmp_path / "checkpoint"),
+            local_storage_profile_id=MOCK_STORAGE_PROFILE_ID,
+            local_storage_profile={
+                "fileSystemLocations": [{"name": "renders", "path": str(renders_dir)}]
+            },
+        )
+
+        assert set(self._status_file_events(events)[0]) == {
+            "file_size_bytes",
+            "job_count",
+            "task_record_count",
+            "jobs_added",
+            "task_records_added",
+            "read_duration_ms",
+            "write_duration_ms",
+            "lock_attempted",
+            "lock_wait_ms",
+            "lock_abandoned",
+            "location_count",
+            "missing_location_count",
+            "write_succeeded",
+            "exception_type",
+        }

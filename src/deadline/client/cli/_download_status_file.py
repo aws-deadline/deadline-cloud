@@ -488,6 +488,8 @@ class _WriteMeasurements:
     job_count_before: int = 0
     task_record_count_before: int = 0
     write_succeeded: bool = False
+    exception_type: str = ""
+    lock_attempted: bool = False
     lock: _LockOutcome = field(default_factory=_LockOutcome)
 
 
@@ -529,11 +531,18 @@ def _record_status_file_telemetry(
                 "task_records_added": task_record_count - measurements.task_record_count_before,
                 "read_duration_ms": measurements.read_duration_ms,
                 "write_duration_ms": measurements.write_duration_ms,
+                # Distinguishes a zero lock wait that means "acquired instantly" from one that
+                # means the run never reached the lock, or died inside it before it yielded.
+                "lock_attempted": measurements.lock_attempted,
                 "lock_wait_ms": measurements.lock.wait_ms,
                 "lock_abandoned": measurements.lock.abandoned,
                 "location_count": measurements.location_count,
                 "missing_location_count": measurements.missing_location_count,
                 "write_succeeded": measurements.write_succeeded,
+                # The class name only, never the exception's string form, which for OSError
+                # includes the filename. Without it a failed write says nothing an operator can
+                # act on: a denied permission and a full share read identically.
+                "exception_type": measurements.exception_type,
             },
         )
     except Exception as e:
@@ -834,6 +843,7 @@ def write_download_status_file(
         try:
             with _status_file_lock(status_file_path) as lock_outcome:
                 measurements.lock = lock_outcome
+                measurements.lock_attempted = True
 
                 read_started = time.monotonic()
                 existing_jobs = _read_existing_status_file(status_file_path)
@@ -860,6 +870,7 @@ def write_download_status_file(
             if not fmt.suppressed:
                 fmt.summary_row("status file", _format_path(status_file_path))
         except Exception as e:
+            measurements.exception_type = type(e).__name__
             logger.warning(f"Failed to write download status file to {status_file_path}: {e}")
             fmt.warning(f"failed to write status file to {_format_path(status_file_path)}: {e}")
         finally:
