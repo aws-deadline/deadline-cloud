@@ -1,3 +1,13 @@
+## 0.60.9 (2026-10-07)
+
+### Features
+* Added support for the OpenJD `LIST[LIST[INT]]` job parameter type, so jobs can take a list of integer lists such as `[[1, 2], [3, 4]]`. (#1392)
+* Added support for the OpenJD `LIST[PATH]` job parameter type, so jobs can take a list of file or directory paths. (#1389)
+* On Python 3.9, the library now ships its own copy of the latest Deadline Cloud service model, so newer APIs such as ListVolumes work there too. botocore no longer releases updates for Python 3.9. Service models in `~/.aws/models` or `AWS_DATA_PATH` still take priority over the bundled copy. (#1390)
+
+### Bug Fixes
+* Fixed a problem under PySide2 where a background task could keep raising errors after its GUI component was closed. PySide2's "already deleted" error is now handled the same way as in PySide6 and PyQt5. (#1389)
+* Fixed `sync-output` checkpoints saving the same session end time for every job. Before this fix, the next run could download sessions it had already handled again, or skip sessions it hadn't handled yet. (#1376)
 ## 0.60.8 (2026-10-02)
 
 ### Features
