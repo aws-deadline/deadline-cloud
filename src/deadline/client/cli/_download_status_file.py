@@ -484,14 +484,17 @@ class _WriteMeasurements:
     read_duration_ms: int = 0
     write_duration_ms: int = 0
     location_count: int = 1
+    missing_location_count: int = 0
     job_count_before: int = 0
     task_record_count_before: int = 0
     write_succeeded: bool = False
+    exception_type: str = ""
+    lock_attempted: bool = False
     lock: _LockOutcome = field(default_factory=_LockOutcome)
 
 
 def _record_status_file_telemetry(
-    status_file_path: str,
+    status_file_path: Optional[str],
     status_content: Optional[dict[str, Any]],
     measurements: _WriteMeasurements,
 ) -> None:
@@ -502,6 +505,10 @@ def _record_status_file_telemetry(
     every run while the content builds fine each time, and reporting the intended delta there
     would count the same growth once per failed attempt. Nothing in the event identifies which
     file a sample came from, so a reader summing the deltas cannot correct for that.
+
+    `location_count` and `missing_location_count` describe the run rather than the location, so
+    both repeat unchanged on every sample the run emits. Read them from any one sample; summing
+    either across a run's samples multiplies it by the number of locations that wrote.
     """
     try:
         if status_content is None or not measurements.write_succeeded:
@@ -524,14 +531,34 @@ def _record_status_file_telemetry(
                 "task_records_added": task_record_count - measurements.task_record_count_before,
                 "read_duration_ms": measurements.read_duration_ms,
                 "write_duration_ms": measurements.write_duration_ms,
+                # Distinguishes a zero lock wait that means "acquired instantly" from one that
+                # means the run never reached the lock, or died inside it before it yielded.
+                "lock_attempted": measurements.lock_attempted,
                 "lock_wait_ms": measurements.lock.wait_ms,
                 "lock_abandoned": measurements.lock.abandoned,
                 "location_count": measurements.location_count,
+                "missing_location_count": measurements.missing_location_count,
                 "write_succeeded": measurements.write_succeeded,
+                # The class name only, never the exception's string form, which for OSError
+                # includes the filename. Without it a failed write says nothing an operator can
+                # act on: a denied permission and a full share read identically.
+                "exception_type": measurements.exception_type,
             },
         )
     except Exception as e:
         logger.debug(f"Failed to record status file telemetry for {status_file_path}: {e}")
+
+
+@dataclass
+class _StatusFileTargets:
+    """Where the status file will be written, and how many locations were dropped getting there.
+
+    The dropped count is carried rather than recomputed, so a location that mounts between the
+    two checks cannot make the written and dropped counts disagree in the same run.
+    """
+
+    paths: list[str] = field(default_factory=list)
+    missing_location_count: int = 0
 
 
 def _get_status_file_paths(
@@ -539,31 +566,36 @@ def _get_status_file_paths(
     local_storage_profile_id: Optional[str],
     local_storage_profile: Optional[dict[str, Any]],
     checkpoint_dir: str,
-) -> list[str]:
+) -> _StatusFileTargets:
     """
     Determines all paths where the status file should be written.
 
     With storage profile: writes to {each_file_system_location}/.deadline/{queue_id}_download_status.json
     Without storage profile: writes to {checkpoint_dir}/{queue_id}_ignore-storage-profiles_download_status.json
+
+    A location whose root is not a directory is dropped and counted, because nothing downstream
+    writes it and so nothing downstream would otherwise report it.
     """
     if local_storage_profile_id and local_storage_profile:
         paths = []
+        missing_location_count = 0
         for location in local_storage_profile.get("fileSystemLocations", []):
             location_path = location["path"]
             # Only include paths whose root location already exists — avoids writing
-            # phantom files under an empty mount point when the NAS is unmounted.
+            # phantom files under a missing mount point when the NAS is unmounted.
             if not os.path.isdir(location_path):
+                missing_location_count += 1
                 continue
             status_file_path = os.path.join(
                 location_path, ".deadline", f"{queue_id}_download_status.json"
             )
             paths.append(status_file_path)
-        return paths
+        return _StatusFileTargets(paths, missing_location_count)
     else:
         status_file_path = os.path.join(
             checkpoint_dir, f"{queue_id}_ignore-storage-profiles_download_status.json"
         )
-        return [status_file_path]
+        return _StatusFileTargets([status_file_path])
 
 
 def _get_default_pointer_path(queue_id: str) -> str:
@@ -572,10 +604,55 @@ def _get_default_pointer_path(queue_id: str) -> str:
     return os.path.join(default_dir, f"{queue_id}_ignore-storage-profiles_download_status.json")
 
 
+@dataclass
+class _PointerMeasurements:
+    """How the once-per-run pointer file write behaved.
+
+    `outcome` starts at "failed" because the telemetry emit happens in a `finally` that runs
+    before the handler catching the exception, so a value set only on the way out would never
+    be reported and every failure would read as whatever the last success wrote.
+    """
+
+    outcome: str = "failed"
+    exception_type: str = ""
+    read_duration_ms: int = 0
+    write_duration_ms: int = 0
+    lock_attempted: bool = False
+    superseded_real_data: bool = False
+    lock: _LockOutcome = field(default_factory=_LockOutcome)
+
+
+def _record_pointer_telemetry(measurements: _PointerMeasurements) -> None:
+    """Best-effort: the pointer write has already happened, so a telemetry failure must not fail it.
+
+    Takes no path and no exception text. Every field is a scalar this module chose, so nothing
+    derived from a customer's filesystem can reach the payload — `OSError` carries the filename
+    in its string form, which is why only the exception's class name is reported.
+    """
+    try:
+        api.get_deadline_cloud_library_telemetry_client().record_event(
+            event_type="com.amazon.rum.deadline.queue_sync_output_status_pointer",
+            event_details={
+                "outcome": measurements.outcome,
+                "exception_type": measurements.exception_type,
+                "read_duration_ms": measurements.read_duration_ms,
+                "write_duration_ms": measurements.write_duration_ms,
+                # Distinguishes a zero lock wait that means "acquired instantly" from one that
+                # means the run never reached the lock, or died inside it before it yielded.
+                "lock_attempted": measurements.lock_attempted,
+                "lock_wait_ms": measurements.lock.wait_ms,
+                "lock_abandoned": measurements.lock.abandoned,
+                "superseded_real_data": measurements.superseded_real_data,
+            },
+        )
+    except Exception as e:
+        logger.debug(f"Failed to record status file pointer telemetry: {e}")
+
+
 def _write_pointer_if_needed(
     queue_id: str,
     checkpoint_dir: str,
-    actual_status_file_path: str,
+    actual_status_file_path: Optional[str],
     print_function_callback: Callable[[Any], None] = lambda msg: None,
 ) -> None:
     """Writes a pointer file at the default well-known path when the actual status file
@@ -588,74 +665,122 @@ def _write_pointer_if_needed(
 
     The pointer write is best-effort: a failure here logs a warning but does not
     abort — the real status file was written successfully by the caller.
+
+    `actual_status_file_path` is None when no status file reached disk this run, leaving nothing
+    to point at. That is reported rather than skipped, so a run whose pointer could not be
+    written is never silently absent from the samples.
     """
-    # Compare canonical (symlink-resolved) paths so a custom --checkpoint-dir that is a
-    # symlink or alias of the default dir is recognized as the default — otherwise we could
-    # write a pointer on top of the real status file and destroy the user's downloads.
-    default_dir = os.path.realpath(os.path.expanduser(DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR))
-    resolved_checkpoint_dir = os.path.realpath(checkpoint_dir)
-    if resolved_checkpoint_dir == default_dir:
-        # Status file is already at the default location — no pointer needed.
-        return
-
-    pointer_path = _get_default_pointer_path(queue_id)
+    measurements = _PointerMeasurements()
+    superseded_path: Optional[str] = None
     try:
-        # Take the same lock a real status-file write to this path would take. A concurrent
-        # sync of this queue that uses the *default* checkpoint dir writes real status data to
-        # this exact path under _status_file_lock; without holding it here, the pointer write
-        # would clobber that data (or vice-versa) — the last-writer-wins race the lock prevents.
-        # The lock also closes the has_real_data read → write TOCTOU window below.
-        with _status_file_lock(pointer_path):
-            # If the real status file and the pointer path resolve to the same physical file
-            # (e.g. the two dirs alias each other in a way the realpath dir check missed),
-            # writing the pointer would clobber the real data. The FE already finds it here — skip.
-            if (
-                os.path.exists(actual_status_file_path)
-                and os.path.exists(pointer_path)
-                and os.path.samefile(actual_status_file_path, pointer_path)
-            ):
-                return
+        if actual_status_file_path is None:
+            # Settled before the lock, and before the default-directory comparison: a run with
+            # nothing to point at must not create the default directory or wait out a contended
+            # lock just to report its outcome, and "nothing was written" is the more actionable
+            # of the two facts when the checkpoint dir is also the default.
+            measurements.outcome = "no_status_file"
+            return
 
-            # If the default path currently holds real status data (not already a pointer),
-            # overwriting it with the pointer intentionally discards that data. This file is a
-            # receipt, not durable history — per-task entries repopulate at the new location as
-            # jobs sync — and we deliberately do not copy it to a backup/history file. Failing
-            # closed (an old Monitor shows "-") beats leaving a stale status file that a Monitor
-            # would read as current. `superseded_path` records where the data was purely as a
-            # reference for the warning below, not as a recoverable location.
-            superseded_path: Optional[str] = None
-            if os.path.exists(pointer_path):
+        # Compare canonical (symlink-resolved) paths so a custom --checkpoint-dir that is a
+        # symlink or alias of the default dir is recognized as the default — otherwise we could
+        # write a pointer on top of the real status file and destroy the user's downloads.
+        default_dir = os.path.realpath(os.path.expanduser(DEFAULT_QUEUE_INCREMENTAL_DOWNLOAD_DIR))
+        resolved_checkpoint_dir = os.path.realpath(checkpoint_dir)
+        if resolved_checkpoint_dir == default_dir:
+            # Status file is already at the default location — no pointer needed.
+            measurements.outcome = "already_default"
+            return
+
+        pointer_path = _get_default_pointer_path(queue_id)
+        try:
+            # Take the same lock a real status-file write to this path would take. A concurrent
+            # sync of this queue that uses the *default* checkpoint dir writes real status data to
+            # this exact path under _status_file_lock; without holding it here, the pointer write
+            # would clobber that data (or vice-versa) — the last-writer-wins race the lock prevents.
+            # The lock also closes the has_real_data read → write TOCTOU window below.
+            with _status_file_lock(pointer_path) as lock_outcome:
+                measurements.lock = lock_outcome
+                measurements.lock_attempted = True
+
+                read_started = time.monotonic()
                 try:
-                    with open(pointer_path) as _f:
-                        existing = json.load(_f)
-                    has_real_data = "jobs" in existing
-                except Exception:
-                    # A corrupt or unreadable existing file only affects the warning below; let
-                    # the pointer overwrite it.
-                    has_real_data = False
-                if has_real_data:
-                    superseded_path = pointer_path
-                    warning = (
-                        f"Previous job history at {pointer_path} has been replaced by a pointer to "
-                        f"{actual_status_file_path}. Job statuses will repopulate in the Monitor as "
-                        f"future syncs run."
-                    )
-                    logger.warning(warning)
-                    _SyncOutputFormatter(print_function_callback).warning(warning)
+                    # If the real status file and the pointer path resolve to the same physical file
+                    # (e.g. the two dirs alias each other in a way the realpath dir check missed),
+                    # writing the pointer would clobber the real data. The FE already finds it
+                    # here — skip.
+                    if (
+                        os.path.exists(actual_status_file_path)
+                        and os.path.exists(pointer_path)
+                        and os.path.samefile(actual_status_file_path, pointer_path)
+                    ):
+                        measurements.outcome = "same_file_skipped"
+                        return
 
-            pointer: dict[str, Any] = {
-                "schema_version": DOWNLOAD_STATUS_FILE_SCHEMA_VERSION,
-                "status_file_path": actual_status_file_path,
-            }
-            if superseded_path:
-                pointer["superseded_path"] = superseded_path
-            _atomic_write_json(pointer_path, pointer)
-    except Exception as e:
-        logger.warning(
-            f"Failed to write status file pointer at {pointer_path}: {e}. "
-            f"The status file was written to {actual_status_file_path} but the monitor "
-            f"may not be able to locate it automatically."
-        )
+                    # If the default path currently holds real status data (not already a pointer),
+                    # overwriting it with the pointer intentionally discards that data. This file is
+                    # a receipt, not durable history — per-task entries repopulate at the new
+                    # location as jobs sync — and we deliberately do not copy it to a backup/history
+                    # file. Failing closed (an old Monitor shows "-") beats leaving a stale status
+                    # file that a Monitor would read as current. `superseded_path` records where the
+                    # data was purely as a reference for the warning below, not as a recoverable
+                    # location.
+                    if os.path.exists(pointer_path):
+                        try:
+                            with open(pointer_path) as _f:
+                                existing = json.load(_f)
+                            has_real_data = "jobs" in existing
+                        except Exception:
+                            # A corrupt or unreadable existing file only affects the warning below;
+                            # let the pointer overwrite it.
+                            has_real_data = False
+                        if has_real_data:
+                            superseded_path = pointer_path
+                finally:
+                    measurements.read_duration_ms = int((time.monotonic() - read_started) * 1000)
+
+                pointer: dict[str, Any] = {
+                    "schema_version": DOWNLOAD_STATUS_FILE_SCHEMA_VERSION,
+                    "status_file_path": actual_status_file_path,
+                }
+                if superseded_path:
+                    pointer["superseded_path"] = superseded_path
+                write_started = time.monotonic()
+                try:
+                    _atomic_write_json(pointer_path, pointer)
+                finally:
+                    # Reported whatever the outcome: how long a failing write blocked before it
+                    # raised is the measurement that says whether the share was slow or absent.
+                    measurements.write_duration_ms = int((time.monotonic() - write_started) * 1000)
+                # Inside the lock, so releasing it is not what decides whether the pointer that is
+                # already on disk gets reported as written.
+                measurements.outcome = "written"
+                measurements.superseded_real_data = superseded_path is not None
+        except Exception as e:
+            measurements.exception_type = type(e).__name__
+            logger.warning(
+                f"Failed to write status file pointer at {pointer_path}: {e}. "
+                f"The status file was written to {actual_status_file_path} but the monitor "
+                f"may not be able to locate it automatically."
+            )
+
+        # Told only once the write has happened, because a failed write leaves the previous file
+        # intact and reporting history as gone when it is still there is worse than saying
+        # nothing. Outside the handler above and swallowing its own errors, so a closed output
+        # pipe cannot report an already-written pointer as a failed write, and cannot abort the
+        # run before the caller saves its checkpoint.
+        if measurements.outcome == "written" and superseded_path:
+            warning = (
+                f"Previous job history at {superseded_path} has been replaced by a pointer to "
+                f"{actual_status_file_path}. Job statuses will repopulate in the Monitor as "
+                f"future syncs run."
+            )
+            try:
+                logger.warning(warning)
+                _SyncOutputFormatter(print_function_callback).warning(warning)
+            except Exception as e:
+                logger.debug(f"Could not surface the superseded job history warning: {e}")
+    finally:
+        _record_pointer_telemetry(measurements)
 
 
 def write_download_status_file(
@@ -687,20 +812,38 @@ def write_download_status_file(
         print_function_callback: Callback for printing output.
     """
     fmt = _SyncOutputFormatter(print_function_callback)
-    status_file_paths = _get_status_file_paths(
+    targets = _get_status_file_paths(
         queue_id=queue_id,
         local_storage_profile_id=local_storage_profile_id,
         local_storage_profile=local_storage_profile,
         checkpoint_dir=checkpoint_dir,
     )
+    status_file_paths = targets.paths
+
+    if not status_file_paths:
+        # The loop below is the only other thing that reports a location, so a run where every
+        # location's root is missing would otherwise be the one run that produces no sample at
+        # all. A location_count of zero is reachable no other way, which is what separates this
+        # from a write that was attempted and failed.
+        _record_status_file_telemetry(
+            None,
+            None,
+            _WriteMeasurements(
+                location_count=0, missing_location_count=targets.missing_location_count
+            ),
+        )
 
     written_paths: list[str] = []
     for status_file_path in status_file_paths:
-        measurements = _WriteMeasurements(location_count=len(status_file_paths))
+        measurements = _WriteMeasurements(
+            location_count=len(status_file_paths),
+            missing_location_count=targets.missing_location_count,
+        )
         status_content: Optional[dict[str, Any]] = None
         try:
             with _status_file_lock(status_file_path) as lock_outcome:
                 measurements.lock = lock_outcome
+                measurements.lock_attempted = True
 
                 read_started = time.monotonic()
                 existing_jobs = _read_existing_status_file(status_file_path)
@@ -727,6 +870,7 @@ def write_download_status_file(
             if not fmt.suppressed:
                 fmt.summary_row("status file", _format_path(status_file_path))
         except Exception as e:
+            measurements.exception_type = type(e).__name__
             logger.warning(f"Failed to write download status file to {status_file_path}: {e}")
             fmt.warning(f"failed to write status file to {_format_path(status_file_path)}: {e}")
         finally:
@@ -738,8 +882,12 @@ def write_download_status_file(
     # When --ignore-storage-profiles is used, the FE has no API-derivable location for the
     # status file. Write a pointer at the well-known default path so the FE can always find
     # the real file even when the user passed a custom --checkpoint-dir. Only point at a file
-    # that was actually written — pointing the FE at a missing file is worse than no pointer.
-    if not local_storage_profile_id and written_paths:
+    # that was actually written — pointing the FE at a missing file is worse than no pointer,
+    # which is what the None says, and the call is made anyway so the run still reports.
+    if not local_storage_profile_id:
         _write_pointer_if_needed(
-            queue_id, checkpoint_dir, written_paths[0], print_function_callback
+            queue_id,
+            checkpoint_dir,
+            written_paths[0] if written_paths else None,
+            print_function_callback,
         )
