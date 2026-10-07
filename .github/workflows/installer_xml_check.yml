@@ -1,0 +1,13 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+name: Installer XML changes
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: aws-deadline/.github/.github/workflows/reusable_installer_xml_check.yml@mainline
