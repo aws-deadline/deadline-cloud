@@ -23,10 +23,11 @@ The status includes three parts:
 
 import os
 from configparser import ConfigParser
+from functools import partial
 from logging import getLogger
 from typing import Optional
 
-from qtpy.QtCore import QObject, QFileSystemWatcher, Qt, Signal
+from qtpy.QtCore import QObject, QFileSystemWatcher, QTimer, Qt, Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
@@ -37,6 +38,20 @@ from .controllers import AsyncTaskRunner
 logger = getLogger(__name__)
 
 _deadline_authentication_status = None
+
+# How often (in milliseconds) to re-probe the authentication status while a GUI is
+# open. Credentials can expire in place, or be changed out-of-process (e.g. a
+# `deadline auth logout`/`login` from a terminal). Neither of those reliably trips
+# the QFileSystemWatcher, so we poll as a backstop to keep the UI in sync.
+_AUTH_STATUS_POLL_INTERVAL_MS = 30 * 1000
+
+# Number of consecutive quiet-poll probe failures required before a previously
+# AUTHENTICATED state is downgraded in the UI. check_authentication_status maps
+# any probe exception (including transient network/throttling errors) to a
+# non-AUTHENTICATED status, so a single blip should not flip the UI; requiring a
+# couple of consecutive failures debounces that without meaningfully delaying a
+# real logout/expiry (which fails every poll).
+_AUTH_STATUS_POLL_FAILURE_THRESHOLD = 2
 
 
 class DeadlineAuthenticationStatus(QObject):
@@ -79,6 +94,14 @@ class DeadlineAuthenticationStatus(QObject):
         self.__auth_status: Optional[api.AwsAuthenticationStatus] = None
         self.__api_availability: Optional[bool] = None
 
+        # Count of consecutive *quiet poll* probe failures while otherwise
+        # AUTHENTICATED. The probe reports CONFIGURATION_ERROR/NEEDS_LOGIN on any
+        # exception, including transient network/throttling blips, so we require a
+        # few consecutive failures before downgrading a steady AUTHENTICATED state
+        # — otherwise a momentary blip would flip the UI to "Log in" and back
+        # every poll interval. Reset on any success or on a user-driven refresh.
+        self.__consecutive_poll_failures = 0
+
         # Use AsyncTaskRunner for background API calls
         self._runner = AsyncTaskRunner(self)
         self._runner.task_error.connect(self._handle_task_error, Qt.QueuedConnection)
@@ -105,6 +128,20 @@ class DeadlineAuthenticationStatus(QObject):
             )
         self.aws_creds_file_watcher.fileChanged.connect(self.files_changed)
         self.aws_creds_file_watcher.directoryChanged.connect(self.files_changed)
+
+        # The file watcher only fires on direct add/remove/rename of entries in the
+        # watched directories; it misses in-place credential rewrites, expiry, and
+        # out-of-process changes. Poll periodically as a backstop so the UI reflects
+        # the true auth state even when nothing on disk visibly changed.
+        #
+        # The timer is only run while at least one auth-status widget is visible
+        # (see start_polling/stop_polling), so we never issue background AWS calls
+        # when no GUI is shown, and the timer can't outlive the widgets that need
+        # it. _poll_subscribers ref-counts those widgets.
+        self._poll_subscribers = 0
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(_AUTH_STATUS_POLL_INTERVAL_MS)
+        self._poll_timer.timeout.connect(self._poll_auth_status)
 
         self.refresh_status()
 
@@ -193,48 +230,148 @@ class DeadlineAuthenticationStatus(QObject):
 
     def _on_creds_source_success(self, result: api.AwsCredentialsSource) -> None:
         """Handle successful credentials source fetch."""
-        self.__creds_source = result
-        self.creds_source_changed.emit()
+        self._set_creds_source(result)
 
     def _on_creds_source_error(self, error: BaseException) -> None:
         """Handle credentials source fetch error."""
         logger.exception(error)
-        self.__creds_source = None
-        self.creds_source_changed.emit()
+        self._set_creds_source(None)
 
-    def _refresh_auth_status(self) -> api.AwsAuthenticationStatus:
-        """Background task to check authentication status."""
+    def _set_creds_source(self, value: Optional[api.AwsCredentialsSource]) -> None:
+        """Update the cached creds source, emitting only when it actually changed.
+
+        Emitting only on change lets the periodic poll re-probe silently: nothing
+        is signalled (and so nothing re-renders) while the state is steady.
+        """
+        if self.__creds_source != value:
+            self.__creds_source = value
+            self.creds_source_changed.emit()
+
+    def _refresh_auth_status(self, force_refresh: bool = False) -> api.AwsAuthenticationStatus:
+        """Background task to check authentication status.
+
+        When ``force_refresh`` is set (the periodic poll), the cached boto3
+        session is invalidated first so out-of-process credential changes that
+        the file watcher misses — an in-place rewrite of ``~/.aws/credentials``,
+        or a logout — are actually re-read rather than validated against the
+        stale, in-memory cached session. This runs on the background thread just
+        before the probe, keeping the (potentially slow) refresh off the Qt loop.
+        """
+        if force_refresh:
+            api.get_boto3_session(force_refresh=True, config=self.config)
         return api.check_authentication_status(config=self.config)
 
-    def _on_auth_status_success(self, result: api.AwsAuthenticationStatus) -> None:
+    def _on_auth_status_success(
+        self, result: api.AwsAuthenticationStatus, quiet: bool = False
+    ) -> None:
         """Handle successful authentication status check."""
-        self.__auth_status = result
-        self.auth_status_changed.emit()
+        # A successful probe (of any status) clears the transient-failure streak.
+        self.__consecutive_poll_failures = 0
         # API availability is equivalent to being AUTHENTICATED: both derive from
         # the same deadline:ListFarms probe. Compute it from the status result
         # rather than issuing a second, redundant probe.
-        self.__api_availability = result == api.AwsAuthenticationStatus.AUTHENTICATED
-        self.api_availability_changed.emit()
+        self._set_auth_status(result, result == api.AwsAuthenticationStatus.AUTHENTICATED)
 
-    def _on_auth_status_error(self, error: BaseException) -> None:
+    def _on_auth_status_error(self, error: BaseException, quiet: bool = False) -> None:
         """Handle authentication status check error."""
         logger.exception(error)
-        self.__auth_status = api.AwsAuthenticationStatus.CONFIGURATION_ERROR
-        self.auth_status_changed.emit()
-        self.__api_availability = False
-        self.api_availability_changed.emit()
+        # A quiet-poll failure while we are otherwise AUTHENTICATED may just be a
+        # transient network/service blip (check_authentication_status maps any
+        # probe exception to CONFIGURATION_ERROR). Debounce: only downgrade the UI
+        # after N consecutive failures, so a momentary blip does not flip the
+        # widget to "Log in"/"error" and back every poll interval. User-driven
+        # refreshes (quiet=False) still surface the error immediately.
+        if quiet and self.__auth_status == api.AwsAuthenticationStatus.AUTHENTICATED:
+            self.__consecutive_poll_failures += 1
+            if self.__consecutive_poll_failures < _AUTH_STATUS_POLL_FAILURE_THRESHOLD:
+                logger.info(
+                    "Quiet auth poll failed (%d/%d) while AUTHENTICATED; not downgrading yet",
+                    self.__consecutive_poll_failures,
+                    _AUTH_STATUS_POLL_FAILURE_THRESHOLD,
+                )
+                return
+        self.__consecutive_poll_failures = 0
+        self._set_auth_status(api.AwsAuthenticationStatus.CONFIGURATION_ERROR, False)
+
+    def _set_auth_status(
+        self,
+        auth_status: Optional[api.AwsAuthenticationStatus],
+        api_availability: Optional[bool],
+    ) -> None:
+        """Update the cached auth status / API availability, emitting only on change.
+
+        Emitting only on change lets the periodic poll re-probe silently: a steady
+        AUTHENTICATED state produces no signals, while a transition (e.g. to
+        NEEDS_LOGIN after expiry or an external logout) flips the UI exactly once.
+        """
+        if self.__auth_status != auth_status:
+            self.__auth_status = auth_status
+            self.auth_status_changed.emit()
+        if self.__api_availability != api_availability:
+            self.__api_availability = api_availability
+            self.api_availability_changed.emit()
+
+    def _start_polling(self) -> None:
+        """Register interest in periodic auth-status polling.
+
+        Ref-counted: the timer runs while at least one caller (typically a live
+        auth-status widget) has registered. Pairs with :meth:`_stop_polling`. This
+        keeps polling — and the background AWS probes it triggers — scoped to when
+        a GUI is actually present, rather than for the entire lifetime of the
+        process-wide singleton (which would otherwise leak probes into a headless
+        process or across unrelated tests).
+        """
+        self._poll_subscribers += 1
+        if not self._poll_timer.isActive():
+            self._poll_timer.start()
+
+    def _stop_polling(self) -> None:
+        """Release interest in periodic auth-status polling (see _start_polling).
+
+        The timer is stopped once the last subscriber releases. Extra/unbalanced
+        calls are clamped at zero so a stray stop can't drive the count negative.
+        """
+        if self._poll_subscribers > 0:
+            self._poll_subscribers -= 1
+        if self._poll_subscribers == 0 and self._poll_timer.isActive():
+            self._poll_timer.stop()
+
+    def _poll_auth_status(self) -> None:
+        """Timer-driven background re-check of the authentication status.
+
+        Runs a quiet refresh so a steady state produces no UI churn, and skips the
+        tick entirely if a refresh is already in flight to avoid cancelling and
+        restarting work on every interval.
+        """
+        if self._runner.is_running("auth_status") or self._runner.is_running("creds_source"):
+            return
+        self._refresh_status(quiet=True)
 
     def refresh_status(self) -> None:
         """
         Initiates an asynchronous status refresh.
         """
-        # Clear current values and emit signals to indicate refresh started
-        self.__creds_source = None
-        self.creds_source_changed.emit()
-        self.__auth_status = None
-        self.auth_status_changed.emit()
-        self.__api_availability = None
-        self.api_availability_changed.emit()
+        self._refresh_status(quiet=False)
+
+    def _refresh_status(self, quiet: bool) -> None:
+        """
+        Initiates an asynchronous status refresh.
+
+        Args:
+            quiet (bool): When False (used for user-initiated refreshes), the
+                cached values are cleared first so widgets show a "Refreshing"
+                state while the probes run. When True (used by the periodic
+                poll), the cached values are left in place and signals fire only
+                if the probe result differs, so a steady auth state produces no
+                visible flicker.
+        """
+        if not quiet:
+            # A user-driven refresh should reflect the probe result immediately,
+            # so drop any in-progress transient-failure debounce.
+            self.__consecutive_poll_failures = 0
+            # Clear current values and emit signals to indicate refresh started
+            self._set_creds_source(None)
+            self._set_auth_status(None, None)
 
         # Start async tasks for each status check
         self._runner.run(
@@ -246,9 +383,12 @@ class DeadlineAuthenticationStatus(QObject):
         # The auth_status task also resolves api_availability (both rely on the
         # same deadline:ListFarms probe), so no separate api_availability task
         # is needed — see _on_auth_status_success / _on_auth_status_error.
+        # On a quiet poll, force-refresh the boto3 session so out-of-process
+        # credential changes are picked up, and pass ``quiet`` to the handlers so
+        # transient failures are debounced rather than flipping the UI at once.
         self._runner.run(
             operation_key="auth_status",
-            fn=self._refresh_auth_status,
-            on_success=self._on_auth_status_success,
-            on_error=self._on_auth_status_error,
+            fn=partial(self._refresh_auth_status, force_refresh=quiet),
+            on_success=partial(self._on_auth_status_success, quiet=quiet),
+            on_error=partial(self._on_auth_status_error, quiet=quiet),
         )
