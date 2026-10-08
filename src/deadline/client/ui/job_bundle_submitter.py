@@ -33,6 +33,9 @@ from ..job_bundle.saver import save_yaml_or_json_to_file
 from ..job_bundle._repository import S3BundleRepository as _S3BundleRepository
 from ..job_bundle.parameters import (
     JobParameter,
+    _absolute_path_value,
+    _has_expr_extension,
+    _path_list_with_absolute_items,
     apply_job_parameters,
     merge_queue_job_parameters,
     read_job_bundle_parameters,
@@ -150,6 +153,15 @@ def _validate_and_warn_about_parameters(
     )
 
     return reply == QMessageBox.Yes
+
+
+def _validated_cli_value(parameter: JobParameter, value: Any) -> Any:
+    """Validates a --parameter value against its definition, returning it with the correct type."""
+    try:
+        return validate_job_parameter_value(parameter, value)
+    except (ValueError, TypeError) as e:
+        # Convert the exception to DeadlineOperationError to avoid showing a full stack trace.
+        raise DeadlineOperationError(str(e))
 
 
 def show_job_bundle_submitter(
@@ -327,6 +339,7 @@ def show_job_bundle_submitter(
             job_bundle_dir,
             parameters,
             AssetReferences(),
+            allow_uri_path_values=_has_expr_extension(template),
         )
 
         save_yaml_or_json_to_file(
@@ -418,16 +431,21 @@ def show_job_bundle_submitter(
         # e.g. from the CLI when this is called by the 'deadline bundle gui-submit' command.
         if parameter["name"] in job_parameters_dict:
             value = job_parameters_dict.pop(parameter["name"])["value"]
-            # Convert any path parameters to absolute
+            # Convert path parameters to absolute as 'deadline bundle submit' does. With the
+            # EXPR extension, URIs are kept.
+            allow_uri_path_values = _has_expr_extension(template)
             if parameter["type"] == "PATH":
-                value = os.path.abspath(value)
-            # Validate the value against the parameter definition and ensure it has the correct type
-            try:
-                value = validate_job_parameter_value(parameter, value)
-            except (ValueError, TypeError) as e:
-                # Convert the exception to DeadlineOperationError to avoid showing a full stack trace.
-                raise DeadlineOperationError(str(e))
-            parameter["value"] = value
+                # As in 'deadline bundle submit', an empty value keeps the bundle's value.
+                if value != "":
+                    value = _absolute_path_value(value, allow_uri_path_values=allow_uri_path_values)
+                    parameter["value"] = _validated_cli_value(parameter, value)
+            elif parameter["type"] == "LIST[PATH]":
+                value = _path_list_with_absolute_items(
+                    parameter, value, allow_uri_path_values=allow_uri_path_values
+                )
+                parameter["value"] = _validated_cli_value(parameter, value)
+            else:
+                parameter["value"] = _validated_cli_value(parameter, value)
 
         # Populate the initial queue parameter values based on the job template parameter values
         if "default" in parameter or "value" in parameter:

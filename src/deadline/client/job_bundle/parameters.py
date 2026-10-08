@@ -11,10 +11,11 @@ __all__ = [
 ]
 
 import json
+import logging
 import math
 import os
 from collections import namedtuple
-from typing import Any, TYPE_CHECKING, cast, Union
+from typing import Any, TYPE_CHECKING, cast, Optional, Union
 
 # typing_extensions is only needed for type-checking. It fails to import at run-time in Python 3.7
 # so provide stubs at run-time.
@@ -25,10 +26,12 @@ else:
     NotRequired = object
     TypedDict = object
 
-from .._path_utils import is_absolute_path, is_path_contained
+from .._path_utils import is_absolute_path, is_path_contained, is_uri
 from ..exceptions import DeadlineOperationError
 from ._range_expr import parse_int_range_expr
 from .loader import read_yaml_or_json_object
+
+_logger = logging.getLogger(__name__)
 
 _VALID_PARAMETER_TYPES = (
     "STRING",
@@ -38,9 +41,11 @@ _VALID_PARAMETER_TYPES = (
     "BOOL",
     "RANGE_EXPR",
     "LIST[STRING]",
+    "LIST[PATH]",
     "LIST[INT]",
     "LIST[FLOAT]",
     "LIST[BOOL]",
+    "LIST[LIST[INT]]",
 )
 _BOOL_DISALLOWED_FIELDS = (
     "allowedValues",
@@ -59,27 +64,41 @@ _LIST_DISALLOWED_FIELDS = (
     "allowedValues",
     "minValue",
     "maxValue",
+)
+# Like a PATH, a LIST[PATH] describes the objects its paths name and how the job uses them.
+_PATH_ONLY_FIELDS = (
     "objectType",
     "dataFlow",
 )
 # LIST[BOOL] has no "item" object, since a boolean has nothing to constrain.
 _LIST_ITEM_FIELDS = {
     "LIST[STRING]": ("allowedValues", "minLength", "maxLength"),
+    "LIST[PATH]": ("allowedValues", "minLength", "maxLength"),
     "LIST[INT]": ("allowedValues", "minValue", "maxValue"),
     "LIST[FLOAT]": ("allowedValues", "minValue", "maxValue"),
+    # Constrains each inner list, whose own "item" constrains each integer as LIST[INT]'s does.
+    "LIST[LIST[INT]]": ("minLength", "maxLength", "item"),
 }
 _LIST_TYPES = (*_LIST_ITEM_FIELDS, "LIST[BOOL]")
-# CreateJob's JobParameter.stringList is a list of 0-64 ParameterString, each 0-1024 characters.
+# The list types whose items are strings, constrained by length.
+_STRING_ITEM_LIST_TYPES = ("LIST[STRING]", "LIST[PATH]")
+# CreateJob's JobParameter.stringList and pathList are each a list of 0-64 strings of 0-1024
+# characters.
 _MAX_STRING_LIST_ITEMS = 64
 _MAX_STRING_LIST_ITEM_LENGTH = 1024
 # CreateJob's JobParameter.intList, floatList and boolList each hold 0-512 items.
 _MAX_NUMBER_LIST_ITEMS = 512
 _MAX_BOOL_LIST_ITEMS = 512
+# CreateJob's JobParameter.intListList holds 0-512 inner lists of 0-64 integers each.
+_MAX_INT_LIST_LIST_ITEMS = 512
+_MAX_INNER_INT_LIST_ITEMS = 64
 _MAX_LIST_ITEMS = {
     "LIST[STRING]": _MAX_STRING_LIST_ITEMS,
+    "LIST[PATH]": _MAX_STRING_LIST_ITEMS,
     "LIST[INT]": _MAX_NUMBER_LIST_ITEMS,
     "LIST[FLOAT]": _MAX_NUMBER_LIST_ITEMS,
     "LIST[BOOL]": _MAX_BOOL_LIST_ITEMS,
+    "LIST[LIST[INT]]": _MAX_INT_LIST_LIST_ITEMS,
 }
 # The case-insensitive strings that a BOOL or LIST[BOOL] value accepts.
 _TRUE_STRINGS = ("true", "yes", "on", "1")
@@ -90,16 +109,21 @@ _MAX_INT64 = 2**63 - 1
 # How each list type describes its items in error messages, with an example value.
 _LIST_ITEM_DESCRIPTIONS = {
     "LIST[STRING]": ("strings", '["a", "b"]'),
+    "LIST[PATH]": ("paths", '["scenes/a.blend", "scenes/b.blend"]'),
     "LIST[INT]": ("integers", "[1, 2]"),
     "LIST[FLOAT]": ("numbers", "[0.5, 2]"),
     "LIST[BOOL]": ("booleans", "[true, false]"),
+    "LIST[LIST[INT]]": ("lists of integers", "[[1, 2], [3]]"),
 }
 _VALID_UI_CONTROLS = (
     "CHECK_BOX",
     "CHECK_BOX_LIST",
     "CHOOSE_DIRECTORY",
+    "CHOOSE_DIRECTORY_LIST",
     "CHOOSE_INPUT_FILE",
+    "CHOOSE_INPUT_FILE_LIST",
     "CHOOSE_OUTPUT_FILE",
+    "CHOOSE_OUTPUT_FILE_LIST",
     "DROPDOWN_LIST",
     "LINE_EDIT",
     "LINE_EDIT_LIST",
@@ -131,6 +155,8 @@ class JobParameterItemConstraints(TypedDict):
     maxLength: NotRequired[int]
     minValue: NotRequired[Union[int, float]]
     maxValue: NotRequired[Union[int, float]]
+    # Only for LIST[LIST[INT]], where it constrains each integer of an inner list.
+    item: NotRequired[JobParameterItemConstraints]
 
 
 class JobParameter(TypedDict):
@@ -150,6 +176,14 @@ class JobParameter(TypedDict):
     userInterface: NotRequired[UserInterfaceSpec]
 
 
+def _has_expr_extension(template: Any) -> bool:
+    """Whether a job template declares OpenJD's EXPR extension."""
+    if not isinstance(template, dict):
+        return False
+    extensions = template.get("extensions")
+    return isinstance(extensions, list) and "EXPR" in extensions
+
+
 def _normalize_parameter_type_case(template: dict[str, Any]) -> None:
     """Upper-cases the "type" of each job parameter definition in place when the template
     declares the EXPR extension, which makes OpenJD parameter type names case-insensitive.
@@ -158,8 +192,7 @@ def _normalize_parameter_type_case(template: dict[str, Any]) -> None:
     submitted to CreateJob is read separately and left unchanged, so task parameter
     type names reach the service as written.
     """
-    extensions = template.get("extensions")
-    if not isinstance(extensions, list) or "EXPR" not in extensions:
+    if not _has_expr_extension(template):
         return
     parameter_definitions = template.get("parameterDefinitions")
     if not isinstance(parameter_definitions, list):
@@ -177,9 +210,9 @@ def validate_job_parameter(
 ) -> JobParameter:
     """Validates a job parameter as defined by Open Job Description. The validation allows for the
     union of all possible fields. Per-type checks are applied for BOOL, RANGE_EXPR and
-    the LIST[STRING], LIST[INT], LIST[FLOAT] and LIST[BOOL] types, whose constraint fields
-    and defaults differ from the other types; the other types are not checked per type
-    (e.g. minValue is not limited to "INT" / "FLOAT").
+    the LIST[STRING], LIST[PATH], LIST[INT], LIST[FLOAT], LIST[BOOL] and LIST[LIST[INT]] types,
+    whose constraint fields and defaults differ from the other types; the other types are not
+    checked per type (e.g. minValue is not limited to "INT" / "FLOAT").
 
     name: <Identifier>
     type: "PATH"
@@ -288,7 +321,10 @@ def validate_job_parameter(
 
     if input.get("type") in _LIST_TYPES:
         list_type = input["type"]
-        for field in _LIST_DISALLOWED_FIELDS:
+        disallowed_fields: tuple[str, ...] = _LIST_DISALLOWED_FIELDS
+        if list_type != "LIST[PATH]":
+            disallowed_fields += _PATH_ONLY_FIELDS
+        for field in disallowed_fields:
             if field in input:
                 raise ValueError(
                     f'Job parameter "{name}" has "{field}" but type "{list_type}" does not support it'
@@ -298,8 +334,12 @@ def validate_job_parameter(
                 raise ValueError(
                     f'Job parameter "{name}" has "item" but type "{list_type}" does not support it'
                 )
-            elif list_type == "LIST[STRING]":
-                _validate_list_string_item_constraints(input["item"], parameter_name=name)
+            elif list_type in _STRING_ITEM_LIST_TYPES:
+                _validate_list_string_item_constraints(
+                    input["item"], list_type=list_type, parameter_name=name
+                )
+            elif list_type == "LIST[LIST[INT]]":
+                _validate_list_list_int_item_constraints(input["item"], parameter_name=name)
             else:
                 _validate_list_number_item_constraints(
                     input["item"], list_type=list_type, parameter_name=name
@@ -394,6 +434,22 @@ def validate_job_parameter(
         )
 
     # Checked last so the list and item constraints it applies are already validated.
+    if input.get("type") == "PATH":
+        # A PATH is constrained exactly as one item of a LIST[PATH] is.
+        _validate_string_constraints(input, parameter_name=name)
+        if "default" in input:
+            path_constraints = {
+                field: input[field]
+                for field in ("allowedValues", "minLength", "maxLength")
+                if field in input
+            }
+            try:
+                validate_job_parameter_value(
+                    cast(JobParameter, {"name": name, "type": "PATH", **path_constraints}),
+                    input["default"],
+                )
+            except (ValueError, TypeError) as e:
+                raise type(e)(f'In "default": {e}') from e
     if input.get("type") in _LIST_TYPES:
         list_type = input["type"]
         _validate_list_length_range(input, parameter_name=name)
@@ -412,96 +468,10 @@ def validate_job_parameter(
     return cast(JobParameter, input)
 
 
-def _validate_list_string_item_constraints(item: Any, *, parameter_name: str) -> None:
-    """Validates the "item" object of a LIST[STRING] job parameter definition."""
-    if not isinstance(item, dict):
-        raise TypeError(
-            f'Job parameter "{parameter_name}" got {type(item).__name__} for "item" but expected dict'
-        )
-    for field in item:
-        if field not in _LIST_ITEM_FIELDS["LIST[STRING]"]:
-            quoted = ", ".join(f'"{f}"' for f in _LIST_ITEM_FIELDS["LIST[STRING]"])
-            raise ValueError(
-                f'Job parameter "{parameter_name}" has "item" -> "{field}" but type "LIST[STRING]" only supports ({quoted})'
-            )
-    if "allowedValues" in item:
-        allowed_values = item["allowedValues"]
-        if not isinstance(allowed_values, list):
-            raise TypeError(
-                f'Job parameter "{parameter_name}" got {type(allowed_values).__name__} for "item" -> "allowedValues" but expected list'
-            )
-        if not allowed_values:
-            raise ValueError(
-                f'Job parameter "{parameter_name}" has an empty "item" -> "allowedValues" list'
-            )
-        for i, allowed_value in enumerate(allowed_values):
-            if not isinstance(allowed_value, str):
-                raise TypeError(
-                    f'Job parameter "{parameter_name}" got {type(allowed_value).__name__} for "item" -> "allowedValues" [{i}] but expected str'
-                )
-    for field in ("minLength", "maxLength"):
-        if field in item:
-            length = item[field]
-            if type(length) is not int:  # noqa: E721
-                raise TypeError(
-                    f'Job parameter "{parameter_name}" got {type(length).__name__} for "item" -> "{field}" but expected int'
-                )
-            if length < 0:
-                raise ValueError(
-                    f'Job parameter "{parameter_name}" got {length} for "item" -> "{field}" but the value must be non-negative'
-                )
-
-    # Reject constraints no item could satisfy, so the author learns at bundle load rather
-    # than from a GUI that can never be submitted.
-    item_min = item.get("minLength", 0)
-    item_max = min(
-        item.get("maxLength", _MAX_STRING_LIST_ITEM_LENGTH), _MAX_STRING_LIST_ITEM_LENGTH
-    )
-    if item_min > item_max:
-        raise ValueError(
-            f'Job parameter "{parameter_name}" has "item" -> "minLength" {item_min} greater than '
-            f"the maximum item length of {item_max}"
-        )
-    for i, allowed_value in enumerate(item.get("allowedValues", [])):
-        if not item_min <= len(allowed_value) <= item_max:
-            raise ValueError(
-                f'Job parameter "{parameter_name}" has "item" -> "allowedValues" [{i}] of length '
-                f"{len(allowed_value)}, outside the item length range {item_min}-{item_max}"
-            )
-
-
-def _check_list_number_constraint(
-    value: Any, *, list_type: str, parameter_name: str, field_path: str
-) -> None:
-    """Checks one number from the "item" object of a LIST[INT] or LIST[FLOAT] definition."""
-    expected: Any = int if list_type == "LIST[INT]" else (int, float)
-    if isinstance(value, bool) or not isinstance(value, expected):
-        expected_name = "int" if list_type == "LIST[INT]" else "int or float"
-        raise TypeError(
-            f'Job parameter "{parameter_name}" got {type(value).__name__} for "item" -> {field_path} but expected {expected_name}'
-        )
-    if list_type == "LIST[INT]":
-        if not _MIN_INT64 <= value <= _MAX_INT64:
-            raise ValueError(
-                f'Job parameter "{parameter_name}" got {value} for "item" -> {field_path} which is outside the 64-bit integer range'
-            )
-    elif not _is_finite_float(value):
-        raise ValueError(
-            f'Job parameter "{parameter_name}" got {value!r} for "item" -> {field_path} which is not a finite number'
-        )
-
-
-def _is_finite_float(value: int | float) -> bool:
-    try:
-        return math.isfinite(float(value))
-    except OverflowError:
-        return False
-
-
-def _validate_list_number_item_constraints(
+def _validate_list_string_item_constraints(
     item: Any, *, list_type: str, parameter_name: str
 ) -> None:
-    """Validates the "item" object of a LIST[INT] or LIST[FLOAT] job parameter definition."""
+    """Validates the "item" object of a LIST[STRING] or LIST[PATH] job parameter definition."""
     if not isinstance(item, dict):
         raise TypeError(
             f'Job parameter "{parameter_name}" got {type(item).__name__} for "item" but expected dict'
@@ -513,15 +483,120 @@ def _validate_list_number_item_constraints(
             raise ValueError(
                 f'Job parameter "{parameter_name}" has "item" -> "{field}" but type "{list_type}" only supports ({quoted})'
             )
+    _validate_string_constraints(item, parameter_name=parameter_name, field_prefix='"item" -> ')
+
+
+def _validate_string_constraints(
+    constraints: dict, *, parameter_name: str, field_prefix: str = ""
+) -> None:
+    """Validates the allowedValues, minLength and maxLength that constrain one string: a PATH
+    value, or with ``field_prefix='"item" -> '`` each item of a LIST[STRING] or LIST[PATH]."""
+    if "allowedValues" in constraints:
+        allowed_values = constraints["allowedValues"]
+        if not isinstance(allowed_values, list):
+            raise TypeError(
+                f'Job parameter "{parameter_name}" got {type(allowed_values).__name__} for {field_prefix}"allowedValues" but expected list'
+            )
+        if not allowed_values:
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has an empty {field_prefix}"allowedValues" list'
+            )
+        for i, allowed_value in enumerate(allowed_values):
+            if not isinstance(allowed_value, str):
+                raise TypeError(
+                    f'Job parameter "{parameter_name}" got {type(allowed_value).__name__} for {field_prefix}"allowedValues" [{i}] but expected str'
+                )
+    for field in ("minLength", "maxLength"):
+        if field in constraints:
+            length = constraints[field]
+            if type(length) is not int:  # noqa: E721
+                raise TypeError(
+                    f'Job parameter "{parameter_name}" got {type(length).__name__} for {field_prefix}"{field}" but expected int'
+                )
+            if length < 0:
+                raise ValueError(
+                    f'Job parameter "{parameter_name}" got {length} for {field_prefix}"{field}" but the value must be non-negative'
+                )
+
+    # Reject constraints no value could satisfy, so the author learns at bundle load rather
+    # than from a GUI that can never be submitted.
+    min_length = constraints.get("minLength", 0)
+    max_length = min(
+        constraints.get("maxLength", _MAX_STRING_LIST_ITEM_LENGTH), _MAX_STRING_LIST_ITEM_LENGTH
+    )
+    if min_length > max_length:
+        raise ValueError(
+            f'Job parameter "{parameter_name}" has {field_prefix}"minLength" {min_length} greater than '
+            f"the maximum length of {max_length}"
+        )
+    for i, allowed_value in enumerate(constraints.get("allowedValues", [])):
+        if not min_length <= len(allowed_value) <= max_length:
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has {field_prefix}"allowedValues" [{i}] of length '
+                f"{len(allowed_value)}, outside the length range {min_length}-{max_length}"
+            )
+
+
+def _check_list_number_constraint(
+    value: Any,
+    *,
+    list_type: str,
+    parameter_name: str,
+    field_path: str,
+    item_path: str = '"item"',
+) -> None:
+    """Checks one number from the "item" object of a LIST[INT] or LIST[FLOAT] definition, or
+    from the "item" -> "item" object of a LIST[LIST[INT]] definition."""
+    is_int = list_type in ("LIST[INT]", "LIST[LIST[INT]]")
+    expected: Any = int if is_int else (int, float)
+    if isinstance(value, bool) or not isinstance(value, expected):
+        expected_name = "int" if is_int else "int or float"
+        raise TypeError(
+            f'Job parameter "{parameter_name}" got {type(value).__name__} for {item_path} -> {field_path} but expected {expected_name}'
+        )
+    if is_int:
+        if not _MIN_INT64 <= value <= _MAX_INT64:
+            raise ValueError(
+                f'Job parameter "{parameter_name}" got {value} for {item_path} -> {field_path} which is outside the 64-bit integer range'
+            )
+    elif not _is_finite_float(value):
+        raise ValueError(
+            f'Job parameter "{parameter_name}" got {value!r} for {item_path} -> {field_path} which is not a finite number'
+        )
+
+
+def _is_finite_float(value: int | float) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return False
+
+
+def _validate_list_number_item_constraints(
+    item: Any, *, list_type: str, parameter_name: str, item_path: str = '"item"'
+) -> None:
+    """Validates the "item" object of a LIST[INT] or LIST[FLOAT] job parameter definition, or
+    with ``item_path='"item" -> "item"'`` the integer constraints of a LIST[LIST[INT]]."""
+    if not isinstance(item, dict):
+        raise TypeError(
+            f'Job parameter "{parameter_name}" got {type(item).__name__} for {item_path} but expected dict'
+        )
+    item_fields = _LIST_ITEM_FIELDS["LIST[INT]" if list_type == "LIST[LIST[INT]]" else list_type]
+    for field in item:
+        if field not in item_fields:
+            quoted = ", ".join(f'"{f}"' for f in item_fields)
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has {item_path} -> "{field}" but type "{list_type}" only supports ({quoted})'
+            )
     if "allowedValues" in item:
         allowed_values = item["allowedValues"]
         if not isinstance(allowed_values, list):
             raise TypeError(
-                f'Job parameter "{parameter_name}" got {type(allowed_values).__name__} for "item" -> "allowedValues" but expected list'
+                f'Job parameter "{parameter_name}" got {type(allowed_values).__name__} for {item_path} -> "allowedValues" but expected list'
             )
         if not allowed_values:
             raise ValueError(
-                f'Job parameter "{parameter_name}" has an empty "item" -> "allowedValues" list'
+                f'Job parameter "{parameter_name}" has an empty {item_path} -> "allowedValues" list'
             )
         for i, allowed_value in enumerate(allowed_values):
             _check_list_number_constraint(
@@ -529,6 +604,7 @@ def _validate_list_number_item_constraints(
                 list_type=list_type,
                 parameter_name=parameter_name,
                 field_path=f'"allowedValues" [{i}]',
+                item_path=item_path,
             )
     for field in ("minValue", "maxValue"):
         if field in item:
@@ -537,6 +613,7 @@ def _validate_list_number_item_constraints(
                 list_type=list_type,
                 parameter_name=parameter_name,
                 field_path=f'"{field}"',
+                item_path=item_path,
             )
 
     # Reject constraints no item could satisfy, so the author learns at bundle load rather
@@ -544,17 +621,59 @@ def _validate_list_number_item_constraints(
     item_min, item_max = item.get("minValue"), item.get("maxValue")
     if item_min is not None and item_max is not None and item_min > item_max:
         raise ValueError(
-            f'Job parameter "{parameter_name}" has "item" -> "minValue" {item_min} greater than '
-            f'"item" -> "maxValue" {item_max}'
+            f'Job parameter "{parameter_name}" has {item_path} -> "minValue" {item_min} greater than '
+            f'{item_path} -> "maxValue" {item_max}'
         )
     for i, allowed_value in enumerate(item.get("allowedValues", [])):
         if (item_min is not None and allowed_value < item_min) or (
             item_max is not None and allowed_value > item_max
         ):
             raise ValueError(
-                f'Job parameter "{parameter_name}" has "item" -> "allowedValues" [{i}] {allowed_value} '
+                f'Job parameter "{parameter_name}" has {item_path} -> "allowedValues" [{i}] {allowed_value} '
                 f"outside the item value range {item_min}-{item_max}"
             )
+
+
+def _validate_list_list_int_item_constraints(item: Any, *, parameter_name: str) -> None:
+    """Validates the "item" object of a LIST[LIST[INT]] job parameter definition, which
+    constrains the length of each inner list, and through its own "item" each integer."""
+    list_type = "LIST[LIST[INT]]"
+    if not isinstance(item, dict):
+        raise TypeError(
+            f'Job parameter "{parameter_name}" got {type(item).__name__} for "item" but expected dict'
+        )
+    item_fields = _LIST_ITEM_FIELDS[list_type]
+    for field in item:
+        if field not in item_fields:
+            quoted = ", ".join(f'"{f}"' for f in item_fields)
+            raise ValueError(
+                f'Job parameter "{parameter_name}" has "item" -> "{field}" but type "{list_type}" only supports ({quoted})'
+            )
+    for field in ("minLength", "maxLength"):
+        if field in item:
+            length = item[field]
+            if type(length) is not int:  # noqa: E721
+                raise TypeError(
+                    f'Job parameter "{parameter_name}" got {type(length).__name__} for "item" -> "{field}" but expected int'
+                )
+            if length < 0:
+                raise ValueError(
+                    f'Job parameter "{parameter_name}" got {length} for "item" -> "{field}" but the value must be non-negative'
+                )
+    min_length = item.get("minLength", 0)
+    max_length = min(item.get("maxLength", _MAX_INNER_INT_LIST_ITEMS), _MAX_INNER_INT_LIST_ITEMS)
+    if min_length > max_length:
+        raise ValueError(
+            f'Job parameter "{parameter_name}" has "item" -> "minLength" {min_length} greater than '
+            f"the maximum inner list item count of {max_length}"
+        )
+    if "item" in item:
+        _validate_list_number_item_constraints(
+            item["item"],
+            list_type=list_type,
+            parameter_name=parameter_name,
+            item_path='"item" -> "item"',
+        )
 
 
 def _validate_list_length_range(input: dict[str, Any], *, parameter_name: str) -> None:
@@ -594,7 +713,7 @@ def _to_bool(value: Any) -> bool | None:
 def _check_list_item_type(list_type: str, name: str, i: int, item: Any) -> None:
     """Raises TypeError if a list item is not of the list's item type. Items are not
     converted between types, e.g. "5" is not an item of a LIST[INT]."""
-    if list_type == "LIST[STRING]":
+    if list_type in _STRING_ITEM_LIST_TYPES:
         is_item_type = isinstance(item, str)
     elif list_type == "LIST[INT]":
         is_item_type = isinstance(item, int) and not isinstance(item, bool)
@@ -652,10 +771,62 @@ def _to_bool_list_item(name: str, i: int, item: Any) -> bool:
     return converted
 
 
+def _check_int_list_list_item_type(name: str, i: int, item: Any) -> None:
+    """Raises if an item of a LIST[LIST[INT]] is not a list of 64-bit integers. As for a
+    LIST[INT], elements are not converted, e.g. "5" and true are not integers."""
+    if not isinstance(item, list):
+        raise TypeError(
+            f"Job parameter {name!r} has type LIST[LIST[INT]] but item {i} is {item!r} of type {type(item)}, not a list of integers."
+        )
+    for j, element in enumerate(item):
+        if isinstance(element, bool) or not isinstance(element, int):
+            raise TypeError(
+                f"Job parameter {name!r} has type LIST[LIST[INT]] but item {i} element {j} is {element!r} of type {type(element)}."
+            )
+        if not _MIN_INT64 <= element <= _MAX_INT64:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} element {j} {element} is outside the 64-bit integer range."
+            )
+
+
+def _check_int_list_list_item(name: str, i: int, item: list, item_constraints: dict) -> None:
+    """Checks one inner list of a LIST[LIST[INT]] against the definition's "item" constraints."""
+    min_length = item_constraints.get("minLength")
+    if min_length is not None and len(item) < min_length:
+        raise ValueError(
+            f"Job parameter {name!r} item {i} has {len(item)} elements but item minLength is {min_length}."
+        )
+    max_length = min(
+        item_constraints.get("maxLength", _MAX_INNER_INT_LIST_ITEMS), _MAX_INNER_INT_LIST_ITEMS
+    )
+    if len(item) > max_length:
+        raise ValueError(
+            f"Job parameter {name!r} item {i} has {len(item)} elements but at most {max_length} are allowed."
+        )
+    element_constraints: dict = item_constraints.get("item", {})
+    min_value = element_constraints.get("minValue")
+    max_value = element_constraints.get("maxValue")
+    allowed_values = element_constraints.get("allowedValues")
+    for j, element in enumerate(item):
+        if min_value is not None and element < min_value:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} element {j} {element} is less than item -> item minValue {min_value}."
+            )
+        if max_value is not None and element > max_value:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} element {j} {element} is greater than item -> item maxValue {max_value}."
+            )
+        if allowed_values is not None and element not in allowed_values:
+            raise ValueError(
+                f"Job parameter {name!r} item {i} element {j} {element} is not an allowed value from {tuple(allowed_values)!r}."
+            )
+
+
 def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
-    """Converts a LIST[STRING], LIST[INT], LIST[FLOAT] or LIST[BOOL] value, a list or a
-    string holding a JSON array, to a list and checks it against the definition's list and
-    item constraints. LIST[FLOAT] items are returned as float, and LIST[BOOL] items as bool."""
+    """Converts a LIST[STRING], LIST[PATH], LIST[INT], LIST[FLOAT], LIST[BOOL] or
+    LIST[LIST[INT]] value, a list or a string holding a JSON array, to a list and checks it
+    against the definition's list and item constraints. LIST[FLOAT] items are returned as
+    float, LIST[BOOL] items as bool, and LIST[LIST[INT]] items as new lists."""
     name = job_parameter["name"]
     list_type = job_parameter["type"]
     item_kind, example = _LIST_ITEM_DESCRIPTIONS[list_type]
@@ -678,6 +849,9 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
     if list_type == "LIST[BOOL]":
         # Unlike the other list types, an item accepts every spelling of a BOOL value.
         value = [_to_bool_list_item(name, i, item) for i, item in enumerate(value)]
+    elif list_type == "LIST[LIST[INT]]":
+        for i, item in enumerate(value):
+            _check_int_list_list_item_type(name, i, item)
     else:
         for i, item in enumerate(value):
             _check_list_item_type(list_type, name, i, item)
@@ -695,9 +869,13 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
         )
 
     item_constraints: dict = dict(job_parameter.get("item", {}))
+    if list_type == "LIST[LIST[INT]]":
+        for i, item in enumerate(value):
+            _check_int_list_list_item(name, i, item, item_constraints)
+        return [list(item) for item in value]
     item_allowed_values = item_constraints.get("allowedValues")
     for i, item in enumerate(value):
-        if list_type == "LIST[STRING]":
+        if list_type in _STRING_ITEM_LIST_TYPES:
             _check_string_list_item(name, i, item, item_constraints)
         elif list_type in ("LIST[INT]", "LIST[FLOAT]"):
             _check_number_list_item(name, i, item, item_constraints)
@@ -713,13 +891,25 @@ def _to_list(job_parameter: JobParameter, value: Any) -> list[Any]:
 
 def validate_job_parameter_value(
     job_parameter: JobParameter,
-    value: str | int | float | bool | list[str] | list[int] | list[float] | list[bool],
-) -> str | int | float | bool | list[str] | list[int] | list[float] | list[bool]:
+    value: (
+        str
+        | int
+        | float
+        | bool
+        | list[str]
+        | list[int]
+        | list[float]
+        | list[bool]
+        | list[list[int]]
+    ),
+) -> str | int | float | bool | list[str] | list[int] | list[float] | list[bool] | list[list[int]]:
     """
     Validates a value for the specified parameter definition, returning the value with the correct type,
     e.g. a string "19" for an INT parameter is returned as the integer 19, and a string
-    '["a", "b"]' for a LIST[STRING] parameter is returned as the list ["a", "b"]. LIST[INT],
-    LIST[FLOAT] and LIST[BOOL] values are also accepted as a JSON array string. LIST[FLOAT]
+    '["a", "b"]' for a LIST[STRING] parameter is returned as the list ["a", "b"]. LIST[PATH],
+    LIST[INT], LIST[FLOAT], LIST[BOOL] and LIST[LIST[INT]] values are also accepted as a JSON
+    array string, e.g. '[[1, 2], [3]]' for a LIST[LIST[INT]].
+    LIST[PATH] items are not made absolute. LIST[FLOAT]
     items are returned as float, and LIST[BOOL] items, which accept the same values as a BOOL
     parameter such as "yes" or 0, are returned as bool.
     Raises a ValueError if validation fails.
@@ -740,6 +930,12 @@ def validate_job_parameter_value(
         if not isinstance(value, str):
             raise TypeError(
                 f"Job parameter {name!r} has type {param_type} but got value {value!r} of type {type(value)}."
+            )
+        # CreateJob's JobParameter.path holds at most this many characters, as each pathList item does.
+        if param_type == "PATH" and len(value) > _MAX_STRING_LIST_ITEM_LENGTH:
+            shown = value[:40] + "..."
+            raise ValueError(
+                f"Job parameter {name!r} value {shown!r} is longer than the maximum of {_MAX_STRING_LIST_ITEM_LENGTH} characters."
             )
     elif param_type == "BOOL":
         converted = _to_bool(value)
@@ -1130,25 +1326,112 @@ def merge_queue_job_parameters(
     return list(collected_parameters.values())
 
 
+def _parse_path_list(value: Any) -> list[str] | None:
+    """Returns the items of a LIST[PATH] value, a list of strings or a string holding a JSON
+    array of them, or None if the value is neither."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return list(value)
+    return None
+
+
+def _absolute_path_value(path: str, *, allow_uri_path_values: bool) -> str:
+    """Makes a PATH value, or a LIST[PATH] item, given on the command line absolute against
+    the current working directory. An empty value stays empty, and with the EXPR extension
+    a URI such as s3://bucket/key is kept as it is."""
+    if not path or (allow_uri_path_values and is_uri(path)):
+        return path
+    return _lexical_join(os.getcwd(), path)
+
+
+def _path_list_with_absolute_items(
+    parameter: JobParameter, value: Any, *, allow_uri_path_values: bool = False
+) -> Any:
+    """Returns a LIST[PATH] value given on the command line as a list, with each relative item
+    made absolute against the current working directory, as a PATH value is. Empty items stay
+    empty, and with the EXPR extension URI items are kept. A value that is not a list of
+    strings is returned unchanged, for submission to report."""
+    items = _parse_path_list(value)
+    if items is None:
+        return value
+    return [
+        _absolute_path_value(item, allow_uri_path_values=allow_uri_path_values) for item in items
+    ]
+
+
+def _add_path_asset_reference(
+    asset_references: AssetReferences,
+    parameter: JobParameter,
+    path: str,
+    *,
+    allow_uri_path_values: bool = False,
+) -> None:
+    """Adds a PATH value, or one item of a LIST[PATH] value, to the asset references its
+    parameter's dataFlow and objectType select. With the EXPR extension, a URI is not a
+    local path, so job attachments neither upload, download nor map it."""
+    data_flow = parameter.get("dataFlow", "NONE")
+    if path == "":
+        # An empty value names no path, so there is nothing to reference or transfer.
+        return
+    if allow_uri_path_values and is_uri(path):
+        if data_flow != "NONE":
+            _logger.info(
+                "Job parameter %r value %r is a URI, so job attachments do not transfer it.",
+                parameter["name"],
+                path,
+            )
+        return
+    if data_flow == "NONE":
+        # This path is referenced, but its contents are not necessarily
+        # input or output.
+        asset_references.referenced_paths.add(path)
+    else:
+        object_type = parameter.get("objectType")
+
+        if "IN" in data_flow:
+            if object_type == "FILE":
+                asset_references.input_filenames.add(path)
+            else:
+                asset_references.input_directories.add(path)
+        if "OUT" in data_flow:
+            if object_type == "FILE":
+                # TODO: When job attachments supports output files in addition to directories, change this to
+                #       add the filename instead.
+                asset_references.output_directories.add(os.path.dirname(path))
+            else:
+                asset_references.output_directories.add(path)
+
+
 def apply_job_parameters(
     job_parameters: list[dict[str, Any]],
     job_bundle_dir: str,
     parameters: list[JobParameter],
     asset_references: AssetReferences,
+    *,
+    allow_uri_path_values: bool = False,
 ) -> None:
     """
     Modifies the provided parameters and asset_references to incorporate
-    the job_parameters and to resolve any relative paths in PATH parameters.
+    the job_parameters and to resolve any relative paths in PATH and LIST[PATH] parameters.
 
     The following actions are taken:
     - Any job_parameters provided set or replace the "value" key in the corresponding
       job_bundle_parameters entry.
     - Any job_parameters for a PATH, that is a relative path, is made absolute by joining
-      with the current working directory.
+      with the current working directory. So is each relative item of a LIST[PATH].
     - Any job_bundle_parameters for a PATH, not set by job_parameters, that is a
       relative path, is made absolute by joining with the job bundle directory.
     - Any PATH parameters that have IN, OUT, or INOUT assetReferences metadata are
-      added to the appropriate asset_references entries.
+      added to the appropriate asset_references entries. Each non-empty item of a
+      LIST[PATH] is added the same way, as if it were a PATH with the same definition.
+
+    Pass allow_uri_path_values=True for a job template that uses OpenJD's EXPR extension,
+    where a PATH value or LIST[PATH] item may be a URI such as s3://bucket/key. A URI is
+    neither made absolute nor added to asset_references.
     """
     # Convert the job_parameters to a dict for efficient lookup
     param_dict: dict[str, Any] = {
@@ -1166,12 +1449,19 @@ def apply_job_parameters(
         # Apply the job_parameters value if available
         parameter_value = param_dict.pop(parameter_name, None)
         if parameter_value is not None:
-            # Make PATH parameter values that are not constrained by allowedValues
-            # absolute by joining with the current working directory
-            if parameter_type == "PATH" and "allowedValues" not in parameter:
+            # Make relative PATH parameter values absolute by joining with the current
+            # working directory. As OpenJD specifies, this applies even when allowedValues
+            # constrains the value, which is checked after the join.
+            if parameter_type == "PATH":
                 if parameter_value == "":
                     continue
-                parameter_value = os.path.abspath(parameter_value)
+                parameter_value = _absolute_path_value(
+                    parameter_value, allow_uri_path_values=allow_uri_path_values
+                )
+            elif parameter_type == "LIST[PATH]":
+                parameter_value = _path_list_with_absolute_items(
+                    parameter, parameter_value, allow_uri_path_values=allow_uri_path_values
+                )
             parameter["value"] = parameter_value
         else:
             parameter_value = parameter.get("value", parameter.get("default"))
@@ -1180,8 +1470,7 @@ def apply_job_parameters(
                     f"Job Template for job bundle {job_bundle_dir}:\nNo parameter value provided for Job Template parameter {parameter_name}, and it has no default value."
                 )
 
-        # If it's a PATH parameter with dataFlow, add it to asset_references
-        if parameter_type == "PATH":
+        if parameter_type in ("PATH", "LIST[PATH]"):
             data_flow = parameter.get("dataFlow", "NONE")
             if data_flow not in ("NONE", "IN", "OUT", "INOUT"):
                 raise DeadlineOperationError(
@@ -1189,26 +1478,57 @@ def apply_job_parameters(
                     + f"value {data_flow} for 'dataFlow'. Valid values are "
                     + "['NONE', 'IN', 'OUT', 'INOUT']"
                 )
-            if data_flow == "NONE":
-                # This path is referenced, but its contents are not necessarily
-                # input or output.
-                asset_references.referenced_paths.add(parameter_value)
-            elif parameter_value != "":
-                # While empty parameters are allowed, we don't want to add them to asset references
-                object_type = parameter.get("objectType")
 
-                if "IN" in data_flow:
-                    if object_type == "FILE":
-                        asset_references.input_filenames.add(parameter_value)
-                    else:
-                        asset_references.input_directories.add(parameter_value)
-                if "OUT" in data_flow:
-                    if object_type == "FILE":
-                        # TODO: When job attachments supports output files in addition to directories, change this to
-                        #       add the filename instead.
-                        asset_references.output_directories.add(os.path.dirname(parameter_value))
-                    else:
-                        asset_references.output_directories.add(parameter_value)
+        # If it's a PATH parameter with dataFlow, add it to asset_references
+        if parameter_type == "PATH":
+            _add_path_asset_reference(
+                asset_references,
+                parameter,
+                parameter_value,
+                allow_uri_path_values=allow_uri_path_values,
+            )
+        elif parameter_type == "LIST[PATH]":
+            # A value that is not a list of paths is reported when the parameters are
+            # formatted for CreateJob.
+            for item in _parse_path_list(parameter_value) or []:
+                _add_path_asset_reference(
+                    asset_references,
+                    parameter,
+                    item,
+                    allow_uri_path_values=allow_uri_path_values,
+                )
+
+
+def _resolve_bundle_path_default(
+    bundle_dir: str, name: str, default: str, *, item_index: Optional[int] = None
+) -> str:
+    """Returns the absolute path of a PATH default, or of item ``item_index`` of a LIST[PATH]
+    default, which must be relative and resolve within the job bundle directory."""
+    what = "Default PATH" if item_index is None else f"Default LIST[PATH] item {item_index}"
+    # Not os.path.isabs, which before Python 3.11 reads a UNC path naming a
+    # share as relative -- such a default reached the containment check below
+    # and failed there, reporting the wrong reason.
+    if is_absolute_path(default, path_module=os.path):
+        raise DeadlineOperationError(
+            f"Job Template for job bundle {bundle_dir}:\n{what} '{default}' for parameter '{name}' is absolute.\nPATH values must be relative, and must resolve within the Job Bundle directory."
+        )
+    bundle_real_path = os.path.realpath(bundle_dir)
+    default_real_path = os.path.realpath(os.path.join(bundle_real_path, default))
+    if not is_path_contained(default_real_path, bundle_real_path, path_module=os.path):
+        raise DeadlineOperationError(
+            f"Job Template for job bundle {bundle_dir}:\n{what} '{default_real_path}' for parameter '{name}' specifies files outside of Job Bundle directory '{bundle_real_path}'.\nPATH values must be relative, and must resolve within the Job Bundle directory."
+        )
+
+    return _lexical_join(os.path.abspath(bundle_dir), default)
+
+
+def _lexical_join(base_dir: str, path: str) -> str:
+    """Joins a relative path with an absolute base directory and normalizes the result
+    lexically, as OpenJD specifies for PATH values: "." components are removed and ".."
+    components are applied. Unlike os.path.abspath on Windows, which calls
+    GetFullPathName, this keeps trailing dots and spaces, so a component such as "..." is
+    kept."""
+    return os.path.normpath(os.path.join(base_dir, path))
 
 
 def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
@@ -1274,40 +1594,54 @@ def read_job_bundle_parameters(bundle_dir: str) -> list[JobParameter]:
                 # values such as "deadline:*"
                 template_parameters[name] = parameter_value
 
-    # Make valueless PATH parameters with 'default' (but not constrained
-    # by allowedValues) absolute by joining with the job bundle directory
-    for name, parameter in template_parameters.items():
-        if (
-            "value" not in parameter
-            and parameter["type"] == "PATH"
-            and "allowedValues" not in parameter
-        ):
-            default = parameter.get("default")
-            if default:
-                # Not os.path.isabs, which before Python 3.11 reads a UNC path naming a
-                # share as relative -- such a default reached the containment check below
-                # and failed there, reporting the wrong reason.
-                if is_absolute_path(default, path_module=os.path):
-                    raise DeadlineOperationError(
-                        f"Job Template for job bundle {bundle_dir}:\nDefault PATH '{default}' for parameter '{name}' is absolute.\nPATH values must be relative, and must resolve within the Job Bundle directory."
-                    )
-                bundle_real_path = os.path.realpath(bundle_dir)
-                default_real_path = os.path.realpath(os.path.join(bundle_real_path, default))
-                if not is_path_contained(default_real_path, bundle_real_path, path_module=os.path):
-                    raise DeadlineOperationError(
-                        f"Job Template for job bundle {bundle_dir}:\nDefault PATH '{default_real_path}' for parameter '{name}' specifies files outside of Job Bundle directory '{bundle_real_path}'.\nPATH values must be relative, and must resolve within the Job Bundle directory."
-                    )
+    # Make valueless PATH parameters with a 'default' absolute by joining with the job bundle
+    # directory, and each item of a LIST[PATH] default the same way. As OpenJD specifies, this
+    # applies even when allowedValues constrains the default, so the joined value is checked
+    # against the constraints here; the default as written is checked by
+    # validate_job_parameter below. With the EXPR extension, a URI default is not a path in the
+    # bundle and is kept as it is.
+    allow_uri_path_values = _has_expr_extension(template)
+    joined_defaults: set[str] = set()
 
-                default_absolute = os.path.normpath(
-                    os.path.abspath(os.path.join(bundle_dir, default))
-                )
-                parameter["value"] = default_absolute
+    def resolve_default(name: str, default: str, item_index: Optional[int] = None) -> str:
+        if not default or (allow_uri_path_values and is_uri(default)):
+            return default
+        return _resolve_bundle_path_default(bundle_dir, name, default, item_index=item_index)
+
+    for name, parameter in template_parameters.items():
+        if "value" in parameter:
+            continue
+        if parameter["type"] == "PATH":
+            default = parameter.get("default")
+            if isinstance(default, str) and default:
+                parameter["value"] = resolve_default(name, default)
+                joined_defaults.add(name)
+        elif parameter["type"] == "LIST[PATH]":
+            # A malformed default is reported by validate_job_parameter below.
+            default = parameter.get("default")
+            if isinstance(default, list) and all(isinstance(value, str) for value in default):
+                parameter["value"] = [
+                    resolve_default(name, value, index) for index, value in enumerate(default)
+                ]
+                joined_defaults.add(name)
 
     # Rearrange the dict from the template into a list
     parameters = [
         validate_job_parameter({"name": name, **values})
         for name, values in template_parameters.items()
     ]
+
+    for param in parameters:
+        if param["name"] in joined_defaults:
+            try:
+                validate_job_parameter_value(param, param["value"])
+            except (ValueError, TypeError) as e:
+                raise DeadlineOperationError(
+                    f"Job Template for job bundle {bundle_dir}:\nThe default for parameter "
+                    f"'{param['name']}', joined with the Job Bundle directory, is not a valid "
+                    f"value: {e}\nThe constraints of a PATH parameter apply to the joined path, so "
+                    "use allowedValues with absolute paths or URIs, not a relative default."
+                ) from e
 
     # Validate hidden parameters have values
     invalid_params = []
@@ -1345,15 +1679,26 @@ _SUPPORTED_CONTROLS_FOR_TYPE = {
     "BOOL": {"CHECK_BOX", "HIDDEN"},
     "RANGE_EXPR": {"LINE_EDIT", "HIDDEN"},
     "LIST[STRING]": {"LINE_EDIT_LIST", "HIDDEN"},
+    "LIST[PATH]": {
+        "CHOOSE_INPUT_FILE_LIST",
+        "CHOOSE_OUTPUT_FILE_LIST",
+        "CHOOSE_DIRECTORY_LIST",
+        "HIDDEN",
+    },
     "LIST[INT]": {"SPIN_BOX_LIST", "HIDDEN"},
     "LIST[FLOAT]": {"SPIN_BOX_LIST", "HIDDEN"},
     "LIST[BOOL]": {"CHECK_BOX_LIST", "HIDDEN"},
+    # OpenJD defines no editing control for this type.
+    "LIST[LIST[INT]]": {"HIDDEN"},
 }
 
 
 def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
     """Returns the UI control for the given parameter definition, determining
-    the default if not explicitly set."""
+    the default if not explicitly set.
+
+    A LIST[LIST[INT]] parameter may only set the HIDDEN control. Without it, this returns
+    MULTILINE_EDIT, where the client edits the value as JSON text."""
     # If it's explicitly provided, return that
     control = param_def.get("userInterface", {}).get("control")
     param_type = param_def["type"]
@@ -1370,6 +1715,8 @@ def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
             return "SPIN_BOX_LIST"
         elif param_type == "LIST[BOOL]":
             return "CHECK_BOX_LIST"
+        elif param_type == "LIST[LIST[INT]]":
+            return "MULTILINE_EDIT"
         elif param_type == "PATH":
             if param_def.get("objectType", "DIRECTORY") == "FILE":
                 if param_def.get("dataFlow", "NONE") == "OUT":
@@ -1378,6 +1725,14 @@ def get_ui_control_for_parameter_definition(param_def: JobParameter) -> str:
                     return "CHOOSE_INPUT_FILE"
             else:
                 return "CHOOSE_DIRECTORY"
+        elif param_type == "LIST[PATH]":
+            if param_def.get("objectType", "DIRECTORY") == "FILE":
+                if param_def.get("dataFlow", "NONE") == "OUT":
+                    return "CHOOSE_OUTPUT_FILE_LIST"
+                else:
+                    return "CHOOSE_INPUT_FILE_LIST"
+            else:
+                return "CHOOSE_DIRECTORY_LIST"
         elif param_type in ("INT", "FLOAT"):
             return "SPIN_BOX"
         elif param_type == "BOOL":
@@ -1469,7 +1824,8 @@ def parameter_definition_difference(
 
 def _item_constraints_equivalent(lhs: Any, rhs: Any) -> bool:
     """Compares list parameter "item" constraints, with allowedValues compared as sets like
-    the top-level allowedValues. An absent "item" is the same as one with no constraints."""
+    the top-level allowedValues, and a nested "item" compared the same way. An absent "item"
+    is the same as one with no constraints."""
     lhs = {} if lhs is None else lhs
     rhs = {} if rhs is None else rhs
     if not isinstance(lhs, dict) or not isinstance(rhs, dict):
@@ -1477,6 +1833,10 @@ def _item_constraints_equivalent(lhs: Any, rhs: Any) -> bool:
     for field in ("minLength", "maxLength", "minValue", "maxValue"):
         if lhs.get(field) != rhs.get(field):
             return False
+    if ("item" in lhs or "item" in rhs) and not _item_constraints_equivalent(
+        lhs.get("item"), rhs.get("item")
+    ):
+        return False
     lhs_allowed, rhs_allowed = lhs.get("allowedValues"), rhs.get("allowedValues")
     if lhs_allowed is None or rhs_allowed is None:
         return lhs_allowed == rhs_allowed

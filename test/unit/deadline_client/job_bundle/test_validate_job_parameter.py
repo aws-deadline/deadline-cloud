@@ -62,7 +62,8 @@ def valid_min_length() -> int:
 
 @pytest.fixture
 def valid_max_length() -> int:
-    return 2
+    # Long enough for the PATH default, which is checked against minLength and maxLength.
+    return 16
 
 
 @pytest.fixture(
@@ -279,7 +280,7 @@ def test_validate_job_parameter_nonvalid_type(
         when()
     assert (
         str(ctx.value)
-        == f'Job parameter "foo" had "type" {typ} but expected one of ("STRING", "PATH", "INT", "FLOAT", "BOOL", "RANGE_EXPR", "LIST[STRING]", "LIST[INT]", "LIST[FLOAT]", "LIST[BOOL]")'
+        == f'Job parameter "foo" had "type" {typ} but expected one of ("STRING", "PATH", "INT", "FLOAT", "BOOL", "RANGE_EXPR", "LIST[STRING]", "LIST[PATH]", "LIST[INT]", "LIST[FLOAT]", "LIST[BOOL]", "LIST[LIST[INT]]")'
     )
 
 

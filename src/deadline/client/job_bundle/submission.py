@@ -107,11 +107,14 @@ class AssetReferences:
 # converted before submission. Other types are sent as a string in their lower-cased type name.
 _VALIDATED_PARAMETER_WIRE_MEMBERS = {
     "BOOL": "bool",
+    "PATH": "path",
     "RANGE_EXPR": "rangeExpr",
     "LIST[STRING]": "stringList",
+    "LIST[PATH]": "pathList",
     "LIST[INT]": "intList",
     "LIST[FLOAT]": "floatList",
     "LIST[BOOL]": "boolList",
+    "LIST[LIST[INT]]": "intListList",
 }
 
 
@@ -181,7 +184,7 @@ def split_parameter_args(
                             # CreateJob's JobParameter.bool is a string shape, so normalize
                             # the accepted spellings (yes/on/1/...) to "true"/"false".
                             parameter_value = "true" if validated_value else "false"
-                        elif parameter_type == "LIST[STRING]":
+                        elif parameter_type in ("LIST[STRING]", "LIST[PATH]"):
                             parameter_value = validated_value
                         elif parameter_type in ("LIST[INT]", "LIST[FLOAT]"):
                             # CreateJob's intList and floatList hold numbers as strings.
@@ -192,6 +195,12 @@ def split_parameter_args(
                             # CreateJob's boolList holds BooleanString items, like bool.
                             parameter_value = [
                                 "true" if item else "false"
+                                for item in validated_value  # type: ignore[union-attr]
+                            ]
+                        elif parameter_type == "LIST[LIST[INT]]":
+                            # CreateJob's intListList holds IntString items, like intList.
+                            parameter_value = [
+                                [repr(element) for element in item]  # type: ignore[union-attr]
                                 for item in validated_value  # type: ignore[union-attr]
                             ]
                         else:

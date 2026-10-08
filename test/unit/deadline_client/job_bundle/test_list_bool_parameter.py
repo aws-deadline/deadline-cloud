@@ -367,7 +367,6 @@ def test_parameter_definition_difference_list_bool() -> None:
 
 
 def test_bundle_browser_labels_list_bool() -> None:
-    pytest.importorskip("qtpy")
     try:
         from deadline.client.ui.dialogs.job_bundle_browser_dialog import _friendly_param_type
     except ImportError:
