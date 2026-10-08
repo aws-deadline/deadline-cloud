@@ -8,6 +8,13 @@ on:
   schedule:
     - cron: '0 8 * * MON'
 
+# Cancel superseded in-progress runs for the same PR branch. No draft-skip here:
+# CodeQL is a required status check, and gating a required check on draft state
+# would leave it unreported on draft PRs and stall the merge queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   Analysis:
     name: Analysis

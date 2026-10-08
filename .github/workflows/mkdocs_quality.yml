@@ -2,6 +2,7 @@ name: MkDocs Quality Check
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ mainline, release, feature_assets_cli, 'patch_*' ]
   workflow_call:
     inputs:
@@ -14,8 +15,16 @@ on:
 permissions:
   contents: write
 
+# Cancel superseded in-progress docs builds for the same PR branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-docs:
+    # Skip the docs build on draft PRs. workflow_call has no pull_request
+    # context, so draft is null there and the build still runs.
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

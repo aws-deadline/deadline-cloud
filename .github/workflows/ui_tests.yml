@@ -4,11 +4,20 @@ on:
   push:
     branches: [mainline, release]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [mainline, release, 'patch_*', 'feature_*']
+
+# Cancel superseded in-progress UI-test runs for the same PR branch; never
+# interrupt pushes to mainline/release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ui-test-linux:
     name: UI Tests (Linux)
+    # Skip heavy GUI tests on draft PRs.
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,6 +63,7 @@ jobs:
 
   ui-test-macos:
     name: UI Tests (macOS)
+    if: github.event.pull_request.draft != true
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,6 +99,7 @@ jobs:
 
   ui-test-windows:
     name: UI Tests (Windows)
+    if: github.event.pull_request.draft != true
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

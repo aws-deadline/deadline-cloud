@@ -2,6 +2,7 @@ name: Code Quality
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ mainline, release, feature_assets_cli, 'patch_*' , "feature_*"]
   push:
     # Run on mainline pushes to populate the Actions cache that PRs restore from.
@@ -15,10 +16,23 @@ on:
         required: false
         type: string
 
+# Cancel superseded in-progress runs for the same PR branch. The conditional
+# scopes cancellation to pull_request events so pushes to mainline (which
+# populate the Actions cache) and workflow_call invocations are never
+# interrupted.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   Test:
     name: Python
+    # Skip the 18-cell matrix on draft PRs (where agent iteration churns most).
+    # workflow_call invocations have no pull_request context, so draft is null
+    # there and the job still runs.
+    if: github.event.pull_request.draft != true
     strategy:
+      fail-fast: true
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
