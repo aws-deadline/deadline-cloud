@@ -16,12 +16,15 @@ on:
         required: false
         type: string
 
-# Cancel superseded in-progress runs for the same PR branch. The conditional
-# scopes cancellation to pull_request events so pushes to mainline (which
-# populate the Actions cache) and workflow_call invocations are never
-# interrupted.
+# Cancel superseded in-progress runs for the same PR branch. The group key is
+# conditional: pull_request events share a per-ref group so a new push to a PR
+# cancels the superseded run, while every other event (mainline push,
+# workflow_call) gets a unique run_id group so it is never canceled by a
+# sibling -- GitHub cancels PENDING runs in a shared group regardless of
+# cancel-in-progress, so isolating non-PR events by group is what actually
+# protects them.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

@@ -7,10 +7,13 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [mainline, release, 'patch_*', 'feature_*']
 
-# Cancel superseded in-progress UI-test runs for the same PR branch; never
-# interrupt pushes to mainline/release.
+# Cancel superseded in-progress UI-test runs for the same PR branch. The group
+# key is conditional: pull_request events share a per-ref group, while
+# mainline/release pushes get a unique run_id group so they are never canceled
+# by a sibling (GitHub cancels PENDING runs in a shared group regardless of
+# cancel-in-progress).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

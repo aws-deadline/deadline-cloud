@@ -15,9 +15,13 @@ on:
 permissions:
   contents: write
 
-# Cancel superseded in-progress docs builds for the same PR branch.
+# Cancel superseded in-progress docs builds for the same PR branch. The group
+# key is conditional: pull_request events share a per-ref group, while
+# workflow_call invocations get a unique run_id group so they are never
+# canceled by a sibling (GitHub cancels PENDING runs in a shared group
+# regardless of cancel-in-progress).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
