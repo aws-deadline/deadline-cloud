@@ -6,9 +6,15 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
-from qtpy.QtCore import QEvent, QPoint, QPointF, Qt
-from qtpy.QtGui import QMouseEvent
-from qtpy.QtWidgets import QApplication, QStyle, QStyleOptionViewItem
+from qtpy.QtCore import QEvent, QPoint, QPointF, QRect, Qt
+from qtpy.QtGui import QImage, QMouseEvent, QPainter
+from qtpy.QtWidgets import (
+    QApplication,
+    QProxyStyle,
+    QStyle,
+    QStyleFactory,
+    QStyleOptionViewItem,
+)
 
 from deadline.client.ui.widgets.openjd_parameters_widget import (
     OpenJDParametersWidget,
@@ -423,3 +429,51 @@ class TestListControlEventFilterDuringTeardown:
             assert control.eventFilter(list_widget, QEvent(event_type)) is False
         finally:
             control.edit_control = list_widget
+
+
+class _NoDecorationSelectedStyle(QProxyStyle):
+    """A style that, unlike the built-in ones for a list view, highlights only the text
+    rectangle of a selected item."""
+
+    def styleHint(self, hint, option=None, widget=None, returnData=None):
+        if hint == QStyle.StyleHint.SH_ItemView_ShowDecorationSelected:
+            return 0
+        return super().styleHint(hint, option, widget, returnData)
+
+
+@pytest.mark.parametrize("hint_false", [False, True], ids=["default-style", "hint-false"])
+def test_selection_highlight_covers_the_drag_strip(qtbot, hint_false):
+    widget = _make(qtbot, _list_param(default=[True]))
+    list_widget = widget.controls["Flags"].edit_control
+    if hint_false:
+        style = _NoDecorationSelectedStyle(QStyleFactory.create("Fusion"))
+        style.setParent(widget)
+        list_widget.setStyle(style)
+    style = list_widget.style()
+    index = list_widget.model().index(0, 0)
+    rect = list_widget.visualRect(index)
+
+    def render(selected):
+        option = QStyleOptionViewItem()
+        option.initFrom(list_widget)
+        option.rect = QRect(0, 0, rect.width(), rect.height())
+        option.widget = list_widget
+        # As the view sets it, from the style.
+        option.showDecorationSelected = bool(
+            style.styleHint(QStyle.StyleHint.SH_ItemView_ShowDecorationSelected, None, list_widget)
+        )
+        if selected:
+            option.state |= QStyle.StateFlag.State_Selected
+        image = QImage(option.rect.size(), QImage.Format.Format_ARGB32)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        list_widget.itemDelegate().paint(painter, option, index)
+        painter.end()
+        return image
+
+    selected = render(True)
+    unselected = render(False)
+    strip = QPoint(2, rect.height() // 2)
+    row_end = QPoint(rect.width() - 3, rect.height() // 2)
+    assert selected.pixel(strip) == selected.pixel(row_end)
+    assert selected.pixel(strip) != unselected.pixel(strip)

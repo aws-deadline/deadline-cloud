@@ -15,6 +15,18 @@ from qtpy.QtCore import QCoreApplication, QObject, QRunnable, QThread, Signal
 
 logger = getLogger(__name__)
 
+# Substrings of the RuntimeError each Qt binding raises when emitting from a deleted
+# signal source:
+#   PySide6: "Signal source has been deleted"
+#   PyQt5:   "wrapped C/C++ object of type WorkerSignals has been deleted"
+#   PySide2: "Internal C++ object (WorkerSignals) already deleted." (from shiboken2)
+_DELETED_SOURCE_MESSAGES = ("has been deleted", "already deleted")
+
+
+def _is_deleted_source_error(exc: RuntimeError) -> bool:
+    message = str(exc)
+    return any(marker in message for marker in _DELETED_SOURCE_MESSAGES)
+
 
 class WorkerSignals(QObject):
     """
@@ -140,8 +152,8 @@ class AsyncTask(QRunnable):
         ``run()`` executes in a background thread and may still be in-flight when
         the owning runner (or the widget it is parented to) is destroyed. When that
         happens the underlying ``WorkerSignals`` C++ object is deleted out from under
-        us, and touching/emitting it raises ``RuntimeError("Signal source has been
-        deleted")``. A deleted source has no live listeners, so there is nothing to
+        us, and touching/emitting it raises a ``RuntimeError`` whose message depends
+        on the Qt binding (see ``_DELETED_SOURCE_MESSAGES``). A deleted source has no live listeners, so there is nothing to
         deliver - we log at debug level and move on instead of letting the exception
         cascade through the result/error/finished emissions.
         """
@@ -155,7 +167,7 @@ class AsyncTask(QRunnable):
             # signal source. Only swallow the "source deleted" case (nothing is
             # listening anymore); re-raise anything else so genuine slot bugs and
             # failed error/finished deliveries aren't silently lost.
-            if "has been deleted" not in str(exc):
+            if not _is_deleted_source_error(exc):
                 raise
             logger.debug("Skipping '%s' emit; signal source has been deleted", signal_name)
 

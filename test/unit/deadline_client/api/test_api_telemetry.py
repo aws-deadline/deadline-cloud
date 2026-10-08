@@ -23,6 +23,11 @@ from deadline.client.api._telemetry import (
     record_function_latency_telemetry_event,
 )
 from deadline.client.api import _stack_trace_sanitizer
+from deadline.client.exceptions import (
+    CreateJobWaiterCanceled,
+    DeadlineOperationCanceled,
+    UserInitiatedCancel,
+)
 from deadline.client.api._stack_trace_sanitizer import (
     _sanitize_path,
     sanitize_exception,
@@ -329,6 +334,36 @@ def test_record_error_with_trace(fresh_deadline_config, mock_telemetry_client):
     }
     assert "ValueError" in stack_trace
     assert "Traceback (most recent call last):" in stack_trace
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        DeadlineOperationCanceled(),
+        UserInitiatedCancel(),
+        CreateJobWaiterCanceled(),
+    ],
+)
+def test_record_error_with_trace_skips_cancellations(
+    fresh_deadline_config, mock_telemetry_client, exc
+):
+    """A canceled operation stopped as designed, so it must not be reported as an error."""
+    # GIVEN
+    queue_mock = MagicMock()
+    mock_telemetry_client.event_queue = queue_mock
+
+    try:
+        raise exc
+    except DeadlineOperationCanceled as raised:
+        with (
+            patch.object(mock_telemetry_client, "get_account_id", return_value="111122223333"),
+            patch.object(api._telemetry, "get_boto3_session"),
+        ):
+            # WHEN
+            mock_telemetry_client.record_error_with_trace(raised, "on_submit")
+
+    # THEN
+    queue_mock.put_nowait.assert_not_called()
 
 
 def test_record_error_with_trace_extra_details(fresh_deadline_config, mock_telemetry_client):

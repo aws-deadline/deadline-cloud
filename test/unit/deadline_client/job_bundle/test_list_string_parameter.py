@@ -223,27 +223,27 @@ def test_validate_job_parameter_list_string_invalid_item(
         ),
         pytest.param(
             {"item": {"minLength": 5, "maxLength": 4}},
-            '"item" -> "minLength" 5 greater than the maximum item length of 4',
+            '"item" -> "minLength" 5 greater than the maximum length of 4',
             id="item-min-over-max",
         ),
         pytest.param(
             {"item": {"minLength": 1025}},
-            '"item" -> "minLength" 1025 greater than the maximum item length of 1024',
+            '"item" -> "minLength" 1025 greater than the maximum length of 1024',
             id="item-min-over-cap",
         ),
         pytest.param(
             {"item": {"allowedValues": ["ok", "toolong"], "maxLength": 4}},
-            '"item" -> "allowedValues" \\[1\\] of length 7, outside the item length range 0-4',
+            '"item" -> "allowedValues" \\[1\\] of length 7, outside the length range 0-4',
             id="allowed-too-long",
         ),
         pytest.param(
             {"item": {"allowedValues": ["a", "abc"], "minLength": 2}},
-            '"item" -> "allowedValues" \\[0\\] of length 1, outside the item length range 2-1024',
+            '"item" -> "allowedValues" \\[0\\] of length 1, outside the length range 2-1024',
             id="allowed-too-short",
         ),
         pytest.param(
             {"item": {"allowedValues": ["x" * 1025]}},
-            '"item" -> "allowedValues" \\[0\\] of length 1025, outside the item length range 0-1024',
+            '"item" -> "allowedValues" \\[0\\] of length 1025, outside the length range 0-1024',
             id="allowed-over-cap",
         ),
     ],

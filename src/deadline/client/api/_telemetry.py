@@ -31,6 +31,7 @@ from ._session import (
     get_boto3_session,
 )
 from ._stack_trace_sanitizer import sanitize_exception
+from ..exceptions import DeadlineOperationCanceled
 from ..config import config_file
 from .. import version
 
@@ -214,6 +215,13 @@ class TelemetryClient:
         extra_details: Optional[dict] = None,
         from_gui: bool = False,
     ) -> None:
+        # A cancellation is the operation stopping as designed -- the user declined a
+        # prompt, or --yes refused to upload unknown paths -- not a client failure.
+        # Reporting it as an error lets one user retrying a refused submission trip the
+        # client error alarm on their own.
+        if isinstance(exc, DeadlineOperationCanceled):
+            return
+
         event_details: dict = {
             "exception_type": type(exc).__qualname__,
             "exception_scope": exception_scope,
