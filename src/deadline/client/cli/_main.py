@@ -120,11 +120,23 @@ def deadline(
     Common workflows:
 
     \b
-      Submit a job:       deadline bundle submit <path>
-      Monitor a job:      deadline job get --job-id <job-id>
-      Wait for a job:     deadline job wait
-      Download output:    deadline job download-output
+      Submit a job:       deadline bundle submit <path> [--yes]
+      Wait for completion: deadline job wait --job-id <id>  (exit 0=ok)
+      Download output:    deadline job download-output --job-id <id> [--yes]
+      Monitor a job:      deadline job get --job-id <job-id> | deadline job logs
       Sync all output:    deadline queue sync-output
+
+    \b
+    Scripted end-to-end example (no interactive prompts):
+      deadline bundle submit ./bundle --yes
+      deadline job wait --job-id job-abc123
+      deadline job download-output --job-id job-abc123 --yes
+
+    \b
+    Configuration:
+      deadline config show          Show current farm/queue/profile
+      deadline config set <k> <v>   Set a config value
+      deadline auth status          Check authentication state
 
     Works with any configured AWS credentials, or with Deadline Cloud monitor
     for identity-provider-based login (see `deadline auth login`).
