@@ -424,6 +424,35 @@ class TestDeadlineUIController:
         assert _resolve_region() == "us-east-1"
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_switching_farms_across_regions_tracks_each_farm_region(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """
+        Switching between farms discovered in different regions points config-resolved
+        calls (submission, queue credentials, CLI) at the selected farm's region each time.
+        """
+        from deadline.client.api._session import _resolve_region, get_boto3_client
+
+        controller = DeadlineUIController.getInstance()
+        mock_api.list_queues.return_value = {"queues": []}
+        controller._on_farms_region_result(
+            ("us-west-2", [{"farmId": "farm-a", "displayName": "Farm A"}], None)
+        )
+        controller._on_farms_region_result(
+            ("eu-west-1", [{"farmId": "farm-b", "displayName": "Farm B"}], None)
+        )
+
+        for farm_id, expected_region in [
+            ("farm-a", "us-west-2"),
+            ("farm-b", "eu-west-1"),
+            ("farm-a", "us-west-2"),
+        ]:
+            controller.select_farm(farm_id)
+
+            assert _resolve_region() == expected_region
+            assert get_boto3_client("deadline").meta.region_name == expected_region
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
     def test_select_farm_keeps_stored_region_when_farm_unobserved(
         self, mock_api, qtbot, fresh_deadline_config
     ):
