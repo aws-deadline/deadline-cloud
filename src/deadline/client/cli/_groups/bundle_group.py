@@ -74,6 +74,16 @@ def cli_bundle():
     review and edit parameters in a GUI before submitting.
 
     \b
+    A job bundle directory must contain template.yaml (or template.json).
+    It may also include parameter_values.yaml and asset_references.yaml.
+
+    \b
+    Scripted workflow (no prompts):
+      deadline bundle submit ./bundle --yes
+      deadline job wait --job-id <id>
+      deadline job download-output --job-id <id> --yes
+
+    \b
     Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
     """
 
@@ -234,7 +244,10 @@ def _interactive_confirmation_prompt(message: str, default_response: bool) -> bo
     "--known-asset-path",
     multiple=True,
     help="Path that should not generate warnings when outside storage profile locations. "
-    "Can be specified multiple times for different paths.",
+    "Use this when submitting from a temporary or non-standard directory to suppress "
+    "the 'unknown asset paths' confirmation prompt. "
+    "Can be specified multiple times for different paths. "
+    "Equivalent to adding paths to config setting 'settings.known_asset_paths'.",
 )
 @click.option(
     "--save-debug-snapshot",
@@ -248,6 +261,20 @@ def _interactive_confirmation_prompt(message: str, default_response: bool) -> bo
     help="Force verification that job attachments exist in S3 before skipping upload. "
     "Use when S3 bucket contents may be out of sync with local caches. "
     "Overrides the 'settings.force_s3_check' config setting.",
+)
+@click.option(
+    "--wait",
+    is_flag=True,
+    help="After submitting, block until the job reaches a terminal state (the "
+    "equivalent of running `deadline job wait` on the new job). Exits non-zero if "
+    "the job does not succeed.",
+)
+@click.option(
+    "--download-on-success",
+    is_flag=True,
+    help="Implies --wait: after the job SUCCEEDS, download its output to the paths "
+    "recorded at submission time (the equivalent of `deadline job download-output`). "
+    "No-op if the job does not succeed.",
 )
 @click.argument("job_bundle_dir")
 @_handle_error
@@ -266,6 +293,8 @@ def bundle_submit(
     submitter_name,
     save_debug_snapshot,
     force_s3_check,
+    wait,
+    download_on_success,
     **args,
 ):
     """
@@ -284,6 +313,24 @@ def bundle_submit(
     The command returns a job id (job-xxxx). Use `deadline job get --job-id <id>`
     to see its current taskRunStatus, or `deadline job wait --job-id <id>` to
     block until the job reaches a terminal state (SUCCEEDED / FAILED / CANCELED).
+
+    \b
+    JOB_BUNDLE_DIR is the path to the directory containing template.yaml (or
+    template.json), and optionally parameter_values.yaml and
+    asset_references.yaml.
+
+    \b
+    If asset files reference paths outside the configured storage profile
+    locations (settings.storage_profile_id), submission will warn about
+    "unknown asset paths" and prompt for confirmation. To suppress this in
+    non-interactive use, either pass --known-asset-path <dir> for each additional
+    root, or pass --yes to auto-confirm all prompts.
+
+    \b
+    To do the whole workflow in one command, add --wait to block until the job
+    finishes (exit code 0 = success), and --download-on-success to also download
+    its output once it succeeds. Otherwise you can run the steps separately:
+    `deadline job wait --job-id <id>` then `deadline job download-output --job-id <id>`.
 
     \b
     Learn more about [job bundles](https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/build-job-bundle.html)
@@ -366,6 +413,31 @@ def bundle_submit(
             and job_id
         ):
             config_file.set_setting("defaults.job_id", job_id)
+
+        # --download-on-success implies --wait. Skipped when there is no real job
+        # (e.g. --save-debug-snapshot yields job_id=None).
+        if job_id and (wait or download_on_success):
+            farm_id = config_file.get_setting("defaults.farm_id", config=config)
+            queue_id = config_file.get_setting("defaults.queue_id", config=config)
+            click.echo(f"Waiting for job {job_id} to complete...")
+            result = api.wait_for_job_completion(
+                farm_id=farm_id, queue_id=queue_id, job_id=job_id, config=config
+            )
+            click.echo(f"Job completed with status: {result.status}")
+            if result.status != "SUCCEEDED":
+                sys.exit(1)
+            if download_on_success:
+                # Imported lazily to avoid a circular import with job_group.
+                from .job_group import _download_job_output
+
+                _download_job_output(
+                    config=config,
+                    farm_id=farm_id,
+                    queue_id=queue_id,
+                    job_id=job_id,
+                    step_id=None,
+                    task_id=None,
+                )
 
     except AssetSyncCancelledError as exc:
         if sigint_handler.continue_operation:
