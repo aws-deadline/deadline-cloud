@@ -10,7 +10,7 @@ try:
     from deadline.client.ui.widgets.job_bundle_settings_tab import JobBundleSettingsWidget
     import deadline.client.ui.dialogs.job_bundle_browser_dialog  # noqa: F401 - preload for patching
 except ImportError:
-    pytest.importorskip("deadline.client.ui.widgets.job_bundle_settings_tab")
+    pytest.importorskip("deadline.client.ui.widgets.job_bundle_settings_tab", exc_type=ImportError)
 
 
 MINIMAL_TEMPLATE = """

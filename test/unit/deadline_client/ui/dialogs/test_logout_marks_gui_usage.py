@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytest.importorskip("qtpy")
+pytest.importorskip("qtpy", exc_type=ImportError)
 
 
 def test_config_dialog_logout_marks_gui_usage():

@@ -132,7 +132,11 @@ API_TOOLS_CONFIG: dict[str, ToolConfig] = {
     # ... existing tools ...
     "your_new_tool": {
         "func": api.your_new_function,  # Must be from deadline.client.api
-        "params": ["param1", "param2", "optional_param"],  # List all parameters, or None if no params
+        "params": [
+            "param1",
+            "param2",
+            "optional_param",
+        ],  # List all parameters, or None if no params
     },
 }
 ```

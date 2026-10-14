@@ -145,7 +145,7 @@ def main(
     with tempfile.TemporaryDirectory() as wd:
         workdir = Path(wd)
         print(f"cwd: {os.getcwd()}")
-        print(f"working directory: {str(workdir)}")
+        print(f"working directory: {workdir!s}")
 
         installer_folder = Path(__file__).absolute().parent.parent / "installer"
         components_dir = installer_folder / "components"

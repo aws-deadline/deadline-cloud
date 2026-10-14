@@ -135,7 +135,6 @@ class TestRegisterAPITools:
 
         def unregistered_function():
             """A function not in the registry."""
-            pass
 
         with pytest.raises(
             ValueError, match="Function unregistered_function not found in tool registry"

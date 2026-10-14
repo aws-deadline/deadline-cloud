@@ -54,8 +54,7 @@ message = tr("Profile '{name}' has an error.").format(name=profile_name)
 
 # Multiple placeholders
 message = tr("Uploaded {count} files to {destination}").format(
-    count=file_count,
-    destination=bucket_name
+    count=file_count, destination=bucket_name
 )
 ```
 

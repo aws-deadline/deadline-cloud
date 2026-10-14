@@ -19,7 +19,7 @@ try:
     )
 except ImportError:
     # The tests in this file should be skipped if Qt UI related modules cannot be loaded
-    pytest.importorskip("deadline.client.ui.widgets.host_requirements_tab")
+    pytest.importorskip("deadline.client.ui.widgets.host_requirements_tab", exc_type=ImportError)
 
 from deadline.client.exceptions import NonValidInputError
 

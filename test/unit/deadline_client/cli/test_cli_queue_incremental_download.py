@@ -6,12 +6,12 @@ Tests for the CLI queue incremental output download command.
 
 import json
 import os
-import sys
 import pytest
-from unittest.mock import patch
-from datetime import datetime, timedelta
-from typing import Callable, NamedTuple
+from unittest.mock import patch, MagicMock
+from datetime import datetime, timedelta, timezone
+from typing import Callable, NamedTuple, Optional
 
+import boto3
 from freezegun import freeze_time
 import click
 from click.testing import CliRunner
@@ -26,6 +26,7 @@ from ..shared_constants import (
     MOCK_STORAGE_PROFILE_ID,
     MOCK_FLEET_ID,
     MOCK_WORKER_ID,
+    MOCK_BUCKET_NAME,
 )
 from ..mock_deadline_job_apis import (
     mock_search_jobs_for_set,
@@ -35,9 +36,22 @@ from ..mock_deadline_job_apis import (
 from deadline.job_attachments._incremental_downloads.incremental_download_state import (
     EVENTUAL_CONSISTENCY_MAX_SECONDS,
     IncrementalDownloadState,
+    IncrementalDownloadJob,
+)
+from deadline.job_attachments.asset_manifests.hash_algorithms import HashAlgorithm
+from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+    AssetManifest,
+    ManifestPath,
 )
 from deadline.job_attachments.models import StorageProfileOperatingSystemFamily
 import deadline.client.api
+import deadline.client.cli._incremental_download as mod
+from deadline.client.cli._incremental_download import (
+    CategorizedJobIds,
+    _update_checkpoint_jobs_list,
+    _filter_session_actions_without_manifests_from_job_sessions,
+    _get_job_sessions,
+)
 
 ISO_FREEZE_TIME_MINUS_5MIN = "2025-05-26 11:55:00+00:00"
 ISO_FREEZE_TIME_MINUS_1MIN = "2025-05-26 11:59:00+00:00"
@@ -94,9 +108,6 @@ def deadline_telemetry_client_mock():
         yield m
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_requires_queue_with_job_attachments(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -133,9 +144,6 @@ def test_incremental_output_download_requires_queue_with_job_attachments(
     )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_pid_lock_already_held_error(
     fresh_deadline_config,
     deadline_mock,
@@ -181,9 +189,6 @@ def test_incremental_output_download_pid_lock_already_held_error(
     assert os.path.exists(pid_lock_file)
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_storage_profile_options_mutually_exclusive(
     fresh_deadline_config,
     deadline_mock,
@@ -255,9 +260,6 @@ def _mock_unchanged_job(deadline_mock):
     return mock_jobs
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_quiet_when_nothing_new(
     fresh_deadline_config,
     deadline_mock,
@@ -287,9 +289,6 @@ def test_incremental_output_download_quiet_when_nothing_new(
     ], second.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_failure_releases_the_held_back_report(
     fresh_deadline_config,
     deadline_mock,
@@ -312,9 +311,6 @@ def test_incremental_output_download_failure_releases_the_held_back_report(
     assert "checkpoint" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_quiet_result_line_comes_last(
     fresh_deadline_config,
     deadline_mock,
@@ -340,9 +336,6 @@ def test_incremental_output_download_quiet_result_line_comes_last(
     assert lines[-1].startswith("OK  Mock Queue: nothing new"), lines
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_verbose_reports_a_run_with_nothing_new(
     fresh_deadline_config,
     deadline_mock,
@@ -364,9 +357,6 @@ def test_incremental_output_download_verbose_reports_a_run_with_nothing_new(
     assert "nothing to download" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_output_is_ascii_only(
     fresh_deadline_config,
     deadline_mock,
@@ -384,9 +374,6 @@ def test_incremental_output_download_output_is_ascii_only(
     result.output.encode("cp1252")
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_hides_sub_second_timings(
     fresh_deadline_config,
     deadline_mock,
@@ -412,9 +399,6 @@ def test_incremental_output_download_hides_sub_second_timings(
     assert not step_lines, step_lines
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_json_mode_writes_nothing_to_stdout(
     fresh_deadline_config,
     deadline_mock,
@@ -458,9 +442,6 @@ def test_incremental_output_download_json_mode_writes_nothing_to_stdout(
     assert result.output == "", result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 @pytest.mark.parametrize("storage_profile_id", [None, MOCK_STORAGE_PROFILE_ID])
 def test_incremental_output_download_bootstrap_and_completion(
     fresh_deadline_config,
@@ -676,9 +657,6 @@ def test_incremental_output_download_bootstrap_and_completion(
     assert "skipped     none" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_storage_profile_path_mapping(
     fresh_deadline_config,
     tmp_path,
@@ -829,9 +807,6 @@ def test_incremental_output_download_storage_profile_path_mapping(
     ), result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_bootstrap_retire_job_without_attachments(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -968,9 +943,6 @@ def test_incremental_output_download_bootstrap_retire_job_without_attachments(
     assert "1 retired" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_job_unchanged(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -1068,9 +1040,6 @@ def test_incremental_output_download_job_unchanged(
     assert "skipped     1 unchanged" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_job_canceled(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -1176,9 +1145,6 @@ def test_incremental_output_download_job_canceled(
     assert "1 retired" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_job_completed_then_requeued(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -1322,9 +1288,6 @@ def test_incremental_output_download_job_completed_then_requeued(
     assert "jobs        0 downloaded, 1 in progress" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_dry_run(fresh_deadline_config, deadline_mock, checkpoint_dir):
     """Test a new job through bootstrap, completion, and retirement."""
     mock_jobs = create_fake_job_list(1)
@@ -1388,9 +1351,6 @@ def test_incremental_output_download_dry_run(fresh_deadline_config, deadline_moc
     assert "checkpoint  not saved (dry run)" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_stats_telemetry(
     fresh_deadline_config,
     deadline_mock,
@@ -1435,7 +1395,14 @@ def test_incremental_output_download_stats_telemetry(
             ],
         )
 
-    deadline_telemetry_client_mock().record_event.assert_called_once_with(
+    # The storage profile configures no file system locations, so the status file write reports
+    # that there was nowhere to write rather than staying silent. That is the only other event.
+    calls = deadline_telemetry_client_mock().record_event.call_args_list
+    assert [c.kwargs["event_type"] for c in calls] == [
+        "com.amazon.rum.deadline.queue_sync_output_stats",
+        "com.amazon.rum.deadline.queue_sync_output_status_file",
+    ], calls
+    deadline_telemetry_client_mock().record_event.assert_any_call(
         event_type="com.amazon.rum.deadline.queue_sync_output_stats",
         event_details={
             # All latencies will be zero due to freeze_time()
@@ -1570,9 +1537,6 @@ def test_incremental_output_download_unmapped_paths_without_storage_profile(
     assert "/etc/cron.d/evil" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_manifest_mismatch_still_downloads(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -1899,9 +1863,6 @@ def test_incremental_output_download_fallback_failure_marks_run_failed(
     )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_per_task_error_isolation(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -2094,9 +2055,6 @@ def test_incremental_output_download_per_task_error_isolation(
     assert tasks[task_ids[1]]["error_code"] == "PERMISSION_DENIED", tasks
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_farm_failed_task_reaches_status_file(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -2254,9 +2212,6 @@ def test_incremental_output_download_farm_failed_task_reaches_status_file(
     assert tasks[task_ids[1]]["error_code"] is None, tasks
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_stale_farm_failed_cleared_when_task_later_succeeds(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -2386,9 +2341,6 @@ def test_incremental_output_download_stale_farm_failed_cleared_when_task_later_s
     assert task_id not in tasks, tasks
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_leftover_non_task_paths_are_downloaded(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -2539,9 +2491,6 @@ def test_incremental_output_download_leftover_non_task_paths_are_downloaded(
     assert "files       2 downloaded" in result.output, result.output
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_same_path_across_tasks_downloaded_once(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -2699,9 +2648,6 @@ def test_incremental_output_download_same_path_across_tasks_downloaded_once(
     assert task_ids[0] not in tasks, tasks
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_shared_path_newest_wins_regardless_of_order(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -2876,9 +2822,6 @@ def test_incremental_output_download_shared_path_newest_wins_regardless_of_order
     assert loser_entry["tasks"][task_id_old]["downloaded_files"] == 1, loser_entry
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_deduped_job_inherits_winning_jobs_error(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -3230,9 +3173,6 @@ def _run_two_job_sync(deadline_mock, checkpoint_dir, env):
         )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_cross_job_error_isolation(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -3261,9 +3201,6 @@ def test_incremental_output_download_cross_job_error_isolation(
     assert status["sync_metadata"]["last_run_status"] == "failed", status["sync_metadata"]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_cancellation_propagates(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -3287,9 +3224,6 @@ def test_incremental_output_download_cancellation_propagates(
     )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_cancellation_keeps_already_downloaded_files(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path, restore_sigint_handler
 ):
@@ -3329,9 +3263,6 @@ def test_incremental_output_download_cancellation_keeps_already_downloaded_files
     )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_cancellation_stops_remaining_work(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path, restore_sigint_handler
 ):
@@ -3370,9 +3301,6 @@ def test_incremental_output_download_cancellation_stops_remaining_work(
     )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_sigint_flag_alone_cancels_the_run(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path, restore_sigint_handler
 ):
@@ -3407,9 +3335,6 @@ def test_incremental_output_download_sigint_flag_alone_cancels_the_run(
     ), "a run cancelled by flag alone must not advance the checkpoint"
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_per_job_counts_are_correctly_attributed(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -3446,9 +3371,6 @@ def test_incremental_output_download_per_job_counts_are_correctly_attributed(
     assert status["sync_metadata"]["last_run_status"] == "success", status["sync_metadata"]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_retries_failed_job_via_get_job(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -3556,11 +3478,12 @@ def test_incremental_output_download_retries_failed_job_via_get_job(
         tracker_after = json.load(f)
     assert deleted_job_id not in tracker_after, tracker_after
     assert tracker_after.get(abandoned_job_id) == _MAX_FAILED_JOB_RETRIES, tracker_after
+    # The retried job was a candidate this run but had nothing to download, so it produced no
+    # result entry. That is not a failure, so it leaves the tracker rather than being retried
+    # on every future run.
+    assert retried_job_id not in tracker_after, tracker_after
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_force_bootstrap_clears_failed_jobs_tracker(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -3617,19 +3540,25 @@ class _ManifestPlan(NamedTuple):
     ``order`` is the manifest's S3 LastModified rank — attribution sorts by it, so it is what
     decides which job/task owns a path emitted by more than one manifest. It is deliberately
     independent of list position so tests can shuffle the download order.
+
+    ``paths=None`` leaves that manifest's slot in the downloaded list as None, the sentinel
+    for a manifest that was listed but never fetched.
     """
 
     order: int
     job_id: str
     task_id: str
-    paths: list[str]
+    paths: Optional[list[str]]
 
 
-def _run_manifest_plan(deadline_mock, checkpoint_dir, plans, downloader=None):
+def _run_manifest_plan(deadline_mock, checkpoint_dir, plans, downloader=None, force_bootstrap=True):
     """Runs `queue sync-output` over an arbitrary set of per-task output manifests.
 
     Generalizes the two-job harness: any number of jobs, each with any number of tasks and
     paths, with explicit manifest timestamps. Returns (result, downloaded_paths).
+
+    ``force_bootstrap=False`` keeps the checkpoint and failed-jobs tracker from an earlier run
+    in ``checkpoint_dir``, for tests that span several runs.
     """
     from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
         AssetManifest,
@@ -3701,11 +3630,22 @@ def _run_manifest_plan(deadline_mock, checkpoint_dir, plans, downloader=None):
                 paths=[ManifestPath(path=p, hash="h", size=1, mtime=1) for p in plan.paths],
             ),
         )
+        if plan.paths is not None
+        else None
         for plan in plans
     ]
     manifests_to_download = [
         (None, plan.job_id, "/", f"prefix/{_STEP_ID}/{plan.task_id}/manifest") for plan in plans
     ]
+
+    # The real helpers only return manifests for jobs whose sessions were fetched, so a job
+    # dropped from the candidates (e.g. abandoned by the retry cap) contributes none.
+    def _for_fetched_jobs(items, job_sessions):
+        return [
+            item
+            for item, (_, job_id, _, _) in zip(items, manifests_to_download)
+            if job_id in job_sessions
+        ]
 
     downloaded_paths: list[str] = []
 
@@ -3728,11 +3668,15 @@ def _run_manifest_plan(deadline_mock, checkpoint_dir, plans, downloader=None):
     with (
         patch(
             "deadline.client.cli._incremental_download._download_all_manifests_with_absolute_paths",
-            side_effect=lambda *a, **k: downloaded_manifests,
+            side_effect=lambda queue, jobs, job_sessions, *a, **k: _for_fetched_jobs(
+                downloaded_manifests, job_sessions
+            ),
         ),
         patch(
             "deadline.client.cli._incremental_download._get_manifests_to_download",
-            side_effect=lambda *a, **k: manifests_to_download,
+            side_effect=lambda prefix, jobs, job_sessions, *a, **k: _for_fetched_jobs(
+                manifests_to_download, job_sessions
+            ),
         ),
         patch(
             "deadline.client.cli._incremental_download._download_manifest_paths",
@@ -3746,7 +3690,7 @@ def _run_manifest_plan(deadline_mock, checkpoint_dir, plans, downloader=None):
                 "queue",
                 "sync-output",
                 "--ignore-storage-profiles",
-                "--force-bootstrap",
+                *(["--force-bootstrap"] if force_bootstrap else []),
                 "--bootstrap-lookback-minutes",
                 "120",
                 "--farm-id",
@@ -3760,9 +3704,6 @@ def _run_manifest_plan(deadline_mock, checkpoint_dir, plans, downloader=None):
     return result, downloaded_paths
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_shared_path_across_three_jobs_newest_wins(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -3809,9 +3750,6 @@ def test_incremental_output_download_shared_path_across_three_jobs_newest_wins(
         assert loser_task["error_code"] is None, loser_task
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_cross_job_then_within_job_overwrite(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -3852,9 +3790,6 @@ def test_incremental_output_download_cross_job_then_within_job_overwrite(
     assert status["jobs"][job_a]["tasks"][task_a]["download_status"] == "downloaded"
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_case_differing_paths_treated_as_one(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path, monkeypatch
 ):
@@ -3901,9 +3836,6 @@ def test_incremental_output_download_case_differing_paths_treated_as_one(
     assert loser["downloaded_files"] <= 1, loser
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_every_path_downloaded_exactly_once(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -3965,9 +3897,6 @@ def test_incremental_output_download_every_path_downloaded_exactly_once(
     assert tasks[0] not in status["jobs"][job_a]["tasks"], status["jobs"][job_a]["tasks"]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_status_file_shape_is_stable(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -4083,9 +4012,6 @@ def test_incremental_output_download_status_file_shape_is_stable(
     assert bad_entry["tasks"][tasks[1]]["error_code"] == "PERMISSION_DENIED", bad_entry
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_transient_getjob_error_keeps_job_in_tracker(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -4197,9 +4123,6 @@ class TestFailedJobsTrackerDurability:
             assert json.load(f) == {"job-0123456789abcdefabcdefabcdefab05": 1}
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_succeeded_task_with_no_output_is_not_a_failure(
     fresh_deadline_config, deadline_mock, checkpoint_dir
 ):
@@ -4297,9 +4220,6 @@ def test_incremental_output_download_succeeded_task_with_no_output_is_not_a_fail
     assert status["sync_metadata"]["last_run_status"] == "success", status["sync_metadata"]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Incremental output download requires Python >= 3.9"
-)
 def test_incremental_output_download_mixed_output_and_no_output_steps(
     fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
 ):
@@ -4450,3 +4370,847 @@ def test_incremental_output_download_mixed_output_and_no_output_steps(
     assert set(entry["tasks"]) == {producing_task}, entry["tasks"]
     assert entry["tasks"][producing_task]["downloaded_files"] == 1, entry["tasks"]
     assert entry["tasks"][producing_task]["error_code"] is None, entry["tasks"]
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _update_checkpoint_jobs_list (checkpoint session-ended timestamps)
+# ---------------------------------------------------------------------------
+
+
+def _make_categorized_job_ids(**kwargs):
+    """Build a CategorizedJobIds with all categories reset to fresh empty sets.
+
+    CategorizedJobIds defines its sets as class attributes, so instances share
+    them unless reassigned. Reset every category to avoid cross-test contamination.
+    """
+    cats = CategorizedJobIds()
+    for name in (
+        "added",
+        "updated",
+        "unchanged",
+        "completed",
+        "inactive",
+        "missing_storage_profile",
+        "attachments_free",
+    ):
+        setattr(cats, name, set(kwargs.get(name, set())))
+    return cats
+
+
+def test_update_checkpoint_jobs_list_does_not_corrupt_session_ended_timestamp():
+    """Each job's session_ended_timestamp must reflect its own sessions.
+
+    Regression for the stale-variable bug: a leftover max_session_ended_timestamp
+    from the last job of the first loop was written to every job in a second loop,
+    corrupting the checkpoint timestamps.
+    """
+    t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    t_a = datetime(2025, 1, 2, tzinfo=timezone.utc)
+    t_b = datetime(2025, 1, 3, tzinfo=timezone.utc)
+
+    checkpoint = IncrementalDownloadState(
+        local_storage_profile_id=None, downloads_started_timestamp=t0
+    )
+    download_candidate_jobs = {
+        "job-a": {"jobId": "job-a", "name": "A"},
+        "job-b": {"jobId": "job-b", "name": "B"},
+    }
+    job_sessions = {
+        "job-a": [
+            {"sessionId": "s-a", "endedAt": t_a, "sessionActions": [{"sessionActionIndex": 1}]}
+        ],
+        "job-b": [
+            {"sessionId": "s-b", "endedAt": t_b, "sessionActions": [{"sessionActionIndex": 1}]}
+        ],
+    }
+    cats = _make_categorized_job_ids(added={"job-a", "job-b"})
+
+    _update_checkpoint_jobs_list(checkpoint, download_candidate_jobs, cats, job_sessions)
+
+    result = {job.job_id: job.session_ended_timestamp for job in checkpoint.jobs}
+    assert result["job-a"] == t_a, result
+    assert result["job-b"] == t_b, result
+
+
+def test_update_checkpoint_running_only_job_keeps_saved_timestamp():
+    """A job whose current sessions are all still running (no endedAt) must keep
+    the session_ended_timestamp saved in the previous checkpoint rather than have
+    it overwritten with None."""
+    t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    t_saved = datetime(2025, 1, 2, tzinfo=timezone.utc)
+
+    prior_job = IncrementalDownloadJob({"jobId": "job-a", "name": "A"}, t_saved, {})
+    checkpoint = IncrementalDownloadState(
+        local_storage_profile_id=None, downloads_started_timestamp=t0, jobs=[prior_job]
+    )
+    download_candidate_jobs = {"job-a": {"jobId": "job-a", "name": "A"}}
+    # Session is still running: no "endedAt" field.
+    job_sessions = {"job-a": [{"sessionId": "s-a", "sessionActions": [{"sessionActionIndex": 1}]}]}
+    cats = _make_categorized_job_ids(updated={"job-a"})
+
+    _update_checkpoint_jobs_list(checkpoint, download_candidate_jobs, cats, job_sessions)
+
+    result = {job.job_id: job.session_ended_timestamp for job in checkpoint.jobs}
+    assert result["job-a"] == t_saved, result
+
+
+def test_filter_session_actions_tolerates_missing_manifests_key():
+    """A session action without a 'manifests' key must not raise KeyError."""
+    job_sessions = {
+        "job-a": [
+            {
+                "sessionId": "s-a",
+                "sessionActions": [{"sessionActionId": "sa-0"}],  # no "manifests" key
+            }
+        ]
+    }
+    download_candidate_jobs = {"job-a": {"jobId": "job-a", "name": "A"}}
+
+    # Must not raise (previously raised KeyError on session_action["manifests"]).
+    _filter_session_actions_without_manifests_from_job_sessions(
+        job_sessions, download_candidate_jobs
+    )
+    # The action lacked any output manifests, so it is filtered out.
+    assert job_sessions["job-a"][0].get("sessionActions", []) == []
+
+
+def test_get_job_sessions_requeued_job_uses_eventual_consistency_window():
+    """A requeued job reappears categorized as 'added' but carries a saved
+    session_ended_timestamp. It must get the eventual-consistency window applied,
+    like updated/completed jobs, so sessions near the requeue boundary aren't missed."""
+    t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    t_saved = datetime(2025, 1, 5, tzinfo=timezone.utc)
+
+    prior_job = IncrementalDownloadJob({"jobId": "job-a"}, t_saved, {})
+    checkpoint = IncrementalDownloadState(
+        local_storage_profile_id=None, downloads_started_timestamp=t0, jobs=[prior_job]
+    )
+    download_candidate_jobs = {"job-a": {"jobId": "job-a", "name": "A"}}
+    cats = _make_categorized_job_ids(added={"job-a"})
+
+    captured_thresholds = {}
+
+    def fake_retrieve_sessions_for_job(
+        deadline_client, farm_id, queue_id, job_id, session_ended_threshold, output_job_sessions
+    ):
+        captured_thresholds[job_id] = session_ended_threshold
+
+    with (
+        patch.object(mod, "get_session_client", return_value=MagicMock()),
+        patch.object(mod, "_retrieve_sessions_for_job", side_effect=fake_retrieve_sessions_for_job),
+    ):
+        _get_job_sessions(
+            MagicMock(),  # boto3_session
+            MagicMock(),  # boto3_session_for_s3
+            MOCK_FARM_ID,
+            {"queueId": MOCK_QUEUE_ID},
+            {},  # checkpoint_job_session_completed_indexes
+            cats,
+            checkpoint,
+            download_candidate_jobs,
+        )
+
+    expected = t_saved - timedelta(seconds=checkpoint.eventual_consistency_max_seconds)
+    assert captured_thresholds["job-a"] == expected, captured_thresholds
+
+
+def test_incremental_output_download_json_mode_emits_no_debug_lines(
+    fresh_deadline_config, deadline_mock, checkpoint_dir
+):
+    """In --json mode the command must not emit raw DEBUG print() lines that would
+    corrupt the JSON output stream."""
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "READY"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 1, "READY": 1}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {"rootPath": "/", "rootPathFormat": "posix", "outputRelativeDirectories": ["."]}
+        ],
+        "fileSystem": "VIRTUAL",
+    }
+    del mock_jobs[0]["endedAt"]
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--json",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "DEBUG" not in result.output, result.output
+
+
+def _put_manifest_and_data_objects_in_s3(root_path: str) -> dict[str, bytes]:
+    """Upload asset manifests and CAS data objects to the moto S3 bucket so that
+    sync-output performs real S3 downloads. Returns {relative_path: content}.
+
+    The keys follow the job attachments layout under the queue's rootPrefix
+    ("MockRootPrefix" from the deadline_mock fixture's get_queue response):
+    manifests at MockRootPrefix/Manifests/<outputManifestPath> and CAS data at
+    MockRootPrefix/Data/<hash>.xxh128.
+    """
+    files = {
+        "output/file1.txt": b"content of file one",
+        "output/file2.txt": b"content of file two, a bit longer",
+        "output/deeper/file3.txt": b"third file content",
+    }
+    hashes = {path: f"fakehash{i}" for i, path in enumerate(files)}
+
+    def make_manifest(paths: list[str]) -> str:
+        return AssetManifest(
+            hash_alg=HashAlgorithm.XXH128,
+            paths=[
+                ManifestPath(path=path, hash=hashes[path], size=len(files[path]), mtime=1)
+                for path in paths
+            ],
+            total_size=sum(len(files[path]) for path in paths),
+        ).encode()
+
+    s3 = boto3.client("s3", region_name="us-west-2")
+    s3.put_object(
+        Bucket=MOCK_BUCKET_NAME,
+        Key="MockRootPrefix/Manifests/manifest_action_0_output.xxh128",
+        Body=make_manifest(["output/file1.txt", "output/file2.txt"]).encode("utf-8"),
+    )
+    s3.put_object(
+        Bucket=MOCK_BUCKET_NAME,
+        Key="MockRootPrefix/Manifests/manifest_action_1_output.xxh128",
+        Body=make_manifest(["output/deeper/file3.txt"]).encode("utf-8"),
+    )
+    for path, content in files.items():
+        s3.put_object(
+            Bucket=MOCK_BUCKET_NAME,
+            Key=f"MockRootPrefix/Data/{hashes[path]}.xxh128",
+            Body=content,
+        )
+    return files
+
+
+def test_incremental_output_download_json_mode_with_real_s3_download(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """In --json mode, stdout must stay byte-clean even while sync-output performs
+    real S3 file downloads (via moto) with the real ProgressTracker firing progress
+    callbacks. A contrast run without --json verifies that the same download emits
+    progress output, proving the callbacks fired and were suppressed rather than
+    the download being skipped."""
+    root_path = str(tmp_path / "job_root")
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Mock Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "READY"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 2, "READY": 1}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {
+                "rootPath": root_path,
+                "rootPathFormat": "posix",
+                "outputRelativeDirectories": ["output"],
+            }
+        ],
+        "fileSystem": "VIRTUAL",
+    }
+    del mock_jobs[0]["endedAt"]
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    # One running session (no endedAt, so it passes the session threshold filter)
+    # with two SUCCEEDED task-run session actions carrying output manifests.
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": "2025-05-26T11:40:00+00:00",
+                "lifecycleStatus": "STARTED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_1,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-05-26T11:41:00+00:00",
+                "endedAt": "2025-05-26T11:42:00+00:00",
+                "definition": {"taskRun": {"taskId": "task-abc-0", "stepId": "step-abc"}},
+                "manifests": [{"outputManifestPath": "manifest_action_0_output.xxh128"}],
+            },
+            {
+                "sessionActionId": MOCK_SESSION_ACTION_ID_2,
+                "status": "SUCCEEDED",
+                "startedAt": "2025-05-26T11:43:00+00:00",
+                "endedAt": "2025-05-26T11:44:00+00:00",
+                "definition": {"taskRun": {"taskId": "task-abc-1", "stepId": "step-abc"}},
+                "manifests": [{"outputManifestPath": "manifest_action_1_output.xxh128"}],
+            },
+        ]
+    }
+
+    files = _put_manifest_and_data_objects_in_s3(root_path)
+
+    # RUN 1: --json mode, real downloads through moto S3.
+    runner = CliRunner()
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--json",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+    assert result.exit_code == 0, result.output
+
+    # The files must have actually been downloaded from S3, byte-for-byte.
+    for rel_path, content in files.items():
+        local_file = os.path.join(root_path, *rel_path.split("/"))
+        assert os.path.isfile(local_file), f"missing downloaded file: {local_file}"
+        with open(local_file, "rb") as f:
+            assert f.read() == content, rel_path
+
+    # stdout must be byte-clean for scripting: the command currently emits no JSON
+    # payload of its own, so any output at all is leakage. If a legitimate JSON
+    # payload is added later, every line must still parse as JSON.
+    for line in result.output.splitlines():
+        if line.strip():
+            json.loads(line)
+    assert result.output == "", repr(result.output)
+
+    # RUN 2 (contrast): the same download without --json emits the progress report and
+    # the ProgressTracker's 100% progress message, proving the progress callbacks
+    # fired during RUN 1 and were suppressed rather than the download not happening.
+    contrast_checkpoint_dir = str(tmp_path / "contrast_checkpoint")
+    with freeze_time(ISO_FREEZE_TIME):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--ignore-storage-profiles",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                contrast_checkpoint_dir,
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    assert "Mock Job: downloading 3 files" in result.output, result.output
+    # The 100% progress callback message, e.g. "Downloaded 70 B / 70 B of 3 files (...)"
+    assert "Downloaded 70 B / 70 B of 3 files" in result.output, result.output
+    assert "downloaded 3 files" in result.output, result.output
+
+
+def test_incremental_output_download_cancellation_between_tasks_keeps_finished_task(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path, restore_sigint_handler
+):
+    """Ctrl+C after one task of a multi-task job finished: that task's files stay on disk, the
+    rest of the job is not downloaded, and nothing is recorded.
+
+    Per-task isolation downloads a job one task at a time, so a cancellation usually lands
+    between tasks rather than inside one. The finished task must not be rolled back, and the
+    job must not be recorded as partly downloaded — the next run has to re-scan it in full.
+    """
+    from deadline.job_attachments.exceptions import AssetSyncCancelledError
+
+    tasks = [f"task-b1764261dff54214aace3932bde8ae7e-{i}" for i in range(2)]
+    task_paths = {
+        tasks[0]: [str(tmp_path / "out" / "f0_beauty.exr"), str(tmp_path / "out" / "f0_depth.exr")],
+        tasks[1]: [str(tmp_path / "out" / "f1_beauty.exr")],
+    }
+    plans = [
+        _ManifestPlan(order=i + 1, job_id=MOCK_JOB_ID, task_id=task_id, paths=task_paths[task_id])
+        for i, task_id in enumerate(tasks)
+    ]
+    finished_batches: list[list[str]] = []
+
+    def cancel_on_second_task(downloaded_paths):
+        from deadline.client.cli._common import sigint_handler
+
+        def download(
+            files,
+            hash_algorithm,
+            queue,
+            session,
+            conflict,
+            on_downloading_files,
+            print_function_callback,
+        ):
+            if finished_batches:
+                sigint_handler.continue_operation = False
+                raise AssetSyncCancelledError("File download cancelled.")
+            for f in files:
+                downloaded_paths.append(f.path)
+                os.makedirs(os.path.dirname(f.path), exist_ok=True)
+                with open(f.path, "w") as fh:
+                    fh.write("output")
+            finished_batches.append([f.path for f in files])
+
+        return download
+
+    result, downloaded_paths = _run_manifest_plan(
+        deadline_mock, checkpoint_dir, plans, downloader=cancel_on_second_task
+    )
+
+    assert result.exit_code != 0, result.output
+    assert AssetSyncCancelledError.__name__ in result.output, result.output
+    # Exactly one task finished, whichever the loop visited first; all of its files survive.
+    assert len(finished_batches) == 1, finished_batches
+    finished = finished_batches[0]
+    finished_task = next(t for t, paths in task_paths.items() if sorted(paths) == sorted(finished))
+    for path in finished:
+        assert os.path.exists(path), f"{path} from the finished task must survive Ctrl+C"
+    for task_id, paths in task_paths.items():
+        if task_id != finished_task:
+            for path in paths:
+                assert not os.path.exists(path), f"{path} was queued behind the cancel"
+    assert sorted(downloaded_paths) == sorted(finished), downloaded_paths
+    assert not os.path.exists(
+        os.path.join(
+            checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_download_checkpoint.json"
+        )
+    ), "a cancelled run must not advance the checkpoint"
+    assert not os.path.exists(_ignore_profiles_status_file(checkpoint_dir)), (
+        "a cancelled run must not record the finished task as a partial success"
+    )
+
+
+def test_incremental_output_download_unfetched_manifest_never_reaches_a_download_batch(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """A None slot in the downloaded-manifest list is skipped, not passed to the downloader.
+
+    The list is pre-filled with None and each slot is set by a worker thread, so None means
+    "listed but not fetched". Attribution must skip it without shifting the index correlation
+    for the manifests around it, or every later manifest would be credited to the wrong task.
+    """
+    job_a, job_b = MOCK_JOB_ID, "job-0123456789abcdefabcdefabcdefab99"
+    tasks = [f"task-b1764261dff54214aace3932bde8ae7e-{i}" for i in range(3)]
+    path_a = str(tmp_path / "out" / "a.exr")
+    path_b = str(tmp_path / "out" / "b.exr")
+    plans = [
+        _ManifestPlan(order=1, job_id=job_a, task_id=tasks[0], paths=[path_a]),
+        _ManifestPlan(order=2, job_id=job_a, task_id=tasks[1], paths=None),
+        _ManifestPlan(order=3, job_id=job_b, task_id=tasks[2], paths=[path_b]),
+    ]
+    batches: list[list] = []
+
+    def recording_downloader(downloaded_paths):
+        def download(
+            files,
+            hash_algorithm,
+            queue,
+            session,
+            conflict,
+            on_downloading_files,
+            print_function_callback,
+        ):
+            batches.append(list(files))
+            for f in files:
+                downloaded_paths.append(f.path)
+                os.makedirs(os.path.dirname(f.path), exist_ok=True)
+                with open(f.path, "w") as fh:
+                    fh.write("output")
+
+        return download
+
+    result, downloaded_paths = _run_manifest_plan(
+        deadline_mock, checkpoint_dir, plans, downloader=recording_downloader
+    )
+
+    assert result.exit_code == 0, result.output
+    assert all(f is not None for batch in batches for f in batch), batches
+    assert sorted(downloaded_paths) == sorted([path_a, path_b]), downloaded_paths
+    # The skip is per-slot, so per-job and per-task tracking stays on for the rest of the run.
+    assert "manifest list length mismatch" not in result.output, result.output
+
+    with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
+        status = json.load(f)
+    # Each surviving manifest is still credited to its own job and task.
+    assert set(status["jobs"][job_a]["tasks"]) == {tasks[0]}, status["jobs"][job_a]
+    assert status["jobs"][job_a]["tasks"][tasks[0]]["downloaded_files"] == 1
+    assert set(status["jobs"][job_b]["tasks"]) == {tasks[2]}, status["jobs"][job_b]
+    assert status["jobs"][job_b]["tasks"][tasks[2]]["downloaded_files"] == 1
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_incremental_output_download_attribution_properties_hold_for_random_manifests(
+    seed, fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """Seeded property test over random (timestamp, job, task, paths) manifest sets.
+
+    Against an oracle that replays the manifests oldest to newest, every run must download
+    each distinct path exactly once, credit it to the newest manifest's job and task, and
+    report every job as downloaded. The hand-built attribution tests each pin one shape;
+    this covers the combinations between them.
+    """
+    import random
+
+    rng = random.Random(seed)
+    job_ids = [
+        MOCK_JOB_ID,
+        "job-0123456789abcdefabcdefabcdefab98",
+        "job-0123456789abcdefabcdefabcdefab99",
+    ]
+    pool = [str(tmp_path / "out" / f"frame_{i}.exr") for i in range(8)]
+    manifest_count = rng.randint(3, 8)
+    # A permutation, so list position and timestamp order disagree.
+    orders = rng.sample(range(1, manifest_count + 1), manifest_count)
+    plans = [
+        _ManifestPlan(
+            order=order,
+            job_id=rng.choice(job_ids),
+            task_id=f"task-b1764261dff54214aace3932bde8ae7e-{rng.randrange(3)}",
+            paths=rng.sample(pool, rng.randint(1, 4)),
+        )
+        for order in orders
+    ]
+
+    owner: dict[str, tuple[str, str]] = {}
+    for plan in sorted(plans, key=lambda plan: plan.order):
+        for path in plan.paths or []:
+            owner[path] = (plan.job_id, plan.task_id)
+    owned_per_task: dict[str, dict[str, int]] = {}
+    for job_id, task_id in owner.values():
+        job_counts = owned_per_task.setdefault(job_id, {})
+        job_counts[task_id] = job_counts.get(task_id, 0) + 1
+
+    result, downloaded_paths = _run_manifest_plan(deadline_mock, checkpoint_dir, plans)
+
+    assert result.exit_code == 0, (plans, result.output)
+    assert sorted(downloaded_paths) == sorted(owner), (plans, downloaded_paths)
+    assert f"files       {len(owner)} downloaded" in result.output, (plans, result.output)
+
+    with open(_ignore_profiles_status_file(checkpoint_dir)) as f:
+        jobs = json.load(f)["jobs"]
+    assert set(jobs) == {plan.job_id for plan in plans}, (plans, jobs.keys())
+    for job_id, entry in jobs.items():
+        assert entry["download_status"] == "downloaded", (plans, job_id, entry)
+        assert entry["error_code"] is None, (plans, job_id, entry)
+    for job_id, task_counts in owned_per_task.items():
+        entry = jobs[job_id]
+        assert entry["downloaded_files"] == sum(task_counts.values()), (plans, job_id, entry)
+        assert {
+            task_id: task["downloaded_files"] for task_id, task in entry["tasks"].items()
+        } == task_counts, (plans, job_id, entry)
+
+
+def test_incremental_output_download_retry_cap_reached_then_suppressed_next_run(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """The failure that reaches the retry cap warns, and the next run leaves the job alone.
+
+    Pins the boundary across two real runs rather than on the tracker in isolation: the
+    capping failure has to be counted and announced in the same run, and the following run has
+    to drop the job even though the search window still returns it.
+    """
+    from deadline.client.cli._incremental_download import _MAX_FAILED_JOB_RETRIES
+
+    task_id = "task-b1764261dff54214aace3932bde8ae7e-0"
+    output_path = str(tmp_path / "out" / "beauty.exr")
+    plans = [_ManifestPlan(order=1, job_id=MOCK_JOB_ID, task_id=task_id, paths=[output_path])]
+    failed_jobs_file = os.path.join(
+        checkpoint_dir, f"{MOCK_QUEUE_ID}_ignore-storage-profiles_failed_jobs.json"
+    )
+    with open(failed_jobs_file, "w") as f:
+        json.dump({MOCK_JOB_ID: _MAX_FAILED_JOB_RETRIES - 1}, f)
+
+    def failing_downloader(downloaded_paths):
+        def download(
+            files,
+            hash_algorithm,
+            queue,
+            session,
+            conflict,
+            on_downloading_files,
+            print_function_callback,
+        ):
+            raise PermissionError(f"[Errno 13] Permission denied: '{files[0].path}'")
+
+        return download
+
+    # Run 1: the last allowed attempt fails.
+    result, _ = _run_manifest_plan(
+        deadline_mock,
+        checkpoint_dir,
+        plans,
+        downloader=failing_downloader,
+        force_bootstrap=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert f"failed to download {_MAX_FAILED_JOB_RETRIES} times" in result.output, result.output
+    with open(failed_jobs_file) as f:
+        assert json.load(f) == {MOCK_JOB_ID: _MAX_FAILED_JOB_RETRIES}
+
+    # Run 2: downloads would now succeed and the search window still returns the job, but it
+    # has been abandoned.
+    deadline_mock.list_sessions.reset_mock()
+    result, downloaded_paths = _run_manifest_plan(
+        deadline_mock, checkpoint_dir, plans, force_bootstrap=False
+    )
+    assert result.exit_code == 0, result.output
+    assert "previously failed job" not in result.output, result.output
+    looked_up = [c.kwargs.get("jobId") for c in deadline_mock.list_sessions.call_args_list]
+    assert MOCK_JOB_ID not in looked_up, "an abandoned job must not be scanned for output again"
+    assert downloaded_paths == [], downloaded_paths
+    assert not os.path.exists(output_path), "an abandoned job must not be downloaded again"
+    with open(failed_jobs_file) as f:
+        assert json.load(f) == {MOCK_JOB_ID: _MAX_FAILED_JOB_RETRIES}, (
+            "the cap value is what keeps the job suppressed, so it must be kept"
+        )
+
+
+def test_incremental_output_download_cross_os_path_mapping_with_per_task_attribution(
+    fresh_deadline_config, deadline_mock, checkpoint_dir, tmp_path
+):
+    """A job submitted from Windows and synced on this host gets mapped paths and per-task rows.
+
+    Path mapping rewrites every manifest path before attribution sees it, so the two have to
+    compose: each Windows source path lands under the local storage profile root, is credited
+    to the task whose manifest key named it, and the status file is written to the local
+    file system location. Only the S3 manifest fetch and the file transfer are faked; the
+    manifest-key construction, path joining and mapping run for real.
+    """
+    from deadline.job_attachments.asset_manifests.v2023_03_03.asset_manifest import (
+        AssetManifest,
+        ManifestPath,
+    )
+    from deadline.job_attachments.asset_manifests import HashAlgorithm
+
+    local_root = tmp_path / "renders"
+    local_root.mkdir()
+    tasks = [f"task-b1764261dff54214aace3932bde8ae7e-{i}" for i in range(2)]
+    relative_paths = {tasks[0]: "out/frame_0001.exr", tasks[1]: "out/frame_0002.exr"}
+    session_action_ids = {
+        task_id: f"sessionaction-0123456789abcdefabcdefabcdefabcd-{i}"
+        for i, task_id in enumerate(tasks)
+    }
+    output_manifest_paths = {
+        task_id: (
+            f"{MOCK_FARM_ID}/{MOCK_QUEUE_ID}/{MOCK_JOB_ID}/{_STEP_ID}/{task_id}/"
+            f"2025-05-26T11:5{i}:00.000000Z_{session_action_ids[task_id]}/hash_output"
+        )
+        for i, task_id in enumerate(tasks)
+    }
+
+    mock_jobs = create_fake_job_list(1)
+    mock_jobs[0]["name"] = "Windows Job"
+    mock_jobs[0]["jobId"] = MOCK_JOB_ID
+    mock_jobs[0]["taskRunStatus"] = "SUCCEEDED"
+    mock_jobs[0]["taskRunStatusCounts"] = {"SUCCEEDED": 2, "READY": 0}
+    mock_jobs[0]["attachments"] = {
+        "manifests": [
+            {
+                "rootPath": "C:\\Renders\\shot01",
+                "rootPathFormat": "windows",
+                "outputRelativeDirectories": ["out"],
+            }
+        ],
+        "fileSystem": "COPIED",
+    }
+    mock_jobs[0]["storageProfileId"] = MOCK_STORAGE_PROFILE_ID
+    mock_jobs[0]["endedAt"] = datetime.fromisoformat(ISO_FREEZE_TIME)
+    deadline_mock.search_jobs = mock_search_jobs_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+    deadline_mock.get_job = mock_get_job_for_set(MOCK_FARM_ID, MOCK_QUEUE_ID, mock_jobs)
+
+    def mock_get_storage_profile_for_queue(farmId, queueId, storageProfileId):
+        if storageProfileId == MOCK_STORAGE_PROFILE_ID:
+            return {
+                "storageProfileId": MOCK_STORAGE_PROFILE_ID,
+                "displayName": "Windows-Workstation",
+                "osFamily": "WINDOWS",
+                "fileSystemLocations": [
+                    {"name": "Renders", "path": "C:\\Renders", "type": "SHARED"}
+                ],
+            }
+        return {
+            "storageProfileId": MOCK_STORAGE_PROFILE_ID_LOCAL,
+            "displayName": "Local-Workstation",
+            "osFamily": StorageProfileOperatingSystemFamily.get_host_os_family().value.upper(),
+            "fileSystemLocations": [{"name": "Renders", "path": str(local_root), "type": "SHARED"}],
+        }
+
+    deadline_mock.get_storage_profile_for_queue = mock_get_storage_profile_for_queue
+    deadline_mock.list_sessions.return_value = {
+        "sessions": [
+            {
+                "sessionId": MOCK_SESSION_ID,
+                "fleetId": MOCK_FLEET_ID,
+                "workerId": MOCK_WORKER_ID,
+                "startedAt": datetime.fromisoformat("2025-08-06T00:15:45.712000+00:00"),
+                "endedAt": datetime.fromisoformat("2025-08-06T00:20:59.992000+00:00"),
+                "lifecycleStatus": "ENDED",
+            }
+        ]
+    }
+    deadline_mock.list_session_actions.return_value = {
+        "sessionActions": [
+            {
+                "sessionActionId": session_action_ids[task_id],
+                "status": "SUCCEEDED",
+                "startedAt": "2025-08-06T00:20:58.454000+00:00",
+                "endedAt": "2025-08-06T00:20:59.992000+00:00",
+                "progressPercent": 100.0,
+                "definition": {"taskRun": {"taskId": task_id, "stepId": _STEP_ID}},
+                "manifests": [{"outputManifestPath": output_manifest_paths[task_id]}],
+            }
+            for task_id in tasks
+        ]
+    }
+
+    fetched_keys: list[str] = []
+
+    def fake_fetch_manifest(manifest_s3_key, s3_bucket, session):
+        fetched_keys.append(manifest_s3_key)
+        task_id = next(t for t in tasks if f"/{t}/" in manifest_s3_key)
+        return (
+            None,
+            datetime.fromisoformat(ISO_FREEZE_TIME_MINUS_5MIN)
+            + timedelta(seconds=tasks.index(task_id)),
+            AssetManifest(
+                hash_alg=HashAlgorithm.XXH128,
+                total_size=1,
+                paths=[ManifestPath(path=relative_paths[task_id], hash="h", size=1, mtime=1)],
+            ),
+        )
+
+    downloaded_paths: list[str] = []
+
+    def fake_download_manifest_paths(
+        files,
+        hash_algorithm,
+        queue,
+        session,
+        conflict,
+        on_downloading_files,
+        print_function_callback,
+    ):
+        for f in files:
+            downloaded_paths.append(f.path)
+            os.makedirs(os.path.dirname(f.path), exist_ok=True)
+            with open(f.path, "w") as fh:
+                fh.write("output")
+
+    runner = CliRunner()
+    with (
+        patch(
+            "deadline.job_attachments._incremental_downloads._manifest_s3_downloads"
+            "._get_asset_root_and_manifest_from_s3_with_last_modified",
+            side_effect=fake_fetch_manifest,
+        ),
+        patch(
+            "deadline.client.cli._incremental_download._download_manifest_paths",
+            side_effect=fake_download_manifest_paths,
+        ),
+        freeze_time(ISO_FREEZE_TIME),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "queue",
+                "sync-output",
+                "--storage-profile-id",
+                MOCK_STORAGE_PROFILE_ID_LOCAL,
+                "--force-bootstrap",
+                "--bootstrap-lookback-minutes",
+                "120",
+                "--farm-id",
+                MOCK_FARM_ID,
+                "--queue-id",
+                MOCK_QUEUE_ID,
+                "--checkpoint-dir",
+                checkpoint_dir,
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert len(fetched_keys) == 2, fetched_keys
+    assert "unmapped output paths" not in result.output, result.output
+    expected_local = {
+        task_id: str(local_root / "shot01" / "out" / os.path.basename(relative_paths[task_id]))
+        for task_id in tasks
+    }
+    assert sorted(downloaded_paths) == sorted(expected_local.values()), downloaded_paths
+
+    status_file = os.path.join(
+        str(local_root), ".deadline", f"{MOCK_QUEUE_ID}_download_status.json"
+    )
+    with open(status_file) as f:
+        status = json.load(f)
+    assert status["sync_metadata"]["storage_profile_id"] == MOCK_STORAGE_PROFILE_ID_LOCAL
+    entry = status["jobs"][MOCK_JOB_ID]
+    assert entry["download_status"] == "downloaded", entry
+    assert (entry["total_files"], entry["downloaded_files"]) == (2, 2), entry
+    assert set(entry["tasks"]) == set(tasks), entry["tasks"]
+    for task_id in tasks:
+        assert entry["tasks"][task_id]["downloaded_files"] == 1, entry["tasks"]
+        assert entry["tasks"][task_id]["error_code"] is None, entry["tasks"]
+
+
+def test_update_checkpoint_jobs_list_keeps_each_jobs_own_session_ended_timestamp():
+    """Each job's session_ended_timestamp is the max endedAt of its own sessions, not
+    the value computed for whichever job happened to be processed last.
+
+    Regression test for https://github.com/aws-deadline/deadline-cloud/issues/1373
+    """
+    early = datetime.fromisoformat(ISO_FREEZE_TIME_MINUS_5MIN)
+    late = datetime.fromisoformat(ISO_FREEZE_TIME_MINUS_1MIN)
+    checkpoint = IncrementalDownloadState(
+        local_storage_profile_id=None,
+        downloads_started_timestamp=early - timedelta(hours=1),
+    )
+    download_candidate_jobs: dict[str, dict] = {
+        job_id: {"jobId": job_id, "name": job_id, "attachments": {}}
+        for job_id in ("job-early", "job-late", "job-running")
+    }
+    job_sessions: dict[str, list] = {
+        "job-early": [
+            {"sessionId": "session-e", "endedAt": early, "sessionActions": []},
+        ],
+        "job-late": [
+            {"sessionId": "session-l", "endedAt": late, "sessionActions": []},
+        ],
+        # A session that is still running has no endedAt
+        "job-running": [
+            {"sessionId": "session-r", "sessionActions": []},
+        ],
+    }
+
+    categorized_job_ids = _make_categorized_job_ids(added=set(download_candidate_jobs))
+
+    _update_checkpoint_jobs_list(
+        checkpoint, download_candidate_jobs, categorized_job_ids, job_sessions
+    )
+
+    assert {job.job_id: job.session_ended_timestamp for job in checkpoint.jobs} == {
+        "job-early": early,
+        "job-late": late,
+        "job-running": None,
+    }

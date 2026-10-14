@@ -1,4 +1,3 @@
-# coding: utf-8
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
 import copy
@@ -34,6 +33,9 @@ from ..job_bundle.saver import save_yaml_or_json_to_file
 from ..job_bundle._repository import S3BundleRepository as _S3BundleRepository
 from ..job_bundle.parameters import (
     JobParameter,
+    _absolute_path_value,
+    _has_expr_extension,
+    _path_list_with_absolute_items,
     apply_job_parameters,
     merge_queue_job_parameters,
     read_job_bundle_parameters,
@@ -151,6 +153,15 @@ def _validate_and_warn_about_parameters(
     )
 
     return reply == QMessageBox.Yes
+
+
+def _validated_cli_value(parameter: JobParameter, value: Any) -> Any:
+    """Validates a --parameter value against its definition, returning it with the correct type."""
+    try:
+        return validate_job_parameter_value(parameter, value)
+    except (ValueError, TypeError) as e:
+        # Convert the exception to DeadlineOperationError to avoid showing a full stack trace.
+        raise DeadlineOperationError(str(e))
 
 
 def show_job_bundle_submitter(
@@ -328,6 +339,7 @@ def show_job_bundle_submitter(
             job_bundle_dir,
             parameters,
             AssetReferences(),
+            allow_uri_path_values=_has_expr_extension(template),
         )
 
         save_yaml_or_json_to_file(
@@ -419,16 +431,21 @@ def show_job_bundle_submitter(
         # e.g. from the CLI when this is called by the 'deadline bundle gui-submit' command.
         if parameter["name"] in job_parameters_dict:
             value = job_parameters_dict.pop(parameter["name"])["value"]
-            # Convert any path parameters to absolute
+            # Convert path parameters to absolute as 'deadline bundle submit' does. With the
+            # EXPR extension, URIs are kept.
+            allow_uri_path_values = _has_expr_extension(template)
             if parameter["type"] == "PATH":
-                value = os.path.abspath(value)
-            # Validate the value against the parameter definition and ensure it has the correct type
-            try:
-                value = validate_job_parameter_value(parameter, value)
-            except (ValueError, TypeError) as e:
-                # Convert the exception to DeadlineOperationError to avoid showing a full stack trace.
-                raise DeadlineOperationError(str(e))
-            parameter["value"] = value
+                # As in 'deadline bundle submit', an empty value keeps the bundle's value.
+                if value != "":
+                    value = _absolute_path_value(value, allow_uri_path_values=allow_uri_path_values)
+                    parameter["value"] = _validated_cli_value(parameter, value)
+            elif parameter["type"] == "LIST[PATH]":
+                value = _path_list_with_absolute_items(
+                    parameter, value, allow_uri_path_values=allow_uri_path_values
+                )
+                parameter["value"] = _validated_cli_value(parameter, value)
+            else:
+                parameter["value"] = _validated_cli_value(parameter, value)
 
         # Populate the initial queue parameter values based on the job template parameter values
         if "default" in parameter or "value" in parameter:
@@ -480,20 +497,51 @@ def show_job_bundle_submitter(
     submitter_dialog._s3_repo = _s3_repo_for_reuse
 
     if job_parameters:
-        # We want to validate the job parameters after the queue parameters are loaded.
-        # Connect a parameter validation function to the queue parameter loading completion
-        def validate_parameters_after_queue_load(refresh_id: int, queue_parameters: list):
+        # The controller is a global singleton that outlives this dialog, and its
+        # queue_parameters_updated signal also fires with [] to clear stale state
+        # (farm/queue switch, fetch error, nothing selected) — indistinguishable
+        # from a queue that genuinely has zero queue parameters. Connect to the
+        # success-only queue_parameters_load_succeeded signal instead, so we only
+        # validate against a real, successful load (which may legitimately be
+        # empty) and keep waiting through clears and transient fetch errors.
+        # Validate single-shot, then disconnect so the closure over
+        # submitter_dialog can't fire against a closed dialog later.
+        controller = submitter_dialog.shared_job_settings._controller
+        # Mutable cell so both closures below share the connection state. Guards
+        # the double-disconnect (validation ran, then the dialog is destroyed),
+        # which PySide6 reports with a RuntimeWarning rather than an exception.
+        connected = [False]
+
+        def disconnect_validation_callback():
+            if not connected[0]:
+                return
+            connected[0] = False
+            try:
+                controller.queue_parameters_load_succeeded.disconnect(
+                    validate_parameters_after_queue_load
+                )
+            except (TypeError, RuntimeError):
+                # Some bindings raise instead of warn when already disconnected.
+                pass
+
+        def validate_parameters_after_queue_load(queue_parameters: list):
             """Validate CLI parameters against loaded queue parameters and set parameter values"""
+            disconnect_validation_callback()
             if not _validate_and_warn_about_parameters(
                 job_parameters, initial_settings.parameters, queue_parameters, submitter_dialog
             ):
-                # User chose to cancel, close the dialog
+                # User cancelled at the validation warning.
                 submitter_dialog.close()
 
-        # Connect to the queue parameters update signal
-        submitter_dialog.shared_job_settings._queue_parameters_update.connect(
-            validate_parameters_after_queue_load
-        )
+        # Validate CLI params once the controller successfully loads queue params.
+        controller.queue_parameters_load_succeeded.connect(validate_parameters_after_queue_load)
+        connected[0] = True
+        # If the dialog goes away before any load succeeds, tear the connection down.
+        # The dialog does not set WA_DeleteOnClose, so an ordinary close never emits
+        # destroyed — hook finished (emitted on accept/reject/close of a visible
+        # dialog) for the close path, and destroyed for deletion without done().
+        submitter_dialog.finished.connect(lambda _result: disconnect_validation_callback())
+        submitter_dialog.destroyed.connect(disconnect_validation_callback)
 
     submitter_dialog.show()
     return submitter_dialog

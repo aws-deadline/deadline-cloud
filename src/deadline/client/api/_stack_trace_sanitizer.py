@@ -39,7 +39,7 @@ def _normalize(path: str) -> str:
     return os.path.normcase(path.replace("\\", "/").rstrip("/"))
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _known_package_install_dirs() -> Dict[str, List[str]]:
     """Map each known package name to the normalized directories it is installed in.
 

@@ -2305,3 +2305,55 @@ class TestRejectRelativeHookPathValues:
     )
     def test_values_outside_the_guard_are_left_alone(self, parameters, definitions):
         _reject_relative_hook_path_values(parameters, definitions, path_module=ntpath)
+
+    LIST_PATH_PARAM = [{"name": "Scenes", "type": "LIST[PATH]"}]
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param([r"C:\a.ma", r"\\host\share\b.ma"], id="list"),
+            pytest.param('["C:\\\\a.ma", ""]', id="json-string-with-empty-item"),
+            pytest.param([], id="empty"),
+            # Not a list of paths; split_parameter_args reports it.
+            pytest.param("not json", id="not-a-list"),
+        ],
+    )
+    def test_list_path_absolute_items_are_accepted(self, value):
+        _reject_relative_hook_path_values(
+            {"Scenes": value}, self.LIST_PATH_PARAM, path_module=ntpath
+        )
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param([r"C:\a.ma", r"relative\b.ma"], id="list"),
+            pytest.param('["C:\\\\a.ma", "b.ma"]', id="json-string"),
+        ],
+    )
+    def test_list_path_relative_item_is_rejected(self, value):
+        with pytest.raises(
+            DeadlineOperationError,
+            match=r"relative LIST\[PATH\] item 1 for parameter 'Scenes'",
+        ):
+            _reject_relative_hook_path_values(
+                {"Scenes": value}, self.LIST_PATH_PARAM, path_module=ntpath
+            )
+
+    @pytest.mark.parametrize(
+        ("parameters", "definitions"),
+        [
+            pytest.param({"ScenePath": "s3://bucket/scene.ma"}, PATH_PARAM, id="path"),
+            pytest.param(
+                {"Scenes": ["s3://bucket/a.ma", r"C:\b.ma"]}, LIST_PATH_PARAM, id="list-path"
+            ),
+        ],
+    )
+    def test_uri_is_accepted_with_expr(self, parameters, definitions):
+        _reject_relative_hook_path_values(
+            parameters, definitions, path_module=ntpath, allow_uri_path_values=True
+        )
+        # Without EXPR a URI is read as a relative path, as before.
+        with pytest.raises(
+            DeadlineOperationError, match=r"relative (PATH value|LIST\[PATH\] item 0) for"
+        ):
+            _reject_relative_hook_path_values(parameters, definitions, path_module=ntpath)

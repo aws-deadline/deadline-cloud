@@ -69,7 +69,7 @@ output = {
         "deadline:maxRetriesPerTask": 3,
         "deadline:maxWorkerCount": 10,
         "deadline:targetTaskRunStatus": "READY",  # or "SUSPENDED"
-    }
+    },
 }
 print(json.dumps(output))
 ```
@@ -259,11 +259,7 @@ import json
 
 # Add files to upload
 output = {
-    "attachments": {
-        "assetReferences": {
-            "inputFilenames": ["/path/to/discovered/texture.exr"]
-        }
-    }
+    "attachments": {"assetReferences": {"inputFilenames": ["/path/to/discovered/texture.exr"]}}
 }
 print(json.dumps(output))
 ```
@@ -353,17 +349,11 @@ bundle_dir = metadata["jobBundleDir"]
 textures = []
 for root, _, files in os.walk(bundle_dir):
     for f in files:
-        if f.endswith(('.exr', '.png', '.jpg', '.tx')):
+        if f.endswith((".exr", ".png", ".jpg", ".tx")):
             textures.append(os.path.join(root, f))
 
 if textures:
-    print(json.dumps({
-        "attachments": {
-            "assetReferences": {
-                "inputFilenames": textures
-            }
-        }
-    }))
+    print(json.dumps({"attachments": {"assetReferences": {"inputFilenames": textures}}}))
 ```
 
 ### Slack Notification (Post-Submission)
@@ -379,13 +369,9 @@ metadata = json.load(sys.stdin)
 webhook = os.environ.get("SLACK_WEBHOOK")
 
 if webhook:
-    message = {
-        "text": f"Job submitted: {metadata['jobName']} (ID: {metadata['jobId']})"
-    }
+    message = {"text": f"Job submitted: {metadata['jobName']} (ID: {metadata['jobId']})"}
     req = urllib.request.Request(
-        webhook,
-        data=json.dumps(message).encode(),
-        headers={"Content-Type": "application/json"}
+        webhook, data=json.dumps(message).encode(), headers={"Content-Type": "application/json"}
     )
     urllib.request.urlopen(req)
 ```

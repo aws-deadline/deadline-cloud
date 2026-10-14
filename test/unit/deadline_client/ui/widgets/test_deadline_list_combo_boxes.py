@@ -9,7 +9,7 @@ from typing import List
 from unittest.mock import patch
 from configparser import ConfigParser
 
-pytest.importorskip("deadline.client.ui.widgets._deadline_list_combo_boxes")
+pytest.importorskip("deadline.client.ui.widgets._deadline_list_combo_boxes", exc_type=ImportError)
 
 from deadline.client.config import config_file  # noqa: E402
 from deadline.client.ui.widgets._deadline_list_combo_boxes import (  # noqa: E402

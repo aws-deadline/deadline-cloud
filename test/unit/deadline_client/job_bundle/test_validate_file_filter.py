@@ -177,7 +177,7 @@ def test_validate_user_interface_file_filter_nonvalid_patterns_type(
         when()
     assert (
         str(ctx.value)
-        == f'Job parameter "{parameter_name}" got "{repr(pattern)}" for {field_path} -> "patterns" [0] but expected str'
+        == f'Job parameter "{parameter_name}" got "{pattern!r}" for {field_path} -> "patterns" [0] but expected str'
     )
 
 

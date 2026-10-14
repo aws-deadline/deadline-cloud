@@ -78,15 +78,13 @@ def _get_pyinstaller_contents_info(archive_path: Path) -> list[str]:
         elif state == _PYIParseState.End:
             if line.strip():
                 raise RuntimeError(
-                    (
-                        f"Further data found after contents list for {archive_path}. "
-                        "This may mean the format has changed between pyinstaller versions. "
-                        f"Use `pyi-archive_viewer -l -b {archive_path}` to check the output to check the output."
-                    )
+                    f"Further data found after contents list for {archive_path}. "
+                    "This may mean the format has changed between pyinstaller versions. "
+                    f"Use `pyi-archive_viewer -l -b {archive_path}` to check the output to check the output."
                 )
         else:
             raise RuntimeError(
-                f"Non-valid parse state {str(state)} reached while parsing contents of {archive_path}"
+                f"Non-valid parse state {state!s} reached while parsing contents of {archive_path}"
             )
 
     return items
@@ -127,7 +125,7 @@ def temp_pyinstaller_archive_contents(archive_path: Path) -> Generator[Path, Non
                 process.stdin.write(f"X {item}\n")
                 process.stdin.flush()
                 # Input the path to extract to
-                process.stdin.write(f"{str(temp / item)}\n")
+                process.stdin.write(f"{temp / item!s}\n")
                 process.stdin.flush()
             # Quit
             process.stdin.write("Q\n")

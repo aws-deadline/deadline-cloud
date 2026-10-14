@@ -69,7 +69,7 @@ def make_exe(exe_zipfile: Path, cleanup=True, version_file: Optional[Path] = Non
     if cleanup:
         clean_pyinstaller_build_dirs()
 
-    print(f"Exe build is available at: {str(exe_zipfile)}")
+    print(f"Exe build is available at: {exe_zipfile!s}")
 
 
 def pyinstaller(*args: tuple):
@@ -94,7 +94,7 @@ def clean_pyinstaller_build_dirs():
         PYINSTALLER_DIST_DIR,
     ]:
         shutil.rmtree(location, ignore_errors=True)
-        print(f"Deleted build directory: {str(location)}")
+        print(f"Deleted build directory: {location!s}")
 
 
 # Qt modules to keep - only the ones we actually use.

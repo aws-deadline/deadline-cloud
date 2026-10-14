@@ -19,7 +19,7 @@ try:
     except AttributeError:
         _QueuedConnection = Qt.QueuedConnection  # type: ignore[attr-defined]
 except ImportError:
-    pytest.importorskip("deadline.client.ui.controllers._async_runner")
+    pytest.importorskip("deadline.client.ui.controllers._async_runner", exc_type=ImportError)
 
 
 class TestAsyncTaskRunner:

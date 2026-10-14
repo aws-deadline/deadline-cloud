@@ -15,7 +15,9 @@ try:
     from deadline.client.ui.dialogs.submit_job_to_deadline_dialog import SubmitJobToDeadlineDialog
 except ImportError:
     # The tests in this file should be skipped if Qt UI related modules cannot be loaded
-    pytest.importorskip("deadline.client.ui.dialogs.submit_job_to_deadline_dialog")
+    pytest.importorskip(
+        "deadline.client.ui.dialogs.submit_job_to_deadline_dialog", exc_type=ImportError
+    )
 
 
 class MockJobSettings:
