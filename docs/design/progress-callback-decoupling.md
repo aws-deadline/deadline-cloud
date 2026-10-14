@@ -106,6 +106,7 @@ def my_progress_handler(metadata: ProgressReportMetadata) -> bool:
     print(f"{metadata.progress}% - {metadata.progressMessage}")
     return True  # continue
 
+
 _manifest_snapshot(
     root=root,
     # ...

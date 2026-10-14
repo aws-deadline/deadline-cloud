@@ -17,7 +17,7 @@ try:
     except AttributeError:
         _QueuedConnection = Qt.QueuedConnection  # type: ignore[attr-defined]
 except ImportError:
-    pytest.importorskip("deadline.client.ui.dialogs._job_submission_worker")
+    pytest.importorskip("deadline.client.ui.dialogs._job_submission_worker", exc_type=ImportError)
 
 
 class TestJobSubmissionWorker:

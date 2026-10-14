@@ -21,7 +21,7 @@ try:
     except AttributeError:
         _QueuedConnection = Qt.QueuedConnection  # type: ignore[attr-defined]
 except ImportError:
-    pytest.importorskip("deadline.client.ui.controllers._deadline_controller")
+    pytest.importorskip("deadline.client.ui.controllers._deadline_controller", exc_type=ImportError)
 
 
 class TestDeadlineUIController:
@@ -404,6 +404,72 @@ class TestDeadlineUIController:
         assert get_setting("defaults.farm_id") == "farm-123"
 
     @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_select_farm_persists_discovered_farm_region(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """
+        select_farm persists the farm's discovered region, so submission and CLI calls
+        target the farm's region rather than the profile/monitor region.
+        """
+        from deadline.client.api._session import _resolve_region
+        from deadline.client.config import get_setting
+
+        controller = DeadlineUIController.getInstance()
+        controller._farm_regions = {"farm-123": "us-east-1"}
+        mock_api.list_queues.return_value = {"queues": []}
+
+        controller.select_farm("farm-123")
+
+        assert get_setting("defaults.farm_region") == "us-east-1"
+        assert _resolve_region() == "us-east-1"
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_switching_farms_across_regions_tracks_each_farm_region(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """
+        Switching between farms discovered in different regions points config-resolved
+        calls (submission, queue credentials, CLI) at the selected farm's region each time.
+        """
+        from deadline.client.api._session import _resolve_region, get_boto3_client
+
+        controller = DeadlineUIController.getInstance()
+        mock_api.list_queues.return_value = {"queues": []}
+        controller._on_farms_region_result(
+            ("us-west-2", [{"farmId": "farm-a", "displayName": "Farm A"}], None)
+        )
+        controller._on_farms_region_result(
+            ("eu-west-1", [{"farmId": "farm-b", "displayName": "Farm B"}], None)
+        )
+
+        for farm_id, expected_region in [
+            ("farm-a", "us-west-2"),
+            ("farm-b", "eu-west-1"),
+            ("farm-a", "us-west-2"),
+        ]:
+            controller.select_farm(farm_id)
+
+            assert _resolve_region() == expected_region
+            assert get_boto3_client("deadline").meta.region_name == expected_region
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_select_farm_keeps_stored_region_when_farm_unobserved(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """A farm not seen in this session keeps its previously stored region."""
+        from deadline.client.config import get_setting, set_setting
+
+        set_setting("defaults.farm_id", "farm-123")
+        set_setting("defaults.farm_region", "us-east-1")
+        set_setting("defaults.farm_id", "farm-other")
+        controller = DeadlineUIController.getInstance()
+        mock_api.list_queues.return_value = {"queues": []}
+
+        controller.select_farm("farm-123")
+
+        assert get_setting("defaults.farm_region") == "us-east-1"
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
     def test_select_farm_clears_queue_and_storage(self, mock_api, qtbot, fresh_deadline_config):
         """select_farm clears the previous queue/storage (they belong to the old farm)."""
         from deadline.client.config import get_setting, set_setting
@@ -565,6 +631,72 @@ class TestDeadlineUIController:
 
         assert get_setting("settings.storage_profile_id") == "sp-789"
         mock_api.list_storage_profiles_for_queue.assert_not_called()
+        mock_api.get_queue_parameter_definitions.assert_not_called()
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_queue_params_success_emits_load_succeeded(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """A successful fetch emits queue_parameters_load_succeeded with the parameters,
+        even when the queue genuinely has zero queue parameters."""
+        controller = DeadlineUIController.getInstance()
+        mock_api.get_queue_parameter_definitions.return_value = []
+
+        succeeded = []
+        updated = []
+        controller.queue_parameters_load_succeeded.connect(
+            lambda x: succeeded.append(x), _QueuedConnection
+        )
+        controller.queue_parameters_updated.connect(lambda x: updated.append(x), _QueuedConnection)
+
+        controller.refresh_queue_parameters(farm_id="farm-123", queue_id="queue-456")
+
+        qtbot.waitUntil(lambda: len(succeeded) > 0, timeout=2000)
+        assert succeeded[0] == []
+        assert updated[0] == []
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_queue_params_error_does_not_emit_load_succeeded(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """A failed fetch emits queue_parameters_updated([]) but NOT load_succeeded, so
+        success-only consumers can distinguish an error from an empty-but-real load."""
+        controller = DeadlineUIController.getInstance()
+        mock_api.get_queue_parameter_definitions.side_effect = RuntimeError("boom")
+
+        succeeded = []
+        updated = []
+        controller.queue_parameters_load_succeeded.connect(
+            lambda x: succeeded.append(x), _QueuedConnection
+        )
+        controller.queue_parameters_updated.connect(lambda x: updated.append(x), _QueuedConnection)
+
+        controller.refresh_queue_parameters(farm_id="farm-123", queue_id="queue-456")
+
+        qtbot.waitUntil(lambda: len(updated) > 0, timeout=2000)
+        assert updated[0] == []
+        assert succeeded == []
+
+    @patch("deadline.client.ui.controllers._deadline_controller.api")
+    def test_clearing_emission_does_not_emit_load_succeeded(
+        self, mock_api, qtbot, fresh_deadline_config
+    ):
+        """refresh with no farm/queue selected clears via queue_parameters_updated([]) without
+        emitting load_succeeded."""
+        controller = DeadlineUIController.getInstance()
+
+        succeeded = []
+        updated = []
+        controller.queue_parameters_load_succeeded.connect(
+            lambda x: succeeded.append(x), _QueuedConnection
+        )
+        controller.queue_parameters_updated.connect(lambda x: updated.append(x), _QueuedConnection)
+
+        controller.refresh_queue_parameters(farm_id="", queue_id="")
+
+        qtbot.waitUntil(lambda: len(updated) > 0, timeout=2000)
+        assert updated[0] == []
+        assert succeeded == []
         mock_api.get_queue_parameter_definitions.assert_not_called()
 
     def test_shutdown_cancels_operations(self, qtbot):

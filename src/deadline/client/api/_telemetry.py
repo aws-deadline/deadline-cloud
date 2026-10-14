@@ -31,6 +31,7 @@ from ._session import (
     get_boto3_session,
 )
 from ._stack_trace_sanitizer import sanitize_exception
+from ..exceptions import DeadlineOperationCanceled
 from ..config import config_file
 from .. import version
 
@@ -214,6 +215,13 @@ class TelemetryClient:
         extra_details: Optional[dict] = None,
         from_gui: bool = False,
     ) -> None:
+        # A cancellation is the operation stopping as designed -- the user declined a
+        # prompt, or --yes refused to upload unknown paths -- not a client failure.
+        # Reporting it as an error lets one user retrying a refused submission trip the
+        # client error alarm on their own.
+        if isinstance(exc, DeadlineOperationCanceled):
+            return
+
         event_details: dict = {
             "exception_type": type(exc).__qualname__,
             "exception_scope": exception_scope,
@@ -326,7 +334,7 @@ class TelemetryClient:
                     success = True
             except error.HTTPError as httpe:
                 if httpe.code == 429 or httpe.code == 500:
-                    logger.debug(f"Error received from service. Waiting to retry: {str(httpe)}")
+                    logger.debug(f"Error received from service. Waiting to retry: {httpe!s}")
 
                     attempts += 1
                     if attempts >= TelemetryClient.MAX_RETRY_ATTEMPTS:
@@ -382,7 +390,7 @@ class TelemetryClient:
                 }
                 request_body_encoded = str(json.dumps(request_body)).encode("utf-8")
             except Exception as exc:
-                logger.debug(f"Failed to serialize telemetry data. {str(exc)}")
+                logger.debug(f"Failed to serialize telemetry data. {exc!s}")
                 continue
 
             req = request.Request(url=self.endpoint, data=request_body_encoded, headers=headers)
@@ -391,7 +399,7 @@ class TelemetryClient:
                 self._send_request(req)
             except Exception as exc:
                 # Swallow any kind of uncaught exception and stop sending telemetry
-                logger.debug(f"Error received from service. {str(exc)}")
+                logger.debug(f"Error received from service. {exc!s}")
                 return
             self.event_queue.task_done()
 

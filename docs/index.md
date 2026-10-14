@@ -54,6 +54,7 @@ $ deadline farm list
 or as a python library:
 ```python
 from deadline.client import api
+
 api.list_farms()
 # {'farms': [{'farmId': 'farm-1234567890abcdefg', 'displayName': 'my-first-farm', ...},]}
 ```

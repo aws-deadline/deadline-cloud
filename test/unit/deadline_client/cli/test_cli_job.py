@@ -365,7 +365,7 @@ def test_cli_job_download_output_stdout_with_only_required_input(
         result = runner.invoke(
             main,
             ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
-            input=f"1\n{str(tmp_path)}\ny\n",
+            input=f"1\n{tmp_path!s}\ny\n",
         )
 
         MockOutputDownloader.assert_called_once_with(
@@ -393,15 +393,15 @@ You are about to download files which may come from multiple root directories. H
 [0] {mock_root_path}
 [1] {mock_root_path}2
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, 1, y, n) [y]: 1
-> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}2]: {str(tmp_path)}
+> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}2]: {tmp_path!s}
 
 Summary of files to download:
     {mock_root_path}{path_separator}outputs (3 files)
-    {str(tmp_path)}{path_separator}outputs (3 files)
+    {tmp_path!s}{path_separator}outputs (3 files)
 
 You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {mock_root_path}
-[1] {str(tmp_path)}
+[1] {tmp_path!s}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, 1, y, n) [y]: y
 """
             in result.output
@@ -479,7 +479,7 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
         result = runner.invoke(
             main,
             ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
-            input=f"{str(tmp_path)}\ny\n",
+            input=f"{tmp_path!s}\ny\n",
         )
 
         MockOutputDownloader.assert_called_once_with(
@@ -500,13 +500,13 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
             f"""Downloading output from Job 'Mock Job'
 This root path format does not match the operating system you're using. Where would you like to save the files?
 The location was {mock_root_path}, on {other_format[0].upper() + other_format[1:]}.
-> Please enter a new root path: {str(tmp_path)}
+> Please enter a new root path: {tmp_path!s}
 
 Summary of files to download:
-    {str(tmp_path)}{path_separator}outputs (3 files)
+    {tmp_path!s}{path_separator}outputs (3 files)
 
 You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
-[0] {str(tmp_path)}
+[0] {tmp_path!s}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
             in result.output
@@ -580,7 +580,7 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
         result = runner.invoke(
             main,
             ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
-            input=f"0\n{str(tmp_path)}\ny\n",
+            input=f"0\n{tmp_path!s}\ny\n",
         )
 
         MockOutputDownloader.assert_called_once_with(
@@ -606,13 +606,13 @@ Summary of files to download:
 You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {mock_root_path}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: 0
-> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}]: {str(tmp_path)}
+> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}]: {tmp_path!s}
 
 Summary of files to download:
-    {str(tmp_path)}{path_separator}outputs (3 files)
+    {tmp_path!s}{path_separator}outputs (3 files)
 
 You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
-[0] {str(tmp_path)}
+[0] {tmp_path!s}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
             in result.output
@@ -2260,7 +2260,7 @@ class TestJobDownloadInput:
             result = runner.invoke(
                 main,
                 ["job", "download-input", "--job-id", MOCK_JOB_ID],
-                input=f"{str(tmp_path)}\ny\n",
+                input=f"{tmp_path!s}\ny\n",
             )
 
             assert result.exit_code == 0
@@ -2343,7 +2343,7 @@ class TestJobDownloadInput:
             result = runner.invoke(
                 main,
                 ["job", "download-input", "--job-id", MOCK_JOB_ID],
-                input=f"0\n{str(tmp_path)}\ny\n",
+                input=f"0\n{tmp_path!s}\ny\n",
             )
 
             assert result.exit_code == 0

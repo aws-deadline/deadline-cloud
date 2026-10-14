@@ -102,6 +102,12 @@ _FRIENDLY_PARAM_TYPES = {
     "FLOAT": "Number",
     "BOOL": "Checkbox",
     "RANGE_EXPR": "Frame range",
+    "LIST[STRING]": "List",
+    "LIST[PATH]": "Path list",
+    "LIST[INT]": "Number list",
+    "LIST[FLOAT]": "Number list",
+    "LIST[BOOL]": "Checkbox list",
+    "LIST[LIST[INT]]": "Nested number list",
 }
 
 

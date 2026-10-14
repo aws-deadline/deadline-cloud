@@ -10,7 +10,7 @@ try:
     from deadline.client.ui.dataclasses import JobBundleSettings
 except ImportError:
     # The tests in this file should be skipped if Qt UI related modules cannot be loaded
-    pytest.importorskip("deadline.client.ui.widgets.shared_job_settings_tab")
+    pytest.importorskip("deadline.client.ui.widgets.shared_job_settings_tab", exc_type=ImportError)
 
 
 @pytest.fixture(scope="function")
