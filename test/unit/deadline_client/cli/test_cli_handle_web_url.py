@@ -1259,7 +1259,7 @@ def test_linux_install_raises_on_malformed_mimeapps(fresh_deadline_config, tmp_p
         from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
         from deadline.client.exceptions import DeadlineOperationError
 
-        with pytest.raises(DeadlineOperationError, match="could not parse existing"):
+        with pytest.raises(DeadlineOperationError, match="could not read existing"):
             install_deadline_web_url_handler(all_users=False)
 
 
@@ -1319,6 +1319,134 @@ def test_linux_install_tolerates_duplicate_mimeapps_entries(fresh_deadline_confi
 
     # And the deadline handler is added.
     assert "x-scheme-handler/deadline=deadline.desktop" in contents
+
+
+def test_linux_install_preserves_non_ascii_mimeapps_entries(fresh_deadline_config, tmp_path):
+    """
+    mimeapps.list is UTF-8 per the XDG spec, so non-ASCII entries must round-trip
+    regardless of the locale's default encoding. ("Ł" encodes to a byte that is
+    undefined in cp1252, so a locale-encoded read fails on Windows.)
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    mimeapps_path.write_text(
+        "[Default Applications]\ntext/plain=Łódź-éditeur.desktop\n", encoding="utf-8"
+    )
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    contents = mimeapps_path.read_text(encoding="utf-8")
+    assert "text/plain=Łódź-éditeur.desktop" in contents
+    assert "x-scheme-handler/deadline=deadline.desktop" in contents
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Creating symlinks requires privileges on Windows"
+)
+def test_linux_install_writes_through_symlinked_mimeapps(fresh_deadline_config, tmp_path):
+    """
+    A symlinked mimeapps.list (e.g. ~/.config/mimeapps.list ->
+    ~/.local/share/applications/mimeapps.list) must stay a symlink, with the
+    update landing in the link target.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    target_path = entry_dir / "mimeapps.list"
+    target_path.write_text("[Default Applications]\ntext/html=firefox.desktop\n")
+    link_path = config_dir / "mimeapps.list"
+    link_path.symlink_to(target_path)
+
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch.object(sys, "argv", ["/usr/bin/deadline"]),
+        patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+        patch.object(
+            os.path,
+            "expanduser",
+            side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                "~/.config", str(config_dir)
+            ),
+        ),
+        patch.object(subprocess, "run"),
+        patch.object(os, "makedirs"),
+    ):
+        from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+        install_deadline_web_url_handler(all_users=False)
+
+    assert link_path.is_symlink()
+    assert os.path.samefile(link_path, target_path)
+    contents = target_path.read_text()
+    assert "text/html=firefox.desktop" in contents
+    assert "x-scheme-handler/deadline=deadline.desktop" in contents
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or os.geteuid() == 0,
+    reason="POSIX file modes are not meaningful on Windows, and root can read any file",
+)
+def test_linux_install_raises_on_unreadable_mimeapps(fresh_deadline_config, tmp_path):
+    """
+    An existing mimeapps.list that cannot be read must fail the install instead of
+    being overwritten with only the deadline entry.
+    """
+    entry_dir = tmp_path / "applications"
+    entry_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+
+    mimeapps_path = config_dir / "mimeapps.list"
+    original = "[Default Applications]\ntext/html=firefox.desktop\n"
+    mimeapps_path.write_text(original)
+    mimeapps_path.chmod(0o000)
+
+    try:
+        with (
+            patch.object(sys, "platform", "linux"),
+            patch.object(sys, "argv", ["/usr/bin/deadline"]),
+            patch.object(shutil, "which", return_value="/usr/bin/deadline"),
+            patch.object(
+                os.path,
+                "expanduser",
+                side_effect=lambda p: p.replace("~/.local/share", str(tmp_path)).replace(
+                    "~/.config", str(config_dir)
+                ),
+            ),
+            patch.object(subprocess, "run"),
+            patch.object(os, "makedirs"),
+        ):
+            from deadline.client.cli._deadline_web_url import install_deadline_web_url_handler
+
+            with pytest.raises(DeadlineOperationError, match="could not read existing"):
+                install_deadline_web_url_handler(all_users=False)
+    finally:
+        mimeapps_path.chmod(0o644)
+
+    assert mimeapps_path.read_text() == original
+    assert [p.name for p in config_dir.iterdir()] == ["mimeapps.list"]
 
 
 def test_linux_install_resolves_bare_command_via_shutil_which(fresh_deadline_config, tmp_path):

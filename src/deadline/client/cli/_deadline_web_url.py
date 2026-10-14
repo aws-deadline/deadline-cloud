@@ -3,7 +3,9 @@
 import configparser
 import os
 import re
+import stat
 import sys
+import tempfile
 import urllib.parse
 from pathlib import Path
 from logging import getLogger
@@ -219,32 +221,25 @@ MimeType=x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}
         with open(desktop_file_path, "w") as desktop_file:
             desktop_file.write(desktop_file_content)
 
-        # Read/parse any existing mimeapps.list and add/update ONLY the deadline
-        # handler entry, preserving all other default-application associations.
-        # Opening in "w" mode would truncate the file and destroy unrelated
-        # associations (browser, PDF, mailto, etc.), causing permanent data loss.
-        # interpolation=None avoids treating "%" in values specially, and
-        # optionxform=str preserves the case of mime-type/scheme keys.
-        # strict=False tolerates duplicate keys/sections (last value wins),
-        # which real-world mimeapps.list files written by other desktop tools
-        # have historically contained; the default strict=True would turn an
-        # otherwise-usable file into a hard install failure.
+        # Merge into any existing mimeapps.list; a plain rewrite would drop unrelated
+        # associations. strict=False: real-world files contain duplicate keys.
+        # interpolation=None and optionxform=str keep "%" and key case verbatim.
         mimeapps = configparser.ConfigParser(interpolation=None, strict=False)
         mimeapps.optionxform = str  # type: ignore[assignment,method-assign]
 
+        # Write through a symlinked mimeapps.list instead of replacing the link.
+        mimeapps_list_file_path = os.path.realpath(mimeapps_list_file_path)
+
         if os.path.isfile(mimeapps_list_file_path):
-            # A pre-existing mimeapps.list that is not valid INI can still make
-            # configparser raise even with strict=False (MissingSectionHeaderError
-            # for a key before any section header, UnicodeDecodeError for a
-            # non-text file, ...). Surface these as a DeadlineOperationError for
-            # consistency with the rest of this function rather than crashing the
-            # CLI with a raw traceback.
+            # Open explicitly: ConfigParser.read() silently skips unreadable files,
+            # which would overwrite the file with only our entry. XDG files are UTF-8.
             try:
-                mimeapps.read(mimeapps_list_file_path)
-            except (configparser.Error, UnicodeDecodeError) as e:
+                with open(mimeapps_list_file_path, encoding="utf-8") as mimeapps_list_file:
+                    mimeapps.read_file(mimeapps_list_file, source=mimeapps_list_file_path)
+            except (OSError, configparser.Error, UnicodeDecodeError) as e:
                 raise DeadlineOperationError(
                     f"Failed to install the handler for {DEADLINE_URL_SCHEME_NAME} URLs: "
-                    f"could not parse existing {mimeapps_list_file_path}:\n{e}"
+                    f"could not read existing {mimeapps_list_file_path}:\n{e}"
                 ) from e
 
         if not mimeapps.has_section("Default Applications"):
@@ -255,40 +250,28 @@ MimeType=x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}
             f"{DEADLINE_URL_SCHEME_NAME}.desktop;",
         )
 
-        # Write atomically: rendering to a temp file in the same directory and
-        # os.replace()-ing it into place means the original mimeapps.list is only
-        # replaced once the new content is fully and successfully written. Opening
-        # the destination directly in "w" mode would truncate it before write()
-        # runs, so a crash/kill/disk-full mid-write would leave it empty or partial
-        # -- losing exactly the unrelated associations this change protects.
-        import stat
-        import tempfile
-
-        # tempfile.mkstemp() creates the temp file with mode 0600, and os.replace()
-        # keeps that mode on the final file. That would silently drop the
-        # permissions of a pre-existing mimeapps.list, and for the all_users case
-        # (/usr/share/applications/mimeapps.list, written as root) would leave a
-        # system-wide file that other users' desktop environments cannot read.
-        # Preserve the existing file's mode, or default to 0644 for a new file.
+        # mkstemp() creates the file as 0600; mimeapps.list must stay readable by the
+        # desktop environment (and by all users for the system-wide file).
         if os.path.isfile(mimeapps_list_file_path):
             mimeapps_list_file_mode = stat.S_IMODE(os.stat(mimeapps_list_file_path).st_mode)
         else:
             mimeapps_list_file_mode = 0o644
 
+        # Write to a temp file, fsync, and rename so the file is never left truncated.
         dir_name = os.path.dirname(mimeapps_list_file_path)
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".mimeapps.list.", suffix=".tmp")
         try:
-            with os.fdopen(fd, "w") as tmp_file:
+            with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
                 mimeapps.write(tmp_file, space_around_delimiters=False)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
             os.chmod(tmp_path, mimeapps_list_file_mode)
             os.replace(tmp_path, mimeapps_list_file_path)
         except BaseException:
             try:
                 os.unlink(tmp_path)
             except OSError:
-                # Best-effort temp file cleanup; the original exception below is
-                # the actual failure to surface, and a leftover temp file is
-                # harmless compared to masking it.
+                # Best-effort cleanup; don't mask the original exception.
                 pass
             raise
 
