@@ -223,9 +223,12 @@ def test_attachment_download_missing_settings_and_no_uri_still_raises(
             ],
         )
 
-    assert result.exit_code != 0
-    assert isinstance(result.exception, (MissingJobAttachmentSettingsError, SystemExit)) or (
-        "has no attachment settings" in result.output
+    # _handle_error turns every exception into SystemExit(1) and prints the traceback,
+    # so assert on the printed exception to pin the failure to this specific guard.
+    assert result.exit_code == 1
+    assert (
+        f"{MissingJobAttachmentSettingsError.__name__}: "
+        f"Queue {MOCK_QUEUE_ID} has no attachment settings" in result.output
     )
     mock_download.assert_not_called()
 
