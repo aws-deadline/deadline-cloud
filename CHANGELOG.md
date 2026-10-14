@@ -1,3 +1,10 @@
+## 0.60.10 (2026-10-14)
+
+### Features
+* The bundled Deadline Cloud service model now matches botocore 1.43.112. On Python 3.9 you can now use the `ListMemberships` operation and its paginator. (#1403)
+
+### Bug Fixes
+* Picking a farm in the submit dialog now also saves that farm's region. Before, only the farm ID was saved. If the farm was in a different region than your AWS profile, job submission, queue-role credentials and later `deadline` CLI commands were sent to the wrong region. (#1397)
 ## 0.60.9 (2026-10-07)
 
 ### Features
