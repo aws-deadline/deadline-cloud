@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import json
+from typing import Any, Dict
 from unittest.mock import patch
 
 import pytest
@@ -9,6 +10,7 @@ import click
 import yaml
 
 from deadline.client.cli._common import (
+    _STANDARD_OPTION_NAMES,
     _apply_cli_options_to_config,
     _auto_select_farm,
     _auto_select_queue,
@@ -40,6 +42,25 @@ class TestApplyCliOptionsRegion:
         config = _apply_cli_options_to_config(farm_id="farm-1", region=None)
         assert config_file.get_setting("defaults.farm_id", config=config) == "farm-1"
         assert config_file.get_setting("defaults.farm_region", config=config) == ""
+
+
+class TestApplyCliOptionsStandardNames:
+    """Every standard option must be consumed whether or not any option has a value."""
+
+    @pytest.mark.parametrize("name", _STANDARD_OPTION_NAMES)
+    def test_unset_standard_option_is_consumed(self, fresh_deadline_config, name):
+        # All-None args take the "no options provided" path, which must still consume
+        # every standard name so the "not standard options" RuntimeError doesn't fire.
+        args: Dict[str, Any] = {name: None}
+        assert _apply_cli_options_to_config(**args) is None
+
+    def test_all_unset_standard_options_are_consumed(self, fresh_deadline_config):
+        args: Dict[str, Any] = {name: None for name in _STANDARD_OPTION_NAMES}
+        assert _apply_cli_options_to_config(**args) is None
+
+    def test_non_standard_option_still_raises(self, fresh_deadline_config):
+        with pytest.raises(RuntimeError, match="not standard"):
+            _apply_cli_options_to_config(farm_id=None, not_a_standard_option=None)
 
 
 class TestCliRegionPrecedenceEndToEnd:
