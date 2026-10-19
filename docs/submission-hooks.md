@@ -494,6 +494,24 @@ Hooks work with these submission methods:
 
 The standalone GUI copies `hooks.yaml` to the job history bundle and resolves script paths back to your original bundle directory.
 
+### As-submitted job bundles
+
+The job history bundle holds the submission as it was before pre-submission hooks ran. When
+pre-submission hooks run, the GUI and in-application submitters also save an as-submitted
+bundle next to it, in a directory with the same name ending in `.as-submitted`. It holds the
+template, parameter values, job properties such as priority, and asset references with the
+hooks' changes applied.
+
+The as-submitted bundle has no `hooks.yaml`, so submitting it again does not run its bundle
+hooks. Environment hooks from `DEADLINE_HOOKS_DIR` still run when they are enabled, because
+each submission creates a new job.
+
+```bash
+deadline bundle submit ~/.deadline/job_history/<profile>/2026-10/2026-10-19-01-Maya-MyJob.as-submitted
+```
+
+From Python, pass `as_submitted_bundle_dir` to `create_job_from_job_bundle` to save one.
+
 ## Best Practices
 
 1. **Keep hooks fast** - Use appropriate timeouts, avoid long-running operations

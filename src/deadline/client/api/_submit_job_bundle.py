@@ -50,7 +50,13 @@ from ..job_bundle.parameters import (
     read_job_bundle_parameters,
     JobParameter,
 )
-from ..job_bundle.submission import AssetReferences, split_parameter_args
+from ..job_bundle.saver import save_yaml_or_json_to_file
+from ..job_bundle.submission import (
+    DEFAULT_APP_NAME,
+    DEFAULT_SUPPORTED_APP_PARAMETER_NAMES,
+    AssetReferences,
+    split_parameter_args,
+)
 from ...job_attachments.exceptions import MisconfiguredInputsError
 from ...job_attachments.models import (
     JobAttachmentsFileSystem,
@@ -575,6 +581,44 @@ def _save_debug_snapshot(
             json.dump(storage_profile.to_dict(), fh, indent=1)
 
 
+def _save_as_submitted_bundle(
+    bundle_dir: str,
+    *,
+    template_contents: str,
+    file_type: str,
+    parameters: list[JobParameter],
+    create_job_args: Dict[str, Any],
+    asset_references: AssetReferences,
+) -> None:
+    """Save a job bundle that reproduces a submission without re-running its bundle hooks."""
+    os.makedirs(bundle_dir, exist_ok=True)
+    if os.listdir(bundle_dir):
+        raise DeadlineOperationError(f"The directory {bundle_dir} is not empty.")
+
+    with open(
+        os.path.join(bundle_dir, f"template.{file_type.lower()}"), "w", encoding="utf8"
+    ) as fh:
+        fh.write(template_contents)
+
+    # Job properties come from what was sent to CreateJob, since arguments, config defaults,
+    # and hooks can all override the bundle's deadline:* values.
+    parameter_values = [
+        {"name": p["name"], "value": p["value"]}
+        for p in parameters
+        if "value" in p and not p["name"].startswith(f"{DEFAULT_APP_NAME}:")
+    ]
+    parameter_values.extend(
+        {"name": f"{DEFAULT_APP_NAME}:{name}", "value": create_job_args[name]}
+        for name in DEFAULT_SUPPORTED_APP_PARAMETER_NAMES
+        if name in create_job_args
+    )
+    save_yaml_or_json_to_file(
+        bundle_dir, "parameter_values", file_type, {"parameterValues": parameter_values}
+    )
+
+    save_yaml_or_json_to_file(bundle_dir, "asset_references", file_type, asset_references.to_dict())
+
+
 @api.record_function_latency_telemetry_event()
 def create_job_from_job_bundle(
     job_bundle_dir: str,
@@ -601,6 +645,7 @@ def create_job_from_job_bundle(
     upload_progress_callback: Optional[Callable[[ProgressReportMetadata], bool]] = None,
     create_job_result_callback: Optional[Callable[[], bool]] = None,
     force_s3_check: Optional[bool] = None,
+    as_submitted_bundle_dir: Optional[str] = None,
 ) -> Optional[str]:
     """
     Creates a [Deadline Cloud job] in the [queue] configured as default for the workstation
@@ -674,6 +719,10 @@ def create_job_from_job_bundle(
         force_s3_check (bool, optional): If True, skip S3CheckCache and always do S3 HEAD
                 to verify job attachment existence before uploading. Use when S3 bucket contents may be out of sync with local caches.
                 If None (default), reads from the `settings.force_s3_check` config setting.
+        as_submitted_bundle_dir (str, optional): If provided and pre-submission hooks ran, a job bundle
+                holding the template, parameter values, job properties, and asset references as submitted
+                (after the hooks changed them) is saved to this directory once the job is created. It has
+                no hooks configuration, so submitting it again does not run its bundle hooks.
 
     Returns:
         Returns the submitted job id. If `debug_snapshot_dir` is provided then no job is submitted and it returns None.
@@ -897,6 +946,10 @@ def create_job_from_job_bundle(
     # to users.
     known_asset_paths = _filter_redundant_known_paths(known_asset_paths)
 
+    # The bundle's own asset references plus any a hook adds. PATH parameter references are
+    # left out, since they are derived again from the parameter values on re-submission.
+    submitted_asset_references = AssetReferences.from_dict(asset_references_obj)
+
     # Execute pre-submission hooks before hashing/uploading
     if has_pre_submission_hooks:
         template_obj = parse_yaml_or_json_content(
@@ -993,14 +1046,14 @@ def create_job_from_job_bundle(
         # Merge any asset references from hooks into asset_references
         if "attachments" in hook_result and "assetReferences" in hook_result["attachments"]:
             hook_refs = hook_result["attachments"]["assetReferences"]
-            for f in hook_refs.get("inputFilenames", []):
-                asset_references.input_filenames.add(f)
-            for d in hook_refs.get("inputDirectories", []):
-                asset_references.input_directories.add(d)
-            for d in hook_refs.get("outputDirectories", []):
-                asset_references.output_directories.add(d)
-            for p in hook_refs.get("referencedPaths", []):
-                asset_references.referenced_paths.add(p)
+            hook_asset_references = AssetReferences(
+                input_filenames=set(hook_refs.get("inputFilenames", [])),
+                input_directories=set(hook_refs.get("inputDirectories", [])),
+                output_directories=set(hook_refs.get("outputDirectories", [])),
+                referenced_paths=set(hook_refs.get("referencedPaths", [])),
+            )
+            asset_references = asset_references.union(hook_asset_references)
+            submitted_asset_references = submitted_asset_references.union(hook_asset_references)
 
     telemetry_client = api.get_deadline_cloud_library_telemetry_client()
 
@@ -1235,6 +1288,23 @@ def create_job_from_job_bundle(
 
     if create_job_response and "jobId" in create_job_response:
         job_id = create_job_response["jobId"]
+
+        if as_submitted_bundle_dir and has_pre_submission_hooks:
+            # The job already exists, so a failure here must not fail the submission.
+            try:
+                _save_as_submitted_bundle(
+                    as_submitted_bundle_dir,
+                    template_contents=file_contents,
+                    file_type=file_type,
+                    parameters=parameters,
+                    create_job_args=create_job_args,
+                    asset_references=submitted_asset_references,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to save the as-submitted job bundle to {as_submitted_bundle_dir}: {e}"
+                )
+
         print_function_callback("Waiting for Job to be created...")
 
         # If using the default config, set the default job id so it holds the
