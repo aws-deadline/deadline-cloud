@@ -40,6 +40,11 @@ parameterDefinitions:
   type: PATH
   objectType: DIRECTORY
   dataFlow: IN
+- name: ScriptsDir
+  type: PATH
+  objectType: DIRECTORY
+  dataFlow: IN
+  default: scripts
 steps:
 - name: S
   script:
@@ -54,6 +59,8 @@ _HOOK_TEMPLATE = _TEMPLATE.replace("name: AsSubmittedTest", "name: RenamedByHook
 def _write_bundle(bundle: Path, in_dir: Path, studio_dir: Path) -> None:
     bundle.mkdir()
     (bundle / "template.yaml").write_text(_TEMPLATE)
+    (bundle / "scripts").mkdir()
+    (bundle / "scripts" / "run.sh").write_text("echo run")
     (bundle / "parameter_values.yaml").write_text(
         "parameterValues:\n"
         "- name: Message\n  value: original\n"
@@ -71,8 +78,12 @@ def _write_bundle(bundle: Path, in_dir: Path, studio_dir: Path) -> None:
     )
 
 
-def _submit(bundle_dir, tmp_path, **kwargs):
-    """Submit the bundle with mocked AWS calls, returning (CreateJob kwargs, hashed inputs)."""
+def _submit(bundle_dir, tmp_path, known_asset_paths, **kwargs):
+    """Submit the bundle with mocked AWS calls, returning (CreateJob kwargs, hashed inputs).
+
+    There is no confirmation callback, so any input outside the bundle directory and
+    known_asset_paths cancels the submission.
+    """
     hashed_inputs: set = set()
 
     def fake_hash(*args, **kwargs):
@@ -109,7 +120,7 @@ def _submit(bundle_dir, tmp_path, **kwargs):
         job_id = api.create_job_from_job_bundle(
             job_bundle_dir=str(bundle_dir),
             queue_parameter_definitions=[],
-            known_asset_paths=[str(tmp_path)],
+            known_asset_paths=[str(p) for p in known_asset_paths],
             **kwargs,
         )
 
@@ -119,6 +130,7 @@ def _submit(bundle_dir, tmp_path, **kwargs):
 
 
 def _setup(fresh_deadline_config, tmp_path):
+    """Return (bundle, inputs dir, studio defaults dir); only the two dirs are known paths."""
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
     config.set_setting("settings.allow_bundle_hooks", "true")
@@ -140,14 +152,17 @@ def test_as_submitted_bundle_captures_hook_changes(fresh_deadline_config, tmp_pa
     bundle, in_dir, studio_dir = _setup(fresh_deadline_config, tmp_path)
     as_submitted = tmp_path / "bundle.as-submitted"
 
-    _submit(bundle, tmp_path, as_submitted_bundle_dir=str(as_submitted))
+    _submit(bundle, tmp_path, [in_dir, studio_dir], as_submitted_bundle_dir=str(as_submitted))
 
     assert sorted(os.listdir(as_submitted)) == [
         "asset_references.yaml",
+        "hook.py",
         "parameter_values.yaml",
+        "scripts",
         "template.yaml",
     ]
     assert (as_submitted / "template.yaml").read_text() == _HOOK_TEMPLATE
+    assert (as_submitted / "scripts" / "run.sh").read_text() == "echo run"
 
     parameter_values = {
         p["name"]: p["value"]
@@ -157,6 +172,7 @@ def test_as_submitted_bundle_captures_hook_changes(fresh_deadline_config, tmp_pa
     }
     assert parameter_values["Message"] == "from_hook"
     assert parameter_values["InDir"] == str(in_dir)
+    assert parameter_values["ScriptsDir"] == str(as_submitted / "scripts")
     assert parameter_values["deadline:priority"] == 80
 
     asset_references = yaml.safe_load((as_submitted / "asset_references.yaml").read_text())
@@ -168,37 +184,54 @@ def test_as_submitted_bundle_captures_hook_changes(fresh_deadline_config, tmp_pa
 
 
 def test_submitting_as_submitted_bundle_reproduces_create_job(fresh_deadline_config, tmp_path):
-    bundle, _, _ = _setup(fresh_deadline_config, tmp_path)
+    bundle, in_dir, studio_dir = _setup(fresh_deadline_config, tmp_path)
     as_submitted = tmp_path / "bundle.as-submitted"
 
     original_args, original_inputs = _submit(
-        bundle, tmp_path, as_submitted_bundle_dir=str(as_submitted)
+        bundle, tmp_path, [in_dir, studio_dir], as_submitted_bundle_dir=str(as_submitted)
     )
-    resubmitted_args, resubmitted_inputs = _submit(as_submitted, tmp_path)
+    # Files from the bundle are not under a known path here, so this would be canceled
+    # if the as-submitted bundle still referenced them in the original bundle.
+    resubmitted_args, resubmitted_inputs = _submit(as_submitted, tmp_path, [in_dir, studio_dir])
 
-    assert resubmitted_args == original_args
-    assert resubmitted_inputs == original_inputs
-    assert any("studio_defaults" in p for p in resubmitted_inputs)
+    def in_original_bundle(value):
+        return json.loads(json.dumps(value).replace(str(as_submitted), str(bundle)))
+
+    assert in_original_bundle(resubmitted_args) == original_args
+    assert in_original_bundle(sorted(resubmitted_inputs)) == sorted(original_inputs)
+    assert str(as_submitted / "scripts" / "run.sh") in resubmitted_inputs
+    assert str(studio_dir / "b.txt") in resubmitted_inputs
 
 
 def test_no_as_submitted_bundle_without_pre_submission_hooks(fresh_deadline_config, tmp_path):
-    bundle, _, _ = _setup(fresh_deadline_config, tmp_path)
+    bundle, in_dir, studio_dir = _setup(fresh_deadline_config, tmp_path)
     (bundle / "hooks.yaml").unlink()
     as_submitted = tmp_path / "bundle.as-submitted"
 
-    _submit(bundle, tmp_path, as_submitted_bundle_dir=str(as_submitted))
+    _submit(bundle, tmp_path, [in_dir, studio_dir], as_submitted_bundle_dir=str(as_submitted))
 
     assert not as_submitted.exists()
 
 
 def test_as_submitted_bundle_failure_does_not_fail_submission(fresh_deadline_config, tmp_path):
-    bundle, _, _ = _setup(fresh_deadline_config, tmp_path)
+    bundle, in_dir, studio_dir = _setup(fresh_deadline_config, tmp_path)
     as_submitted = tmp_path / "bundle.as-submitted"
     as_submitted.mkdir()
     (as_submitted / "existing.txt").write_text("keep")
 
     with patch.object(_submit_job_bundle.logger, "warning") as mock_warning:
-        _submit(bundle, tmp_path, as_submitted_bundle_dir=str(as_submitted))
+        _submit(bundle, tmp_path, [in_dir, studio_dir], as_submitted_bundle_dir=str(as_submitted))
 
     assert os.listdir(as_submitted) == ["existing.txt"]
     assert "as-submitted" in mock_warning.call_args.args[0]
+
+
+def test_as_submitted_bundle_inside_job_bundle_is_rejected(fresh_deadline_config, tmp_path):
+    bundle, in_dir, studio_dir = _setup(fresh_deadline_config, tmp_path)
+    as_submitted = bundle / "as-submitted"
+
+    with patch.object(_submit_job_bundle.logger, "warning") as mock_warning:
+        _submit(bundle, tmp_path, [in_dir, studio_dir], as_submitted_bundle_dir=str(as_submitted))
+
+    assert not as_submitted.exists()
+    assert "inside the job bundle" in mock_warning.call_args.args[0]

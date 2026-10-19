@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Iterable
 from collections.abc import Collection, Mapping
 from pathlib import Path
 import shlex
+import shutil
 from datetime import datetime
 
 from botocore.client import BaseClient
@@ -81,6 +82,7 @@ from .._path_utils import (
     is_absolute_path,
     is_bare_unc_anchor,
     is_any_path_contained,
+    is_path_contained,
     is_uri,
     normalized_path,
     path_components,
@@ -581,9 +583,17 @@ def _save_debug_snapshot(
             json.dump(storage_profile.to_dict(), fh, indent=1)
 
 
+_AS_SUBMITTED_REWRITTEN_FILES = {
+    f"{name}.{ext}"
+    for name in ("template", "parameter_values", "asset_references", "hooks")
+    for ext in ("yaml", "json")
+} | {".hooks_origin"}
+
+
 def _save_as_submitted_bundle(
     bundle_dir: str,
     *,
+    job_bundle_dir: str,
     template_contents: str,
     file_type: str,
     parameters: list[JobParameter],
@@ -591,9 +601,39 @@ def _save_as_submitted_bundle(
     asset_references: AssetReferences,
 ) -> None:
     """Save a job bundle that reproduces a submission without re-running its bundle hooks."""
+    source_dir = os.path.abspath(job_bundle_dir)
+    bundle_dir = os.path.abspath(bundle_dir)
+    if is_path_contained(bundle_dir, source_dir):
+        raise DeadlineOperationError(
+            f"The directory {bundle_dir} is inside the job bundle {source_dir}."
+        )
     os.makedirs(bundle_dir, exist_ok=True)
     if os.listdir(bundle_dir):
         raise DeadlineOperationError(f"The directory {bundle_dir} is not empty.")
+
+    # Submission treats the bundle directory as a known asset path, so files the job uses
+    # from the bundle are copied and their paths moved, to avoid an unknown-path prompt.
+    shutil.copytree(
+        source_dir,
+        bundle_dir,
+        ignore=lambda dir, names: (
+            _AS_SUBMITTED_REWRITTEN_FILES if os.path.abspath(dir) == source_dir else set()
+        ),
+        dirs_exist_ok=True,
+    )
+
+    def move_path(path: str) -> str:
+        if is_path_contained(path, source_dir):
+            return os.path.join(bundle_dir, os.path.relpath(path, source_dir))
+        return path
+
+    def move_parameter_value(parameter: JobParameter) -> Any:
+        value = parameter["value"]
+        if parameter.get("type") == "PATH" and isinstance(value, str) and not is_uri(value):
+            return move_path(value)
+        if parameter.get("type") == "LIST[PATH]" and isinstance(value, list):
+            return [v if is_uri(v) else move_path(v) for v in value]
+        return value
 
     with open(
         os.path.join(bundle_dir, f"template.{file_type.lower()}"), "w", encoding="utf8"
@@ -603,7 +643,7 @@ def _save_as_submitted_bundle(
     # Job properties come from what was sent to CreateJob, since arguments, config defaults,
     # and hooks can all override the bundle's deadline:* values.
     parameter_values = [
-        {"name": p["name"], "value": p["value"]}
+        {"name": p["name"], "value": move_parameter_value(p)}
         for p in parameters
         if "value" in p and not p["name"].startswith(f"{DEFAULT_APP_NAME}:")
     ]
@@ -616,7 +656,15 @@ def _save_as_submitted_bundle(
         bundle_dir, "parameter_values", file_type, {"parameterValues": parameter_values}
     )
 
-    save_yaml_or_json_to_file(bundle_dir, "asset_references", file_type, asset_references.to_dict())
+    moved_asset_references = AssetReferences(
+        input_filenames={move_path(p) for p in asset_references.input_filenames},
+        input_directories={move_path(p) for p in asset_references.input_directories},
+        output_directories={move_path(p) for p in asset_references.output_directories},
+        referenced_paths={move_path(p) for p in asset_references.referenced_paths},
+    )
+    save_yaml_or_json_to_file(
+        bundle_dir, "asset_references", file_type, moved_asset_references.to_dict()
+    )
 
 
 @api.record_function_latency_telemetry_event()
@@ -1294,6 +1342,7 @@ def create_job_from_job_bundle(
             try:
                 _save_as_submitted_bundle(
                     as_submitted_bundle_dir,
+                    job_bundle_dir=job_bundle_dir,
                     template_contents=file_contents,
                     file_type=file_type,
                     parameters=parameters,

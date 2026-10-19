@@ -500,7 +500,8 @@ The job history bundle holds the submission as it was before pre-submission hook
 pre-submission hooks run, the GUI and in-application submitters also save an as-submitted
 bundle next to it, in a directory with the same name ending in `.as-submitted`. It holds the
 template, parameter values, job properties such as priority, and asset references with the
-hooks' changes applied.
+hooks' changes applied. Other files in the job bundle are copied into it, and paths to them
+are changed to point at the copies, so the as-submitted bundle works on its own.
 
 The as-submitted bundle has no `hooks.yaml`, so submitting it again does not run its bundle
 hooks. Environment hooks from `DEADLINE_HOOKS_DIR` still run when they are enabled, because
