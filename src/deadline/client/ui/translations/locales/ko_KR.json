@@ -161,6 +161,7 @@
   "Name": "이름",
   "Parameters:": "파라미터:",
   "Path:": "경로:",
+  "Folder:": "폴더:",
   "Select": "선택",
   "Select a job bundle to see details": "작업 번들을 선택하여 세부 정보 보기",
   "Source:": "소스:",
