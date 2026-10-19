@@ -2,6 +2,7 @@ name: Code Quality
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ mainline, release, feature_assets_cli, 'patch_*' , "feature_*"]
   push:
     # Run on mainline pushes to populate the Actions cache that PRs restore from.
@@ -15,10 +16,26 @@ on:
         required: false
         type: string
 
+# Cancel superseded in-progress runs for the same PR branch. The group key is
+# conditional: pull_request events share a per-ref group so a new push to a PR
+# cancels the superseded run, while every other event (mainline push,
+# workflow_call) gets a unique run_id group so it is never canceled by a
+# sibling -- GitHub cancels PENDING runs in a shared group regardless of
+# cancel-in-progress, so isolating non-PR events by group is what actually
+# protects them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   Test:
     name: Python
+    # Skip the 18-cell matrix on draft PRs (where agent iteration churns most).
+    # workflow_call invocations have no pull_request context, so draft is null
+    # there and the job still runs.
+    if: github.event.pull_request.draft != true
     strategy:
+      fail-fast: true
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']

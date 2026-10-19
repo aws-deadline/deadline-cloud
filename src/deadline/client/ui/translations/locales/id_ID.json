@@ -47,6 +47,7 @@
   "Drag to show more or fewer rows": "Drag to show more or fewer rows",
   "Edit": "Edit",
   "Items: {count}": "Items: {count}",
+  "Item {number}": "Item {number}",
   "Edit...": "Edit...",
   "Error: Timeout cannot be set to zero.": "Kesalahan: Timeout tidak dapat diatur ke nol.",
   "Save bundle as": "Simpan bundel sebagai",

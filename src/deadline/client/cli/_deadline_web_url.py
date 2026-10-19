@@ -1,8 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+import configparser
 import os
 import re
+import stat
 import sys
+import tempfile
 import urllib.parse
 from pathlib import Path
 from logging import getLogger
@@ -215,13 +218,62 @@ Terminal=true
 MimeType=x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}
 """
 
-        mimeapps_file_content = f"""[Default Applications]
-x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}={DEADLINE_URL_SCHEME_NAME}.desktop;
-"""
         with open(desktop_file_path, "w") as desktop_file:
             desktop_file.write(desktop_file_content)
-        with open(mimeapps_list_file_path, "w") as mimeapps_list_file:
-            mimeapps_list_file.write(mimeapps_file_content)
+
+        # Merge into any existing mimeapps.list; a plain rewrite would drop unrelated
+        # associations. strict=False: real-world files contain duplicate keys.
+        # interpolation=None and optionxform=str keep "%" and key case verbatim.
+        mimeapps = configparser.ConfigParser(interpolation=None, strict=False)
+        mimeapps.optionxform = str  # type: ignore[assignment,method-assign]
+
+        # Write through a symlinked mimeapps.list instead of replacing the link.
+        mimeapps_list_file_path = os.path.realpath(mimeapps_list_file_path)
+
+        if os.path.isfile(mimeapps_list_file_path):
+            # Open explicitly: ConfigParser.read() silently skips unreadable files,
+            # which would overwrite the file with only our entry. XDG files are UTF-8.
+            try:
+                with open(mimeapps_list_file_path, encoding="utf-8") as mimeapps_list_file:
+                    mimeapps.read_file(mimeapps_list_file, source=mimeapps_list_file_path)
+            except (OSError, configparser.Error, UnicodeDecodeError) as e:
+                raise DeadlineOperationError(
+                    f"Failed to install the handler for {DEADLINE_URL_SCHEME_NAME} URLs: "
+                    f"could not read existing {mimeapps_list_file_path}:\n{e}"
+                ) from e
+
+        if not mimeapps.has_section("Default Applications"):
+            mimeapps.add_section("Default Applications")
+        mimeapps.set(
+            "Default Applications",
+            f"x-scheme-handler/{DEADLINE_URL_SCHEME_NAME}",
+            f"{DEADLINE_URL_SCHEME_NAME}.desktop;",
+        )
+
+        # mkstemp() creates the file as 0600; mimeapps.list must stay readable by the
+        # desktop environment (and by all users for the system-wide file).
+        if os.path.isfile(mimeapps_list_file_path):
+            mimeapps_list_file_mode = stat.S_IMODE(os.stat(mimeapps_list_file_path).st_mode)
+        else:
+            mimeapps_list_file_mode = 0o644
+
+        # Write to a temp file, fsync, and rename so the file is never left truncated.
+        dir_name = os.path.dirname(mimeapps_list_file_path)
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".mimeapps.list.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+                mimeapps.write(tmp_file, space_around_delimiters=False)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            os.chmod(tmp_path, mimeapps_list_file_mode)
+            os.replace(tmp_path, mimeapps_list_file_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                # Best-effort cleanup; don't mask the original exception.
+                pass
+            raise
 
         try:
             subprocess.run(["update-desktop-database", entry_dir], check=True)

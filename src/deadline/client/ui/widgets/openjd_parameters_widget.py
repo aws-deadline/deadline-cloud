@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from copy import deepcopy
 
-from qtpy.QtCore import QEvent, QRegularExpression, Qt, Signal  # type: ignore
-from qtpy.QtGui import QIcon, QPainter, QValidator
+from qtpy.QtCore import QEvent, QPersistentModelIndex, QPoint, QRegularExpression, Qt, Signal  # type: ignore
+from qtpy.QtGui import QFontDatabase, QIcon, QPainter, QValidator
 from qtpy.QtWidgets import (  # type: ignore
     QAbstractItemDelegate,
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -26,6 +27,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QPlainTextEdit,
     QPushButton,
     QSizePolicy,
     QSpacerItem,
@@ -33,6 +35,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QStyle,
     QStyledItemDelegate,
     QStyleOptionSizeGrip,
+    QStyleOptionViewItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -50,6 +53,7 @@ from ...job_bundle.parameters import (
     _MAX_LIST_ITEMS,
     _MAX_STRING_LIST_ITEMS,
     _MIN_INT64,
+    _to_bool,
     get_ui_control_for_parameter_definition,
 )
 from ...job_bundle.parameters import (
@@ -60,6 +64,7 @@ from .path_widgets import (
     DirectoryPickerWidget,
     InputFilePickerWidget,
     OutputFilePickerWidget,
+    _normalize_path_text,
 )
 from .spinbox_widgets import DecimalMode, FloatDragSpinBox, IntDragSpinBox
 
@@ -155,6 +160,10 @@ class OpenJDParametersWidget(QWidget):
             ControlType.MULTILINE_EDIT.name: _JobTemplateMultiLineEditWidget,
             ControlType.LINE_EDIT_LIST.name: _JobTemplateLineEditListWidget,
             ControlType.SPIN_BOX_LIST.name: _JobTemplateSpinBoxListWidget,
+            ControlType.CHECK_BOX_LIST.name: _JobTemplateCheckBoxListWidget,
+            ControlType.CHOOSE_INPUT_FILE_LIST.name: _JobTemplateInputFileListWidget,
+            ControlType.CHOOSE_OUTPUT_FILE_LIST.name: _JobTemplateOutputFileListWidget,
+            ControlType.CHOOSE_DIRECTORY_LIST.name: _JobTemplateDirectoryListWidget,
             ControlType.DROPDOWN_LIST.name: _JobTemplateDropdownListWidget,
             ControlType.CHOOSE_INPUT_FILE.name: _JobTemplateInputFileWidget,
             ControlType.CHOOSE_OUTPUT_FILE.name: _JobTemplateOutputFileWidget,
@@ -181,6 +190,8 @@ class OpenJDParametersWidget(QWidget):
                 control_widget = _JobTemplateIntSpinBoxWidget
             elif parameter["type"] == "FLOAT" and control_type_name == "SPIN_BOX":
                 control_widget = _JobTemplateFloatSpinBoxWidget
+            elif parameter["type"] == "LIST[LIST[INT]]" and control_type_name == "MULTILINE_EDIT":
+                control_widget = _JobTemplateJsonEditWidget
             else:
                 control_widget = control_map[control_type_name]
 
@@ -323,6 +334,13 @@ class _JobTemplateRangeExprValidator(QValidator):
 class _JobTemplateWidget(QWidget):
     IS_VERTICAL_EXPANDING: bool = False
 
+    # Reports a change as a copy of the parameter definition with "value" set. Controls
+    # report changes through this Qt signal, connected to their own bound method, rather
+    # than through Python closures or containers that capture the parent's callbacks:
+    # those form reference cycles or leaks, so the widget could only be freed by the
+    # garbage collector, on whichever thread it happens to run.
+    _value_changed = Signal(dict)
+
     def __init__(self, parent, parameter):
         super().__init__(parent)
 
@@ -361,6 +379,23 @@ class _JobTemplateWidget(QWidget):
         # Set the initial value to the first of the value, default or a type default
         value = parameter.get("value", parameter.get("default", self.OPENJD_DEFAULT_VALUE))
         self.set_value(value)
+
+        # Connected after the initial value is set, so setting it reports no change.
+        change_signal = self._change_signal()
+        if change_signal is not None:
+            change_signal.connect(self._emit_value_changed)
+
+    def _change_signal(self) -> Any:
+        """The child widget's signal that reports a user edit, or None."""
+        return None
+
+    def _emit_value_changed(self, *args) -> None:
+        message = deepcopy(self.job_template_parameter)
+        message["value"] = self.value()
+        self._value_changed.emit(message)
+
+    def connect_parameter_changed(self, callback) -> None:
+        self._value_changed.connect(callback)
 
     def name(self):
         return self.job_template_parameter["name"]
@@ -437,15 +472,8 @@ class _JobTemplateLineEditWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setText(value.as_posix() if isinstance(value, Path) else str(value))
 
-    def _handle_text_changed(self, text, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = text
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.textChanged.connect(
-            lambda text: self._handle_text_changed(text, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.textChanged
 
 
 class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
@@ -491,15 +519,128 @@ class _JobTemplateMultiLineEditWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setPlainText(value.as_posix() if isinstance(value, Path) else str(value))
 
-    def _handle_text_changed(self, text, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = text
-        callback(message)
+    def _change_signal(self):
+        return self.edit_control.textChanged
 
-    def connect_parameter_changed(self, callback):
-        self.edit_control.textChanged.connect(
-            lambda: self._handle_text_changed(self.value(), callback)
+
+class _JobTemplateJsonEditWidget(_JobTemplateWidget):
+    """A multiline JSON text edit for a LIST[LIST[INT]] parameter, which OpenJD gives no
+    editing control. The text is validated as it is typed. The value is the parsed list while
+    the text is valid, and the text itself otherwise.
+    """
+
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.MULTILINE_EDIT
+    OPENJD_TYPES: List[str] = ["LIST[LIST[INT]]"]
+    OPENJD_DEFAULT_VALUE: List[Any] = []
+    OPENJD_REQUIRED_PARAMETER_FIELDS: List[str] = []
+    OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
+    VISIBLE_LINES: int = 4
+
+    def _build_ui(self, parameter):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        label_layout = QHBoxLayout()
+        self.label = QLabel(_get_parameter_label(parameter), self)
+        self.warning_icon = QLabel(self)
+        icon_size = self.style().pixelMetric(QStyle.PM_SmallIconSize, None, self)
+        self.warning_icon.setPixmap(
+            self.style().standardIcon(QStyle.SP_MessageBoxWarning).pixmap(icon_size, icon_size)
         )
+        self.warning_icon.setVisible(False)
+        label_layout.addWidget(self.label)
+        label_layout.addWidget(self.warning_icon)
+        label_layout.addStretch()
+        layout.addLayout(label_layout)
+
+        self.edit_control = QPlainTextEdit(self)
+        self.edit_control.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        self.edit_control.setPlaceholderText("e.g. [[1, 2], [3]]")
+        self.edit_control.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        margins = self.edit_control.contentsMargins()
+        self.edit_control.setFixedHeight(
+            int(
+                self.edit_control.fontMetrics().lineSpacing() * self.VISIBLE_LINES
+                + 2 * self.edit_control.document().documentMargin()
+                + 2 * self.edit_control.frameWidth()
+                + margins.top()
+                + margins.bottom()
+            )
+        )
+        layout.addWidget(self.edit_control)
+        self.setLayout(layout)
+
+        if "description" in parameter:
+            for widget in (self.label, self.edit_control):
+                widget.setToolTip(parameter["description"])
+
+        # Connected before the base class connects the change report, so the feedback is
+        # current when the change is reported.
+        self.edit_control.textChanged.connect(self._update_feedback)
+
+    def _validation_error(self) -> str:
+        text = self.edit_control.toPlainText()
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as e:
+            return (
+                f"The text is not valid JSON ({e}). Enter a list of lists of integers, "
+                "such as [[1, 2], [3]]."
+            )
+        if not isinstance(parsed, list):
+            # Not passed on for validation, which would parse a JSON string a second time.
+            return (
+                "The text is JSON but not a list. Enter a list of lists of integers, "
+                "such as [[1, 2], [3]]."
+            )
+        try:
+            _validate_job_parameter_value(self.job_template_parameter, parsed)
+        except (ValueError, TypeError) as e:
+            return str(e)
+        return ""
+
+    def _update_feedback(self) -> None:
+        error = self._validation_error()
+        self.warning_icon.setVisible(bool(error))
+        self.warning_icon.setToolTip(error)
+        if error:
+            self.edit_control.setStyleSheet("QPlainTextEdit { border: 1px solid red; }")
+            self.edit_control.setToolTip(error)
+        else:
+            self.edit_control.setStyleSheet("")
+            self.edit_control.setToolTip(self.job_template_parameter.get("description", ""))
+
+    def is_valid(self) -> bool:
+        return not self._validation_error()
+
+    def value(self) -> Any:
+        text = self.edit_control.toPlainText()
+        if not self._validation_error():
+            return json.loads(text)
+        # Kept as typed, so submission and the saved bundle report it rather than lose it.
+        # Nor could a parameter_changed signal carry an integer beyond 64 bits.
+        return text
+
+    def set_value(self, value: Any) -> None:
+        if isinstance(value, str):
+            # CLI and pre-GUI hook values arrive as JSON text. Text that is not a JSON list is
+            # shown as written, marked invalid, for the user to correct.
+            text = value
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                text = json.dumps(parsed)
+        else:
+            try:
+                text = json.dumps(value)
+            except (TypeError, ValueError):
+                text = str(value)
+        self.edit_control.setPlainText(text)
+        self._update_feedback()
+
+    def _change_signal(self):
+        return self.edit_control.textChanged
 
 
 class _FixedRowHeightDelegate(QStyledItemDelegate):
@@ -583,7 +724,6 @@ class _JobTemplateListWidgetBase(_JobTemplateWidget):
 
     def _build_ui(self, parameter):
         self._suppress_changes = False
-        self._change_callbacks: List[Any] = []
         max_items_cap = _MAX_LIST_ITEMS[parameter["type"]]
         self.max_items = min(parameter.get("maxLength", max_items_cap), max_items_cap)
 
@@ -722,7 +862,10 @@ class _JobTemplateListWidgetBase(_JobTemplateWidget):
             self.corner_grip.raise_()
 
     def eventFilter(self, watched, event) -> bool:
-        if watched is self.edit_control and event.type() == QEvent.Resize:
+        # Qt can still deliver events while the control is being destroyed, after its
+        # attributes are gone.
+        edit_control = getattr(self, "edit_control", None)
+        if edit_control is not None and watched is edit_control and event.type() == QEvent.Resize:
             self._place_grip()
         return super().eventFilter(watched, event)
 
@@ -748,10 +891,7 @@ class _JobTemplateListWidgetBase(_JobTemplateWidget):
             self._update_buttons()
         finally:
             self._suppress_changes = False
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = self.value()
-        for callback in self._change_callbacks:
-            callback(message)
+        self._emit_value_changed()
 
     def _update_buttons(self) -> None:
         count = self.edit_control.count()
@@ -831,9 +971,6 @@ class _JobTemplateListWidgetBase(_JobTemplateWidget):
 
     def _before_set_value(self) -> None:
         """Called before set_value replaces the items."""
-
-    def connect_parameter_changed(self, callback):
-        self._change_callbacks.append(callback)
 
 
 class _JobTemplateLineEditListWidget(_JobTemplateListWidgetBase):
@@ -925,18 +1062,21 @@ class _JobTemplateLineEditListWidget(_JobTemplateListWidgetBase):
 
 # The item data role that holds a SPIN_BOX_LIST item's number.
 _NUMBER_ROLE = Qt.UserRole
+# The item data role that holds a path list item's path.
+_PATH_ROLE = Qt.UserRole
 # The range of the int that a QSpinBox holds.
 _SPIN_BOX_INT_MIN = -(2**31)
 _SPIN_BOX_INT_MAX = 2**31 - 1
 
 
-class _SpinBoxListView(QListWidget):
-    """The list of a SPIN_BOX_LIST, whose rows each hold an always-open spin box.
+class _EditorRowListView(QListWidget):
+    """The list of a SPIN_BOX_LIST or path list control, whose rows each hold an
+    always-open editor.
 
     A view focuses a row's persistent editor when the row is pressed or becomes current.
-    Pressing a row's drag strip would then hand the press to the spin box and the view
-    would never start dragging the row, so neither moves focus into the spin box; a
-    spin box still takes focus when it is clicked.
+    Pressing a row's drag strip would then hand the press to the editor and the view
+    would never start dragging the row, so neither moves focus into the editor; an
+    editor still takes focus when it is clicked.
     """
 
     def edit(self, index, trigger=None, event=None):  # type: ignore[override]
@@ -950,11 +1090,85 @@ class _SpinBoxListView(QListWidget):
         return super().edit(index, trigger, event)
 
     def viewportEvent(self, event) -> bool:
-        # Rows are spin boxes, which show their own hover state, so the row behind one is
+        # Rows are editors, which show their own hover state, so the row behind one is
         # not highlighted too. The view tracks the hovered row from these events alone.
         if event.type() in (QEvent.HoverEnter, QEvent.HoverMove, QEvent.HoverLeave):
             return True
         return super().viewportEvent(event)
+
+
+class _EditorRowListWidgetBase(_JobTemplateListWidgetBase):
+    """The shared behavior of the list controls whose rows each hold an always-open editor,
+    right of a strip that holds the row's warning icon and is where a row is grabbed to
+    drag it. Subclasses create the editor, and a delegate that places and loads it."""
+
+    _ITEM_FLAGS = Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsDragEnabled
+
+    def _build_ui(self, parameter):
+        icon_size = self.style().pixelMetric(QStyle.PM_SmallIconSize, None, self)
+        self._strip_width = icon_size + 10
+        super()._build_ui(parameter)
+        # The editors are opened for every row.
+        self.edit_control.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+    def create_editor(self, parent: QWidget) -> QWidget:
+        """Creates the editor of one row."""
+        raise NotImplementedError
+
+    def _editor_line_edit(self, editor: Any) -> QLineEdit:
+        """The line edit inside an editor, where its text is typed."""
+        raise NotImplementedError
+
+    def _editor_accessible_text(self, item: QListWidgetItem) -> str:
+        """What a screen reader announces for a row, since the row itself has no text."""
+        return str(self._item_value(item))
+
+    def _min_row_height(self) -> int:
+        probe = self.create_editor(self)
+        height = probe.sizeHint().height()
+        probe.hide()
+        probe.deleteLater()
+        return height
+
+    def _create_list_widget(self) -> QListWidget:
+        return _EditorRowListView(self)
+
+    def row_editor(self, row: int) -> Any:
+        """The editor of the given row."""
+        return self.edit_control.indexWidget(self.edit_control.model().index(row, 0))
+
+    def _on_rows_changed(self) -> None:
+        # Rows that are added, or recreated by a drag, need their editor opened.
+        for i in range(self.edit_control.count()):
+            item = self.edit_control.item(i)
+            if not self.edit_control.isPersistentEditorOpen(item):
+                self.edit_control.openPersistentEditor(item)
+                # Opening an editor selects its text; only a focused row should show a
+                # selection.
+                editor = self.edit_control.itemWidget(item)
+                if editor is not None:
+                    line_edit = self._editor_line_edit(editor)
+                    if not line_edit.hasFocus():
+                        line_edit.deselect()
+
+    def _set_item_feedback(self, item: QListWidgetItem, error: str) -> None:
+        super()._set_item_feedback(item, error)
+        item.setData(Qt.AccessibleTextRole, self._editor_accessible_text(item))
+        editor = self.edit_control.itemWidget(item)
+        if editor is not None:
+            editor.setToolTip(error or self.job_template_parameter.get("description", ""))
+
+    def eventFilter(self, watched, event) -> bool:
+        # Focusing a row's editor, or a widget inside it, selects the row so Remove
+        # Selected acts on it.
+        edit_control = getattr(self, "edit_control", None)
+        if edit_control is not None and event.type() == QEvent.FocusIn:
+            for i in range(edit_control.count()):
+                editor = self.row_editor(i)
+                if editor is not None and (editor is watched or editor.isAncestorOf(watched)):
+                    edit_control.setCurrentRow(i)
+                    break
+        return super().eventFilter(watched, event)
 
 
 class _SpinBoxListDelegate(_FixedRowHeightDelegate):
@@ -1013,7 +1227,7 @@ class _SpinBoxListDelegate(_FixedRowHeightDelegate):
         editor.setGeometry(option.rect.adjusted(self._strip_width, 0, -self._right_inset, 0))
 
 
-class _JobTemplateSpinBoxListWidget(_JobTemplateListWidgetBase):
+class _JobTemplateSpinBoxListWidget(_EditorRowListWidgetBase):
     """A reorderable list of numbers for a LIST[INT] or LIST[FLOAT] parameter.
 
     Every row is the same spin box that an INT or FLOAT parameter uses, always open for
@@ -1023,16 +1237,16 @@ class _JobTemplateSpinBoxListWidget(_JobTemplateListWidgetBase):
     OPENJD_CONTROL_TYPE: ControlType = ControlType.SPIN_BOX_LIST
     OPENJD_TYPES: List[str] = ["LIST[INT]", "LIST[FLOAT]"]
 
-    _ITEM_FLAGS = Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsDragEnabled
-
     def _build_ui(self, parameter):
         self._is_float = parameter["type"] == "LIST[FLOAT]"
         self.ITEM_KIND = "numbers" if self._is_float else "64-bit integers"
-        icon_size = self.style().pixelMetric(QStyle.PM_SmallIconSize, None, self)
-        self._strip_width = icon_size + 10
         super()._build_ui(parameter)
-        # The spin boxes are the editors, and are opened for every row.
-        self.edit_control.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+    def create_editor(self, parent: QWidget) -> QWidget:
+        return self.create_spin_box(parent)
+
+    def _editor_line_edit(self, editor: Any) -> QLineEdit:
+        return editor.lineEdit()
 
     def create_spin_box(self, parent: QWidget) -> QWidget:
         """Creates a spin box configured like the one for an INT or FLOAT parameter with
@@ -1092,23 +1306,13 @@ class _JobTemplateSpinBoxListWidget(_JobTemplateListWidgetBase):
             spin_box.setSpecialValueText(str(value))
             spin_box.setValue(spin_box.minimum())
 
-    def _min_row_height(self) -> int:
-        probe = self.create_spin_box(self)
-        height = probe.sizeHint().height()
-        probe.hide()
-        probe.deleteLater()
-        return height
-
-    def _create_list_widget(self) -> QListWidget:
-        return _SpinBoxListView(self)
-
     def _create_delegate(self, row_height: int) -> QStyledItemDelegate:
         grip_size = self.style().pixelMetric(QStyle.PM_SizeGripSize, None, self)
         return _SpinBoxListDelegate(self, row_height, self._strip_width, grip_size)
 
     def spin_box(self, row: int) -> Any:
         """The spin box that edits the given row."""
-        return self.edit_control.indexWidget(self.edit_control.model().index(row, 0))
+        return self.row_editor(row)
 
     def _new_item(self, value: Any) -> QListWidgetItem:
         item = QListWidgetItem()
@@ -1158,33 +1362,319 @@ class _JobTemplateSpinBoxListWidget(_JobTemplateListWidgetBase):
             spin_box.setFocus()
             spin_box.selectAll()
 
+
+def _file_dialog_filters(parameter: Dict[str, Any]) -> tuple[str, str]:
+    """The file dialog's filter string, and its initially selected filter, from a PATH or
+    LIST[PATH] parameter's userInterface fileFilters and fileFilterDefault."""
+    filetype_filter = "Any files (*)"
+    selected_filter = ""
+    user_interface = parameter.get("userInterface", {})
+    file_filter_list = user_interface.get("fileFilters")
+    if file_filter_list:
+        filetype_filter = ";;".join(
+            f"{file_filter['label']} ({' '.join(file_filter['patterns'])})"
+            for file_filter in file_filter_list
+        )
+    file_filter_default = user_interface.get("fileFilterDefault")
+    if file_filter_default:
+        selected_filter = (
+            f"{file_filter_default['label']} ({' '.join(file_filter_default['patterns'])})"
+        )
+    if not selected_filter:
+        selected_filter = filetype_filter.split(";", 1)[0]
+    return filetype_filter, selected_filter
+
+
+class _PathListDelegate(_FixedRowHeightDelegate):
+    """Gives each row of a path list control a path picker, a line edit with a button that
+    opens a file or directory dialog, right of a strip that holds the row's warning icon
+    and is where a row is grabbed to drag it."""
+
+    def __init__(
+        self,
+        owner: "_JobTemplatePathListWidgetBase",
+        row_height: int,
+        strip_width: int,
+        right_inset: int,
+    ):
+        super().__init__(owner.edit_control, row_height)
+        self._owner = owner
+        self._strip_width = strip_width
+        self._right_inset = right_inset
+
+    def createEditor(self, parent, option, index):
+        editor = self._owner.create_editor(parent)
+        line_edit = self._owner._editor_line_edit(editor)
+        # A line edit accepts drops, which would make each row, instead of the list, the
+        # target of a row being dragged to reorder it.
+        editor.setAcceptDrops(False)
+        line_edit.setAcceptDrops(False)
+        # Commit as the user types, so the list's feedback and the Submit button follow
+        # the text, and when the dialog button picks a path.
+        line_edit.textEdited.connect(lambda _text, e=editor: self.commitData.emit(e))
+        editor.path_changed.connect(lambda _path, e=editor: self.commitData.emit(e))
+        # Focusing a row's line edit or button selects its row, so Remove Selected acts on it.
+        for child in editor.findChildren(QWidget):
+            child.installEventFilter(self._owner)
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.data(_PATH_ROLE)
+        line_edit = self._owner._editor_line_edit(editor)
+        # The view reloads every editor on any dataChanged, including the icon and tooltip
+        # updates of other rows. Only a changed value is loaded, so the cursor stays put.
+        if value is None or line_edit.text() == value:
+            return
+        # Set the line edit, not the picker: the item value is already normalized as the
+        # picker would show it, and the picker's setText would also report a change.
+        line_edit.setText(value)
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.text(), _PATH_ROLE)
+
+    def updateEditorGeometry(self, editor, option, index):
+        # The right inset keeps the list's resize grip clear of the last row's button.
+        editor.setGeometry(option.rect.adjusted(self._strip_width, 0, -self._right_inset, 0))
+
+
+class _JobTemplatePathListWidgetBase(_EditorRowListWidgetBase):
+    """A reorderable list of paths for a LIST[PATH] parameter.
+
+    Every row is the same path picker that a PATH parameter with the corresponding control
+    uses, always open for editing. Add appends an empty row, focuses it, and opens the
+    row's file or directory dialog.
+    """
+
+    OPENJD_TYPES: List[str] = ["LIST[PATH]"]
+    ITEM_KIND: str = "paths"
+
+    def _build_ui(self, parameter):
+        self._file_filter, self._selected_file_filter = _file_dialog_filters(parameter)
+        super()._build_ui(parameter)
+
+    def _editor_line_edit(self, editor: Any) -> QLineEdit:
+        return editor.findChild(QLineEdit)
+
+    def _configure_editor(self, editor: QWidget) -> QWidget:
+        editor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        if "description" in self.job_template_parameter:
+            editor.setToolTip(self.job_template_parameter["description"])
+        return editor
+
+    def _create_delegate(self, row_height: int) -> QStyledItemDelegate:
+        grip_size = self.style().pixelMetric(QStyle.PM_SizeGripSize, None, self)
+        return _PathListDelegate(self, row_height, self._strip_width, grip_size)
+
+    def _new_item(self, value: Any) -> QListWidgetItem:
+        item = QListWidgetItem()
+        item.setFlags(self._ITEM_FLAGS)
+        item.setData(_PATH_ROLE, value)
+        return item
+
+    def _item_value(self, item: QListWidgetItem) -> str:
+        return item.data(_PATH_ROLE)
+
+    def _to_item_values(self, value: Any) -> Optional[List[Any]]:
+        if isinstance(value, (list, tuple)) and all(isinstance(v, str) for v in value):
+            # Shown as the PATH control's picker shows a value it is given.
+            return [_normalize_path_text(v) for v in value]
+        return None
+
+    def _on_add(self) -> None:
+        item = self._new_item("")
+        self.edit_control.addItem(item)
+        self.edit_control.setCurrentItem(item)
+        editor = self.row_editor(self.edit_control.row(item))
+        if editor is not None:
+            self._editor_line_edit(editor).setFocus()
+            # Canceling leaves the empty row for typing a path, such as a URI, that the
+            # dialog can't choose.
+            self._open_dialog(editor)
+
+    def _open_dialog(self, editor: Any) -> None:
+        """Opens the dialog that the row's "..." button opens."""
+        editor.on_choose_file()
+
+
+class _JobTemplateInputFileListWidget(_JobTemplatePathListWidgetBase):
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHOOSE_INPUT_FILE_LIST
+
+    def create_editor(self, parent: QWidget) -> QWidget:
+        return self._configure_editor(
+            InputFilePickerWidget(
+                initial_filename="",
+                file_label=self.name(),
+                filter=self._file_filter,
+                selected_filter=self._selected_file_filter,
+                parent=parent,
+            )
+        )
+
+
+class _JobTemplateOutputFileListWidget(_JobTemplatePathListWidgetBase):
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHOOSE_OUTPUT_FILE_LIST
+
+    def create_editor(self, parent: QWidget) -> QWidget:
+        return self._configure_editor(
+            OutputFilePickerWidget(
+                initial_filename="",
+                file_label=self.name(),
+                filter=self._file_filter,
+                selected_filter=self._selected_file_filter,
+                parent=parent,
+            )
+        )
+
+
+class _JobTemplateDirectoryListWidget(_JobTemplatePathListWidgetBase):
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHOOSE_DIRECTORY_LIST
+
+    def create_editor(self, parent: QWidget) -> QWidget:
+        return self._configure_editor(
+            DirectoryPickerWidget(initial_directory="", directory_label=self.name(), parent=parent)
+        )
+
+    def _open_dialog(self, editor: Any) -> None:
+        editor.on_choose_directory()
+
+
+class _CheckBoxListDelegate(_FixedRowHeightDelegate):
+    """Draws each row of a CHECK_BOX_LIST right of a strip where the row is grabbed to drag
+    it, and toggles a row when its label is clicked as well as its checkbox."""
+
+    def __init__(self, view: QListWidget, row_height: int, strip_width: int):
+        super().__init__(view, row_height)
+        self._view = view
+        self._strip_width = strip_width
+        # The row whose label the left button was last pressed on. A click toggles only
+        # when it is released on the label of that same row, so a drag or a press that
+        # ends elsewhere does not toggle anything.
+        self._label_pressed_row: Optional[QPersistentModelIndex] = None
+
+    def content_option(self, option: QStyleOptionViewItem) -> QStyleOptionViewItem:
+        """The option for the checkbox and label, which sit right of the drag strip."""
+        content = QStyleOptionViewItem(option)
+        content.rect = option.rect.adjusted(self._strip_width, 0, 0, 0)
+        return content
+
+    def paint(self, painter, option, index):
+        # The selection and hover highlight span the whole row, including the strip. A style
+        # whose ShowDecorationSelected hint is false for a list view would otherwise fill
+        # only the text rectangle.
+        background = QStyleOptionViewItem(option)
+        self.initStyleOption(background, index)
+        background.showDecorationSelected = True
+        style = option.widget.style() if option.widget else QApplication.style()
+        style.drawPrimitive(QStyle.PE_PanelItemViewItem, background, painter, option.widget)
+        super().paint(painter, self.content_option(option), index)
+
+    @staticmethod
+    def _event_pos(event) -> QPoint:
+        # position is Qt 6; pos is its Qt 5 equivalent.
+        if hasattr(event, "position"):
+            return event.position().toPoint()
+        return event.pos()
+
+    def editorEvent(self, event, model, option, index):
+        content = self.content_option(option)
+        # The base class toggles a click on the checkbox, and reports it as handled.
+        handled = super().editorEvent(event, model, content, index)
+        event_type = event.type()
+        if event_type not in (
+            QEvent.MouseButtonPress,
+            QEvent.MouseButtonDblClick,
+            QEvent.MouseButtonRelease,
+        ):
+            return handled
+        on_label = (
+            not handled
+            and event.button() == Qt.LeftButton
+            and content.rect.contains(self._event_pos(event))
+        )
+        if event_type != QEvent.MouseButtonRelease:
+            self._label_pressed_row = QPersistentModelIndex(index) if on_label else None
+            return handled
+        pressed_row, self._label_pressed_row = self._label_pressed_row, None
+        if on_label and pressed_row is not None and pressed_row == index:
+            item = self._view.itemFromIndex(index)
+            item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
+            return True
+        return handled
+
+
+class _JobTemplateCheckBoxListWidget(_JobTemplateListWidgetBase):
+    """A reorderable list of checkboxes for a LIST[BOOL] parameter.
+
+    Each row is a checkable item labelled by its position, "Item 1", "Item 2" and so on,
+    so the labels stay in order when rows are reordered. Clicking a row's checkbox or
+    label, or pressing Space on the current row, toggles it. Like a SPIN_BOX_LIST, a row
+    is dragged by the strip left of its checkbox, and clicking the strip selects the row
+    without toggling it.
+    """
+
+    OPENJD_CONTROL_TYPE: ControlType = ControlType.CHECK_BOX_LIST
+    OPENJD_TYPES: List[str] = ["LIST[BOOL]"]
+    ITEM_KIND: str = "booleans"
+
+    _ITEM_FLAGS = (
+        Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsDragEnabled
+    )
+
+    def _build_ui(self, parameter):
+        icon_size = self.style().pixelMetric(QStyle.PM_SmallIconSize, None, self)
+        self._strip_width = icon_size + 10
+        super()._build_ui(parameter)
+        self.edit_control.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+    def _create_delegate(self, row_height: int) -> QStyledItemDelegate:
+        return _CheckBoxListDelegate(self.edit_control, row_height, self._strip_width)
+
+    def _min_row_height(self) -> int:
+        probe = self._new_item(True)
+        probe.setText(self._item_label(0))
+        self.edit_control.addItem(probe)
+        height = self.edit_control.sizeHintForRow(self.edit_control.row(probe))
+        self.edit_control.takeItem(self.edit_control.row(probe))
+        return height
+
+    def _new_item(self, value: Any) -> QListWidgetItem:
+        # The label is set from the row's position once it is in the list.
+        item = QListWidgetItem()
+        item.setFlags(self._ITEM_FLAGS)
+        item.setCheckState(Qt.Checked if value else Qt.Unchecked)
+        return item
+
+    @staticmethod
+    def _item_label(row: int) -> str:
+        return _tr("Item {number}").format(number=row + 1)
+
+    def _item_value(self, item: QListWidgetItem) -> bool:
+        return item.checkState() == Qt.Checked
+
+    def _to_item_values(self, value: Any) -> Optional[List[Any]]:
+        if not isinstance(value, (list, tuple)):
+            return None
+        items = [_to_bool(v) for v in value]
+        if any(v is None for v in items):
+            return None
+        return items
+
+    def _on_add(self) -> None:
+        count = self.edit_control.count()
+        value = self._item_value(self.edit_control.item(count - 1)) if count else False
+        item = self._new_item(value)
+        self.edit_control.addItem(item)
+        # The new row is current, so Space toggles it.
+        self.edit_control.setCurrentItem(item)
+        self.edit_control.setFocus()
+
     def _on_rows_changed(self) -> None:
-        # Rows that are added, or recreated by a drag, need their spin box opened.
+        # Number the rows by position, so a row moved by a drag takes its new number.
         for i in range(self.edit_control.count()):
             item = self.edit_control.item(i)
-            if not self.edit_control.isPersistentEditorOpen(item):
-                self.edit_control.openPersistentEditor(item)
-                # Opening an editor selects its text; only a focused row should show a
-                # selection.
-                spin_box = self.edit_control.itemWidget(item)
-                if spin_box is not None and not spin_box.hasFocus():
-                    spin_box.lineEdit().deselect()
-
-    def _set_item_feedback(self, item: QListWidgetItem, error: str) -> None:
-        super()._set_item_feedback(item, error)
-        # Screen readers announce the item's number, since the row itself has no text.
-        item.setData(Qt.AccessibleTextRole, str(self._item_value(item)))
-        spin_box = self.edit_control.itemWidget(item)
-        if spin_box is not None:
-            spin_box.setToolTip(error or self.job_template_parameter.get("description", ""))
-
-    def eventFilter(self, watched, event) -> bool:
-        if event.type() == QEvent.FocusIn and watched.parent() is self.edit_control.viewport():
-            for i in range(self.edit_control.count()):
-                if self.spin_box(i) is watched:
-                    self.edit_control.setCurrentRow(i)
-                    break
-        return super().eventFilter(watched, event)
+            label = self._item_label(i)
+            if item.text() != label:
+                item.setText(label)
 
 
 class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
@@ -1255,15 +1745,8 @@ class _JobTemplateIntSpinBoxWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setValue(value)
 
-    def _handle_value_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.valueChanged.connect(
-            lambda value: self._handle_value_changed(value, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.valueChanged
 
 
 class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
@@ -1341,15 +1824,8 @@ class _JobTemplateFloatSpinBoxWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setValue(value)
 
-    def _handle_value_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.valueChanged.connect(
-            lambda value: self._handle_value_changed(value, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.valueChanged
 
 
 class _JobTemplateDropdownListWidget(_JobTemplateWidget):
@@ -1394,15 +1870,8 @@ class _JobTemplateDropdownListWidget(_JobTemplateWidget):
         if index >= 0:
             self.edit_control.setCurrentIndex(index)
 
-    def _handle_index_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.currentIndexChanged.connect(
-            lambda _: self._handle_index_changed(self.value(), callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.currentIndexChanged
 
 
 class _JobTemplateBaseFileWidget(_JobTemplateWidget):
@@ -1412,24 +1881,7 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
     OPENJD_DISALLOWED_PARAMETER_FIELDS: List[str] = ["allowedValues"]
 
     def _build_ui(self, parameter):
-        # Get the filters
-        filetype_filter = "Any files (*)"
-        selected_filter = ""
-        if "userInterface" in parameter:
-            file_filter_list = parameter["userInterface"].get("fileFilters")
-            if file_filter_list:
-                filetype_filter = ";;".join(
-                    f"{file_filter['label']} ({' '.join(file_filter['patterns'])})"
-                    for file_filter in file_filter_list
-                )
-            file_filter_default = parameter["userInterface"].get("fileFilterDefault")
-            if file_filter_default:
-                selected_filter = (
-                    f"{file_filter_default['label']} ({' '.join(file_filter_default['patterns'])})"
-                )
-
-        if not selected_filter:
-            selected_filter = filetype_filter.split(";", 1)[0]
+        filetype_filter, selected_filter = _file_dialog_filters(parameter)
 
         # Create the edit widget
         layout = QHBoxLayout()
@@ -1458,15 +1910,8 @@ class _JobTemplateBaseFileWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setText(value)
 
-    def _handle_path_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.path_changed.connect(
-            lambda path: self._handle_path_changed(path, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.path_changed
 
 
 class _JobTemplateInputFileWidget(_JobTemplateBaseFileWidget):
@@ -1510,15 +1955,8 @@ class _JobTemplateDirectoryWidget(_JobTemplateWidget):
     def set_value(self, value):
         self.edit_control.setText(value)
 
-    def _handle_path_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.path_changed.connect(
-            lambda path: self._handle_path_changed(path, callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.path_changed
 
 
 # These are the permitted sets of values that can be in a string job parameter 'allowedValues'
@@ -1597,15 +2035,8 @@ class _JobTemplateCheckBoxWidget(_JobTemplateWidget):
             checked = value == self.true_value
         self.edit_control.setChecked(checked)
 
-    def _handle_value_changed(self, value, callback):
-        message = deepcopy(self.job_template_parameter)
-        message["value"] = value
-        callback(message)
-
-    def connect_parameter_changed(self, callback):
-        self.edit_control.stateChanged.connect(
-            lambda _: self._handle_value_changed(self.value(), callback)
-        )
+    def _change_signal(self):
+        return self.edit_control.stateChanged
 
 
 class _JobTemplateHiddenWidget(_JobTemplateWidget):
@@ -1618,8 +2049,11 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
         "BOOL",
         "RANGE_EXPR",
         "LIST[STRING]",
+        "LIST[PATH]",
         "LIST[INT]",
         "LIST[FLOAT]",
+        "LIST[BOOL]",
+        "LIST[LIST[INT]]",
     ]
 
     OPENJD_DEFAULT_VALUE: str = ""  # Hidden parameters do not require defaults
@@ -1655,9 +2089,6 @@ class _JobTemplateHiddenWidget(_JobTemplateWidget):
                     # Keep the value as-is so submission reports it as an error.
                     pass
         self._value = value
-
-    def connect_parameter_changed(self, callback):
-        pass
 
 
 class _JobTemplateGroupLayout(QGroupBox):

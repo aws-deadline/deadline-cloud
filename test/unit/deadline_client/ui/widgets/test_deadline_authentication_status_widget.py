@@ -11,7 +11,9 @@ try:
     )
 except ImportError:
     # The tests in this file should be skipped if Qt UI related modules cannot be loaded
-    pytest.importorskip("deadline.client.ui.widgets.deadline_authentication_status_widget")
+    pytest.importorskip(
+        "deadline.client.ui.widgets.deadline_authentication_status_widget", exc_type=ImportError
+    )
 
 from deadline.client import api
 

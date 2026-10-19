@@ -4,3 +4,5 @@
 # Files for testing that need to be byte-for-byte identical, explicitly marked as binary
 *.bin binary
 *.xxh128 binary
+# Copied verbatim from botocore; tests compare them to botocore's copies byte-for-byte
+src/deadline/client/api/_botocore_data/** binary

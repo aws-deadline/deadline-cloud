@@ -5,6 +5,7 @@ Tests the deadline.client.api functions for submitting Open Job Description job 
 where there are PATH parameters that carry assetReference IN/OUT metadata.
 """
 
+import json
 import os
 import pytest
 from unittest.mock import ANY, patch
@@ -637,3 +638,274 @@ def test_pre_submission_hook_redirected_path_stays_known(fresh_deadline_config, 
         )
 
     client_mock().create_job.assert_called_once()
+
+
+_LIST_PATH_TEMPLATE = """specificationVersion: 'jobtemplate-2023-09'
+extensions: [EXPR]
+name: ListPath
+parameterDefinitions:
+- name: InFiles
+  type: LIST[PATH]
+  objectType: FILE
+  dataFlow: IN
+  default: ["bundle_in.txt"]
+- name: InDirs
+  type: LIST[PATH]
+  objectType: DIRECTORY
+  dataFlow: IN
+- name: OutFiles
+  type: LIST[PATH]
+  objectType: FILE
+  dataFlow: OUT
+- name: Refs
+  type: LIST[PATH]
+steps:
+- name: S
+  script:
+    actions:
+      onRun:
+        command: echo
+"""
+
+
+def _mock_upload_result(root: str) -> list:
+    return [
+        SummaryStatistics(),
+        Attachments(
+            [
+                ManifestProperties(
+                    rootPath=root,
+                    rootPathFormat=PathFormat.POSIX,
+                    inputManifestPath="m",
+                    inputManifestHash="h",
+                    outputRelativeDirectories=["."],
+                )
+            ]
+        ),
+    ]
+
+
+def test_create_job_from_job_bundle_list_path_asset_references(
+    fresh_deadline_config, tmp_path, temp_cwd
+):
+    """Every item of a LIST[PATH] parameter is attached as if it were a PATH parameter with
+    the same objectType and dataFlow: default items resolve against the bundle, items from
+    job_parameters resolve against the working directory and count as known paths, and the
+    values are sent to CreateJob in the pathList member."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "template.yaml").write_text(_LIST_PATH_TEMPLATE)
+    (bundle / "bundle_in.txt").write_text("bundle")
+
+    assets = tmp_path / "assets"
+    write_test_asset_files(
+        str(assets),
+        {"a.txt": "a", "b.txt": "bb", "dir1/x.txt": "xxx", "dir2/sub/y.txt": "yyyy"},
+    )
+    out_dir = tmp_path / "out"
+
+    # A relative item is resolved against the current working directory.
+    write_test_asset_files(os.getcwd(), {"cwd_in.txt": "cwd"})
+
+    with (
+        patch.object(_submit_job_bundle.api, "get_boto3_session"),
+        patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock,
+        patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"),
+        patch.object(S3AssetManager, "hash_assets_and_create_manifest") as mock_hash_assets,
+        patch.object(S3AssetManager, "upload_assets") as mock_upload_assets,
+        patch.object(_submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"),
+    ):
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        mock_hash_assets.return_value = [SummaryStatistics(), AssetRootManifest()]
+        mock_upload_assets.return_value = _mock_upload_result(str(tmp_path))
+
+        api.create_job_from_job_bundle(
+            job_bundle_dir=str(bundle),
+            job_parameters=[
+                {
+                    "name": "InFiles",
+                    "value": json.dumps(
+                        [str(assets / "a.txt"), "", "cwd_in.txt", str(assets / "b.txt")]
+                    ),
+                },
+                {"name": "InDirs", "value": [str(assets / "dir1"), str(assets / "dir2")]},
+                {"name": "OutFiles", "value": [str(out_dir / "o1.exr"), str(out_dir / "o2.exr")]},
+                {"name": "Refs", "value": [str(assets / "ref")]},
+            ],
+            queue_parameter_definitions=[],
+            # No known paths are passed: the job_parameters values are known paths, so
+            # submission does not stop to ask about them.
+            require_paths_exist=False,
+        )
+
+    (asset_group,) = mock_hash_assets.call_args.kwargs["asset_groups"]
+    assert asset_group.inputs == {
+        assets / "a.txt",
+        assets / "b.txt",
+        Path(os.getcwd()) / "cwd_in.txt",
+        assets / "dir1" / "x.txt",
+        assets / "dir2" / "sub" / "y.txt",
+    }
+    assert asset_group.outputs == {out_dir}
+    assert asset_group.references == {assets / "ref"}
+
+    parameters = client_mock().create_job.call_args.kwargs["parameters"]
+    assert parameters == {
+        "InFiles": {
+            "pathList": [
+                str(assets / "a.txt"),
+                "",
+                os.path.abspath("cwd_in.txt"),
+                str(assets / "b.txt"),
+            ]
+        },
+        "InDirs": {"pathList": [str(assets / "dir1"), str(assets / "dir2")]},
+        "OutFiles": {"pathList": [str(out_dir / "o1.exr"), str(out_dir / "o2.exr")]},
+        "Refs": {"pathList": [str(assets / "ref")]},
+    }
+
+
+def test_create_job_from_job_bundle_list_path_default_from_bundle(fresh_deadline_config, tmp_path):
+    """A LIST[PATH] default item is resolved against the job bundle and uploaded."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "template.yaml").write_text(_LIST_PATH_TEMPLATE)
+    (bundle / "bundle_in.txt").write_text("bundle")
+
+    with (
+        patch.object(_submit_job_bundle.api, "get_boto3_session"),
+        patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock,
+        patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"),
+        patch.object(S3AssetManager, "hash_assets_and_create_manifest") as mock_hash_assets,
+        patch.object(S3AssetManager, "upload_assets") as mock_upload_assets,
+        patch.object(_submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"),
+    ):
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        mock_hash_assets.return_value = [SummaryStatistics(), AssetRootManifest()]
+        mock_upload_assets.return_value = _mock_upload_result(str(tmp_path))
+
+        api.create_job_from_job_bundle(
+            job_bundle_dir=str(bundle),
+            job_parameters=[
+                {"name": "InDirs", "value": []},
+                {"name": "OutFiles", "value": []},
+                {"name": "Refs", "value": []},
+            ],
+            queue_parameter_definitions=[],
+        )
+
+    (asset_group,) = mock_hash_assets.call_args.kwargs["asset_groups"]
+    assert asset_group.inputs == {bundle / "bundle_in.txt"}
+    parameters = client_mock().create_job.call_args.kwargs["parameters"]
+    assert parameters["InFiles"] == {"pathList": [str(bundle / "bundle_in.txt")]}
+
+
+_URI_TEMPLATE = """specificationVersion: 'jobtemplate-2023-09'
+extensions: [EXPR]
+name: Uris
+parameterDefinitions:
+- name: Scene
+  type: PATH
+  objectType: FILE
+  dataFlow: IN
+- name: Textures
+  type: LIST[PATH]
+  objectType: DIRECTORY
+  dataFlow: INOUT
+- name: Outputs
+  type: LIST[PATH]
+  objectType: FILE
+  dataFlow: OUT
+  default: ["s3://bucket/renders/out.exr"]
+steps:
+- name: S
+  script:
+    actions:
+      onRun:
+        command: echo
+"""
+
+
+def test_create_job_from_job_bundle_uri_path_values(fresh_deadline_config, tmp_path, temp_cwd):
+    """With the EXPR extension, URI values of PATH and LIST[PATH] parameters reach CreateJob
+    unchanged and are not given to job attachments, while local items still are. A URI is
+    not a path that needs confirming, so submission does not stop for it."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "template.yaml").write_text(_URI_TEMPLATE)
+    textures = tmp_path / "textures"
+    write_test_asset_files(str(textures), {"t.txt": "t"})
+
+    with (
+        patch.object(_submit_job_bundle.api, "get_boto3_session"),
+        patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock,
+        patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"),
+        patch.object(S3AssetManager, "hash_assets_and_create_manifest") as mock_hash_assets,
+        patch.object(S3AssetManager, "upload_assets") as mock_upload_assets,
+        patch.object(_submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"),
+    ):
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        mock_hash_assets.return_value = [SummaryStatistics(), AssetRootManifest()]
+        mock_upload_assets.return_value = _mock_upload_result(str(tmp_path))
+
+        api.create_job_from_job_bundle(
+            job_bundle_dir=str(bundle),
+            job_parameters=[
+                {"name": "Scene", "value": "s3://bucket/scenes/a.blend"},
+                {"name": "Textures", "value": ["https://example.com/tex", str(textures)]},
+            ],
+            queue_parameter_definitions=[],
+        )
+
+    (asset_group,) = mock_hash_assets.call_args.kwargs["asset_groups"]
+    assert asset_group.inputs == {textures / "t.txt"}
+    assert asset_group.outputs == {textures}
+    assert asset_group.references == set()
+    assert client_mock().create_job.call_args.kwargs["parameters"] == {
+        "Scene": {"path": "s3://bucket/scenes/a.blend"},
+        "Textures": {"pathList": ["https://example.com/tex", str(textures)]},
+        "Outputs": {"pathList": ["s3://bucket/renders/out.exr"]},
+    }
+
+
+def test_create_job_from_job_bundle_only_uris_skips_job_attachments(
+    fresh_deadline_config, tmp_path
+):
+    """When every path is a URI there is nothing for job attachments to do."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "template.yaml").write_text(_URI_TEMPLATE)
+
+    with (
+        patch.object(_submit_job_bundle.api, "get_boto3_session"),
+        patch.object(_submit_job_bundle.api, "get_boto3_client") as client_mock,
+        patch.object(_submit_job_bundle.api, "get_queue_user_boto3_session"),
+        patch.object(S3AssetManager, "hash_assets_and_create_manifest") as mock_hash_assets,
+        patch.object(_submit_job_bundle.api, "get_deadline_cloud_library_telemetry_client"),
+    ):
+        client_mock().create_job.side_effect = [MOCK_CREATE_JOB_RESPONSE]
+        client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+
+        api.create_job_from_job_bundle(
+            job_bundle_dir=str(bundle),
+            job_parameters=[
+                {"name": "Scene", "value": "s3://bucket/scenes/a.blend"},
+                {"name": "Textures", "value": '["s3://bucket/tex/"]'},
+            ],
+            queue_parameter_definitions=[],
+        )
+
+    mock_hash_assets.assert_not_called()
+    assert "attachments" not in client_mock().create_job.call_args.kwargs

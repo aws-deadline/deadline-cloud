@@ -19,7 +19,7 @@ try:
     _make_keys_human_readable = _HelpDialog._make_keys_human_readable
 except ImportError:
     # The tests in this file should be skipped if Qt UI related modules cannot be loaded
-    pytest.importorskip("deadline.client.ui.dialogs._help_dialog")
+    pytest.importorskip("deadline.client.ui.dialogs._help_dialog", exc_type=ImportError)
 
 
 @pytest.mark.parametrize(

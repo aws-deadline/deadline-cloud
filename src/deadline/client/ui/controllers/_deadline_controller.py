@@ -84,6 +84,10 @@ class DeadlineUIController(QObject):
         queues_updated: Emitted when queue list is updated. Args: [(name, queue_id), ...]
         storage_profiles_updated: Emitted when storage profiles are updated.
         queue_parameters_updated: Emitted when queue parameters are loaded.
+        queue_parameters_load_succeeded: Emitted only when a queue parameter fetch
+            completes successfully (queue_parameters_updated also fires with [] on
+            fetch errors and for clearing emissions). Args: [parameter, ...] — may
+            be empty for a queue that genuinely has no queue parameters.
         farms_loading: Emitted when farm loading state changes. Args: bool
         queues_loading: Emitted when queue loading state changes. Args: bool
         storage_profiles_loading: Emitted when storage profile loading state changes.
@@ -101,6 +105,10 @@ class DeadlineUIController(QObject):
     queues_updated = Signal(list)
     storage_profiles_updated = Signal(list)
     queue_parameters_updated = Signal(list)
+    # Success-only companion to queue_parameters_updated: not emitted on fetch
+    # error or for clearing emissions, so consumers that must act only on real,
+    # successful loads (e.g. CLI --parameter validation) can connect here.
+    queue_parameters_load_succeeded = Signal(list)
 
     # Emitted after a farm or queue selection has been persisted, so a host dialog
     # can reload queue parameters and refresh its Submit button state.
@@ -495,6 +503,7 @@ class DeadlineUIController(QObject):
         """Handle successful queue parameters fetch."""
         self.queue_parameters_loading.emit(False)
         self.queue_parameters_updated.emit(parameters)
+        self.queue_parameters_load_succeeded.emit(parameters)
 
     def _on_queue_parameters_error(self, error: BaseException) -> None:
         """Handle queue parameters fetch error."""
@@ -535,6 +544,11 @@ class DeadlineUIController(QObject):
             farm_id: The newly selected farm ID (may be "" to clear).
         """
         set_setting("defaults.farm_id", farm_id)
+        # Submission and CLI calls resolve the farm's region from config, not this
+        # session's discovery map. An unobserved farm keeps its stored region.
+        region = self._farm_regions.get(farm_id)
+        if farm_id and region:
+            set_setting("defaults.farm_region", region)
         # The previous queue/storage profile belong to the old farm.
         set_setting("defaults.queue_id", "")
         set_setting("settings.storage_profile_id", "")

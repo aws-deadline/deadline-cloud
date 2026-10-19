@@ -7,7 +7,7 @@ import pytest
 try:
     from deadline.client.ui.dialogs.export_bundle_dialog import ExportBundleDialog
 except ImportError:
-    pytest.importorskip("deadline.client.ui.dialogs.export_bundle_dialog")
+    pytest.importorskip("deadline.client.ui.dialogs.export_bundle_dialog", exc_type=ImportError)
 
 
 class TestQueueWarningEscaping:

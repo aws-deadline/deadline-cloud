@@ -47,6 +47,7 @@
   "Drag to show more or fewer rows": "Drag to show more or fewer rows",
   "Edit": "Edit",
   "Items: {count}": "Items: {count}",
+  "Item {number}": "Item {number}",
   "Edit...": "Modifier...",
   "Error: Timeout cannot be set to zero.": "Erreur : Le délai d'expiration ne peut pas être défini sur zéro.",
   "Save bundle as": "Enregistrer le lot sous",

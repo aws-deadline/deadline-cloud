@@ -47,6 +47,7 @@
   "Drag to show more or fewer rows": "Drag to show more or fewer rows",
   "Edit": "Edit",
   "Items: {count}": "Items: {count}",
+  "Item {number}": "Item {number}",
   "Edit...": "编辑...",
   "Error: Timeout cannot be set to zero.": "错误: 超时不能设置为零。",
   "Save bundle as": "另存包为",
