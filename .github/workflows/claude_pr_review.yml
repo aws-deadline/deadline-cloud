@@ -62,3 +62,20 @@ jobs:
     secrets:
       # OIDC role that can mint a Bedrock bearer token.
       bedrock_role_arn: ${{ secrets.AWS_CLAUDE_PR_REVIEW_ROLE }}
+
+  # Re-evaluate the review policy as soon as the Claude review's status exists:
+  # the review sets it with GITHUB_TOKEN, which triggers no workflow.
+  policy:
+    needs: review
+    if: ${{ !cancelled() && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    uses: aws-deadline/.github/.github/workflows/reusable_review_policy.yml@mainline
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    with:
+      head_repository: ${{ github.event.workflow_run.head_repository.full_name }}
+      head_sha: ${{ github.event.workflow_run.head_sha }}
+      # Keep in sync with review_policy.yml.
+      mode: advisory
