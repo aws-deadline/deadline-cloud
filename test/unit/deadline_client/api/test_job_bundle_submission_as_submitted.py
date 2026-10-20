@@ -171,7 +171,7 @@ def test_as_submitted_bundle_captures_hook_changes(fresh_deadline_config, tmp_pa
         ]
     }
     assert parameter_values["Message"] == "from_hook"
-    assert parameter_values["InDir"] == str(in_dir)
+    assert os.path.normpath(parameter_values["InDir"]) == str(in_dir)
     assert parameter_values["ScriptsDir"] == str(as_submitted / "scripts")
     assert parameter_values["deadline:priority"] == 80
 
@@ -195,7 +195,10 @@ def test_submitting_as_submitted_bundle_reproduces_create_job(fresh_deadline_con
     resubmitted_args, resubmitted_inputs = _submit(as_submitted, tmp_path, [in_dir, studio_dir])
 
     def in_original_bundle(value):
-        return json.loads(json.dumps(value).replace(str(as_submitted), str(bundle)))
+        # Replace the JSON-escaped forms, since Windows paths contain backslashes.
+        escaped_as_submitted = json.dumps(str(as_submitted))[1:-1]
+        escaped_bundle = json.dumps(str(bundle))[1:-1]
+        return json.loads(json.dumps(value).replace(escaped_as_submitted, escaped_bundle))
 
     assert in_original_bundle(resubmitted_args) == original_args
     assert in_original_bundle(sorted(resubmitted_inputs)) == sorted(original_inputs)
