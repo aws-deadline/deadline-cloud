@@ -20,12 +20,14 @@ low_risk_paths = [
 
 # Medium risk, one human approval: CI, build, and release configuration, and
 # dependency manifests, whose changes ship into customers' DCC environments.
+# Also the integration tests, which run with AWS credentials after merge.
 low_risk_exclude = [
   ".github/",
   ".semantic_release/",
   "pipeline/",
   "installer/",
   "scripts/",
+  "test/integ/",
   "hatch.toml",
   "hatch_custom_hook.py",
   "pyinstaller-version.json",
