@@ -47,8 +47,8 @@ jobs:
       issues: write
       id-token: write
       # Lets the review set its "Claude review" commit status, which the review
-      # policy reads. Require "review-policy", not this: the review skips bots,
-      # so Dependabot PRs never get it.
+      # policy reads. Require "review-policy", not this: the review skips bots
+      # and non-members, so their PRs never get it.
       statuses: write
     with:
       # Head repo and head SHA come from the server-populated workflow_run event

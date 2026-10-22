@@ -1,28 +1,29 @@
-# Risk tiers for the review policy (aws-deadline/.github
+# Review tiers for the review policy (aws-deadline/.github
 # reusable_review_policy.yml). Read from mainline, so changes take effect once
 # merged. Patterns: `**` crosses directories, `*` does not, and a trailing `/`
-# matches everything under a directory. Dependabot PRs follow the [dependabot]
-# lanes, taking a high-risk path's tier when they need a human. For other PRs:
-# high, then human_review_authors (medium), then low; anything else is medium.
-
-# Always need a human, reviewed by a code owner: the shipped code, which
-# includes credential, telemetry, and path-handling code. PRs labeled
-# security are high risk too.
-high_risk_paths = [
-  "src/",
-]
+# matches everything under a directory.
+#
+# Two tiers: auto (no human approval) and human (one human approval). Both
+# need a clean Claude review, where it runs. The policy always requires a human
+# for .github/, CODEOWNERS, REVIEW.md, AGENTS.md, CLAUDE.md, .claude/, and this
+# file; config here can add to that list but not remove from it. CODEOWNERS,
+# not this file, decides who reviews. Dependabot PRs follow the [dependabot]
+# rules instead.
 
 # May merge with no human approval: a clean Claude review, from a team member,
 # within the size limit.
-low_risk_paths = [
+auto_paths = [
   "**",
 ]
 
-# Medium risk, one human approval: CI, build, and release configuration, and
-# dependency manifests, whose changes ship into customers' DCC environments.
-# Also the integration tests, which run with AWS credentials after merge.
-low_risk_exclude = [
-  ".github/",
+# Always need a human, even though they match auto_paths. The shipped code,
+# which includes credential, telemetry, and path-handling code; build and
+# release configuration, and dependency manifests, whose changes ship into
+# customers' DCC environments; and the integration tests, which run with AWS
+# credentials after merge. PRs labeled security, or with a breaking-change
+# title, need a human too.
+human_paths = [
+  "src/",
   ".semantic_release/",
   "pipeline/",
   "installer/",
@@ -35,7 +36,7 @@ low_risk_exclude = [
   "requirements*.txt",
 ]
 
-low_risk_max_changed_lines = 300
+auto_max_changed_lines = 300
 
 # Release bumps: a human reviews the changelog and what is about to ship.
 human_review_authors = ["client-software-ci"]
