@@ -4,11 +4,13 @@
 # matches everything under a directory.
 #
 # Two tiers: auto (no human approval) and human (one human approval). Both
-# need a clean Claude review, where it runs. The policy always requires a human
-# for .github/, CODEOWNERS, REVIEW.md, AGENTS.md, CLAUDE.md, .claude/, and this
-# file; config here can add to that list but not remove from it. CODEOWNERS,
-# not this file, decides who reviews. Dependabot PRs follow the [dependabot]
-# rules instead.
+# need a clean Claude review, where it runs. The policy itself always requires
+# a human for control-plane files: .github/, CODEOWNERS, REVIEW.md, agent
+# instructions and config (AGENTS.md, CLAUDE.md, .claude/, .kiro/, .amazonq/,
+# .cursor/, .cursorrules, .mcp.json), and this file. Config here can add to
+# that list but not remove from it; this repo's own risk paths go below.
+# CODEOWNERS, not this file, decides who reviews. Dependabot PRs follow the
+# [dependabot] rules instead.
 
 # May merge with no human approval: a clean Claude review, from a team member,
 # within the size limit.
