@@ -5,10 +5,10 @@
 # installs it so the test env matches a consumer who actually uses such a profile.
 # It stays an opt-in extra for consumers because awscrt is a compiled wheel.
 features = ["gui", "console"]
-pre-install-commands = ["{env:HATCH_UV} pip install -r requirements-testing.txt"]
+pre-install-commands = ["{env:HATCH_UV:uv} pip install -r requirements-testing.txt"]
 
 [envs.default.scripts]
-sync = "{env:HATCH_UV} pip install -r requirements-testing.txt"
+sync = "{env:HATCH_UV:uv} pip install -r requirements-testing.txt"
 test = "pytest --cov-config pyproject.toml {args:test/unit test/cli_e2e}"
 test_docker = "./scripts/run_sudo_tests.sh --build"
 test_installer = "pytest --no-cov {args:test/installer} -vvv"
@@ -23,8 +23,8 @@ python = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
 [envs.integ]
 pre-install-commands = [
-  "{env:HATCH_UV} pip install -r requirements-integ-testing.txt",
-  "{env:HATCH_UV} pip install -r requirements-testing.txt",
+  "{env:HATCH_UV:uv} pip install -r requirements-integ-testing.txt",
+  "{env:HATCH_UV:uv} pip install -r requirements-testing.txt",
 ]
 
 [envs.integ.scripts]
@@ -36,7 +36,7 @@ proxy-test = "sudo -E env PATH=$PATH bash scripts/run_proxy_integ_tests.sh {args
 [envs.ui]
 features = ["gui"]
 pre-install-commands = [
-  "{env:HATCH_UV} pip install -r requirements-ui-testing.txt",
+  "{env:HATCH_UV:uv} pip install -r requirements-ui-testing.txt",
 ]
 
 [envs.ui.scripts]
@@ -45,17 +45,17 @@ test = "pytest --no-cov -vvv --numprocesses=1 -o \"testpaths=test/ui\" --confcut
 [envs.blender-ui]
 features = ["gui"]
 pre-install-commands = [
-  "{env:HATCH_UV} pip install -r requirements-ui-testing.txt",
-  "{env:HATCH_UV} pip install \"moto[server,s3]>=5\" boto3",
-  "{env:HATCH_UV} pip install --no-deps deadline-cloud-for-blender",
-  "{env:HATCH_UV} pip install deadline-job-attachments openjd-adaptor-runtime",
+  "{env:HATCH_UV:uv} pip install -r requirements-ui-testing.txt",
+  "{env:HATCH_UV:uv} pip install \"moto[server,s3]>=5\" boto3",
+  "{env:HATCH_UV:uv} pip install --no-deps deadline-cloud-for-blender",
+  "{env:HATCH_UV:uv} pip install deadline-job-attachments openjd-adaptor-runtime",
 ]
 
 [envs.blender-ui.scripts]
 test = "pytest --no-cov -vvv --numprocesses=1 -o \"testpaths=test/blender_submitter_ui\" --confcutdir=test/blender_submitter_ui {args:test/blender_submitter_ui}"
 
 [envs.installer]
-pre-install-commands = ["{env:HATCH_UV} pip install -r requirements-installer.txt"]
+pre-install-commands = ["{env:HATCH_UV:uv} pip install -r requirements-installer.txt"]
 
 [envs.installer.scripts]
 make_exe = "python scripts/pyinstaller/make_exe.py --output {root}/installer/components/DeadlineClient.zip --version-file {root}/pyinstaller-version.json"
@@ -71,7 +71,7 @@ platform.windows.scripts = [
 ]
 
 [envs.attributions]
-pre-install-commands = ["{env:HATCH_UV} pip install -r requirements-attributions.txt"]
+pre-install-commands = ["{env:HATCH_UV:uv} pip install -r requirements-attributions.txt"]
 
 [envs.attributions.scripts]
 generate = """
@@ -97,12 +97,12 @@ python {root}/scripts/attributions/merge_versions.py \
 detached = true
 
 [envs.release.scripts]
-deps = "{env:HATCH_UV} pip install -r requirements-release.txt"
+deps = "{env:HATCH_UV:uv} pip install -r requirements-release.txt"
 bump = "semantic-release -v --strict version --no-push --no-commit --no-tag --skip-build {args}"
 version = "semantic-release -v --strict version --print {args}"
 
 [envs.docs]
-pre-install-commands = ["{env:HATCH_UV} pip install -r requirements-docs.txt"]
+pre-install-commands = ["{env:HATCH_UV:uv} pip install -r requirements-docs.txt"]
 
 [envs.docs.scripts]
 build = "mkdocs build --strict"
