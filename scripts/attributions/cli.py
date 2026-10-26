@@ -207,7 +207,6 @@ _ADDITIONAL_ATTRIBUTIONS = [
         "attribution_path": "LIBZSTD_LICENSE.txt",
         "url": "https://github.com/facebook/zstd/",
         "spdx": _BSD_3_CLAUSE,
-        "platforms": ["Linux"],
     },
     {
         "name": "bzip2",
@@ -270,12 +269,8 @@ _BUNDLED_OWN_PACKAGES = {"deadline", "deadline_job_attachments"}
 
 
 def _get_desired_python_version() -> str:
-    if platform.system() == "Darwin":
-        return "3.13"
-    elif platform.system() == "Windows":
-        return "3.13"
-    elif platform.system() == "Linux":
-        return "3.13"
+    if platform.system() in ("Darwin", "Windows", "Linux"):
+        return "3.14"
     raise RuntimeError("Platform not supported")
 
 

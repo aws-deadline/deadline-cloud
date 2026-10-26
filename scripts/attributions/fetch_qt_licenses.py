@@ -18,7 +18,7 @@ from typing import Optional
 from urllib.request import urlopen
 from urllib.error import HTTPError
 
-BASE_URL = "https://doc.qt.io/qt-6.8"
+BASE_URL = "https://doc.qt.io/qt-6.10"
 
 # Qt modules bundled with PySide6 that we use in this project.
 # Qt Widgets has no third-party components (pure Qt code).

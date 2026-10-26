@@ -20,6 +20,8 @@ from deadline.client.api._update_checker import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("fresh_deadline_config")
+
 SAMPLE_MANIFEST = {
     "DeadlineCloudSubmitter": {
         "versions": {
