@@ -1,3 +1,8 @@
+## 0.60.11 (2026-10-26)
+
+### Bug Fixes
+* Fixed two problems in the `deadline attachment` commands. `deadline attachment download` no longer raises a `RuntimeError` when you leave out `--profile` and `--conflict-resolution` and rely on config defaults. `--s3-root-uri` is now honored even when `--profile` isn't passed. (#1292)
+* On Linux, `deadline handle-web-url --install` used to overwrite your entire `mimeapps.list` file, which deleted all your other default-application settings (browser, PDF viewer, mailto, etc.). It now adds or updates only the `x-scheme-handler/deadline` entry and keeps everything else. (#1286)
 ## 0.60.10 (2026-10-14)
 
 ### Features
