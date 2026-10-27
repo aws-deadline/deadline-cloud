@@ -19,14 +19,14 @@ def attributions():
 
 
 @pytest.mark.parametrize("platform", ["Darwin", "Linux", "Windows"])
-def test_attributions_accepts_python_314_on_every_installer_platform(
+def test_attributions_accepts_python_31318_on_every_installer_platform(
     attributions, monkeypatch, platform
 ):
     monkeypatch.setattr(attributions.platform, "system", lambda: platform)
     monkeypatch.setattr(
         attributions.subprocess,
         "check_output",
-        Mock(return_value="Python 3.14.10\n"),
+        Mock(return_value="Python 3.13.18\n"),
     )
 
     interpreter = attributions.PythonInstall(
@@ -42,21 +42,36 @@ def test_attributions_accepts_python_314_on_every_installer_platform(
     ]
 
 
-def test_attributions_rejects_python_313_for_the_python_314_installer(attributions, monkeypatch):
+@pytest.mark.parametrize("platform", ["Darwin", "Linux", "Windows"])
+def test_attributions_rejects_python_314_for_the_python_313_installer(
+    attributions, monkeypatch, platform
+):
+    monkeypatch.setattr(attributions.platform, "system", lambda: platform)
     monkeypatch.setattr(
-        attributions.subprocess, "check_output", Mock(return_value="Python 3.13.16\n")
+        attributions.subprocess, "check_output", Mock(return_value="Python 3.14.10\n")
     )
 
-    with pytest.raises(RuntimeError, match="does not match specified version 3.14"):
+    with pytest.raises(RuntimeError, match="does not match specified version 3.13"):
         attributions.PythonInstall(
             str(Path(sys.executable)), attributions._get_desired_python_version(), False
         )
 
 
 @pytest.mark.parametrize("platform", ["Darwin", "Linux", "Windows"])
-def test_zstd_license_is_present_in_every_installer_document(attributions, platform):
+def test_zstd_license_matches_python_313_installer_platforms(attributions, platform):
     directory = Path(attributions.__file__).parent
     license_text = (directory / "additional/LIBZSTD_LICENSE.txt").read_text()
     document = (directory / "approved_text" / platform / "THIRD_PARTY_LICENSES").read_text()
 
-    assert f"libzstd\n\n{license_text}\n" in document
+    assert (f"libzstd\n\n{license_text}\n" in document) == (platform == "Linux")
+
+
+@pytest.mark.parametrize("platform", ["Darwin", "Linux", "Windows"])
+def test_installer_notices_match_the_pinned_qt_version(attributions, platform):
+    directory = Path(attributions.__file__).parent
+    document = (directory / "approved_text" / platform / "THIRD_PARTY_LICENSES").read_text()
+
+    assert "qt-6.8.3-src.tar.gz" in document
+    assert "pyside-setup-6.8.3-src.tar.gz" in document
+    assert "qt-6.10.3-src.tar.gz" not in document
+    assert "pyside-setup-6.10.3-src.tar.gz" not in document

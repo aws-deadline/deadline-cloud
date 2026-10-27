@@ -16,21 +16,25 @@ See [attributions](../attributions/README.md)
 
 #### Build Executable
 
-1. `uv venv .venv`
+1. `uv venv .venv --python /path/to/approved/python3.13 --python-preference only-system --no-python-downloads`
 1. `source .venv/bin/activate` (bash/zsh), or `source .venv/bin/activate.fish` (fish), or `.venv/Scripts/activate` (powershell)
-1. `uv pip install -e .`
-1. `uv pip install -r requirements-installer.txt`
+1. `uv pip install -e '.[gui,console]' -r requirements-installer.txt`
 1. `python scripts/pyinstaller/make_exe.py`
 1. `deactivate`
 
-Build the executable with an approved Python 3.14 runtime on each platform. Use the
-same Python minor version to validate it, so the standard-library allowlist matches
-the bundled interpreter. Runtime artifacts must pass the installer pipeline's
-signature, license, and compatibility checks before updating its runtime pins.
+Build the executable with the approved Python 3.13.18 runtime on each platform.
+This security release is source-only: use pipeline runtime artifacts built from
+verified Python.org source. Pass the explicit interpreter
+path to `uv venv` with `--python-preference only-system --no-python-downloads`.
+Use the same Python minor version to validate the executable, so the
+standard-library allowlist matches the bundled interpreter. Runtime artifacts
+must pass the pipeline's signature, license, and compatibility checks before
+updating its runtime pins.
 
-The pinned Qt 6.10 GUI requires macOS 13 or later and, on Linux x86_64, glibc 2.34
-or later. Validate GUI behavior on these minimum platforms before releasing an
-installer with these dependencies.
+The installer pins Qt/PySide6 6.8.3 to retain the team's VFX Reference Platform
+requirement. Its GUI wheels require macOS 12 or later and, on Linux x86_64,
+glibc 2.28 or later. Validate GUI behavior and SSL compatibility on the supported
+platforms and worker fleets before releasing the updated runtime.
 
 `uv venv` has a `--python` argument which can either take a Python version or a path to a Python interpreter. If a version is specified that is not found on the system, uv will
 download that version of Python from the internet and install it into the venv. If a path to a Python interpreter is specified, uv will use that
@@ -39,7 +43,7 @@ if it is not desired. See `uv venv --help` for more information.
 
 #### Validate Executable
 
-1. `uv venv .venv-validation`
+1. `uv venv .venv-validation --python /path/to/approved/python3.13 --python-preference only-system --no-python-downloads`
 1. `source .venv-validation/bin/activate` (bash/zsh), or `source .venv-validation/bin/activate.fish` (fish), or `.venv-validation/Scripts/activate` (powershell)
 1. `uv pip install -r requirements-installer.txt`
 1. `python scripts/pyinstaller/validate.py`

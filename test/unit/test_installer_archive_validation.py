@@ -58,7 +58,7 @@ def test_unapproved_namespace_is_rejected_even_without_code(validator, tmp_path)
 def test_nested_executable_archive_is_audited(validator, tmp_path):
     pyz = _make_pyz(tmp_path, "unapproved_namespace")
     executable = tmp_path / "deadline"
-    CArchiveWriter(str(executable), [("PYZ.pyz", str(pyz), False, "z")], "python314.dll")
+    CArchiveWriter(str(executable), [("PYZ.pyz", str(pyz), False, "z")], "python313.dll")
     allowlist = validator.Allowlist.from_dict(
         {"files": ["PYZ.pyz"], "conditions": {"PYZ.pyz": {"archive_contents": {}}}}
     )
@@ -98,7 +98,7 @@ def test_known_stdlib_extensions_allowed_and_unknown_extensions_rejected(
     assert report.dissallowed_files == [rejected.relative_to(tmp_path)]
 
 
-def test_zstd_allowlist_rejects_other_library_names(validator, tmp_path):
+def test_python_313_allowlist_rejects_unbundled_zstd_libraries(validator, tmp_path):
     internal = tmp_path / "_internal"
     internal.mkdir()
     (internal / "libzstd.1.dylib").touch()
@@ -106,5 +106,8 @@ def test_zstd_allowlist_rejects_other_library_names(validator, tmp_path):
 
     report = validator.Allowlist.from_dict(validator.ALLOWLIST).get_allowed_files(tmp_path)
 
-    assert report.allowed_files == [Path("_internal/libzstd.1.dylib")]
-    assert report.dissallowed_files == [Path("_internal/libzstd.unapproved.dylib")]
+    assert report.allowed_files == []
+    assert set(report.dissallowed_files) == {
+        Path("_internal/libzstd.1.dylib"),
+        Path("_internal/libzstd.unapproved.dylib"),
+    }

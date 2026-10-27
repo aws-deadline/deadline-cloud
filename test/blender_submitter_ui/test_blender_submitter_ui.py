@@ -90,7 +90,7 @@ def blender_exe() -> Path:
 
 @pytest.fixture(scope="session")
 def moto_server() -> Iterator[str]:
-    server = ThreadedMotoServer(port=0)
+    server = ThreadedMotoServer(ip_address="127.0.0.1", port=0)
     server.start()
     host, port = server.get_host_and_port()
     url = f"http://127.0.0.1:{port}" if host == "0.0.0.0" else f"http://{host}:{port}"
