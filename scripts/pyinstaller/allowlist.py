@@ -59,8 +59,11 @@ ALLOWLIST = {
         "_internal/libmpdec.4.dylib",
         # bz2
         "_internal/libbz2.dylib",
-        # zstd
-        "_internal/libzstd.1.dylib",
+        "_internal/libbz2.so.1",
+        # zlib
+        "_internal/libz.so.1",
+        # libffi
+        "_internal/libffi.so.6",
         # expat
         "_internal/libexpat.1.dylib",
     ],

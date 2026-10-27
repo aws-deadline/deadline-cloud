@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 import importlib.util
+from pathlib import Path
 import sys
 from unittest.mock import Mock
 
@@ -12,7 +13,7 @@ from deadline.client.ui._utils import gui_context_for_cli
 
 
 @pytest.mark.parametrize("frozen", [False, True])
-def test_gui_bootstrap_accepts_python_314_compatible_qt(monkeypatch, frozen):
+def test_gui_bootstrap_accepts_the_installer_qt_pin(monkeypatch, frozen):
     real_find_spec = importlib.util.find_spec
     monkeypatch.setattr(
         importlib.util,
@@ -32,7 +33,16 @@ def test_gui_bootstrap_accepts_python_314_compatible_qt(monkeypatch, frozen):
     command = run.call_args.args[0]
     requirement = Requirement(command[4])
     assert requirement.name.lower() == "pyside6-essentials"
-    assert "6.10.3" in requirement.specifier
+    installer_requirements = (
+        Path(__file__).absolute().parents[4] / "requirements-installer.txt"
+    ).read_text()
+    installer_qt = next(
+        Requirement(line.split("#")[0].strip())
+        for line in installer_requirements.splitlines()
+        if line.lower().startswith("pyside6-essentials")
+    )
+    assert next(iter(installer_qt.specifier)).version in requirement.specifier
+    assert "6.8.3" in requirement.specifier
     assert "6.12.0" not in requirement.specifier
     if frozen:
         assert command[command.index("--python-version") + 1] == (
