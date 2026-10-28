@@ -1,3 +1,11 @@
+## 0.60.11 (2026-10-26)
+
+### Features
+* `create_job_from_job_bundle` has a new optional `as_submitted_bundle_dir` argument. If pre-submission hooks ran, it saves a job bundle there that shows what was actually submitted, including the template, parameter values, priority and asset references after the hooks made their changes. Re-submitting this bundle does not re-run the hooks against the pre-hook state. (#1408)
+
+### Bug Fixes
+* `deadline attachment download` no longer raises a `RuntimeError` when you leave out `--profile` and `--conflict-resolution` and rely on config defaults. Also, the attachment CLI no longer ignores `--s3-root-uri` when `--profile` isn't passed. (#1292)
+* On Linux, `deadline handle-web-url --install` no longer erases your `mimeapps.list` file. It now adds or updates only the Deadline URL handler entry and keeps your other default-application settings, such as browser, PDF viewer and mailto. (#1286)
 ## 0.60.10 (2026-10-14)
 
 ### Features
