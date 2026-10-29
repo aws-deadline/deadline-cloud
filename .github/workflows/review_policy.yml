@@ -1,0 +1,48 @@
+# Stage 2 of the review policy: labels each PR with its risk tier and sets the
+# "review-policy" commit status. Rules: .github/review-policy.toml.
+#
+# In advisory mode the status always succeeds and says what enforcement would
+# decide; in enforce mode it gates merging once mainline's ruleset requires it.
+name: Review Policy
+
+on: # zizmor: ignore[dangerous-triggers] -- workflow_run runs from mainline (never a fork's copy), and the policy reads the PR only through the API
+  workflow_run:
+    workflows: ["Review Policy (collect)"]
+    types:
+      - completed
+  # Fallback for missed events or failed runs. The Claude review's result is
+  # picked up by the policy job in claude_pr_review.yml.
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+# Per-PR runs cancel superseded ones; sweeps queue behind each other.
+concurrency:
+  group: review-policy-${{ github.event.workflow_run.head_repository.full_name || 'sweep' }}-${{ github.event.workflow_run.head_branch || 'sweep' }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_run' }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+jobs:
+  policy:
+    # Only for runs of the collect workflow triggered by a PR event, as defense
+    # in depth against a trigger later added to it. Schedule and manual runs
+    # sweep all open PRs.
+    if: >-
+      ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success'
+      && contains(fromJSON('["pull_request", "pull_request_review"]'), github.event.workflow_run.event)) }}
+    uses: aws-deadline/.github/.github/workflows/reusable_review_policy.yml@mainline
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    with:
+      head_repository: ${{ github.event.workflow_run.head_repository.full_name }}
+      head_sha: ${{ github.event.workflow_run.head_sha }}
+      # Keep in sync with the policy job in claude_pr_review.yml.
+      mode: advisory

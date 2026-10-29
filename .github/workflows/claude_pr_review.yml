@@ -29,6 +29,7 @@ permissions:
   pull-requests: write
   issues: write
   id-token: write
+  statuses: write
 
 jobs:
   review:
@@ -45,12 +46,36 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
+      # Lets the review set its "Claude review" commit status, which the review
+      # policy reads. Require "review-policy", not this: the review skips bots
+      # and non-members, so their PRs never get it.
+      statuses: write
     with:
       # Head repo and head SHA come from the server-populated workflow_run event
       # payload, which a fork cannot forge. The review stage resolves the PR
       # number and base SHA from these, so nothing fork-controlled is trusted.
       head_repository: ${{ github.event.workflow_run.head_repository.full_name }}
       head_sha: ${{ github.event.workflow_run.head_sha }}
+      # Read from mainline, not the PR, so a PR cannot change the guidance it
+      # is reviewed with.
+      review_guide_path: REVIEW.md
     secrets:
       # OIDC role that can mint a Bedrock bearer token.
       bedrock_role_arn: ${{ secrets.AWS_CLAUDE_PR_REVIEW_ROLE }}
+
+  # Re-evaluate the review policy as soon as the Claude review's status exists:
+  # the review sets it with GITHUB_TOKEN, which triggers no workflow.
+  policy:
+    needs: review
+    if: ${{ !cancelled() && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    uses: aws-deadline/.github/.github/workflows/reusable_review_policy.yml@mainline
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    with:
+      head_repository: ${{ github.event.workflow_run.head_repository.full_name }}
+      head_sha: ${{ github.event.workflow_run.head_sha }}
+      # Keep in sync with review_policy.yml.
+      mode: advisory

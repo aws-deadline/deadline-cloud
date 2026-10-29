@@ -1,0 +1,28 @@
+# Stage 1 of the review policy: the "collect" workflow.
+#
+# Does nothing; its completion fires the workflow_run event that starts
+# review_policy.yml, which then runs from mainline with a write token even for
+# fork PRs. Like the Claude PR review's collect stage, it produces no data the
+# next stage trusts.
+name: Review Policy (collect)
+
+on:
+  pull_request:
+    # edited: the title decides breaking changes. labeled/unlabeled: the
+    # security label raises the tier.
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+concurrency:
+  group: review-policy-collect-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger review policy
+        run: 'echo "PR event recorded; the review policy runs via workflow_run."'
