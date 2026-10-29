@@ -24,6 +24,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -46,6 +47,7 @@ from qtpy.QtWidgets import (  # type: ignore
 
 from .._utils import tr, warning_banner_qss
 from ..widgets.expandable_section import ExpandableSection as _ExpandableSection
+from ..widgets.path_widgets import DirectoryPickerWidget as _DirectoryPickerWidget
 from ...job_bundle._repository import (
     BrowseEntry as _BrowseEntry,
     BundleRepository as _BundleRepository,
@@ -114,6 +116,18 @@ _FRIENDLY_PARAM_TYPES = {
 def _friendly_param_type(raw_type: str) -> str:
     """Map an OpenJD parameter type enum to an artist-facing label."""
     return _FRIENDLY_PARAM_TYPES.get(raw_type.upper(), raw_type.title() if raw_type else "?")
+
+
+def _read_only_path_field() -> QLineEdit:
+    field = QLineEdit()
+    field.setReadOnly(True)
+    # Look like static text, not an editable field: drop the frame and fill so
+    # it blends into the dialog. ClickFocus (rather than NoFocus) is kept so the
+    # user can still click-drag to select and copy the path.
+    field.setFrame(False)
+    field.setFocusPolicy(Qt.ClickFocus)
+    field.setStyleSheet("QLineEdit { background: transparent; border: none; }")
+    return field
 
 
 def _folders_first(entries: list) -> list:
@@ -273,6 +287,7 @@ class JobBundleBrowserDialog(QDialog):
                 self._populate_tree_from_cache()
             else:
                 self._populate_root()
+            self._update_root_row()
 
     def done(self, result: int) -> None:
         """Join background workers before the dialog is torn down.
@@ -507,20 +522,30 @@ class JobBundleBrowserDialog(QDialog):
             self._queue_warning.setVisible(False)
         layout.addWidget(self._queue_warning)
 
-        # #7 — Path display sits just under the source selection (both describe
-        # "where am I browsing"), rather than at the bottom by the buttons.
-        path_row = QHBoxLayout()
-        path_row.addWidget(QLabel(tr("Path:")))
-        self._path_display = QLineEdit()
-        self._path_display.setReadOnly(True)
-        # Look like static text, not an editable field: drop the frame and fill so
-        # it blends into the dialog. ClickFocus (rather than NoFocus) is kept so the
-        # user can still click-drag to select and copy the path.
-        self._path_display.setFrame(False)
-        self._path_display.setFocusPolicy(Qt.ClickFocus)
-        self._path_display.setStyleSheet("QLineEdit { background: transparent; border: none; }")
-        path_row.addWidget(self._path_display)
-        layout.addLayout(path_row)
+        # #7 — Folder and Path rows sit just under the source selection (both
+        # describe "where am I browsing"), rather than at the bottom by the buttons.
+        path_form = QFormLayout()
+        # The macOS style otherwise keeps fields at their size hint and right-aligns labels.
+        path_form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        path_form.setLabelAlignment(Qt.AlignLeft)
+        # The Local root is editable and overrides the configured folder for this
+        # dialog only; Queue and History roots are shown read-only.
+        self._root_display = _read_only_path_field()
+        self._local_folder_picker = _DirectoryPickerWidget(
+            initial_directory=self._local_repo.root_path(),
+            directory_label=tr("Job bundle directory"),
+            create_missing_directory=False,
+            parent=self,
+        )
+        self._local_folder_picker.path_changed.connect(self._on_local_folder_changed)
+        # A stack sizes to its tallest page, so switching sources doesn't shift the layout.
+        self._root_stack = QStackedWidget()
+        self._root_stack.addWidget(self._root_display)
+        self._root_stack.addWidget(self._local_folder_picker)
+        path_form.addRow(tr("Folder:"), self._root_stack)
+        self._path_display = _read_only_path_field()
+        path_form.addRow(tr("Path:"), self._path_display)
+        layout.addLayout(path_form)
 
         # Default to Queue if available or loading, otherwise Local
         if self._s3_available or self._s3_loading:
@@ -531,6 +556,7 @@ class JobBundleBrowserDialog(QDialog):
                 self._current_repo = None  # Will be set by set_queue_source
         else:
             self._radio_local.setChecked(True)
+        self._update_root_row()
 
         # Main splitter: tree on left, preview on right
         splitter = QSplitter(Qt.Horizontal)
@@ -1289,6 +1315,29 @@ class JobBundleBrowserDialog(QDialog):
 
         return _search(self._model.invisibleRootItem())
 
+    def _update_root_row(self):
+        if self._radio_local.isChecked():
+            self._root_stack.setCurrentWidget(self._local_folder_picker)
+        else:
+            self._root_stack.setCurrentWidget(self._root_display)
+        self._root_display.setText(self._current_repo.root_path() if self._current_repo else "")
+
+    def _on_local_folder_changed(self, directory: str):
+        # Hiding the picker mid-edit emits editingFinished; ignore it unless Local is active.
+        if not self._ready or not self._radio_local.isChecked() or not directory.strip():
+            return
+        root = os.path.normpath(os.path.expanduser(directory.strip()))
+        if root == os.path.normpath(self._local_repo.root_path()):
+            return
+        self._save_tree_state()
+        self._local_repo = _LocalBundleRepository(root=root, include_archives=True)
+        self._current_repo = self._local_repo
+        self._selected_path = None
+        self._select_button.setEnabled(False)
+        self._clear_preview()
+        self._populate_root()
+        self._restore_tree_state()
+
     def _on_source_changed(self, checked: bool):
         if not self._ready:
             return
@@ -1320,6 +1369,7 @@ class JobBundleBrowserDialog(QDialog):
 
         # Restore expanded paths for the new source
         self._restore_tree_state()
+        self._update_root_row()
 
     def _save_tree_state(self):
         """Save expanded folder paths and selection for the current source."""
