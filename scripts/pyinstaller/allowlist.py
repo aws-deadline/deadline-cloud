@@ -93,6 +93,8 @@ ALLOWLIST = {
         # xxsubtype (CPython internal C extension, pulled in by shiboken6/PySide6)
         "_internal/lib-dynload/xxsubtype.cpython-3*-darwin.so",
         "_internal/lib-dynload/xxsubtype.cpython-3*-x86_64-linux-gnu.so",
+        "_internal/python3.*/lib-dynload/xxsubtype.cpython-3*-darwin.so",
+        "_internal/python3.*/lib-dynload/xxsubtype.cpython-3*-x86_64-linux-gnu.so",
         # PySide6/shiboken6 dist-info (auto-generated globs excluded, so list explicitly)
         "_internal/PySide6-*.dist-info/**/*",
         "_internal/PySide6-*.dist-info/*",

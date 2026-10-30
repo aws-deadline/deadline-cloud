@@ -4,23 +4,18 @@ import argparse
 import contextlib
 import fnmatch
 import hashlib
-import itertools
 import os
-import re
-import subprocess
 import sys
 import tempfile
 import zipfile
 
 from dataclasses import dataclass
-from enum import auto, Enum
 from pathlib import Path
 from typing import Any, Callable, Generator, Optional
 
 from allowlist import ALLOWLIST, DEPENDENCIES
 
 _BLOCK_SIZE = 65536
-_PYI_CONTENTS_HEADER_REGEX = re.compile(r"^Contents of '(.+)' \((.+)\):$")
 
 
 @contextlib.contextmanager
@@ -37,108 +32,28 @@ def temp_zip_contents(zip_path: Path) -> Generator[Path, None, None]:
         yield temp
 
 
-class _PYIParseState(Enum):
-    Start = auto()
-    ContentsSection = auto()
-    End = auto()
-
-
-def _get_pyinstaller_contents_info(archive_path: Path) -> list[str]:
-    """
-    Uses pyi-archive_viewer to list the contents of a pyi-archive_viewer compatible
-    archive such as a pyinstaller generated executable or .pyz file
-    """
-    archive_list = subprocess.check_output(
-        ["pyi-archive_viewer", "--list", "--brief", str(archive_path)], text=True
-    )
-    # Output will look something like:
-    #
-    # Options in 'deadline' (PKG/CArchive):
-    #  pyi-contents-directory _internal
-    # Contents of 'deadline' (PKG/CArchive):
-    #  struct
-    #  pyimod01_archive
-    #  pyimod02_importers
-    #  pyimod03_ctypes
-    #  pyiboot01_bootstrap
-    #  deadline
-    #  PYZ.pyz
-
-    state = _PYIParseState.Start
-    items = []
-    for line in archive_list.splitlines(keepends=False):
-        if state == _PYIParseState.Start:
-            if _PYI_CONTENTS_HEADER_REGEX.match(line) is not None:
-                state = _PYIParseState.ContentsSection
-        elif state == _PYIParseState.ContentsSection:
-            if item := line.strip():
-                items.append(item)
-            else:
-                state = _PYIParseState.End
-        elif state == _PYIParseState.End:
-            if line.strip():
-                raise RuntimeError(
-                    f"Further data found after contents list for {archive_path}. "
-                    "This may mean the format has changed between pyinstaller versions. "
-                    f"Use `pyi-archive_viewer -l -b {archive_path}` to check the output to check the output."
-                )
-        else:
-            raise RuntimeError(
-                f"Non-valid parse state {state!s} reached while parsing contents of {archive_path}"
-            )
-
-    return items
-
-
-def batched(iterable, n):
-    iterator = iter(iterable)
-    while chunk := list(itertools.islice(iterator, n)):
-        yield chunk
-
-
 @contextlib.contextmanager
 def temp_pyinstaller_archive_contents(archive_path: Path) -> Generator[Path, None, None]:
-    """
-    Context manager to temporarily extract the contents of a pyi-archive_viewer compatible
-    archive (such as a pyinstaller generated executable or .pyz file) to a temporary directory
-    """
-    archive_contents = _get_pyinstaller_contents_info(archive_path)
+    """Extract archive entries, preserving namespace packages for name auditing."""
+    from PyInstaller.archive.readers import CArchiveReader, ZlibArchiveReader
+    from PyInstaller.loader.pyimod01_archive import PYZ_ITEM_NSPKG
+
+    is_pyz = archive_path.suffix == ".pyz"
+    archive = ZlibArchiveReader(str(archive_path)) if is_pyz else CArchiveReader(str(archive_path))
     with tempfile.TemporaryDirectory() as td:
         temp = Path(td)
-        # We have to batch the extractions into multiple
-        # invocations of pyi-archive_viewer because if we try
-        # to do too many at once on Windows it freezes.
-        for batch in batched(archive_contents, 16):
-            # pyi-archive_viewer doesn't seem to have arguments
-            # for extracting from the archive, so we need to
-            # start it in interactive mode and pipe commands
-            # to stdin
-            process = subprocess.Popen(
-                ["pyi-archive_viewer", archive_path],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            for item in batch:
-                # X - Extract
-                process.stdin.write(f"X {item}\n")
-                process.stdin.flush()
-                # Input the path to extract to
-                process.stdin.write(f"{temp / item!s}\n")
-                process.stdin.flush()
-            # Quit
-            process.stdin.write("Q\n")
-            process.stdin.flush()
-            stdout, stderr = process.communicate()
-            if process.returncode != 0:
-                print(stdout)
-                print(stderr)
-                raise RuntimeError(f"Failed to extract {archive_path}")
-            # Verify that all files were extracted
-            for item in batch:
-                if not (temp / item).is_file():
-                    raise RuntimeError(f"Failed to extract {item.name} from {archive_path}")
+        for name, entry in archive.toc.items():
+            destination = temp / name
+            if not destination.resolve().is_relative_to(temp.resolve()):
+                raise RuntimeError(f"Archive entry {name!r} escapes the extraction directory")
+            data = archive.extract(name, raw=True) if is_pyz else archive.extract(name)
+            if data is None:
+                if not is_pyz or entry[0] != PYZ_ITEM_NSPKG:
+                    raise RuntimeError(f"Archive entry {name!r} has no data")
+                # Namespace packages have no code, but their names still need allowlist checks.
+                data = b""
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
         yield temp
 
 
@@ -224,6 +139,8 @@ class Allowlist:
     def from_dict(raw: dict[str, Any]) -> "Allowlist":
         files = []
         globs = []
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        python_tag = f"{sys.version_info.major}{sys.version_info.minor}"
         for dep in [*DEPENDENCIES, *sys.stdlib_module_names]:
             files.extend(
                 [
@@ -245,6 +162,10 @@ class Allowlist:
                     f"_internal/lib-dynload/{dep}.cpython-3*-darwin.so",
                     f"_internal/lib-dynload/_{dep}.cpython-3*-x86_64-linux-gnu.so",
                     f"_internal/lib-dynload/_{dep}.cpython-3*-darwin.so",
+                    f"_internal/python{python_version}/lib-dynload/{dep}.cpython-{python_tag}-x86_64-linux-gnu.so",
+                    f"_internal/python{python_version}/lib-dynload/{dep}.cpython-{python_tag}-darwin.so",
+                    f"_internal/python{python_version}/lib-dynload/_{dep}.cpython-{python_tag}-x86_64-linux-gnu.so",
+                    f"_internal/python{python_version}/lib-dynload/_{dep}.cpython-{python_tag}-darwin.so",
                 ]
             )
 

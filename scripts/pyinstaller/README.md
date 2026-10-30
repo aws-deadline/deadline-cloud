@@ -12,24 +12,29 @@ In order to ensure the consistency of pyinstaller-built artifacts for this packa
 
 #### Generate Attributions Document
 
-See [attributions](../attributions/README.txt)
+See [attributions](../attributions/README.md)
 
 #### Build Executable
 
-1. `uv venv .venv`
+1. `uv venv .venv --python /path/to/approved/python3.13 --python-preference only-system --no-python-downloads`
 1. `source .venv/bin/activate` (bash/zsh), or `source .venv/bin/activate.fish` (fish), or `.venv/Scripts/activate` (powershell)
-1. `uv pip install -e .`
-1. `uv pip install -r requirements-installer.txt`
+1. `uv pip install -e '.[gui,console]' -r requirements-installer.txt`
 1. `python scripts/pyinstaller/make_exe.py`
 1. `deactivate`
 
-When building the pyinstaller executable, the venv used to build it must use the correct Python version for the platform. The python versions used currently are:
+Build the executable with the approved Python 3.13.18 runtime on each platform.
+This security release is source-only: use pipeline runtime artifacts built from
+verified Python.org source. Pass the explicit interpreter
+path to `uv venv` with `--python-preference only-system --no-python-downloads`.
+Use the same Python minor version to validate the executable, so the
+standard-library allowlist matches the bundled interpreter. Runtime artifacts
+must pass the pipeline's signature, license, and compatibility checks before
+updating its runtime pins.
 
-|Platform|Version|
-|--------|-------|
-|Linux   |3.9    |
-|Windows |3.10   |
-|macOS   |3.12   |
+The installer pins Qt/PySide6 6.8.3 to retain the team's VFX Reference Platform
+requirement. Its GUI wheels require macOS 12 or later and, on Linux x86_64,
+glibc 2.28 or later. Validate GUI behavior and SSL compatibility on the supported
+platforms and worker fleets before releasing the updated runtime.
 
 `uv venv` has a `--python` argument which can either take a Python version or a path to a Python interpreter. If a version is specified that is not found on the system, uv will
 download that version of Python from the internet and install it into the venv. If a path to a Python interpreter is specified, uv will use that
@@ -38,13 +43,13 @@ if it is not desired. See `uv venv --help` for more information.
 
 #### Validate Executable
 
-1. `uv venv .venv-validation`
+1. `uv venv .venv-validation --python /path/to/approved/python3.13 --python-preference only-system --no-python-downloads`
 1. `source .venv-validation/bin/activate` (bash/zsh), or `source .venv-validation/bin/activate.fish` (fish), or `.venv-validation/Scripts/activate` (powershell)
 1. `uv pip install -r requirements-installer.txt`
 1. `python scripts/pyinstaller/validate.py`
 1. `deactivate`
 
-The venv used to run the validation script must use Python 3.12 or later.
+The validation environment must use the same Python minor version as the build environment.
 
 ## Details
 
@@ -53,7 +58,7 @@ assets which were not bundled into the executable. The executable is a thin wrap
 
 All the contents of this zip archive must be reconciled against the allow list which specifies which files we are expecting to be bundled. The allowlist itself is
 defined recursively because all archives must be extracted and their contents also reconciled with the allow list. This includes the executables themselves and the pyz
-archives inside the executables. The pyi-archive_viewer utility that ships with pyinstaller is used to extract the executables and pyz files.
+archives inside the executables. PyInstaller archive readers extract executable and PYZ entries without executing bundled code. Namespace package names are also checked, even though these entries contain no code.
 
 The allowlist itself contains both file paths and globs. Both are relative to the archive root. A file must either be listed under files or match a glob pattern to be
 allowlisted. Any file detected that is not allowlisted will result in the validation failing. Additionally individual files can have conditions on them. The available

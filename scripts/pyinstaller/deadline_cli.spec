@@ -12,7 +12,6 @@ b_module_path = os.path.dirname(os.path.dirname(deadline.client.__file__))
 ROOT = Path(b_module_path).absolute().parents[1]
 EXE_NAME = 'deadline'
 OUTPUT_DIR = 'deadline'
-BLOCK_CIPHER = None
 
 datas, binaries, hiddenimports = collect_all('deadline')
 
@@ -27,10 +26,6 @@ datas += [
     (b_module_path + '/../../THIRD_PARTY_LICENSES',
      '.')
 ]
-
-# https://github.com/pyinstaller/pyinstaller/issues/8554
-# Can be removed once pyinstaller is upgraded to >= 6.7.0
-hiddenimports += ['pkg_resources.extern']
 
 # PySide6/Qt modules to include
 hiddenimports += ['PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets']
@@ -62,32 +57,24 @@ cli_a = Analysis(
         'deadline._mcp',
         'mcp',
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=BLOCK_CIPHER,
 )
 
-# Need to ensure we bundle python3.dll to ensure Shiboken works on windows
-if sys.platform == "win32":
-    python3_dll = None
-    for name, path, _ in cli_a.binaries:
-        if name == "python3.dll":
-            break
-        if not (name.startswith("python3") and name.endswith(".dll")):
-            continue 
-        python3_dll = str(Path(path).parent / "python3.dll")
-        break
-
-    if not python3_dll:
-        raise RuntimeError("python3.dll was not added to binaries, but is required for windows to download pyside. Failing build")
-    
-    cli_a.binaries += [('python3.dll', python3_dll, 'BINARY')]
+# Shiboken uses the stable Python ABI on Windows.
+if sys.platform == "win32" and not any(name == "python3.dll" for name, _, _ in cli_a.binaries):
+    python3_dll = next(
+        (Path(path).with_name("python3.dll") for name, path, _ in cli_a.binaries
+         if name.startswith("python3") and name.endswith(".dll")),
+        None,
+    )
+    if python3_dll is None or not python3_dll.is_file():
+        raise RuntimeError("python3.dll is required for Shiboken on Windows. Failing build")
+    cli_a.binaries.append(('python3.dll', str(python3_dll), 'BINARY'))
 
 
 cli_a.datas = [item for item in cli_a.datas if not item[0].startswith("Python.framework")]
 cli_a.exclude_system_libraries(list_of_exceptions=['libssl*', 'libsqlite3*', 'libcrypto*'])
 
-cli_pyz = PYZ(cli_a.pure, cli_a.zipped_data, cipher=BLOCK_CIPHER)
+cli_pyz = PYZ(cli_a.pure)
 cli_exe = EXE(
     cli_pyz,
     cli_a.scripts,
@@ -103,7 +90,6 @@ cli_exe = EXE(
 coll = COLLECT(
     cli_exe,
     cli_a.binaries,
-    cli_a.zipfiles,
     cli_a.datas,
     strip=False,
     upx=True,

@@ -270,11 +270,7 @@ _BUNDLED_OWN_PACKAGES = {"deadline", "deadline_job_attachments"}
 
 
 def _get_desired_python_version() -> str:
-    if platform.system() == "Darwin":
-        return "3.13"
-    elif platform.system() == "Windows":
-        return "3.13"
-    elif platform.system() == "Linux":
+    if platform.system() in ("Darwin", "Windows", "Linux"):
         return "3.13"
     raise RuntimeError("Platform not supported")
 

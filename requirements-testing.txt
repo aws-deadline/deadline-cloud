@@ -21,3 +21,6 @@ openjd-model >= 0.14.0
 # GUI testing dependencies
 pytest-qt == 4.*
 PySide6-essentials >= 6.6,< 6.11
+
+# Frozen archive auditing regression tests
+pyinstaller == 6.22.3
