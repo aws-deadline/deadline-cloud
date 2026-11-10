@@ -198,3 +198,41 @@ class TestPickersKeepUris:
         assert dialog.call_args.args[2] == "."
         assert list(tmp_path.iterdir()) == []
         assert picker.text() == "s3://bucket/dir"
+
+
+class TestChooseDirectoryStartLocation:
+    @staticmethod
+    def _choose(picker):
+        with patch.object(
+            _path_widgets.QFileDialog, "getExistingDirectory", return_value=""
+        ) as dialog:
+            picker.on_choose_directory()
+        return dialog.call_args.args[2]
+
+    def test_creates_missing_directory_by_default(self, qtbot, tmp_path):
+        missing = tmp_path / "missing"
+        picker = DirectoryPickerWidget(initial_directory=str(missing), directory_label="Test Dir")
+        qtbot.addWidget(picker)
+
+        assert self._choose(picker) == str(missing)
+        assert missing.is_dir()
+
+    def test_without_create_starts_at_nearest_existing_ancestor(self, qtbot, tmp_path):
+        missing = tmp_path / "typo" / "nested"
+        picker = DirectoryPickerWidget(
+            initial_directory=str(missing),
+            directory_label="Test Dir",
+            create_missing_directory=False,
+        )
+        qtbot.addWidget(picker)
+
+        assert self._choose(picker) == str(tmp_path)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_uncreatable_directory_falls_back_to_existing_ancestor(self, qtbot, tmp_path):
+        (tmp_path / "a-file").write_text("")
+        uncreatable = tmp_path / "a-file" / "child"
+        picker = DirectoryPickerWidget(initial_directory=str(uncreatable), directory_label="Dir")
+        qtbot.addWidget(picker)
+
+        assert self._choose(picker) == str(tmp_path)
