@@ -53,7 +53,7 @@ steps:
           set -euo pipefail
 
           echo "Blender file: {{Param.BlenderFile}}"
-          echo "Output directory: {{Param.OutputDir}}
+          echo "Output directory: {{Param.OutputDir}}"
 
           mkdir -p "{{Param.OutputDir}}"
 
