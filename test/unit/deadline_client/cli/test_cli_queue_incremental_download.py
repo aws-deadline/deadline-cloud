@@ -1395,7 +1395,14 @@ def test_incremental_output_download_stats_telemetry(
             ],
         )
 
-    deadline_telemetry_client_mock().record_event.assert_called_once_with(
+    # The storage profile configures no file system locations, so the status file write reports
+    # that there was nowhere to write rather than staying silent. That is the only other event.
+    calls = deadline_telemetry_client_mock().record_event.call_args_list
+    assert [c.kwargs["event_type"] for c in calls] == [
+        "com.amazon.rum.deadline.queue_sync_output_stats",
+        "com.amazon.rum.deadline.queue_sync_output_status_file",
+    ], calls
+    deadline_telemetry_client_mock().record_event.assert_any_call(
         event_type="com.amazon.rum.deadline.queue_sync_output_stats",
         event_details={
             # All latencies will be zero due to freeze_time()

@@ -987,6 +987,7 @@ class SubmitJobToDeadlineDialog(QDialog):
                 job_parameters=job_parameters,
                 known_asset_paths=self.known_asset_paths
                 + parameters_from_callback.get("known_asset_paths", []),
+                as_submitted_bundle_dir=self.job_history_bundle_dir + ".as-submitted",
             )
 
         except UserInitiatedCancel as uic:

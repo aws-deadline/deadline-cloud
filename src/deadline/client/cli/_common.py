@@ -57,6 +57,19 @@ _OUTPUT_FORMAT_HELP = (
     "when the output is piped, redirected, or run without a TTY such as in CI or by an agent)."
 )
 
+# The option names _apply_cli_options_to_config consumes. Any other name passed to it
+# is an error, so a new standard option must be added here.
+_STANDARD_OPTION_NAMES = (
+    "profile",
+    "farm_id",
+    "region",
+    "queue_id",
+    "storage_profile_id",
+    "job_id",
+    "yes",
+    "conflict_resolution",
+)
+
 
 def _stdout_is_tty() -> bool:
     """
@@ -177,49 +190,48 @@ def _apply_cli_options_to_config(
                 If not provided, loads the config from disk.
     """
     # Only work with a custom config if there are standard options provided
-    if any(value is not None for value in args.values()):
+    use_custom_config = any(value is not None for value in args.values())
+    # Remove the standard option names from the args list
+    options = {name: args.pop(name, None) for name in _STANDARD_OPTION_NAMES}
+    if use_custom_config:
         if config is None:
             config = config_file.read_config()
 
-        aws_profile_name = args.pop("profile", None)
+        aws_profile_name = options["profile"]
         if aws_profile_name:
             config_file.set_setting("defaults.aws_profile_name", aws_profile_name, config=config)
 
-        farm_id = args.pop("farm_id", None)
+        farm_id = options["farm_id"]
         if farm_id:
             config_file.set_setting(SETTING_FARM_ID, farm_id, config=config)
 
-        region = args.pop("region", None)
+        region = options["region"]
         if region:
             config_file.set_setting("defaults.farm_region", region, config=config)
 
-        queue_id = args.pop("queue_id", None)
+        queue_id = options["queue_id"]
         if queue_id:
             config_file.set_setting(SETTING_QUEUE_ID, queue_id, config=config)
 
-        storage_profile_id = args.pop("storage_profile_id", None)
+        storage_profile_id = options["storage_profile_id"]
         if storage_profile_id:
             config_file.set_setting(
                 "settings.storage_profile_id", storage_profile_id, config=config
             )
 
-        job_id = args.pop("job_id", None)
+        job_id = options["job_id"]
         if job_id:
             config_file.set_setting("defaults.job_id", job_id, config=config)
 
-        auto_accept = args.pop("yes", None)
+        auto_accept = options["yes"]
         if auto_accept:
             config_file.set_setting("settings.auto_accept", "true", config=config)
 
-        conflict_resolution = args.pop("conflict_resolution", None)
+        conflict_resolution = options["conflict_resolution"]
         if conflict_resolution:
             config_file.set_setting(
                 "settings.conflict_resolution", conflict_resolution, config=config
             )
-    else:
-        # Remove the standard option names from the args list
-        for name in ["profile", "farm_id", "region", "queue_id", "job_id", "storage_profile_id"]:
-            args.pop(name, None)
 
     # Check that the required options have values, auto-selecting if only one exists
     if "farm_id" in required_options:

@@ -1042,3 +1042,90 @@ steps:
             assert {p["name"]: p["value"] for p in saved["parameterValues"]} == expected
             reloaded = read_job_bundle_parameters(str(history_dir))
             assert {p["name"]: p["value"] for p in reloaded} == expected
+
+
+class TestListListIntParameterInSubmitDialog:
+    """A LIST[LIST[INT]] job parameter in the submit dialog, edited as JSON text, gates
+    Submit and saves as a list."""
+
+    MODULE = "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
+
+    TEMPLATE = """
+specificationVersion: 'jobtemplate-2023-09'
+extensions: [EXPR]
+name: Nested List Bundle
+parameterDefinitions:
+- name: Edges
+  type: list[list[int]]
+  default: [[1, 2], [3]]
+  item:
+    item:
+      maxValue: 100
+steps:
+- name: NoOp
+  script:
+    actions:
+      onRun:
+        command: "echo hi"
+"""
+
+    def test_list_list_int_validity_and_saved_values(
+        self, qtbot, mock_auth_status, tmp_path, fresh_deadline_config
+    ):
+        from deadline.client.job_bundle.parameters import read_job_bundle_parameters
+        from deadline.client.ui.widgets.job_bundle_settings_tab import JobBundleSettingsWidget
+
+        (tmp_path / "template.yaml").write_text(self.TEMPLATE, encoding="utf8")
+        type(mock_auth_status).api_availability = PropertyMock(return_value=True)
+        settings = JobBundleSettings(input_job_bundle_dir=str(tmp_path), name="Nested List Bundle")
+        settings.parameters = read_job_bundle_parameters(str(tmp_path))
+
+        with (
+            patch(
+                "deadline.client.ui.widgets.deadline_authentication_status_widget"
+                ".DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            patch(
+                f"{self.MODULE}.DeadlineAuthenticationStatus.getInstance",
+                return_value=mock_auth_status,
+            ),
+            patch(f"{self.MODULE}.get_setting", return_value="configured"),
+        ):
+            dialog = SubmitJobToDeadlineDialog(
+                job_setup_widget_type=JobBundleSettingsWidget,
+                initial_job_settings=settings,
+                initial_shared_parameter_values={},
+                auto_detected_attachments=AssetReferences(),
+                attachments=AssetReferences(),
+                on_create_job_bundle_callback=MagicMock(return_value={}),
+            )
+            qtbot.addWidget(dialog)
+            control = dialog.job_settings.parameters_widget.controls["Edges"]
+            assert control.edit_control.toPlainText() == "[[1, 2], [3]]"
+            with patch.object(dialog.shared_job_settings, "is_queue_valid", return_value=True):
+                dialog._set_submit_button_state()
+                assert dialog.submit_button.isEnabled()
+
+                control.edit_control.setPlainText("[[1, 2], [3")
+                assert not dialog.submit_button.isEnabled()
+                assert "invalid values: Edges" in dialog.submit_button.toolTip()
+
+                control.edit_control.setPlainText("[[1, 500]]")
+                assert not dialog.submit_button.isEnabled()
+
+                control.edit_control.setPlainText("[[4], [], [5, 6]]")
+                assert dialog.submit_button.isEnabled()
+
+            # The job history copy of the bundle stores the value as a JSON list, which
+            # read_job_bundle_parameters loads back unchanged.
+            history_dir = tmp_path / "history"
+            history_dir.mkdir()
+            (history_dir / "template.yaml").write_text(self.TEMPLATE, encoding="utf8")
+            dialog.save_job_parameters_to_job_bundle(
+                str(history_dir), dialog.job_settings.parameters_widget.get_parameters()
+            )
+            saved = json.loads((history_dir / "parameter_values.json").read_text("utf8"))
+            assert saved["parameterValues"][0]["value"] == [[4], [], [5, 6]]
+            (reloaded,) = read_job_bundle_parameters(str(history_dir))
+            assert reloaded["value"] == [[4], [], [5, 6]]

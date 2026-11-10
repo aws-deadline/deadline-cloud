@@ -1,3 +1,28 @@
+## 0.60.11 (2026-10-26)
+
+### Features
+* `create_job_from_job_bundle` has a new optional `as_submitted_bundle_dir` argument. If pre-submission hooks ran, it saves a job bundle there that shows what was actually submitted, including the template, parameter values, priority and asset references after the hooks made their changes. Re-submitting this bundle does not re-run the hooks against the pre-hook state. (#1408)
+
+### Bug Fixes
+* `deadline attachment download` no longer raises a `RuntimeError` when you leave out `--profile` and `--conflict-resolution` and rely on config defaults. Also, the attachment CLI no longer ignores `--s3-root-uri` when `--profile` isn't passed. (#1292)
+* On Linux, `deadline handle-web-url --install` no longer erases your `mimeapps.list` file. It now adds or updates only the Deadline URL handler entry and keeps your other default-application settings, such as browser, PDF viewer and mailto. (#1286)
+## 0.60.10 (2026-10-14)
+
+### Features
+* The bundled Deadline Cloud service model now matches botocore 1.43.112. On Python 3.9 you can now use the `ListMemberships` operation and its paginator. (#1403)
+
+### Bug Fixes
+* Picking a farm in the submit dialog now also saves that farm's region. Before, only the farm ID was saved. If the farm was in a different region than your AWS profile, job submission, queue-role credentials and later `deadline` CLI commands were sent to the wrong region. (#1397)
+## 0.60.9 (2026-10-07)
+
+### Features
+* Added support for the OpenJD `LIST[LIST[INT]]` job parameter type, so jobs can take a list of integer lists such as `[[1, 2], [3, 4]]`. (#1392)
+* Added support for the OpenJD `LIST[PATH]` job parameter type, so jobs can take a list of file or directory paths. (#1389)
+* On Python 3.9, the library now ships its own copy of the latest Deadline Cloud service model, so newer APIs such as ListVolumes work there too. botocore no longer releases updates for Python 3.9. Service models in `~/.aws/models` or `AWS_DATA_PATH` still take priority over the bundled copy. (#1390)
+
+### Bug Fixes
+* Fixed a problem under PySide2 where a background task could keep raising errors after its GUI component was closed. PySide2's "already deleted" error is now handled the same way as in PySide6 and PyQt5. (#1389)
+* Fixed `sync-output` checkpoints saving the same session end time for every job. Before this fix, the next run could download sessions it had already handled again, or skip sessions it hadn't handled yet. (#1376)
 ## 0.60.8 (2026-10-02)
 
 ### Features

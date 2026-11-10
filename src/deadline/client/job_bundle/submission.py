@@ -114,6 +114,7 @@ _VALIDATED_PARAMETER_WIRE_MEMBERS = {
     "LIST[INT]": "intList",
     "LIST[FLOAT]": "floatList",
     "LIST[BOOL]": "boolList",
+    "LIST[LIST[INT]]": "intListList",
 }
 
 
@@ -194,6 +195,12 @@ def split_parameter_args(
                             # CreateJob's boolList holds BooleanString items, like bool.
                             parameter_value = [
                                 "true" if item else "false"
+                                for item in validated_value  # type: ignore[union-attr]
+                            ]
+                        elif parameter_type == "LIST[LIST[INT]]":
+                            # CreateJob's intListList holds IntString items, like intList.
+                            parameter_value = [
+                                [repr(element) for element in item]  # type: ignore[union-attr]
                                 for item in validated_value  # type: ignore[union-attr]
                             ]
                         else:

@@ -544,6 +544,11 @@ class DeadlineUIController(QObject):
             farm_id: The newly selected farm ID (may be "" to clear).
         """
         set_setting("defaults.farm_id", farm_id)
+        # Submission and CLI calls resolve the farm's region from config, not this
+        # session's discovery map. An unobserved farm keeps its stored region.
+        region = self._farm_regions.get(farm_id)
+        if farm_id and region:
+            set_setting("defaults.farm_region", region)
         # The previous queue/storage profile belong to the old farm.
         set_setting("defaults.queue_id", "")
         set_setting("settings.storage_profile_id", "")

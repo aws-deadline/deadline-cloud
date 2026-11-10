@@ -107,6 +107,7 @@ _FRIENDLY_PARAM_TYPES = {
     "LIST[INT]": "Number list",
     "LIST[FLOAT]": "Number list",
     "LIST[BOOL]": "Checkbox list",
+    "LIST[LIST[INT]]": "Nested number list",
 }
 
 

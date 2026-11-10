@@ -15,6 +15,7 @@ from ._session import get_boto3_client
 from ..exceptions import DeadlineOperationError
 from ..job_bundle.parameters import (
     JobParameter,
+    _SUPPORTED_CONTROLS_FOR_TYPE,
     _normalize_parameter_type_case,
     get_ui_control_for_parameter_definition,
     parameter_definition_difference,
@@ -178,9 +179,13 @@ def get_queue_parameter_definitions(
             # If there is no group label, set it to the name of the Queue Environment
             if not parameter.get("userInterface", {}).get("groupLabel"):
                 if "userInterface" not in parameter:
-                    parameter["userInterface"] = {
-                        "control": get_ui_control_for_parameter_definition(parameter)
-                    }
+                    control = get_ui_control_for_parameter_definition(parameter)
+                    # A client-chosen default the template could not set, such as
+                    # LIST[LIST[INT]]'s MULTILINE_EDIT, would be rejected once written.
+                    if control in _SUPPORTED_CONTROLS_FOR_TYPE.get(parameter["type"], ()):
+                        parameter["userInterface"] = {"control": control}
+                    else:
+                        parameter["userInterface"] = {}
                 parameter["userInterface"]["groupLabel"] = tr("Queue Environment: {name}").format(
                     name=template["environment"]["name"]
                 )
