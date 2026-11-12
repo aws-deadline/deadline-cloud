@@ -56,7 +56,9 @@ gui = [
   "PySide6-essentials >= 6.6,< 6.11",
 ]
 mcp = [
-  "mcp >= 1.13.0, < 2",
+  # No python_version marker: on 3.9 pip must fail the install (mcp 2.x needs
+  # 3.10+) rather than silently install an empty extra.
+  "mcp >= 2.0, < 3",
 ]
 # AWS Console sign-in profiles (the `login_session` key in ~/.aws/config) are
 # resolved by botocore's LoginProvider, which needs awscrt to sign the DPoP

@@ -24,15 +24,23 @@ def cli_mcp_server():
 
     The server will run until interrupted with Ctrl+C or Ctrl+D.
 
-    Note: This command requires MCP dependencies. Install them with:
+    Note: This command requires Python 3.10+ and MCP dependencies. Install them with:
     pip install 'deadline[mcp]'
     """
+    if sys.version_info < (3, 10):
+        click.echo(
+            "Error: The MCP server requires Python 3.10 or later "
+            f"(detected Python {sys.version_info.major}.{sys.version_info.minor}).",
+            err=True,
+        )
+        sys.exit(1)
+
     try:
         from ...._mcp.server import main as mcp_main
     except ImportError:
         click.echo(
-            "Error: MCP dependencies not installed.\n"
-            "Please install them with: pip install 'deadline[mcp]'",
+            "Error: MCP dependencies are not installed or are out of date (mcp 2.x is required).\n"
+            "Please install them with: pip install --upgrade 'deadline[mcp]'",
             err=True,
         )
         sys.exit(1)
