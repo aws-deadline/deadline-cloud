@@ -28,6 +28,7 @@ _QT_TEST_FILES = [
     "test_gui_spin_box_list.py",
     "test_gui_check_box_list.py",
     "test_gui_path_list.py",
+    "test_gui_input_contrast.py",
 ]
 
 collect_ignore = [f for f in _QT_TEST_FILES] if not _has_pyside6 else []

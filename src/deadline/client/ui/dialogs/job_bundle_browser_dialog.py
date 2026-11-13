@@ -45,7 +45,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QWidget,
 )
 
-from .._utils import tr, warning_banner_qss
+from .._utils import apply_macos_dark_input_contrast, tr, warning_banner_qss
 from ..widgets.expandable_section import ExpandableSection as _ExpandableSection
 from ..widgets.path_widgets import DirectoryPickerWidget as _DirectoryPickerWidget
 from ...job_bundle._repository import (
@@ -195,6 +195,7 @@ class JobBundleBrowserDialog(QDialog):
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent=parent)
+        apply_macos_dark_input_contrast(self)
         self.setWindowTitle(tr("Browse Job Bundles"))
         self.setMinimumSize(750, 550)
         self.resize(850, 620)

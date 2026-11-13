@@ -21,7 +21,7 @@ from qtpy.QtWidgets import (  # type: ignore
     QVBoxLayout,
 )
 
-from .._utils import tr, warning_banner_qss
+from .._utils import apply_macos_dark_input_contrast, tr, warning_banner_qss
 from ...job_bundle._repository import S3BundleRepository as _S3BundleRepository
 
 
@@ -38,6 +38,7 @@ class ExportBundleDialog(QDialog):
         parent=None,
     ):
         super().__init__(parent=parent)
+        apply_macos_dark_input_contrast(self)
         self.setWindowTitle(tr("Save bundle as"))
         self.setMinimumWidth(500)
 

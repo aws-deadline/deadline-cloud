@@ -75,6 +75,138 @@ def warning_banner_qss(widget) -> str:
     )
 
 
+# How much lighter than the window background text-input fields are drawn in macOS dark
+# mode, on Qt's 0-255 HSL lightness scale.
+_MACOS_DARK_INPUT_BASE_LIFT = 12
+_MACOS_STYLE_NAMES = ("macos", "macintosh")  # Qt 6 / Qt 5 names of the native macOS style
+# Text-input classes the native macOS style fills with QPalette.Base. Editable combo boxes
+# are left out: a stylesheet background drops them to non-native rendering, and their
+# bezel and arrow button already keep them visible.
+_TEXT_INPUT_CLASSES = ("QLineEdit", "QAbstractSpinBox", "QTextEdit", "QPlainTextEdit")
+# Wraps the rule this helper adds to a widget's stylesheet, so it can be found and replaced
+# without disturbing anything else in that stylesheet.
+_INPUT_CONTRAST_BEGIN = "/* deadline-cloud: macos-dark-input-contrast { */"
+_INPUT_CONTRAST_END = "/* } deadline-cloud: macos-dark-input-contrast */"
+
+
+def _uses_macos_style(widget) -> bool:
+    style = widget.style()
+    if style.metaObject().className() == "QStyleSheetStyle":
+        # Any app- or widget-level stylesheet wraps the real style and hides its name, but
+        # the native style still draws unstyled inputs. It is the default on macOS, so
+        # assume it there. A wrong guess only ever raises input contrast (see the
+        # Base-darker-than-window check in _refresh_input_contrast).
+        import sys
+
+        return sys.platform == "darwin"
+    name = style.name() if hasattr(style, "name") else style.objectName()
+    return (name or "").lower() in _MACOS_STYLE_NAMES
+
+
+def _input_contrast_rule(widget) -> str:
+    """The stylesheet rule ``widget`` needs, or "" when its inputs are already visible."""
+    from qtpy.QtGui import QColor, QPalette  # type: ignore
+    from qtpy.QtWidgets import QApplication  # type: ignore
+
+    app = QApplication.instance()
+    host_qss = app.styleSheet() if app is not None else ""
+    if any(cls in host_qss for cls in _TEXT_INPUT_CLASSES + ("QSpinBox",)):
+        return ""  # The host themes its own inputs; don't override its choice.
+
+    palette = QApplication.palette(widget)
+    window = palette.color(QPalette.Window)
+    lifted_lightness = min(255, window.lightness() + _MACOS_DARK_INPUT_BASE_LIFT)
+    if not (
+        _uses_macos_style(widget)
+        and window.lightness() < 128
+        # A host's own dark theme may already draw inputs lighter; never reduce that.
+        and palette.color(QPalette.Base).lightness() < lifted_lightness
+    ):
+        return ""
+
+    lifted = QColor.fromHsl(window.hslHue(), window.hslSaturation(), lifted_lightness)
+    # background-color alone keeps the native bezel, focus ring, and spin arrows: Qt hands
+    # the color to the native style as Base. Adding a border would switch to plain drawing.
+    return (
+        f"{_INPUT_CONTRAST_BEGIN}\n"
+        f"{', '.join(_TEXT_INPUT_CLASSES)} {{ background-color: {lifted.name()}; }}\n"
+        f"{_INPUT_CONTRAST_END}"
+    )
+
+
+def _refresh_input_contrast(widget) -> None:
+    current = widget.styleSheet()
+    start = current.find(_INPUT_CONTRAST_BEGIN)
+    end = current.find(_INPUT_CONTRAST_END)
+    if start != -1 and end != -1:
+        others = (current[:start] + current[end + len(_INPUT_CONTRAST_END) :]).strip()
+    else:
+        others = current.strip()
+
+    rule = _input_contrast_rule(widget)
+    updated = "\n".join(part for part in (others, rule) if part)
+    if updated != current:
+        from qtpy.QtWidgets import QWidget  # type: ignore
+
+        # Replacing one non-empty stylesheet with another on a dialog that isn't shown
+        # yet can leave its unpolished children painting with stale cached rules (seen
+        # with Qt 6.8 and 6.10 once any stylesheet has been used in the process).
+        # Polishing the tree first, then clearing before setting, avoids that.
+        widget.ensurePolished()
+        for child in widget.findChildren(QWidget):
+            child.ensurePolished()
+        # setStyleSheet sends StyleChange, which calls back in here; don't recurse.
+        widget._deadline_input_contrast_updating = True
+        try:
+            widget.setStyleSheet("")
+            widget.setStyleSheet(updated)
+        finally:
+            widget._deadline_input_contrast_updating = False
+
+
+def apply_macos_dark_input_contrast(widget) -> None:
+    """Keep text inputs visible under the native macOS Qt style in dark mode.
+
+    In dark mode the native macOS style fills QLineEdit/QSpinBox/QTextEdit with
+    ``QPalette.Base``, which is darker than the window, and draws only a faint
+    near-black bezel. Inside the submitter's tab and scroll-area panes that makes
+    empty fields look like blank space, and users don't realize they can type
+    there. Combo boxes are unaffected because the style draws them as raised buttons.
+
+    This adds a background-only rule to ``widget``'s stylesheet that draws those
+    inputs slightly lighter than the window, while the native style still draws
+    their bezel, focus ring, and spin arrows. A stylesheet is used rather than a
+    palette because Qt's stylesheet style re-polishes every widget under any
+    stylesheet (the config dialog's group boxes, a host's app stylesheet) from the
+    application palette, which would discard a palette set on the dialog.
+
+    It does nothing for other styles, in light mode, or when the host's app
+    stylesheet already styles inputs, so hosts with their own Qt theme (Maya,
+    Houdini, Nuke, ...) are unaffected. It re-evaluates when the system palette or
+    the style changes, for example on a light/dark switch, or when someone replaces the
+    dialog's stylesheet.
+    """
+    from qtpy.QtCore import QEvent, QObject  # type: ignore
+
+    class _InputContrastFilter(QObject):
+        def eventFilter(self, obj, event):  # noqa: N802 (Qt override)
+            if event.type() in (
+                QEvent.ApplicationPaletteChange,
+                QEvent.StyleChange,
+            ) and not getattr(obj, "_deadline_input_contrast_updating", False):
+                _refresh_input_contrast(obj)
+            return False
+
+    if getattr(widget, "_deadline_input_contrast_filter", None) is not None:
+        return  # already applied
+
+    _refresh_input_contrast(widget)
+    # Qt parenting alone doesn't keep the Python side of the filter alive under PySide:
+    # without this reference it is garbage collected and never sees a palette change.
+    widget._deadline_input_contrast_filter = _InputContrastFilter(widget)
+    widget.installEventFilter(widget._deadline_input_contrast_filter)
+
+
 @contextmanager
 def block_signals(element):
     """

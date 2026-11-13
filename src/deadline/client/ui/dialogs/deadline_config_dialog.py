@@ -49,7 +49,7 @@ import os
 from ... import api
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
 from ...config import config_file, get_setting_default, str2bool
-from .._utils import block_signals, tr
+from .._utils import apply_macos_dark_input_contrast, block_signals, tr
 from ..widgets import DirectoryPickerWidget
 from ..widgets.deadline_authentication_status_widget import (
     DeadlineAuthenticationStatusWidget,
@@ -96,6 +96,7 @@ class DeadlineConfigDialog(QDialog):
             parent=parent,
             f=Qt.WindowSystemMenuHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint,
         )
+        apply_macos_dark_input_contrast(self)
 
         self.setWindowTitle(tr("AWS Deadline Cloud workstation configuration"))
         self.deadline_authentication_status = DeadlineAuthenticationStatus.getInstance()
