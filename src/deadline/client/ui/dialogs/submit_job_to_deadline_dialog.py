@@ -35,7 +35,7 @@ from ...dataclasses import SubmitterInfo
 from ... import api
 from ...api._session import session_context as _session_context
 from ..deadline_authentication_status import DeadlineAuthenticationStatus
-from .._utils import apply_macos_dark_input_contrast, block_signals, tr
+from .._utils import _apply_macos_dark_input_contrast, block_signals, tr
 from ...config import get_setting, set_setting, config_file
 from ...config.config_file import _SETTING_FARM_ID, _SETTING_QUEUE_ID
 from ...exceptions import UserInitiatedCancel, NonValidInputError
@@ -138,7 +138,7 @@ class SubmitJobToDeadlineDialog(QDialog):
     ):
         # The Qt.Tool flag makes sure our widget stays in front of the main application window
         super().__init__(parent=parent, f=f)
-        apply_macos_dark_input_contrast(self)
+        _apply_macos_dark_input_contrast(self)
 
         # Set window title with submitter package info if available
         window_title = tr("Submit to AWS Deadline Cloud")

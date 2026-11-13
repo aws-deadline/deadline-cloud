@@ -1,6 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Tests for apply_macos_dark_input_contrast, which keeps text inputs visible on macOS dark mode."""
+"""Tests for _apply_macos_dark_input_contrast, which keeps text inputs visible on macOS dark mode."""
 
 from unittest.mock import patch
 
@@ -17,7 +17,7 @@ from qtpy.QtWidgets import (
 )
 
 from deadline.client.ui import _utils
-from deadline.client.ui._utils import apply_macos_dark_input_contrast
+from deadline.client.ui._utils import _apply_macos_dark_input_contrast
 
 # Native macOS dark-mode colors: the text-field Base is darker than the window, so empty
 # fields vanish into the dialog's tab/scroll panes.
@@ -90,7 +90,7 @@ def test_lifts_input_base_above_window_on_macos_dark(qtbot, app_palette, macos):
     dialog.layout().addWidget(spin)
     dialog.layout().addWidget(text)
 
-    apply_macos_dark_input_contrast(dialog)
+    _apply_macos_dark_input_contrast(dialog)
 
     assert _is_lifted(line_edit) and _is_lifted(spin) and _is_lifted(text)
 
@@ -108,7 +108,7 @@ def test_leaves_inputs_alone_when_already_visible(qtbot, app_palette, is_macos, 
     app_palette(_palette(window, base))
     with patch.object(_utils, "_uses_macos_style", return_value=is_macos):
         dialog, line_edit = _dialog(qtbot)
-        apply_macos_dark_input_contrast(dialog)
+        _apply_macos_dark_input_contrast(dialog)
 
     assert dialog.styleSheet() == ""
     assert _base(line_edit) == base
@@ -124,7 +124,7 @@ def test_reaches_inputs_under_a_nested_stylesheet(qtbot, app_palette, macos):
     QVBoxLayout(group).addWidget(nested)
     dialog.layout().addWidget(group)
 
-    apply_macos_dark_input_contrast(dialog)
+    _apply_macos_dark_input_contrast(dialog)
 
     assert _is_lifted(nested)
 
@@ -133,7 +133,7 @@ def test_widgets_added_later_are_lifted(qtbot, app_palette, macos):
     """Host submitters add their own widgets after the dialog is constructed."""
     app_palette(_palette(_DARK_WINDOW, _DARK_BASE))
     dialog, _ = _dialog(qtbot)
-    apply_macos_dark_input_contrast(dialog)
+    _apply_macos_dark_input_contrast(dialog)
     late = QLineEdit()
     dialog.layout().addWidget(late)
 
@@ -148,7 +148,7 @@ def test_an_inputs_own_stylesheet_still_wins(qtbot, app_palette, macos):
     spin.setStyleSheet("QSpinBox { background-color: #550000; }")
     dialog.layout().addWidget(spin)
 
-    apply_macos_dark_input_contrast(dialog)
+    _apply_macos_dark_input_contrast(dialog)
 
     assert _base(spin) == QColor("#550000")
 
@@ -157,7 +157,7 @@ def test_preserves_and_survives_other_dialog_stylesheets(qtbot, app_palette, mac
     app_palette(_palette(_DARK_WINDOW, _DARK_BASE))
     dialog, line_edit = _dialog(qtbot)
     dialog.setStyleSheet("QLabel { color: red; }")
-    apply_macos_dark_input_contrast(dialog)
+    _apply_macos_dark_input_contrast(dialog)
     assert "QLabel { color: red; }" in dialog.styleSheet()
     assert _is_lifted(line_edit)
 
@@ -172,19 +172,45 @@ def test_preserves_and_survives_other_dialog_stylesheets(qtbot, app_palette, mac
     assert dialog.styleSheet() == "QPushButton { color: red; }"
 
 
-def test_defers_to_a_host_app_stylesheet_that_styles_inputs(qtbot, app_palette, macos, qapp):
+@pytest.mark.parametrize(
+    "host_qss",
+    [
+        pytest.param("QLineEdit { background-color: #224422; }", id="styles-inputs"),
+        # e.g. Maya on macOS: its own style, dark palette, an app stylesheet that never
+        # names the input classes. The host themes itself, so leave it alone.
+        pytest.param("QToolTip { color: white; }", id="unrelated-rules"),
+    ],
+)
+def test_defers_to_any_host_app_stylesheet(qtbot, app_palette, qapp, host_qss):
     app_palette(_palette(_DARK_WINDOW, _DARK_BASE))
-    qapp.setStyleSheet("QLineEdit { background-color: #224422; }")
-    dialog, _ = _dialog(qtbot)
-    apply_macos_dark_input_contrast(dialog)
+    # Even if the style underneath were native macOS, it can't be identified any more.
+    with patch.object(QApplication.style(), "name", return_value="macos"):
+        qapp.setStyleSheet(host_qss)
+        dialog, _ = _dialog(qtbot)
+        _apply_macos_dark_input_contrast(dialog)
 
     assert dialog.styleSheet() == ""
+
+
+def test_native_style_found_beneath_dialog_stylesheets(qtbot, app_palette):
+    """Without a host app stylesheet, a dialog's own stylesheet doesn't hide the style."""
+    app_palette(_palette(_DARK_WINDOW, _DARK_BASE))
+    with patch.object(QApplication.style(), "name", return_value="macos"):
+        dialog, line_edit = _dialog(qtbot)
+        dialog.setStyleSheet("QLabel { color: red; }")
+        _apply_macos_dark_input_contrast(dialog)
+        assert _is_lifted(line_edit)
+
+        # A host replacing the dialog stylesheet later re-runs detection; still found.
+        dialog.setStyleSheet("QPushButton { color: red; }")
+        assert dialog.styleSheet().count(_utils._INPUT_CONTRAST_BEGIN) == 1
+        assert _is_lifted(line_edit)
 
 
 def test_follows_system_light_dark_switches(qtbot, app_palette, macos):
     app_palette(_palette(_DARK_WINDOW, _DARK_BASE))
     dialog, line_edit = _dialog(qtbot)
-    apply_macos_dark_input_contrast(dialog)
+    _apply_macos_dark_input_contrast(dialog)
     assert _is_lifted(line_edit)
 
     # Light mode: the rule is removed and inputs follow the system again.
@@ -204,8 +230,8 @@ def test_follows_system_light_dark_switches(qtbot, app_palette, macos):
 def test_applying_twice_is_a_no_op(qtbot, app_palette, macos):
     app_palette(_palette(_DARK_WINDOW, _DARK_BASE))
     dialog, _ = _dialog(qtbot)
-    apply_macos_dark_input_contrast(dialog)
-    apply_macos_dark_input_contrast(dialog)
+    _apply_macos_dark_input_contrast(dialog)
+    _apply_macos_dark_input_contrast(dialog)
 
     assert dialog.styleSheet().count(_utils._INPUT_CONTRAST_BEGIN) == 1
 
@@ -219,14 +245,24 @@ def test_uses_macos_style(qtbot, name, expected):
         assert _utils._uses_macos_style(dialog) is expected
 
 
-@pytest.mark.parametrize("platform, expected", [("darwin", True), ("linux", False)])
-def test_stylesheet_does_not_hide_macos_style(qtbot, platform, expected):
-    """A stylesheet wraps the real style and blanks its name; still detect macOS."""
+@pytest.mark.parametrize("app_style, expected", [("macos", True), ("fusion", False)])
+def test_widget_stylesheet_falls_back_to_the_app_style(qtbot, app_style, expected):
+    """A widget stylesheet wraps the real style and blanks its name; read the app's."""
     dialog, _ = _dialog(qtbot)
     dialog.setStyleSheet("QPushButton { color: red; }")
     assert dialog.style().metaObject().className() == "QStyleSheetStyle"
-    with patch("sys.platform", platform):
+    with patch.object(QApplication.style(), "name", return_value=app_style):
         assert _utils._uses_macos_style(dialog) is expected
+
+
+def test_app_stylesheet_means_not_native(qtbot, qapp):
+    original = qapp.styleSheet()
+    try:
+        qapp.setStyleSheet("QToolTip { color: white; }")
+        dialog, _ = _dialog(qtbot)
+        assert _utils._uses_macos_style(dialog) is False
+    finally:
+        qapp.setStyleSheet(original)
 
 
 def test_uses_macos_style_qt5_object_name_fallback():
@@ -241,3 +277,41 @@ def test_uses_macos_style_qt5_object_name_fallback():
 
     widget = type("_Widget", (), {"style": lambda self: _Qt5Style()})()
     assert _utils._uses_macos_style(widget) is True
+
+
+def test_proxy_wrapped_native_style_is_detected(qtbot):
+    from qtpy.QtWidgets import QProxyStyle, QStyleFactory
+
+    dialog, _ = _dialog(qtbot)
+    base = QStyleFactory.create("fusion")
+    proxy = QProxyStyle(base)
+    dialog.setStyle(proxy)
+    assert _utils._uses_macos_style(dialog) is False
+    with patch.object(proxy.baseStyle(), "name", return_value="macos"):
+        assert _utils._uses_macos_style(dialog) is True
+
+
+def test_own_style_hidden_by_a_stylesheet_is_not_guessed(qtbot):
+    """A dialog with its own setStyle() isn't assumed to share the app's native style."""
+    from qtpy.QtWidgets import QStyleFactory
+
+    dialog, _ = _dialog(qtbot)
+    own_style = QStyleFactory.create("fusion")
+    dialog.setStyle(own_style)
+    dialog.setStyleSheet("QLabel { color: red; }")
+    with patch.object(QApplication.style(), "name", return_value="macos"):
+        assert _utils._uses_macos_style(dialog) is False
+
+
+def test_stray_marker_text_in_other_stylesheets_is_preserved(qtbot, app_palette, macos):
+    app_palette(_palette(_DARK_WINDOW, _DARK_BASE))
+    dialog, _ = _dialog(qtbot)
+    user_qss = f"{_utils._INPUT_CONTRAST_BEGIN}\nQLabel {{ color: red; }}"
+    dialog.setStyleSheet(user_qss)
+    _apply_macos_dark_input_contrast(dialog)
+    # Force a refresh after the helper's own block has been appended.
+    dialog.setStyleSheet(dialog.styleSheet())
+    _utils._refresh_input_contrast(dialog)
+
+    assert dialog.styleSheet().startswith(user_qss)
+    assert dialog.styleSheet().count(_utils._INPUT_CONTRAST_END) == 1

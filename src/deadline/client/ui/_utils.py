@@ -89,16 +89,34 @@ _INPUT_CONTRAST_BEGIN = "/* deadline-cloud: macos-dark-input-contrast { */"
 _INPUT_CONTRAST_END = "/* } deadline-cloud: macos-dark-input-contrast */"
 
 
-def _uses_macos_style(widget) -> bool:
-    style = widget.style()
-    if style.metaObject().className() == "QStyleSheetStyle":
-        # Any app- or widget-level stylesheet wraps the real style and hides its name, but
-        # the native style still draws unstyled inputs. It is the default on macOS, so
-        # assume it there. A wrong guess only ever raises input contrast (see the
-        # Base-darker-than-window check in _refresh_input_contrast).
-        import sys
+def _is_stylesheet_style(style) -> bool:
+    return style.metaObject().className() == "QStyleSheetStyle"
 
-        return sys.platform == "darwin"
+
+def _uses_macos_style(widget) -> bool:
+    """Whether ``widget`` is drawn by Qt's native macOS style.
+
+    A stylesheet on the widget or an ancestor (including the rule this module adds)
+    wraps the real style in Qt's internal stylesheet style, which hides the real
+    style's name. Widget-level stylesheets don't affect ``QApplication.style()``, so
+    look at the app's style instead. If the app itself has a stylesheet, the real style
+    can't be identified at all. That means the host themes its own UI, so report False
+    and leave it alone. The same applies when the widget has its own ``setStyle()``
+    hidden under a stylesheet.
+    """
+    from qtpy.QtCore import Qt  # type: ignore
+    from qtpy.QtWidgets import QApplication, QProxyStyle  # type: ignore
+
+    style = widget.style()
+    if _is_stylesheet_style(style):
+        if widget.testAttribute(Qt.WA_SetStyle):
+            return False
+        style = QApplication.style()
+        if style is None or _is_stylesheet_style(style):
+            return False
+    # A host may wrap the native style in a QProxyStyle, which has no name of its own.
+    while isinstance(style, QProxyStyle) and style.baseStyle() is not None:
+        style = style.baseStyle()
     name = style.name() if hasattr(style, "name") else style.objectName()
     return (name or "").lower() in _MACOS_STYLE_NAMES
 
@@ -107,11 +125,6 @@ def _input_contrast_rule(widget) -> str:
     """The stylesheet rule ``widget`` needs, or "" when its inputs are already visible."""
     from qtpy.QtGui import QColor, QPalette  # type: ignore
     from qtpy.QtWidgets import QApplication  # type: ignore
-
-    app = QApplication.instance()
-    host_qss = app.styleSheet() if app is not None else ""
-    if any(cls in host_qss for cls in _TEXT_INPUT_CLASSES + ("QSpinBox",)):
-        return ""  # The host themes its own inputs; don't override its choice.
 
     palette = QApplication.palette(widget)
     window = palette.color(QPalette.Window)
@@ -136,8 +149,10 @@ def _input_contrast_rule(widget) -> str:
 
 def _refresh_input_contrast(widget) -> None:
     current = widget.styleSheet()
-    start = current.find(_INPUT_CONTRAST_BEGIN)
-    end = current.find(_INPUT_CONTRAST_END)
+    # Use the last BEGIN (the helper always appends its block) and the END after it, so
+    # stray marker text elsewhere in someone else's stylesheet is never cut out.
+    start = current.rfind(_INPUT_CONTRAST_BEGIN)
+    end = current.find(_INPUT_CONTRAST_END, start) if start != -1 else -1
     if start != -1 and end != -1:
         others = (current[:start] + current[end + len(_INPUT_CONTRAST_END) :]).strip()
     else:
@@ -164,7 +179,7 @@ def _refresh_input_contrast(widget) -> None:
             widget._deadline_input_contrast_updating = False
 
 
-def apply_macos_dark_input_contrast(widget) -> None:
+def _apply_macos_dark_input_contrast(widget) -> None:
     """Keep text inputs visible under the native macOS Qt style in dark mode.
 
     In dark mode the native macOS style fills QLineEdit/QSpinBox/QTextEdit with
@@ -177,14 +192,14 @@ def apply_macos_dark_input_contrast(widget) -> None:
     inputs slightly lighter than the window, while the native style still draws
     their bezel, focus ring, and spin arrows. A stylesheet is used rather than a
     palette because Qt's stylesheet style re-polishes every widget under any
-    stylesheet (the config dialog's group boxes, a host's app stylesheet) from the
-    application palette, which would discard a palette set on the dialog.
+    stylesheet (e.g. the config dialog's group boxes) from the application
+    palette, which would discard a palette set on the dialog.
 
-    It does nothing for other styles, in light mode, or when the host's app
-    stylesheet already styles inputs, so hosts with their own Qt theme (Maya,
-    Houdini, Nuke, ...) are unaffected. It re-evaluates when the system palette or
-    the style changes, for example on a light/dark switch, or when someone replaces the
-    dialog's stylesheet.
+    It does nothing for other styles, in light mode, when the host's Base is
+    already lighter than the window, or when the host app has its own stylesheet.
+    So hosts with their own Qt theme (Maya, Houdini, Nuke, ...) are unaffected. It
+    re-evaluates when the system palette or the style changes, for example on a
+    light/dark switch, or when someone replaces the dialog's stylesheet.
     """
     from qtpy.QtCore import QEvent, QObject  # type: ignore
 
