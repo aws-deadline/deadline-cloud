@@ -476,7 +476,7 @@ constrained to the interpreter that DCC ships. (After Effects, RenderMan, and Sh
 | Unreal Engine | 5.4, 5.5 | 3.11.8 | [UE 5.4 Python scripting](https://dev.epicgames.com/documentation/en-us/unreal-engine/scripting-the-unreal-editor-using-python?application_version=5.4) |
 | Unreal Engine | 5.6, 5.7 | 3.11.8 | [UE 5.6 Python scripting](https://dev.epicgames.com/documentation/en-us/unreal-engine/scripting-the-unreal-editor-using-python?application_version=5.6) |
 | VRED | 2025, 2026 | 3.11 | [VRED 2026 — What's New](https://help.autodesk.com/cloudhelp/2026/ENU/VRED-WhatsNew/files/Whats-New/whatsnew-vred-2026/wn-20260.html) |
-| After Effects | 2024 – 2026 | None embedded (ExtendScript/JS); submitter uses an external Python | [After Effects scripting guide](https://ae-scripting.docsforadobe.dev/) |
+| After Effects | 2024 – 2027 | None embedded (ExtendScript/JS); submitter uses an external Python | [After Effects scripting guide](https://ae-scripting.docsforadobe.dev/) |
 | RenderMan | 24 – 26 | Uses host app Python; Pro Server bindings target 3.7 / 3.9 / 3.10 / 3.11 | [Installing RenderMan](https://rmanwiki-26.pixar.com/space/REN26/19660949/Installing+on+Linux) |
 
 Notes:
