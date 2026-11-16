@@ -1,3 +1,11 @@
+## 0.60.12 (2026-11-16)
+
+### Features
+* The bundle browser (Deadline Cloud monitor → File → Submit Job Bundle, or `deadline bundle gui-submit --browse`) now has a folder picker for the Local source. You can browse bundles in any folder without changing your configured default bundle directory. (#1407)
+
+### Bug Fixes
+* `deadline bundle submit --parameter` and `deadline bundle gui-submit --parameter` now accept inline JSON (including pretty-printed JSON) and JSON/YAML parameter files, as documented. Previously, only `Name=Value` was accepted. If you pass the same parameter more than once, the last value wins. Null values now produce a clear error. (#1423)
+* Fixed a missing closing quote in the Blender example bundle's run script. Bash exited with an "unexpected EOF" error before Blender started. (#1428)
 ## 0.60.11 (2026-10-26)
 
 ### Features
