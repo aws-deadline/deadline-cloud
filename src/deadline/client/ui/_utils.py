@@ -53,6 +53,28 @@ def tr(text: TranslationKey) -> str:
     return _get_translations().get(text, text)
 
 
+def warning_banner_qss(widget) -> str:
+    """Stylesheet for an inline warning banner that adapts to the active theme.
+
+    The submitter has no in-app theme toggle — it inherits the OS/Qt palette — so a
+    hardcoded light-amber banner looks out of place in dark mode. This derives a
+    light- or dark-amber treatment from the widget's palette. Both pass WCAG AA
+    contrast for the body text (light 7.35:1, dark 9.35:1).
+    """
+    from qtpy.QtGui import QPalette  # type: ignore
+
+    is_dark = widget.palette().color(QPalette.Window).lightness() < 128
+    if is_dark:
+        text, bg, border = "#ffcc80", "#3a2a10", "#8a5a20"
+    else:
+        text, bg, border = "#7a4200", "#fff3e0", "#e0a040"
+    return (
+        f"QLabel {{ color: {text}; background-color: {bg};"
+        f" border: 1px solid {border}; border-radius: 4px;"
+        " padding: 4px 8px; }"
+    )
+
+
 @contextmanager
 def block_signals(element):
     """

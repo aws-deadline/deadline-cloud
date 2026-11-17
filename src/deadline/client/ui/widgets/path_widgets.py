@@ -3,7 +3,7 @@
 __all__ = ["DirectoryPickerWidget", "InputFilePickerWidget", "OutputFilePickerWidget"]
 
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from qtpy.QtCore import Signal
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
@@ -14,7 +14,39 @@ from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QWidget,
 )
 
+from ..._path_utils import is_path_contained, is_uri
 from .._utils import block_signals, tr
+
+
+def _collapse_user_dir(path: str, *, path_module: Any = None) -> str:
+    """Rewrite a path inside the user's home directory to the ``~`` spelling.
+
+    Containment is by component, not by string prefix: with a home directory of
+    ``C:\\Users\\bob``, ``C:\\Users\\bobby\\scene.ma`` is not inside it. Slicing by the home
+    directory's length kept such a path and ate the first character of what followed, and
+    where the remainder then started with a separator ``join("~", ...)`` discarded the
+    ``~`` and returned an unrelated absolute path. The config dialog writes this text
+    straight into ``job_history_dir`` and ``job_bundle_default_directory``, so a wrong
+    answer here is persisted.
+    """
+    path_module = path_module or os.path
+    home_dir = path_module.expanduser("~")
+    if not is_path_contained(path, home_dir, path_module=path_module):
+        return path
+    relative = path_module.relpath(path, home_dir)
+    if relative == path_module.curdir:
+        return "~"
+    return path_module.join("~", relative)
+
+
+def _normalize_path_text(path: str, *, collapse_user_dir: bool = False) -> str:
+    """The text a path picker shows for a path it is given, as opposed to one typed into it.
+    A URI, which OpenJD's EXPR extension allows as a path value, is kept as it is."""
+    if path and not is_uri(path):
+        path = os.path.normpath(path)
+        if collapse_user_dir:
+            path = _collapse_user_dir(path, path_module=os.path)
+    return path
 
 
 class _FileWidget(QWidget):
@@ -59,13 +91,7 @@ class _FileWidget(QWidget):
 
     def setText(self, filename):
         """Sets the current directory value"""
-        if filename:
-            filename = os.path.normpath(filename)
-            if self.collapse_user_dir:
-                # If it's in the home directory, change to the ~ syntax
-                home_dir = os.path.expanduser("~")
-                if filename.startswith(home_dir):
-                    filename = os.path.join("~", filename[len(home_dir) + 1 :])
+        filename = _normalize_path_text(filename, collapse_user_dir=self.collapse_user_dir)
 
         with block_signals(self.filename_edit):
             self.filename_edit.setText(filename)
@@ -76,7 +102,9 @@ class _FileWidget(QWidget):
         self.path_changed.emit(self.text())
 
     def on_choose_file(self):
-        filename = os.path.expanduser(self.filename_edit.text()) or "."
+        filename = self.filename_edit.text()
+        # The dialog cannot browse a URI, so it starts in the current directory instead.
+        filename = "." if is_uri(filename) else os.path.expanduser(filename) or "."
 
         filename = self.file_dialog(self, f"Choose {self.file_label}", filename)
 
@@ -178,6 +206,17 @@ class OutputFilePickerWidget(_FileWidget):
         return filename
 
 
+def _nearest_existing_directory(path: str) -> str:
+    """Return ``path`` or its closest existing ancestor, falling back to the home directory."""
+    path = os.path.abspath(path)
+    while not os.path.isdir(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            return os.path.expanduser("~")
+        path = parent
+    return path
+
+
 class DirectoryPickerWidget(QWidget):
     """
     A LineEdit + Directory Picker button, for choosing a directory.
@@ -193,6 +232,9 @@ class DirectoryPickerWidget(QWidget):
         directory_label (str): The name of the directory for GUI messages.
                 For example, "Job History Dir".
         collapse_user_dir (bool): Whether to collapse the user home directory to "~" or not.
+        create_missing_directory (bool): Whether the chooser button creates a missing
+                directory so the chooser can start there. If False, or if creating it
+                fails, the chooser starts at the nearest existing ancestor instead.
     """
 
     # Emitted when the directory changes
@@ -204,6 +246,7 @@ class DirectoryPickerWidget(QWidget):
         initial_directory: str,
         directory_label: str,
         collapse_user_dir: bool = False,
+        create_missing_directory: bool = True,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
@@ -212,6 +255,7 @@ class DirectoryPickerWidget(QWidget):
             self.directory_edit.setText(initial_directory)
         self.directory_label = directory_label
         self.collapse_user_dir = collapse_user_dir
+        self.create_missing_directory = create_missing_directory
 
     def _build_ui(self):
         self.directory_edit = QLineEdit(parent=self)
@@ -233,13 +277,7 @@ class DirectoryPickerWidget(QWidget):
 
     def setText(self, directory):
         """Sets the current directory value"""
-        if directory:
-            directory = os.path.normpath(directory)
-            if self.collapse_user_dir:
-                # If it's in the home directory, collapse to the ~ syntax
-                home_dir = os.path.expanduser("~")
-                if directory.startswith(home_dir):
-                    directory = os.path.join("~", directory[len(home_dir) + 1 :])
+        directory = _normalize_path_text(directory, collapse_user_dir=self.collapse_user_dir)
 
         with block_signals(self.directory_edit):
             self.directory_edit.setText(directory)
@@ -250,11 +288,12 @@ class DirectoryPickerWidget(QWidget):
         self.path_changed.emit(self.text())
 
     def on_choose_directory(self):
-        directory = os.path.expanduser(self.directory_edit.text()) or "."
+        directory = self.directory_edit.text()
+        # The dialog cannot browse a URI, so it starts in the current directory instead.
+        directory = "." if is_uri(directory) else os.path.expanduser(directory) or "."
 
-        # If the directory is missing, create it so the dir chooser starts there
         if not os.path.isdir(directory):
-            os.makedirs(directory)
+            directory = self._prepare_start_directory(directory)
 
         directory = QFileDialog.getExistingDirectory(
             self,
@@ -265,3 +304,13 @@ class DirectoryPickerWidget(QWidget):
 
         if directory:
             self.setText(directory)
+
+    def _prepare_start_directory(self, directory: str) -> str:
+        """Return a directory for the chooser to start in, creating ``directory`` if allowed."""
+        if self.create_missing_directory:
+            try:
+                os.makedirs(directory)
+                return directory
+            except OSError:
+                pass
+        return _nearest_existing_directory(directory)

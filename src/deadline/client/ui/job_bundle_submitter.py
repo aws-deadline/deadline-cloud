@@ -1,4 +1,3 @@
-# coding: utf-8
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from __future__ import annotations
 import copy
@@ -6,11 +5,10 @@ import os
 from logging import getLogger
 from typing import Any, Optional, Dict
 
-from qtpy.QtCore import Qt  # pylint: disable=import-error
+from qtpy.QtCore import Qt, QThread, Signal  # pylint: disable=import-error
 from ._utils import tr
 from qtpy.QtWidgets import (  # pylint: disable=import-error; type: ignore
     QApplication,
-    QFileDialog,
     QMainWindow,
     QMessageBox,
     QWidget,
@@ -32,8 +30,12 @@ from ..job_bundle.loader import (
     validate_directory_symlink_containment,
 )
 from ..job_bundle.saver import save_yaml_or_json_to_file
+from ..job_bundle._repository import S3BundleRepository as _S3BundleRepository
 from ..job_bundle.parameters import (
     JobParameter,
+    _absolute_path_value,
+    _has_expr_extension,
+    _path_list_with_absolute_items,
     apply_job_parameters,
     merge_queue_job_parameters,
     read_job_bundle_parameters,
@@ -48,6 +50,8 @@ from .dialogs.submit_job_to_deadline_dialog import (
 from .widgets.job_bundle_settings_tab import JobBundleSettingsWidget
 from ..job_bundle.submission import AssetReferences
 from ..api._session import session_context
+from ..config import get_setting
+from .dialogs.job_bundle_browser_dialog import JobBundleBrowserDialog
 
 logger = getLogger(__name__)
 
@@ -151,6 +155,15 @@ def _validate_and_warn_about_parameters(
     return reply == QMessageBox.Yes
 
 
+def _validated_cli_value(parameter: JobParameter, value: Any) -> Any:
+    """Validates a --parameter value against its definition, returning it with the correct type."""
+    try:
+        return validate_job_parameter_value(parameter, value)
+    except (ValueError, TypeError) as e:
+        # Convert the exception to DeadlineOperationError to avoid showing a full stack trace.
+        raise DeadlineOperationError(str(e))
+
+
 def show_job_bundle_submitter(
     *,
     input_job_bundle_dir: str = "",
@@ -195,12 +208,73 @@ def show_job_bundle_submitter(
             if main_windows:
                 parent = main_windows[0]
 
+    _s3_repo_for_reuse = None
+
     if not input_job_bundle_dir:
-        input_job_bundle_dir = QFileDialog.getExistingDirectory(
-            parent, tr("Choose job bundle directory"), input_job_bundle_dir
+        # Start S3 initialization in background immediately (before any other work)
+        class _S3InitWorker(QThread):
+            # NOTE: named ``done`` rather than ``finished`` to avoid shadowing
+            # QThread's built-in ``finished`` signal.
+            done = Signal(object, str, list, set)  # (repo, error, entries, hidden_set)
+
+            def run(self):
+                try:
+                    from concurrent.futures import ThreadPoolExecutor
+
+                    repo = _S3BundleRepository.from_config()
+                    with ThreadPoolExecutor(max_workers=2) as ex:
+                        entries_f = ex.submit(repo.list_entries, repo.root_path())
+                        hidden_f = ex.submit(repo.get_hidden_set)
+                        entries = entries_f.result()
+                        hidden = hidden_f.result()
+                    self.done.emit(repo, "", entries, hidden)
+                except Exception as e:
+                    logger.debug(
+                        "Could not retrieve queue settings for bundle browser", exc_info=True
+                    )
+                    self.done.emit(None, str(e), [], set())
+
+        # Config + dialog setup on the main thread.
+        default_dir = get_setting("settings.job_bundle_default_directory")
+        if default_dir:
+            default_dir = os.path.expanduser(default_dir)
+
+        # Get the job history directory for the current profile
+        job_history_dir = os.path.expanduser(get_setting("settings.job_history_dir"))
+
+        # Show the browser immediately — Queue source will populate when ready
+        browser = JobBundleBrowserDialog(
+            queue_source=None,
+            queue_error="",
+            queue_loading=True,
+            local_source=default_dir,
+            history_source=job_history_dir,
+            parent=parent,
         )
-        if not input_job_bundle_dir:
+        # Connect the worker's result BEFORE starting it. A fast failure (e.g. not
+        # logged in) can emit ``done`` almost immediately; a cross-thread queued
+        # signal emitted before the connection exists is dropped, which would leave
+        # the browser stuck on "Loading..." forever. The worker still runs
+        # concurrently with the dialog's event loop.
+        s3_worker = _S3InitWorker()
+        s3_worker.done.connect(browser.set_queue_source)
+        s3_worker.start()
+        if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
+            s3_worker.wait()
             return None
+
+        s3_worker.wait()
+
+        _s3_repo_for_reuse = browser.s3_repo
+
+        browser.hide()
+        input_job_bundle_dir = browser.resolve_selection()
+        while not input_job_bundle_dir:
+            browser.show()
+            if browser.exec_() != JobBundleBrowserDialog.Accepted or not browser.selected_path:
+                return None
+            browser.hide()
+            input_job_bundle_dir = browser.resolve_selection()
 
     def on_create_job_bundle_callback(
         widget: SubmitJobToDeadlineDialog,
@@ -265,6 +339,7 @@ def show_job_bundle_submitter(
             job_bundle_dir,
             parameters,
             AssetReferences(),
+            allow_uri_path_values=_has_expr_extension(template),
         )
 
         save_yaml_or_json_to_file(
@@ -356,16 +431,21 @@ def show_job_bundle_submitter(
         # e.g. from the CLI when this is called by the 'deadline bundle gui-submit' command.
         if parameter["name"] in job_parameters_dict:
             value = job_parameters_dict.pop(parameter["name"])["value"]
-            # Convert any path parameters to absolute
+            # Convert path parameters to absolute as 'deadline bundle submit' does. With the
+            # EXPR extension, URIs are kept.
+            allow_uri_path_values = _has_expr_extension(template)
             if parameter["type"] == "PATH":
-                value = os.path.abspath(value)
-            # Validate the value against the parameter definition and ensure it has the correct type
-            try:
-                value = validate_job_parameter_value(parameter, value)
-            except (ValueError, TypeError) as e:
-                # Convert the exception to DeadlineOperationError to avoid showing a full stack trace.
-                raise DeadlineOperationError(str(e))
-            parameter["value"] = value
+                # As in 'deadline bundle submit', an empty value keeps the bundle's value.
+                if value != "":
+                    value = _absolute_path_value(value, allow_uri_path_values=allow_uri_path_values)
+                    parameter["value"] = _validated_cli_value(parameter, value)
+            elif parameter["type"] == "LIST[PATH]":
+                value = _path_list_with_absolute_items(
+                    parameter, value, allow_uri_path_values=allow_uri_path_values
+                )
+                parameter["value"] = _validated_cli_value(parameter, value)
+            else:
+                parameter["value"] = _validated_cli_value(parameter, value)
 
         # Populate the initial queue parameter values based on the job template parameter values
         if "default" in parameter or "value" in parameter:
@@ -408,23 +488,60 @@ def show_job_bundle_submitter(
         f=f,
         submitter_info=submitter_info,
         known_asset_paths=known_asset_paths,
+        # Always prefer the deadline-cloud-v2 Conda channel (prepend before deadline-cloud,
+        # keeping it as a fallback). Explicit CondaChannels values still take precedence.
+        use_deadline_cloud_v2_channel=True,
     )
 
+    # Store S3 repo for reuse by "Load Bundle" button (avoids re-creating from scratch)
+    submitter_dialog._s3_repo = _s3_repo_for_reuse
+
     if job_parameters:
-        # We want to validate the job parameters after the queue parameters are loaded.
-        # Connect a parameter validation function to the queue parameter loading completion
-        def validate_parameters_after_queue_load(refresh_id: int, queue_parameters: list):
+        # The controller is a global singleton that outlives this dialog, and its
+        # queue_parameters_updated signal also fires with [] to clear stale state
+        # (farm/queue switch, fetch error, nothing selected) — indistinguishable
+        # from a queue that genuinely has zero queue parameters. Connect to the
+        # success-only queue_parameters_load_succeeded signal instead, so we only
+        # validate against a real, successful load (which may legitimately be
+        # empty) and keep waiting through clears and transient fetch errors.
+        # Validate single-shot, then disconnect so the closure over
+        # submitter_dialog can't fire against a closed dialog later.
+        controller = submitter_dialog.shared_job_settings._controller
+        # Mutable cell so both closures below share the connection state. Guards
+        # the double-disconnect (validation ran, then the dialog is destroyed),
+        # which PySide6 reports with a RuntimeWarning rather than an exception.
+        connected = [False]
+
+        def disconnect_validation_callback():
+            if not connected[0]:
+                return
+            connected[0] = False
+            try:
+                controller.queue_parameters_load_succeeded.disconnect(
+                    validate_parameters_after_queue_load
+                )
+            except (TypeError, RuntimeError):
+                # Some bindings raise instead of warn when already disconnected.
+                pass
+
+        def validate_parameters_after_queue_load(queue_parameters: list):
             """Validate CLI parameters against loaded queue parameters and set parameter values"""
+            disconnect_validation_callback()
             if not _validate_and_warn_about_parameters(
                 job_parameters, initial_settings.parameters, queue_parameters, submitter_dialog
             ):
-                # User chose to cancel, close the dialog
+                # User cancelled at the validation warning.
                 submitter_dialog.close()
 
-        # Connect to the queue parameters update signal
-        submitter_dialog.shared_job_settings._queue_parameters_update.connect(
-            validate_parameters_after_queue_load
-        )
+        # Validate CLI params once the controller successfully loads queue params.
+        controller.queue_parameters_load_succeeded.connect(validate_parameters_after_queue_load)
+        connected[0] = True
+        # If the dialog goes away before any load succeeds, tear the connection down.
+        # The dialog does not set WA_DeleteOnClose, so an ordinary close never emits
+        # destroyed — hook finished (emitted on accept/reject/close of a visible
+        # dialog) for the close path, and destroyed for deletion without done().
+        submitter_dialog.finished.connect(lambda _result: disconnect_validation_callback())
+        submitter_dialog.destroyed.connect(disconnect_validation_callback)
 
     submitter_dialog.show()
     return submitter_dialog

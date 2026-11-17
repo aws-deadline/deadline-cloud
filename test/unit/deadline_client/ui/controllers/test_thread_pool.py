@@ -10,7 +10,7 @@ try:
     from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
     from qtpy.QtCore import QThreadPool  # type: ignore[attr-defined]
 except ImportError:
-    pytest.importorskip("deadline.client.ui.controllers._thread_pool")
+    pytest.importorskip("deadline.client.ui.controllers._thread_pool", exc_type=ImportError)
 
 
 class TestDeadlineThreadPool:

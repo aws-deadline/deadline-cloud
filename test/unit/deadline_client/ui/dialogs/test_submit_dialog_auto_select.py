@@ -27,7 +27,9 @@ try:
         _SETTING_QUEUE_ID as SETTING_QUEUE_ID,
     )
 except ImportError:
-    pytest.importorskip("deadline.client.ui.dialogs.submit_job_to_deadline_dialog")
+    pytest.importorskip(
+        "deadline.client.ui.dialogs.submit_job_to_deadline_dialog", exc_type=ImportError
+    )
 
 DIALOG_MODULE = "deadline.client.ui.dialogs.submit_job_to_deadline_dialog"
 

@@ -21,8 +21,8 @@ against a *realistic* ``https://s3.<region>.amazonaws.com`` endpoint:
          only via settings.ca_bundle) and forwards plaintext to a moto S3 server
       -> the object lands in moto; download reads it back
 
-Using ``--s3-root-uri`` + ``--profile`` keeps the command S3-only (no Deadline /
-STS calls), so the single S3 endpoint is the only thing on the wire and the proxy
+Using ``--s3-root-uri`` + ``--profile`` (plus a pinned ``AWS_ACCOUNT_ID``) keeps the
+command S3-only (no Deadline / STS calls), so the single S3 endpoint is the only thing on the wire and the proxy
 CONNECT log is unambiguous proof the job_attachments S3 client used the proxy. The
 TLS-intercept (rather than a blind tunnel) is the realistic corporate-proxy case
 that motivates ``ca_bundle`` -- moto speaks plain HTTP, and the proxy is what
@@ -40,6 +40,7 @@ from urllib.parse import urlparse
 
 import boto3
 import pytest
+from moto.core import DEFAULT_ACCOUNT_ID as MOTO_ACCOUNT_ID
 
 from _constants import ACCESS_KEY, BUCKET, REGION, ROOT_PREFIX, SECRET_KEY
 from _proxy_helpers import (
@@ -119,6 +120,10 @@ def s3_proxy_setup(tmp_path: Path, moto_server: str) -> Iterator[tuple]:
         "AWS_ENDPOINT_URL_S3": _S3_ENDPOINT,
         "AWS_ACCESS_KEY_ID": ACCESS_KEY,
         "AWS_SECRET_ACCESS_KEY": SECRET_KEY,
+        # job_attachments falls back to sts:GetCallerIdentity (for ExpectedBucketOwner)
+        # when the credentials carry no account; that call would go through the proxy
+        # to a host its cert doesn't cover. Pin it so S3 is the only traffic.
+        "AWS_ACCOUNT_ID": MOTO_ACCOUNT_ID,
         "AWS_DEFAULT_REGION": REGION,
         "DEADLINE_CONFIG_FILE_PATH": str(config_file),
         # No ambient proxy / CA so the configured settings are the only influence.
@@ -147,7 +152,7 @@ def _run(env: dict, *args: str, timeout: int = 90) -> subprocess.CompletedProces
 
 def _config_set(env: dict, key: str, value: str) -> None:
     r = _run(env, "config", "set", key, value)
-    assert r.returncode == 0, f"config set {key} failed: {r.stderr or r.stdout}"
+    assert r.returncode == 0, f"config set {key} failed:\n{r.stdout}\n{r.stderr}"
 
 
 @skip_on_windows
@@ -191,11 +196,11 @@ def test_attachment_upload_download_routes_s3_through_configured_proxy(s3_proxy_
         "--profile",
         "default",
     )
-    assert r.returncode == 0, f"upload failed: {r.stderr or r.stdout}"
+    assert r.returncode == 0, f"upload failed:\n{r.stdout}\n{r.stderr}"
 
     # The job_attachments S3 client genuinely traversed the proxy to the real host.
     assert proxy.connect_targets, "no CONNECT reached the proxy"
-    assert any(_S3_HOST in t for t in proxy.connect_targets), proxy.connect_targets
+    assert all(_S3_HOST in t for t in proxy.connect_targets), proxy.connect_targets
 
     # Objects actually landed in the (moto) backend via the proxied tunnel.
     listing = s3_client.list_objects_v2(Bucket=BUCKET, Prefix=f"{ROOT_PREFIX}/Data/")
@@ -217,7 +222,7 @@ def test_attachment_upload_download_routes_s3_through_configured_proxy(s3_proxy_
         "--profile",
         "default",
     )
-    assert r.returncode == 0, f"download failed: {r.stderr or r.stdout}"
+    assert r.returncode == 0, f"download failed:\n{r.stdout}\n{r.stderr}"
     assert (dest / "a.txt").read_text() == "alpha"
     assert (dest / "b.txt").read_text() == "bravo" * 100
 

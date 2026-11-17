@@ -185,5 +185,5 @@ class _HelpDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Copy Failed",
-                f"Failed to copy version information to clipboard: {str(e)}",
+                f"Failed to copy version information to clipboard: {e!s}",
             )

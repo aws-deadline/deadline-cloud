@@ -146,14 +146,19 @@ Reduced the original `common/path_utils.py` to a deprecation shim that re-export
 
 ```python
 from ..job_attachments._path_summarization import (
-    human_readable_file_size, summarize_paths_by_nested_directory,
-    summarize_paths_by_sequence, summarize_path_list, PathSummary,
+    human_readable_file_size,
+    summarize_paths_by_nested_directory,
+    summarize_paths_by_sequence,
+    summarize_path_list,
+    PathSummary,
 )
 
 import warnings
+
 warnings.warn(
     "The deadline.common module is deprecated. Please use deadline.job_attachments.api instead.",
-    DeprecationWarning, stacklevel=2,
+    DeprecationWarning,
+    stacklevel=2,
 )
 ```
 
@@ -420,8 +425,8 @@ uploader = S3AssetUploader(session=my_session)
 # After (caller must provide the values that deadline-cloud no longer reads from config)
 uploader = S3AssetUploader(
     session=my_session,
-    s3_max_pool_connections=50,           # or read from your own config
-    small_file_threshold_multiplier=20,   # or read from your own config
+    s3_max_pool_connections=50,  # or read from your own config
+    small_file_threshold_multiplier=20,  # or read from your own config
 )
 ```
 

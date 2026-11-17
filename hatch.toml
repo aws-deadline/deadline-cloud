@@ -28,7 +28,9 @@ pre-install-commands = [
 ]
 
 [envs.integ.scripts]
-test = "pytest --xfail-tb --no-cov -vvv --numprocesses=1 {args:test/integ}"
+# windows_smb is excluded: it needs a hosted SMB share, so it skips silently here and
+# reads as coverage this run does not have. windows_smb_test.yml owns it.
+test = "pytest --xfail-tb --no-cov -vvv --numprocesses=1 {args:test/integ --ignore=test/integ/windows_smb}"
 proxy-test = "sudo -E env PATH=$PATH bash scripts/run_proxy_integ_tests.sh {args:test/integ/cli/}"
 
 [envs.ui]

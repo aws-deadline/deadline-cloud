@@ -193,7 +193,7 @@ def extract_functional_signature(obj: Dict[str, Any]) -> Dict[str, Any]:
 
     elif kind == "class":
         # Track base classes
-        if "bases" in obj and obj["bases"]:
+        if obj.get("bases"):
             signature["bases"] = render_annotation(obj["bases"])
 
         # Track decorator names only

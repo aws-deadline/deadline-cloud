@@ -10,7 +10,9 @@ try:
         DeadlineFarmListComboBoxController,
     )
 except ImportError:
-    pytest.importorskip("deadline.client.ui.widgets._deadline_list_combo_boxes")
+    pytest.importorskip(
+        "deadline.client.ui.widgets._deadline_list_combo_boxes", exc_type=ImportError
+    )
 
 
 class TestDeadlineResourceListComboBoxController:

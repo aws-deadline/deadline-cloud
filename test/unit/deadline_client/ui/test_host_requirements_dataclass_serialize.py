@@ -43,7 +43,7 @@ def _compare_requirements(first, second):
                 assert ref_amount.get("max") == _max
                 break
         else:
-            raise ValueError("Could not find amount with name: {}".format(name))
+            raise ValueError(f"Could not find amount with name: {name}")
 
     for attribute in first.get("attributes"):
         name = attribute.get("name")
@@ -55,7 +55,7 @@ def _compare_requirements(first, second):
                 assert set(values) == set(ref_attribute.get(operation))
                 break
         else:
-            raise ValueError("Could not find attribute with name: {}".format(name))
+            raise ValueError(f"Could not find attribute with name: {name}")
 
 
 def test_host_requirements_as_objects_serialize():

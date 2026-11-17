@@ -105,6 +105,15 @@ def _validate_files(installation_path: Path) -> None:
     assert "PySide6" in cli_dir_contents
     assert "shiboken6" in cli_dir_contents
 
+    # awscrt's compiled half, which botocore's LoginProvider needs to refresh an AWS
+    # Console sign-in profile's token. PyInstaller reaches awscrt only by static
+    # analysis through botocore, and the allowlist permits files rather than
+    # requiring them, so nothing else fails if it silently stops being bundled.
+    # The pure-Python package is frozen into PYZ.pyz and so has no directory here.
+    assert any(name.startswith("_awscrt.") for name in cli_dir_contents), (
+        f"awscrt's native extension is missing from the bundle: {sorted(cli_dir_contents)}"
+    )
+
     # Check the deadline module is here and there's a version file
     client_dir = [f.name for f in (cli_dir.joinpath("deadline", "client")).iterdir()]
     assert "_version.py" in client_dir

@@ -7,7 +7,9 @@ Tests for the CLI job commands.
 from datetime import timezone
 import datetime
 import json
+import ntpath
 import os
+import posixpath
 from typing import Dict, List
 import pytest
 from pathlib import Path
@@ -363,7 +365,7 @@ def test_cli_job_download_output_stdout_with_only_required_input(
         result = runner.invoke(
             main,
             ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
-            input=f"1\n{str(tmp_path)}\ny\n",
+            input=f"1\n{tmp_path!s}\ny\n",
         )
 
         MockOutputDownloader.assert_called_once_with(
@@ -391,15 +393,15 @@ You are about to download files which may come from multiple root directories. H
 [0] {mock_root_path}
 [1] {mock_root_path}2
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, 1, y, n) [y]: 1
-> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}2]: {str(tmp_path)}
+> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}2]: {tmp_path!s}
 
 Summary of files to download:
     {mock_root_path}{path_separator}outputs (3 files)
-    {str(tmp_path)}{path_separator}outputs (3 files)
+    {tmp_path!s}{path_separator}outputs (3 files)
 
 You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {mock_root_path}
-[1] {str(tmp_path)}
+[1] {tmp_path!s}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, 1, y, n) [y]: y
 """
             in result.output
@@ -477,7 +479,7 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
         result = runner.invoke(
             main,
             ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
-            input=f"{str(tmp_path)}\ny\n",
+            input=f"{tmp_path!s}\ny\n",
         )
 
         MockOutputDownloader.assert_called_once_with(
@@ -498,13 +500,13 @@ def test_cli_job_download_output_stdout_with_mismatching_path_format(
             f"""Downloading output from Job 'Mock Job'
 This root path format does not match the operating system you're using. Where would you like to save the files?
 The location was {mock_root_path}, on {other_format[0].upper() + other_format[1:]}.
-> Please enter a new root path: {str(tmp_path)}
+> Please enter a new root path: {tmp_path!s}
 
 Summary of files to download:
-    {str(tmp_path)}{path_separator}outputs (3 files)
+    {tmp_path!s}{path_separator}outputs (3 files)
 
 You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
-[0] {str(tmp_path)}
+[0] {tmp_path!s}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
             in result.output
@@ -578,7 +580,7 @@ def test_cli_job_download_output_handles_unc_path_on_windows(fresh_deadline_conf
         result = runner.invoke(
             main,
             ["job", "download-output", "--job-id", MOCK_JOB_ID, "--output", "verbose"],
-            input=f"0\n{str(tmp_path)}\ny\n",
+            input=f"0\n{tmp_path!s}\ny\n",
         )
 
         MockOutputDownloader.assert_called_once_with(
@@ -604,13 +606,13 @@ Summary of files to download:
 You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
 [0] {mock_root_path}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: 0
-> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}]: {str(tmp_path)}
+> Please enter the new root directory path, or press Enter to keep it unchanged [{mock_root_path}]: {tmp_path!s}
 
 Summary of files to download:
-    {str(tmp_path)}{path_separator}outputs (3 files)
+    {tmp_path!s}{path_separator}outputs (3 files)
 
 You are about to download files which may come from multiple root directories. Here are a list of the current root directories:
-[0] {str(tmp_path)}
+[0] {tmp_path!s}
 > Please enter the index of root directory to edit, y to proceed without changes, or n to cancel the download (0, y, n) [y]: y
 """
             in result.output
@@ -911,6 +913,45 @@ def test_get_summary_of_files_to_download_message_windows(
         _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format)
         == expected_result
     )
+
+
+@pytest.mark.parametrize(
+    "output_paths_by_root, expected_result",
+    [
+        # A root under a UNC share summarizes to the shared subdirectory.
+        (
+            {r"\\host\share": ["renders/image1.png", "renders/image2.png"]},
+            "\nSummary of files to download:\n    \\\\host\\share\\renders (2 files)\n",
+        ),
+        # Files directly at a UNC share root summarize to the share itself. os.path.commonpath
+        # returns '\\\\host\\share\\' here, leaving a stray trailing separator in the message.
+        (
+            {r"\\host\share": ["image1.png", "image2.png"]},
+            "\nSummary of files to download:\n    \\\\host\\share (2 files)\n",
+        ),
+        (
+            {r"\\host\share": ["only.png"]},
+            "\nSummary of files to download:\n    \\\\host\\share\\only.png (1 file)\n",
+        ),
+        # Two shares of one host share only the host. This is the pair os.path.commonpath
+        # answers with ValueError("Paths don't have the same drive"), which nothing here
+        # caught -- so summarizing a download spanning two shares aborted the command.
+        (
+            {r"\\host": ["s1/a.png", "s2/b.png"]},
+            "\nSummary of files to download:\n    \\\\host (2 files)\n",
+        ),
+    ],
+)
+def test_get_summary_of_files_to_download_message_unc_paths(
+    output_paths_by_root: Dict[str, List[str]],
+    expected_result: str,
+):
+    """UNC path summaries, exercised via ntpath so the cases run on every platform."""
+    with patch.object(job_group.os, "path", ntpath):
+        assert (
+            _get_summary_of_files_to_download_message(output_paths_by_root, is_json_format=False)
+            == expected_result
+        )
 
 
 def test_cli_job_wait_succeeded(fresh_deadline_config):
@@ -1523,6 +1564,104 @@ You are about to download files which may come from multiple root directories. H
         mock_expanduser.assert_any_call("~")
 
 
+class TestAssertValidPath:
+    """The download-root validation applied to paths arriving over the JSON protocol.
+
+    Not Path.is_absolute: PureWindowsPath(r"\\host").is_absolute() is False before 3.13
+    and True from 3.13, so a host-level UNC download root was rejected on four of the six
+    supported versions. Injecting the path module pins the verdict on every platform.
+    """
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            r"\\host\share\out",
+            r"\\host\share",
+            # A host-level root: the spelling Path.is_absolute disagrees with itself on.
+            r"\\host",
+            r"C:\out",
+            "C:\\",
+        ],
+    )
+    def test_absolute_windows_path_is_accepted(self, path):
+        job_group._assert_valid_path(path, path_module=ntpath)
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            r"relative\out",
+            "out",
+            # Rooted but driveless, and drive-relative: both resolve against the cwd.
+            r"\out",
+            "C:out",
+            "",
+        ],
+    )
+    def test_non_absolute_windows_path_is_rejected(self, path):
+        with pytest.raises(ValueError, match="is not an absolute path"):
+            job_group._assert_valid_path(path, path_module=ntpath)
+
+    def test_posix_paths(self):
+        job_group._assert_valid_path("/mnt/share/out", path_module=posixpath)
+        with pytest.raises(ValueError, match="is not an absolute path"):
+            job_group._assert_valid_path("relative/out", path_module=posixpath)
+
+
+class TestPromptForOsMismatchRoots:
+    """The JSON-protocol branch of the OS-mismatch remap.
+
+    This is where a root arrives from a machine rather than a person -- the GUI and any
+    automation driving the CLI -- so it is the branch that most needs the download root it
+    is handed to be validated. Only the interactive branch's sibling was covered.
+    """
+
+    # The root is validated against the host's own path module, so it has to be spelled for
+    # the platform the test runs on: '/mnt/share/renders' is rooted but driveless on
+    # Windows, which resolves against the current drive and so is not absolute there.
+    # TestAssertValidPath covers both spellings on every platform by injecting the module.
+    HOST_ABSOLUTE_ROOT = r"C:\mnt\share\renders" if os.name == "nt" else "/mnt/share/renders"
+
+    @staticmethod
+    def _remap(new_root, host_format="posix", root_format="windows"):
+        downloader = MagicMock()
+        downloader.get_paths_by_root.return_value = {new_root: ["a.png"]}
+        root = "/renders" if host_format == "posix" else r"C:\renders"
+        json_line = json.dumps({"messageType": "pathconfirm", "value": [new_root]})
+        with (
+            patch.object(
+                job_group.PathFormat, "get_host_path_format_string", return_value=host_format
+            ),
+            patch.object(job_group.click, "prompt", return_value=json_line),
+            patch.object(job_group.click, "echo"),
+        ):
+            result = job_group._prompt_for_os_mismatch_roots(
+                downloader,
+                {root: ["a.png"]},
+                {root: root_format},
+                is_json_format=True,
+            )
+        return downloader, result
+
+    def test_absolute_root_is_accepted_and_set(self):
+        downloader, result = self._remap(self.HOST_ABSOLUTE_ROOT)
+        downloader.set_root_path.assert_called_once_with("/renders", self.HOST_ABSOLUTE_ROOT)
+        assert result == {self.HOST_ABSOLUTE_ROOT: ["a.png"]}
+
+    @pytest.mark.parametrize("new_root", ["relative/renders", "renders"])
+    def test_relative_root_is_rejected(self, new_root):
+        """A relative root would resolve against the CLI's working directory, which the
+        caller on the other end of the protocol does not control."""
+        with pytest.raises(ValueError, match="is not an absolute path"):
+            self._remap(new_root)
+
+    def test_a_root_with_no_format_is_an_error(self):
+        downloader = MagicMock()
+        with pytest.raises(DeadlineOperationError, match="No root path format found"):
+            job_group._prompt_for_os_mismatch_roots(
+                downloader, {"/renders": ["a.png"]}, {}, is_json_format=True
+            )
+
+
 class TestJsonLineHelpers:
     """Tests for JSON line helper functions."""
 
@@ -2121,7 +2260,7 @@ class TestJobDownloadInput:
             result = runner.invoke(
                 main,
                 ["job", "download-input", "--job-id", MOCK_JOB_ID],
-                input=f"{str(tmp_path)}\ny\n",
+                input=f"{tmp_path!s}\ny\n",
             )
 
             assert result.exit_code == 0
@@ -2204,7 +2343,7 @@ class TestJobDownloadInput:
             result = runner.invoke(
                 main,
                 ["job", "download-input", "--job-id", MOCK_JOB_ID],
-                input=f"0\n{str(tmp_path)}\ny\n",
+                input=f"0\n{tmp_path!s}\ny\n",
             )
 
             assert result.exit_code == 0

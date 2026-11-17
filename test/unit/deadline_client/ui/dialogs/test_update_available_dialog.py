@@ -9,7 +9,7 @@ import pytest
 try:
     from deadline.client.ui.dialogs.update_available_dialog import UpdateAvailableDialog
 except ImportError:
-    pytest.importorskip("deadline.client.ui.dialogs.update_available_dialog")
+    pytest.importorskip("deadline.client.ui.dialogs.update_available_dialog", exc_type=ImportError)
 
 
 class TestUpdateAvailableDialogConstruction:

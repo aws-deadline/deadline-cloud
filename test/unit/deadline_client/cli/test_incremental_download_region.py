@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from deadline.client.api._session import _ADAPTIVE_RETRIES_CLIENT_CONFIG
 from deadline.client.cli import _incremental_download
 from ..shared_constants import MOCK_FARM_ID, MOCK_QUEUE_ID
 
@@ -74,4 +75,9 @@ def test_get_job_sessions_scopes_deadline_client_to_region(region):
             region=region,
         )
 
-    mock_get_session_client.assert_called_once_with(boto3_session, "deadline", region=region)
+    mock_get_session_client.assert_called_once_with(
+        boto3_session,
+        "deadline",
+        region=region,
+        client_config=_ADAPTIVE_RETRIES_CLIENT_CONFIG,
+    )

@@ -303,12 +303,11 @@ class TLSInterceptConnectProxy:
             # fixed plaintext backend, ignoring the host the client asked for.
             tls_client = self._ssl_context.wrap_socket(client, server_side=True)
             remote = socket.create_connection(self._target, timeout=10)
-            # Bound every blocking ``recv`` in the pump threads. Without this a
-            # half-open peer (common when the CLI subprocess leaves a pooled
-            # connection open at teardown) leaves a pump blocked on ``recv``
-            # forever; the pump never observes ``_stop`` and the connection's
-            # sockets stay open, leaking threads/fds across the run. A read
-            # timeout lets each pump wake, re-check ``_stop``, and exit.
+            # Bound every blocking ``recv`` in the relay. Without this a half-open
+            # peer (common when the CLI subprocess leaves a pooled connection open
+            # at teardown) leaves the relay blocked on ``recv`` forever; it never
+            # observes ``_stop`` and the connection's sockets stay open, leaking
+            # threads/fds across the run.
             tls_client.settimeout(5)
             remote.settimeout(5)
             self._relay(tls_client, remote, lambda: self._stop)
@@ -327,34 +326,29 @@ class TLSInterceptConnectProxy:
 
     @staticmethod
     def _relay(tls_sock: ssl.SSLSocket, plain_sock: socket.socket, stopped) -> None:
-        # SSLSocket buffers records internally, which doesn't compose with select(), so
-        # use two simple blocking pump threads (one per direction) instead. When either
-        # side closes, shut both down so the other pump unblocks and exits. Both sockets
-        # carry a read timeout, so a pump that would otherwise block forever on a
-        # half-open peer instead wakes periodically to re-check ``stopped()`` and the
-        # peer's liveness, guaranteeing it terminates at teardown.
-        def pump(src, dst):
-            try:
-                while not stopped():
+        # One thread drives both directions: OpenSSL does not support a concurrent read
+        # and write on the same SSL connection, and doing so intermittently fails the
+        # read with EAGAIN mid-request, dropping the tunnel before the response is sent.
+        # ``pending()`` covers decrypted bytes SSLSocket has buffered that select() can't
+        # see. The sockets' read timeout bounds a recv on a non-application TLS record,
+        # so the loop always re-checks ``stopped()`` and terminates at teardown.
+        import select
+
+        try:
+            while not stopped():
+                readable: List[socket.socket]
+                if tls_sock.pending():
+                    readable = [tls_sock]
+                else:
+                    readable, _, _ = select.select([tls_sock, plain_sock], [], [], 0.5)
+                for src in readable:
                     try:
                         data = src.recv(65536)
                     except socket.timeout:
                         continue
                     if not data:
-                        break
+                        return
+                    dst = plain_sock if src is tls_sock else tls_sock
                     dst.sendall(data)
-            except (OSError, ConnectionError, ssl.SSLError):
-                pass
-            finally:
-                for s in (src, dst):
-                    try:
-                        s.shutdown(socket.SHUT_RDWR)
-                    except OSError:
-                        pass
-
-        t1 = threading.Thread(target=pump, args=(tls_sock, plain_sock), daemon=True)
-        t2 = threading.Thread(target=pump, args=(plain_sock, tls_sock), daemon=True)
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
+        except (OSError, ConnectionError, ssl.SSLError):
+            pass

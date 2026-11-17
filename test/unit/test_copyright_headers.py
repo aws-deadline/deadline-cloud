@@ -30,13 +30,12 @@ def _check_file(filename: Path) -> None:
                     " Please add one.",
                     Path(filename),
                 )
-        else:
-            # __init__.py files are usually empty, this is to catch that.
-            raise FileMissingCopyRight(
-                f"Could not find a valid Amazon.com copyright header in the top of {filename}."
-                " Please add one.",
-                Path(filename),
-            )
+        # __init__.py files are usually empty, this is to catch that.
+        raise FileMissingCopyRight(
+            f"Could not find a valid Amazon.com copyright header in the top of {filename}."
+            " Please add one.",
+            Path(filename),
+        )
 
 
 def _is_version_file(filename: Path) -> bool:

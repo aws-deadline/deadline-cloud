@@ -14,7 +14,7 @@ try:
         WorkerSignals,
     )
 except ImportError:
-    pytest.importorskip("deadline.client.ui.controllers._async_task")
+    pytest.importorskip("deadline.client.ui.controllers._async_task", exc_type=ImportError)
 
 
 class TestWorkerSignals:
@@ -214,6 +214,104 @@ class TestAsyncTask:
 
         assert task.autoDelete() is True
 
+    def test_run_swallows_deleted_signal_source_on_result(self, qtbot):
+        """
+        If the signals object is deleted while the task is running, emitting the
+        result must not raise - it should be swallowed (no listeners remain).
+
+        This reproduces the "RuntimeError: Signal source has been deleted"
+        cascade that occurs when the owning runner/widget is torn down before a
+        slow task returns.
+        """
+        fn = Mock(return_value="result")
+        task = AsyncTask(fn)
+
+        # Simulate the WorkerSignals C++ object having been deleted: any access to
+        # a signal raises RuntimeError, mirroring PySide behavior.
+        deleted_signals = Mock()
+        deleted_signals.result.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.error.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.finished.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = deleted_signals
+
+        # Must not raise despite every emit failing.
+        task.run()
+
+        deleted_signals.result.emit.assert_called_once_with("result")
+        # finished is always attempted in the finally block.
+        deleted_signals.finished.emit.assert_called_once_with()
+
+    def test_run_swallows_deleted_signal_source_on_error(self, qtbot):
+        """A deleted signal source during error emission must not raise."""
+        fn = Mock(side_effect=ValueError("boom"))
+        task = AsyncTask(fn)
+
+        deleted_signals = Mock()
+        deleted_signals.error.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.finished.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = deleted_signals
+
+        # Must not raise despite the emits failing.
+        task.run()
+
+        deleted_signals.error.emit.assert_called_once()
+        deleted_signals.finished.emit.assert_called_once_with()
+
+    def test_safe_emit_does_nothing_when_canceled(self):
+        """_safe_emit is a no-op for canceled tasks and never touches the signal."""
+        task = AsyncTask(Mock())
+        signals = Mock()
+        task.signals = signals
+
+        task.cancel()
+        task._safe_emit("result", "value")
+
+        signals.result.emit.assert_not_called()
+
+    def test_safe_emit_swallows_deleted_source(self):
+        """A deleted signal source is swallowed (nothing is listening)."""
+        task = AsyncTask(Mock())
+        signals = Mock()
+        signals.result.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = signals
+
+        task._safe_emit("result", "value")  # must not raise
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            pytest.param("Signal source has been deleted", id="PySide6"),
+            pytest.param("wrapped C/C++ object of type WorkerSignals has been deleted", id="PyQt5"),
+            pytest.param("Internal C++ object (WorkerSignals) already deleted.", id="PySide2"),
+        ],
+    )
+    def test_run_swallows_deleted_source_for_each_binding(self, message):
+        """Each supported Qt binding's deleted-source message is swallowed through the
+        whole result -> error -> finished cascade, so nothing escapes run()."""
+        task = AsyncTask(Mock(return_value="result"))
+        signals = Mock()
+        signals.result.emit.side_effect = RuntimeError(message)
+        signals.error.emit.side_effect = RuntimeError(message)
+        signals.finished.emit.side_effect = RuntimeError(message)
+        task.signals = signals
+
+        task.run()  # must not raise
+
+        signals.result.emit.assert_called_once_with("result")
+        signals.error.emit.assert_not_called()
+        signals.finished.emit.assert_called_once_with()
+
+    def test_safe_emit_reraises_real_slot_error(self):
+        """A RuntimeError from a slot body (DirectConnection runs slots inside
+        emit()) must surface rather than be downgraded to a debug log."""
+        task = AsyncTask(Mock())
+        signals = Mock()
+        signals.result.emit.side_effect = RuntimeError("boom in slot")
+        task.signals = signals
+
+        with pytest.raises(RuntimeError, match="boom in slot"):
+            task._safe_emit("result", "value")
+
 
 class TestStreamingAsyncTask:
     """Tests for StreamingAsyncTask, the progressive-result variant of AsyncTask."""
@@ -321,3 +419,123 @@ class TestStreamingAsyncTask:
 
         assert progress == ["a"]
         assert errors == [test_error]
+
+    def test_run_swallows_deleted_signal_source(self, qtbot):
+        """
+        If the signals object is deleted while the streaming task is running,
+        emitting progress/result/finished must not raise.
+        """
+        task = StreamingAsyncTask(lambda: iter(["a", "b"]))
+
+        deleted_signals = Mock()
+        deleted_signals.progress.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.result.emit.side_effect = RuntimeError("Signal source has been deleted")
+        deleted_signals.finished.emit.side_effect = RuntimeError("Signal source has been deleted")
+        task.signals = deleted_signals
+
+        # Must not raise despite every emit failing.
+        task.run()
+
+        assert deleted_signals.progress.emit.call_count == 2
+        deleted_signals.result.emit.assert_called_once_with(None)
+        deleted_signals.finished.emit.assert_called_once_with()
+
+
+class TestWorkerSignalsLifetime:
+    """A task's WorkerSignals is a QObject created on the main thread, so Qt requires
+    that it is also destroyed there, never on the pool thread that ran the task."""
+
+    @staticmethod
+    def _run_in_pool_and_record_destroying_thread(qtbot, task_type, fn):
+        import threading
+
+        from qtpy.QtCore import Qt
+
+        from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
+
+        destroyed_on = []
+        task = task_type(fn)
+        task.signals.destroyed.connect(
+            lambda *_: destroyed_on.append(threading.get_ident()),
+            Qt.ConnectionType.DirectConnection,
+        )
+        pool = DeadlineThreadPool.instance()
+        pool.start(task)
+        # Only the pool now holds the task, as when the runner drops it on finished.
+        del task
+        assert pool.waitForDone(10000)
+        qtbot.waitUntil(lambda: bool(destroyed_on), timeout=5000)
+        return destroyed_on
+
+    @pytest.mark.parametrize(
+        ("task_type", "fn"),
+        [
+            pytest.param("AsyncTask", lambda: "result", id="result"),
+            pytest.param("AsyncTask", Mock(side_effect=ValueError("boom")), id="error"),
+            pytest.param("StreamingAsyncTask", lambda: iter([1, 2]), id="streaming"),
+        ],
+    )
+    def test_signals_are_destroyed_on_the_main_thread(self, qtbot, task_type, fn):
+        import threading
+
+        task_class = {"AsyncTask": AsyncTask, "StreamingAsyncTask": StreamingAsyncTask}
+        destroyed_on = self._run_in_pool_and_record_destroying_thread(
+            qtbot, task_class[task_type], fn
+        )
+        assert destroyed_on == [threading.main_thread().ident]
+
+    def test_signals_of_a_canceled_task_are_destroyed_on_the_main_thread(self, qtbot):
+        import threading
+
+        from qtpy.QtCore import Qt
+
+        from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
+
+        destroyed_on = []
+        task = AsyncTask(Mock(return_value="result"))
+        task.signals.destroyed.connect(
+            lambda *_: destroyed_on.append(threading.get_ident()),
+            Qt.ConnectionType.DirectConnection,
+        )
+        task.cancel()
+        pool = DeadlineThreadPool.instance()
+        pool.start(task)
+        del task
+        assert pool.waitForDone(10000)
+        qtbot.waitUntil(lambda: bool(destroyed_on), timeout=5000)
+        assert destroyed_on == [threading.main_thread().ident]
+
+    def test_queued_results_are_delivered_before_the_signals_are_destroyed(self, qtbot):
+        from qtpy.QtCore import Qt
+
+        from deadline.client.ui.controllers._thread_pool import DeadlineThreadPool
+
+        events: list[tuple] = []
+        task = AsyncTask(Mock(return_value="value"))
+        task.signals.result.connect(
+            lambda r: events.append(("result", r)), Qt.ConnectionType.QueuedConnection
+        )
+        task.signals.finished.connect(
+            lambda: events.append(("finished",)), Qt.ConnectionType.QueuedConnection
+        )
+        task.signals.destroyed.connect(lambda *_: events.append(("destroyed",)))
+        DeadlineThreadPool.instance().start(task)
+        del task
+        qtbot.waitUntil(lambda: ("destroyed",) in events, timeout=5000)
+        assert events == [("result", "value"), ("finished",), ("destroyed",)]
+
+    def test_dropping_the_python_reference_does_not_destroy_the_signals(self, qtbot):
+        """Qt owns the signals, so a garbage collection on any thread that frees the
+        Python wrapper leaves the Qt object to be deleted by the task."""
+        import gc
+
+        from qtpy.QtWidgets import QApplication
+
+        destroyed = []
+        task = AsyncTask(Mock())
+        assert task.signals.parent() is QApplication.instance()
+        task.signals.destroyed.connect(lambda *_: destroyed.append(True))
+        del task
+        gc.collect()
+        QApplication.processEvents()
+        assert destroyed == []

@@ -180,7 +180,7 @@ For details and a fix using the registry, see: https://learn.microsoft.com/en-us
             logger.json(
                 dict(
                     dataclasses.asdict(manifest_out),
-                    **{"warning": long_manifest_path_warning},
+                    warning=long_manifest_path_warning,
                 )
             )
         else:

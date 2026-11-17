@@ -7,9 +7,25 @@ This module provides a clean pattern for running background operations
 with proper Qt signal integration and automatic cancellation handling.
 """
 
+from logging import getLogger
 from typing import Any, Callable, Iterator, Optional
 
-from qtpy.QtCore import QObject, QRunnable, Signal
+from qtpy.QtCore import QCoreApplication, QObject, QRunnable, QThread, Signal
+
+
+logger = getLogger(__name__)
+
+# Substrings of the RuntimeError each Qt binding raises when emitting from a deleted
+# signal source:
+#   PySide6: "Signal source has been deleted"
+#   PyQt5:   "wrapped C/C++ object of type WorkerSignals has been deleted"
+#   PySide2: "Internal C++ object (WorkerSignals) already deleted." (from shiboken2)
+_DELETED_SOURCE_MESSAGES = ("has been deleted", "already deleted")
+
+
+def _is_deleted_source_error(exc: RuntimeError) -> bool:
+    message = str(exc)
+    return any(marker in message for marker in _DELETED_SOURCE_MESSAGES)
 
 
 class WorkerSignals(QObject):
@@ -36,6 +52,27 @@ class WorkerSignals(QObject):
     progress = Signal(object)
 
 
+def _create_worker_signals() -> WorkerSignals:
+    """Creates a task's WorkerSignals, owned by Qt rather than by Python.
+
+    A Python-owned QObject is destroyed wherever its last Python reference is dropped.
+    For a task's signals that is often the pool thread, which releases the task after
+    run() returns, or a garbage collection that happens to run on that thread. Qt
+    objects must be destroyed on the thread they belong to, so the signals are parented
+    to the application object instead, and the task deletes them with deleteLater once
+    it is done. The parent must live on the current thread, so this applies only when
+    the task is created on the application's thread, as it is from the GUI.
+
+    The deletion is delivered by the application's event loop. Until then, and for a
+    task that is never run, for example one removed by QThreadPool.clear(), the small
+    signals object stays attached to the application.
+    """
+    app = QCoreApplication.instance()
+    if app is not None and QThread.currentThread() is app.thread():
+        return WorkerSignals(app)
+    return WorkerSignals()
+
+
 class AsyncTask(QRunnable):
     """
     A QRunnable that executes a callable and emits signals on completion.
@@ -48,6 +85,9 @@ class AsyncTask(QRunnable):
 
     Signals are emitted from the background thread, so connections should
     use Qt.QueuedConnection for thread-safe delivery to the main thread.
+
+    Subclasses override ``_execute``, not ``run``: ``run`` also deletes the
+    signals object on the main thread once the work is done.
 
     Example::
 
@@ -81,7 +121,7 @@ class AsyncTask(QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.operation_id = operation_id
-        self.signals = WorkerSignals()
+        self.signals = _create_worker_signals()
         self._is_canceled = False
 
         # Allow thread pool to clean up automatically
@@ -104,6 +144,33 @@ class AsyncTask(QRunnable):
         """Check if this task has been canceled."""
         return self._is_canceled
 
+    def _safe_emit(self, signal_name: str, *args: Any) -> None:
+        """
+        Emit ``self.signals.<signal_name>`` unless the task was canceled or the
+        signal source has already been deleted.
+
+        ``run()`` executes in a background thread and may still be in-flight when
+        the owning runner (or the widget it is parented to) is destroyed. When that
+        happens the underlying ``WorkerSignals`` C++ object is deleted out from under
+        us, and touching/emitting it raises a ``RuntimeError`` whose message depends
+        on the Qt binding (see ``_DELETED_SOURCE_MESSAGES``). A deleted source has no live listeners, so there is nothing to
+        deliver - we log at debug level and move on instead of letting the exception
+        cascade through the result/error/finished emissions.
+        """
+        if self._is_canceled:
+            return
+        try:
+            getattr(self.signals, signal_name).emit(*args)
+        except RuntimeError as exc:
+            # For a DirectConnection, emit() invokes slots synchronously, so a
+            # RuntimeError may originate in a slot body rather than from a deleted
+            # signal source. Only swallow the "source deleted" case (nothing is
+            # listening anymore); re-raise anything else so genuine slot bugs and
+            # failed error/finished deliveries aren't silently lost.
+            if not _is_deleted_source_error(exc):
+                raise
+            logger.debug("Skipping '%s' emit; signal source has been deleted", signal_name)
+
     def run(self) -> None:
         """
         Execute the task in the thread pool.
@@ -116,20 +183,39 @@ class AsyncTask(QRunnable):
         2. Execute the function
         3. Check if canceled before emitting result/error
         4. Emit finished signal (if not canceled)
+
+        Emissions are routed through :meth:`_safe_emit`, which additionally
+        tolerates the signal source being deleted mid-flight (e.g. when the
+        owning runner/widget is torn down before a slow task returns).
+
+        Whether or not the task ran, its signals are then scheduled for deletion
+        on their own thread, after the signals already emitted are delivered.
         """
+        try:
+            self._execute()
+        finally:
+            self._release_signals()
+
+    def _release_signals(self) -> None:
+        # deleteLater is thread-safe: it posts the deletion to the thread the signals
+        # belong to, behind the queued emissions this task already made.
+        try:
+            self.signals.deleteLater()
+        except RuntimeError:
+            # Already deleted, e.g. with the application object.
+            pass
+
+    def _execute(self) -> None:
         if self._is_canceled:
             return
 
         try:
             result = self.fn(*self.args, **self.kwargs)
-            if not self._is_canceled:
-                self.signals.result.emit(result)
+            self._safe_emit("result", result)
         except Exception as e:
-            if not self._is_canceled:
-                self.signals.error.emit(e)
+            self._safe_emit("error", e)
         finally:
-            if not self._is_canceled:
-                self.signals.finished.emit()
+            self._safe_emit("finished")
 
 
 class StreamingAsyncTask(AsyncTask):
@@ -153,13 +239,16 @@ class StreamingAsyncTask(AsyncTask):
         **kwargs: Keyword arguments for fn
     """
 
-    def run(self) -> None:
+    def _execute(self) -> None:
         """
         Execute the streaming task in the thread pool.
 
         Runs in a background thread. Emits ``progress`` per yielded item, a single
         terminal ``result`` once exhausted, ``error`` if the generator raises, and
-        ``finished`` at the end. All emissions are guarded by cancellation checks.
+        ``finished`` at the end. All emissions are guarded by cancellation checks
+        and tolerate the signal source being deleted mid-flight (see
+        :meth:`AsyncTask._safe_emit`). :meth:`AsyncTask.run` releases the signals
+        afterwards.
         """
         if self._is_canceled:
             return
@@ -169,13 +258,10 @@ class StreamingAsyncTask(AsyncTask):
             for item in iterator:
                 if self._is_canceled:
                     return
-                self.signals.progress.emit(item)
-            if not self._is_canceled:
-                # Terminal result (no aggregate payload; progress already delivered each item).
-                self.signals.result.emit(None)
+                self._safe_emit("progress", item)
+            # Terminal result (no aggregate payload; progress already delivered each item).
+            self._safe_emit("result", None)
         except Exception as e:
-            if not self._is_canceled:
-                self.signals.error.emit(e)
+            self._safe_emit("error", e)
         finally:
-            if not self._is_canceled:
-                self.signals.finished.emit()
+            self._safe_emit("finished")

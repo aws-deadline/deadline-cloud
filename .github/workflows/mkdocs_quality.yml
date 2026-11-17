@@ -2,6 +2,7 @@ name: MkDocs Quality Check
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ mainline, release, feature_assets_cli, 'patch_*' ]
   workflow_call:
     inputs:
@@ -14,15 +15,27 @@ on:
 permissions:
   contents: write
 
+# Cancel superseded in-progress docs builds for the same PR branch. The group
+# key is conditional: pull_request events share a per-ref group, while
+# workflow_call invocations get a unique run_id group so they are never
+# canceled by a sibling (GitHub cancels PENDING runs in a shared group
+# regardless of cancel-in-progress).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-docs:
+    # Skip the docs build on draft PRs. workflow_call has no pull_request
+    # context, so draft is null there and the build still runs.
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
 

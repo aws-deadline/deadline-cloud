@@ -34,8 +34,8 @@ class TestManifestDownload:
             yield tmpdir_path
 
     def _assert_input_mainfests_exist(self, files):
-        assert "inputs/textures", "brick.png" in files
-        assert "inputs/textures", "cloth.png" in files
+        assert "inputs/textures/brick.png" in files
+        assert "inputs/textures/cloth.png" in files
         assert "inputs/scene.ma" in files
 
     def _assert_output_manifests_exist(self, files):
@@ -266,7 +266,7 @@ class TestManifestDownload:
                     self._assert_input_mainfests_exist(files)
 
                 if asset_type == AssetType.OUTPUT:
-                    assert "inputs/textures", "brick.png" not in files
+                    assert "inputs/textures/brick.png" not in files
                     self._assert_output_manifests_exist(files)
 
                 if asset_type == AssetType.ALL:
@@ -347,7 +347,7 @@ class TestManifestDownload:
                     assert "dependent_step_output_file" not in files
 
                 if asset_type == AssetType.OUTPUT:
-                    assert "inputs/textures", "brick.png" not in files
+                    assert "inputs/textures/brick.png" not in files
                     self._assert_output_manifests_exist(files)
                     self._assert_dependent_step_output_exist(files)
 
@@ -421,7 +421,7 @@ class TestManifestDownload:
 
                 # Create a list of files we know should be in the input paths.
                 files: List[str] = [path.path for path in manifest.paths]
-                assert "inputs/textures", "brick.png" not in files
+                assert "inputs/textures/brick.png" not in files
                 assert "dependent_step_output_file" not in files
                 self._assert_output_manifests_exist(files)
 

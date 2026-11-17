@@ -22,12 +22,14 @@ from botocore.client import BaseClient  # type: ignore[import]
 from botocore.credentials import CredentialProvider, RefreshableCredentials
 from botocore.exceptions import (  # type: ignore[import]
     ClientError,
+    MissingDependencyException,
     ProfileNotFound,
 )
 from botocore.session import get_session as get_botocore_session
 
 from .. import version
 from ._agent_detection import detect_invoking_agent
+from ._bundled_service_models import _use_bundled_service_models
 from ..config import get_setting, set_setting, config_file
 from ..exceptions import DeadlineOperationError
 from ...job_attachments._aws.aws_clients import get_s3_client
@@ -49,6 +51,28 @@ class AwsAuthenticationStatus(Enum):
     CONFIGURATION_ERROR = 1
     AUTHENTICATED = 2
     NEEDS_LOGIN = 3
+    # Distinct from CONFIGURATION_ERROR: this is the one cause a login can never fix
+    # (see check_authentication_status), so callers that poll for login completion
+    # can safely stop on this value without also stopping on an ordinary,
+    # possibly-transient CONFIGURATION_ERROR.
+    MISSING_DEPENDENCY = 4
+
+
+# Shared by every surface that reports MISSING_DEPENDENCY -- the pre-flight check
+# (_check_console_login_dependency) and the login poll loop (both in _loginout.py),
+# `deadline auth status` (auth_group.py), and the GUI status widget's more-info dialog
+# (deadline_authentication_status_widget.py) -- so they don't drift out of sync or
+# recommend different fixes for the same fault. Not profile-type-specific: every
+# MissingDependencyException botocore raises (DPoP signing, SigV4A endpoint resolution,
+# CRT-only checksums, MRAP) is gated on the same optional 'awscrt' dependency, regardless
+# of which credentials source triggered the probe. Recommends the `deadline[console]`
+# extra rather than the underlying `botocore[crt]` directly, so a reinstall of this
+# package keeps requesting the same dependency instead of silently dropping it.
+MISSING_DEPENDENCY_REMEDIATION = (
+    "The AWS SDK's optional 'awscrt' package is missing or broken in this Python "
+    "environment. Logging in will not fix this, so install it, for example with "
+    'pip install "deadline[console]", and try again.'
+)
 
 
 # Place for stashing context to be attached to boto clients.
@@ -99,7 +123,9 @@ def get_boto3_session(
 
 @lru_cache
 def _get_boto3_session_for_profile(profile_name: str, region: Optional[str] = None):
-    session = boto3.Session(profile_name=profile_name, region_name=region)
+    session = _use_bundled_service_models(
+        boto3.Session(profile_name=profile_name, region_name=region)
+    )
 
     # By default, DCM returns creds that expire after 15 minutes, and boto3's RefreshableCredentials
     # class refreshes creds that are within 15 minutes of expiring, so credentials would never be reused.
@@ -264,8 +290,26 @@ def apply_proxy_settings(
     return session
 
 
+# Shared botocore Config for code paths that make many API calls in a burst (e.g. one
+# call per job across a large queue). The "adaptive" strategy suits long bursts of
+# repeated calls: it rate-limits client-side and retains backoff state across calls
+# instead of starting fresh each time. The larger attempt budget rides out sustained
+# throttling instead of surfacing a ThrottlingException mid-operation.
+#
+# Defined once at module level because get_session_client caches by the Config
+# instance's identity — reusing this instance is what makes the client cacheable.
+_ADAPTIVE_RETRIES_CLIENT_CONFIG = botocore.config.Config(
+    retries=dict(mode="adaptive", total_max_attempts=10)
+)
+
+
 @lru_cache
-def get_session_client(session: boto3.Session, service_name: str, region: Optional[str] = None):
+def get_session_client(
+    session: boto3.Session,
+    service_name: str,
+    region: Optional[str] = None,
+    client_config: Optional[botocore.config.Config] = None,
+):
     """
     Create and cache a boto3 client for the given session, service name, and region.
 
@@ -289,21 +333,34 @@ def get_session_client(session: boto3.Session, service_name: str, region: Option
         service_name: The name of the AWS service (e.g., 'deadline', 's3')
         region: The AWS region to create the client for. If None, the session's
             default region is used.
+        client_config: Optional botocore Config merged over the default client
+            config (``get_default_client_config``), taking precedence where both
+            set an option. The default config's user-agent tagging is preserved.
+            CAUTION: ``botocore.config.Config`` hashes by object identity, and this
+            argument is part of the lru_cache key — pass a shared (e.g. module-level)
+            instance rather than constructing a new one per call, or every call
+            builds a new client. Pass ``_ADAPTIVE_RETRIES_CLIENT_CONFIG`` for code
+            paths that make many API calls in a burst.
 
     Returns:
         A boto3 client for the specified service
     """
-    if region is None:
-        return session.client(service_name, config=get_default_client_config())
+    _use_bundled_service_models(session)
+    resolved_config = get_default_client_config()
+    if client_config is not None:
+        resolved_config = resolved_config.merge(client_config)
 
-    client = session.client(service_name, config=get_default_client_config(), region_name=region)
+    if region is None:
+        return session.client(service_name, config=resolved_config)
+
+    client = session.client(service_name, config=resolved_config, region_name=region)
     resolved = client.meta.endpoint_url
     session_region = session.region_name
     # An override leaked the session's region into a cross-region endpoint.
     if region not in resolved and session_region and session_region in resolved:
         return session.client(
             service_name,
-            config=get_default_client_config(),
+            config=resolved_config,
             region_name=region,
             endpoint_url=resolved.replace(session_region, region, 1),
         )
@@ -516,10 +573,12 @@ def _get_queue_user_boto3_session(
     if base_session.profile_name != "default":
         aws_profile_name = base_session.profile_name
 
-    return boto3.Session(
-        botocore_session=botocore_session,
-        profile_name=aws_profile_name,
-        region_name=region if region is not None else base_session.region_name,
+    return _use_bundled_service_models(
+        boto3.Session(
+            botocore_session=botocore_session,
+            profile_name=aws_profile_name,
+            region_name=region if region is not None else base_session.region_name,
+        )
     )
 
 
@@ -567,6 +626,8 @@ def check_authentication_status(
                 object to use instead of the config file.
 
     Returns AwsAuthenticationStatus enum value:
+      - MISSING_DEPENDENCY if the environment is missing a dependency that logging in
+        cannot supply
       - CONFIGURATION_ERROR if there is an unexpected error accessing credentials
       - AUTHENTICATED if they are fine
       - NEEDS_LOGIN if a login is required, for the profile types that support it.
@@ -576,6 +637,22 @@ def check_authentication_status(
         try:
             _list_farms_for_auth_probe(config=config)
             return AwsAuthenticationStatus.AUTHENTICATED
+        except MissingDependencyException as e:
+            # botocore raises this when a feature needs awscrt and it's absent or broken
+            # (botocore.compat swallows the ImportError, so "broken" and "absent" look
+            # identical). This isn't only the AWS Console sign-in LoginProvider path: it
+            # also gates SigV4A endpoint resolution, CRT-only checksums, and S3 MRAP, none
+            # of which are console-profile-specific. Logging in again cannot fix any of
+            # them, so reporting NEEDS_LOGIN here would turn a packaging fault into a
+            # permanent "sign-in needed" loop. Kept distinct from the generic
+            # CONFIGURATION_ERROR below: unlike that one, this cause can never resolve
+            # on its own, so a caller polling for login completion can stop on this
+            # value alone without also stopping on an ordinary, possibly-transient
+            # CONFIGURATION_ERROR.
+            logging.getLogger(__name__).error(
+                "%s Original error: %s", MISSING_DEPENDENCY_REMEDIATION, e
+            )
+            return AwsAuthenticationStatus.MISSING_DEPENDENCY
         except Exception:
             # We assume that the presence of a Deadline Cloud monitor or AWS Console
             # sign-in profile means we know everything necessary to start a login.

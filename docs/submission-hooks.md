@@ -40,10 +40,6 @@ export DEADLINE_HOOKS_DIR=/studio/pipeline/hooks/maya
 
 Requires `settings.allow_environment_hooks` to be enabled. Both sources can be active simultaneously — environment hooks run first, then bundle hooks.
 
-> **Note:** In DCC submitters, environment hooks apply to the **pre-submission** and
-> **post-submission** phases only. The pre-GUI phase is not run by in-application
-> submitters — see [Pre-GUI Hooks](#pre-gui-hooks).
-
 ## Hook Types
 
 ### Pre-GUI Hooks
@@ -54,13 +50,6 @@ Run **before** the submission dialog opens. Use these to:
 - Query a project management system for task metadata
 
 Pre-GUI hooks **block the dialog from opening** if they fail (non-zero exit code or timeout).
-
-> **Supported only by `deadline bundle gui-submit`.** Pre-GUI hooks run on the standalone
-> GUI submitter. They do **not** run in in-application (DCC) submitters such as Maya,
-> Nuke, or Blender — those build their submission dialog directly and do not invoke the
-> pre-GUI phase. Pre-submission and post-submission hooks are unaffected and work across
-> all submission methods. (CLI `deadline bundle submit` has no GUI phase, so pre-GUI hooks
-> do not apply there either.)
 
 Output JSON to stdout to modify the initial dialog state:
 
@@ -80,7 +69,7 @@ output = {
         "deadline:maxRetriesPerTask": 3,
         "deadline:maxWorkerCount": 10,
         "deadline:targetTaskRunStatus": "READY",  # or "SUSPENDED"
-    }
+    },
 }
 print(json.dumps(output))
 ```
@@ -270,11 +259,7 @@ import json
 
 # Add files to upload
 output = {
-    "attachments": {
-        "assetReferences": {
-            "inputFilenames": ["/path/to/discovered/texture.exr"]
-        }
-    }
+    "attachments": {"assetReferences": {"inputFilenames": ["/path/to/discovered/texture.exr"]}}
 }
 print(json.dumps(output))
 ```
@@ -364,17 +349,11 @@ bundle_dir = metadata["jobBundleDir"]
 textures = []
 for root, _, files in os.walk(bundle_dir):
     for f in files:
-        if f.endswith(('.exr', '.png', '.jpg', '.tx')):
+        if f.endswith((".exr", ".png", ".jpg", ".tx")):
             textures.append(os.path.join(root, f))
 
 if textures:
-    print(json.dumps({
-        "attachments": {
-            "assetReferences": {
-                "inputFilenames": textures
-            }
-        }
-    }))
+    print(json.dumps({"attachments": {"assetReferences": {"inputFilenames": textures}}}))
 ```
 
 ### Slack Notification (Post-Submission)
@@ -390,13 +369,9 @@ metadata = json.load(sys.stdin)
 webhook = os.environ.get("SLACK_WEBHOOK")
 
 if webhook:
-    message = {
-        "text": f"Job submitted: {metadata['jobName']} (ID: {metadata['jobId']})"
-    }
+    message = {"text": f"Job submitted: {metadata['jobName']} (ID: {metadata['jobId']})"}
     req = urllib.request.Request(
-        webhook,
-        data=json.dumps(message).encode(),
-        headers={"Content-Type": "application/json"}
+        webhook, data=json.dumps(message).encode(), headers={"Content-Type": "application/json"}
     )
     urllib.request.urlopen(req)
 ```
@@ -513,13 +488,30 @@ Failures are logged as warnings but don't affect the submitted job.
 ## Submission methods
 
 Hooks work with these submission methods:
-- `deadline bundle submit` (CLI) — pre-submission and post-submission hooks.
+- `deadline bundle submit` (CLI) — pre-submission and post-submission hooks (there is no pre-GUI phase).
 - `deadline bundle gui-submit` (standalone GUI) — all phases, including pre-GUI.
-- In-application (DCC) submitters — pre-submission and post-submission hooks. The pre-GUI
-  phase is not run by DCC submitters (see [Pre-GUI Hooks](#pre-gui-hooks)).
+- In-application (DCC) submitters — pre-submission and post-submission hooks, plus the pre-GUI phase in submitters that implement it (they call the client's `run_pre_gui_hooks` entry point).
 
-The standalone GUI copies `hooks.yaml` to the job history bundle and resolves script paths
-back to your original bundle directory.
+The standalone GUI copies `hooks.yaml` to the job history bundle and resolves script paths back to your original bundle directory.
+
+### As-submitted job bundles
+
+The job history bundle holds the submission as it was before pre-submission hooks ran. When
+pre-submission hooks run, the GUI and in-application submitters also save an as-submitted
+bundle next to it, in a directory with the same name ending in `.as-submitted`. It holds the
+template, parameter values, job properties such as priority, and asset references with the
+hooks' changes applied. Other files in the job bundle are copied into it, and paths to them
+are changed to point at the copies, so the as-submitted bundle works on its own.
+
+The as-submitted bundle has no `hooks.yaml`, so submitting it again does not run its bundle
+hooks. Environment hooks from `DEADLINE_HOOKS_DIR` still run when they are enabled, because
+each submission creates a new job.
+
+```bash
+deadline bundle submit ~/.deadline/job_history/<profile>/2026-10/2026-10-19-01-Maya-MyJob.as-submitted
+```
+
+From Python, pass `as_submitted_bundle_dir` to `create_job_from_job_bundle` to save one.
 
 ## Best Practices
 

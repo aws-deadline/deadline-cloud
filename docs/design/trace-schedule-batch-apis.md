@@ -59,11 +59,11 @@ fetches them in a single pair of batch passes before building the trace.
 ```python
 def batch_get(
     *,
-    deadline,                # boto3 deadline client
-    operation: str,          # "batch_get_task" etc.
+    deadline,  # boto3 deadline client
+    operation: str,  # "batch_get_task" etc.
     identifiers: list[dict],
     key_fn: Callable[[dict], Any],
-    items_field: str,        # "tasks" / "steps" / ...
+    items_field: str,  # "tasks" / "steps" / ...
     id_fields: tuple[str, ...],
     max_attempts: int = 3,
     sleep: Callable[[float], None] = time.sleep,
@@ -109,9 +109,7 @@ The command flow:
 
    ```python
    if sys.version_info < (3, 9):
-       raise DeadlineOperationError(
-           "The trace-schedule command requires Python version 3.9 or later"
-       )
+       raise DeadlineOperationError("The trace-schedule command requires Python version 3.9 or later")
    ```
 
 2. **Get the job.** Single `GetJob` call; error out if `startedAt` is
@@ -147,6 +145,7 @@ The command is registered on `cli_job` in `job_group.py`:
 
 ```python
 from ._trace_schedule import cli_job_trace_schedule
+
 cli_job.add_command(cli_job_trace_schedule)
 ```
 
