@@ -175,3 +175,34 @@ def test_assert_clean_ignores_dirt_outside_pathspec(tmp_path: Path) -> None:
     subj = corpus_subject("# Guide\n", tmp_path / "corpus")  # owns only *.md
     (subj.root / "scratch.txt").write_text("non-markdown dirt\n")
     subj.assert_clean()  # must not raise
+
+
+def test_checkout_is_scoped_to_pathspec(tmp_path: Path) -> None:
+    subj = corpus_subject("# Guide\noriginal\n", tmp_path / "corpus")
+    (subj.root / CORPUS_DOC).write_text("# Guide\nrevised\n")
+    (subj.root / "added.md").write_text("new page\n")
+    ref = subj.commit_scratch("eval-revise-test", "test edit")
+    subj._git_checked("checkout", "-q", BASE_REF)
+    (subj.root / "notes.txt").write_text("operator work outside the pathspec")
+
+    subj.checkout(ref)
+    assert "revised" in (subj.root / CORPUS_DOC).read_text()
+    assert (subj.root / "added.md").exists()
+    # HEAD stays put, and work outside the pathspec is untouched.
+    assert _git_out(subj.root, "rev-parse", "--abbrev-ref", "HEAD").strip() == BASE_REF
+    assert (subj.root / "notes.txt").read_text() == "operator work outside the pathspec"
+
+    subj.reset_clean()
+    assert "original" in (subj.root / CORPUS_DOC).read_text()
+    assert not (subj.root / "added.md").exists()  # files HEAD lacks are removed
+    assert _git_out(subj.root, "status", "--porcelain", "--", subj.diff_pathspec) == ""
+
+
+def test_scratch_worktree_is_removed(tmp_path: Path) -> None:
+    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
+    with subj.scratch_worktree(BASE_REF) as scratch:
+        assert scratch.root != subj.root
+        assert (scratch.root / CORPUS_DOC).exists()
+        path = scratch.root
+    assert not path.exists()
+    assert str(path) not in _git_out(subj.root, "worktree", "list")

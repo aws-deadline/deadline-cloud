@@ -76,6 +76,23 @@ def _real_aws_context() -> dict:
     return {"farm_id": farm, "queue_id": queue, "region": os.environ.get(ENV_REGION, "").strip()}
 
 
+def _fill_placeholders(text: str, ctx: dict) -> str:
+    """Substitute only the known {name} placeholders. str.format would treat every
+    brace as syntax: OpenJD `{{...}}` gets unescaped and stray braces raise."""
+    for name, value in ctx.items():
+        text = text.replace("{" + name + "}", value)
+    return text
+
+
+def _agent_env(aws_ctx: Optional[dict]) -> Optional[dict]:
+    """The agent's environment: the operator's, plus the eval region when set, so a
+    sandbox farm in another region doesn't fail on the ambient default."""
+    region = (aws_ctx or {}).get("region")
+    if not region:
+        return None
+    return {**os.environ, "AWS_REGION": region, "AWS_DEFAULT_REGION": region}
+
+
 def _aws_authenticated() -> bool:
     """True when `deadline auth status` reports the API reachable."""
     try:
@@ -158,9 +175,8 @@ def _run_case(
     `aws_ctx` (farm_id/queue_id/region) is filled into {placeholders} in the prompt
     and rubric for real_aws cases; None for offline/mock cases.
     """
-    fmt = dict(aws_ctx or {})
-    prompt = case["prompt"].format(**fmt) if fmt else case["prompt"]
-    rubric = case["rubric"].format(**fmt) if fmt else case["rubric"]
+    prompt = _fill_placeholders(case["prompt"], aws_ctx or {})
+    rubric = _fill_placeholders(case["rubric"], aws_ctx or {})
     materials = case.get("materials", {})
     if materials:
         listing = ", ".join(f"materials/{name}" for name in materials)
@@ -186,6 +202,7 @@ def _run_case(
                 case.get("tools", DEFAULT_TOOLS),
                 max_turns=case.get("max_turns", 20),
                 model=model,
+                env=_agent_env(aws_ctx),
             )
         except HarnessError as e:
             # A run that could not launch or timed out fails just this run -- it must
@@ -282,8 +299,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     base_ref = None
     if args.revised_ref:
         subj = subject_mod.repo_subject(args.pathspec)
-        base = subj._git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-        base_ref = args.base_ref or base
+        base_ref = _resolve_base_ref(subj, args.base_ref)
         # Fail fast, BEFORE any (costly) agent runs: both refs must resolve, and the
         # operator's working tree must be clean -- checkout() discards changes under
         # the pathspec, and that must never eat uncommitted work.
@@ -351,13 +367,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
             if subj and args.revised_ref:
                 summary["source_diff"] = subj.diff_refs(base_ref, args.revised_ref)
                 b, c = variants["baseline"]["aggregate"], variants["revised"]["aggregate"]
-                improved = c["pass_rate"] > b["pass_rate"] or (
-                    c["pass_rate"] == b["pass_rate"] and c["median_turns"] < b["median_turns"]
-                )
-                regressed = c["pass_rate"] < b["pass_rate"]
-                summary["verdict"] = (
-                    "improved" if improved else "regressed" if regressed else "no_change"
-                )
+                summary["verdict"] = _ab_verdict(b, c)
+                regressed = summary["verdict"] == "regressed"
                 print(
                     f"  [A/B] pass {b['pass_rate']:.0%} -> {c['pass_rate']:.0%}, "
                     f"turns {b['median_turns']:g} -> {c['median_turns']:g}: {summary['verdict']}"
@@ -366,8 +377,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     exit_code = 4
             summaries.append(summary)
     finally:
-        if subj and base_ref:
-            subj.checkout(base_ref)  # always leave the checkout on baseline
+        if subj:
+            # Return the owned paths to the operator's HEAD. A restore failure must
+            # not replace the exception that got us here.
+            try:
+                subj.reset_clean()
+            except subject_mod.SubjectError as e:
+                print(f"WARNING: could not restore {subj.diff_pathspec} to HEAD: {e}")
 
     out_root.mkdir(parents=True, exist_ok=True)
     (out_root / "summary.json").write_text(json.dumps(summaries, indent=2))
@@ -384,6 +400,29 @@ def _cmd_run(args: argparse.Namespace) -> int:
         elif any(s.get("verdict") == "regressed" for s in summaries):
             print("[proposal] skipped: the change regressed at least one eval.")
     return exit_code
+
+
+def _resolve_base_ref(subj, explicit: Optional[str]) -> str:
+    """The baseline as a commit SHA. `--abbrev-ref HEAD` prints the literal "HEAD"
+    on a detached checkout, which would follow every checkout instead of pinning."""
+    return explicit or subj._git_checked("rev-parse", "HEAD").stdout.strip()
+
+
+def _ab_verdict(b: dict, c: dict) -> str:
+    """improved / regressed / no_change for baseline `b` vs revised `c` aggregates.
+
+    Fewer turns breaks a pass-rate tie only when the variants pass at all and each
+    has more than one run: at 0% "fewer turns" means gave up faster, and at k=1 a
+    turn count is one sample of noise. Either would ship a patch that fixed nothing.
+    """
+    if c["pass_rate"] > b["pass_rate"]:
+        return "improved"
+    if c["pass_rate"] < b["pass_rate"]:
+        return "regressed"
+    turns_comparable = b["pass_rate"] > 0 and min(b["n"], c["n"]) > 1
+    if turns_comparable and c["median_turns"] < b["median_turns"]:
+        return "improved"
+    return "no_change"
 
 
 def _should_emit_proposal(summaries: list, diff: str) -> bool:

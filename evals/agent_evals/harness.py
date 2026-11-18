@@ -2,10 +2,15 @@
 
 """Run Claude Code headless against a goal and capture telemetry.
 
-The tested agent runs as an ISOLATED subprocess (`claude -p` with stream-json
-output) in a sandbox directory. The JSON event stream carries both per-tool-call
-events and a final result event with token/cost telemetry, so no extra
-instrumentation is needed.
+The tested agent runs as a separate subprocess (`claude -p` with stream-json
+output) in a temp working directory. The JSON event stream carries both
+per-tool-call events and a final result event with token/cost telemetry, so no
+extra instrumentation is needed.
+
+Trust boundary: the working directory is a convention, NOT a sandbox. The agent
+runs with bypassPermissions and the operator's user, filesystem, and AWS
+credentials, so eval files, materials, and seeded subjects are trusted input.
+Run untrusted (fetched) material only inside a container or VM.
 """
 
 from __future__ import annotations
@@ -67,6 +72,7 @@ def run_agent(
     model: Optional[str] = None,
     claude_bin: str = "claude",
     timeout_s: int = DEFAULT_TIMEOUT_S,
+    env: Optional[dict] = None,
 ) -> RunResult:
     """Run Claude Code headless in `workdir`, restricted to `allowed_tools`.
 
@@ -101,6 +107,7 @@ def run_agent(
             text=True,
             stdin=subprocess.DEVNULL,
             timeout=timeout_s,
+            env=env,
         )
     except OSError as e:
         raise HarnessError(f"could not launch {claude_bin}: {e}") from e

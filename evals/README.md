@@ -9,7 +9,7 @@ the docs, or any reference material actually helps.
 1. An **eval file** (JSON) gives an agent a goal, the tools it may use, optional
    reference material, and a **rubric** describing what a passing answer must do.
 2. The **runner** launches an isolated headless agent (`claude -p`) per run in a
-   throwaway sandbox and captures telemetry (tool calls, turns, cost).
+   throwaway working directory and captures telemetry (tool calls, turns, cost).
 3. An **LLM judge** grades the agent's final answer against the rubric.
 4. In **A/B mode**, every case runs twice — with this repo at the current ref
    (baseline) and at `--revised-ref` (candidate) — and the summary reports the
@@ -89,7 +89,9 @@ python -m agent_evals.runner run examples/real_aws_submit.json --allow-real-aws
 ```
 
 The case's `prompt`/`rubric` may reference `{farm_id}`, `{queue_id}`, and `{region}`,
-which are filled from those env vars. Missing vars or expired auth skip the case
+which are filled from those env vars. `DEADLINE_EVAL_REGION` is also exported to the
+agent as `AWS_REGION`/`AWS_DEFAULT_REGION`; a `defaults.farm_region` in the agent's
+deadline config still takes precedence. Missing vars or expired auth skip the case
 with a clear reason rather than submitting to the wrong place.
 
 ## Write an eval
@@ -135,7 +137,7 @@ back to `--revised-ref` to A/B-prove the improvement:
 ```python
 from agent_evals import reviser, subject
 
-subj = subject.repo_subject()                       # or corpus_subject(markdown)
+subj = subject.repo_subject()  # or corpus_subject(markdown)
 ref = reviser.revise(subj, run_dir, goal="...", base_ref="mainline")
 # python -m agent_evals.runner run my_eval.json --revised-ref <ref>
 ```
@@ -146,4 +148,12 @@ ref = reviser.revise(subj, run_dir, goal="...", base_ref="mainline")
   the goal itself, or the telemetry measures the wrong thing.
 - Runs that talk to real AWS use whatever credentials/config the environment has;
   point them at a non-production sandbox account.
+- The run directory is not a sandbox. Agents run with `bypassPermissions` as your
+  user, with your filesystem and AWS credentials, so eval files, materials, and
+  seeded corpora are trusted input. Run fetched material you don't trust inside a
+  container or VM.
+- A/B mode swaps only the files under `--pathspec` and restores them to HEAD at the
+  end; the reviser edits in a throwaway `git worktree`, so neither touches your
+  branch or work outside the pathspec.
+- Unit tests in `evals/tests/` run with the repo suite (`hatch run test`).
 - The judge is a single vote per run; for gate-quality decisions increase `k`.

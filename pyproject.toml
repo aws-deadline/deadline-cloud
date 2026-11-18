@@ -202,7 +202,7 @@ addopts = [
   "--cov-report=term-missing",
   "--numprocesses=auto",
 ]
-testpaths = ["test/unit", "test/cli_e2e"]
+testpaths = ["test/unit", "test/cli_e2e", "evals/tests"]
 looponfailroots = ["src", "test/unit", "test/cli_e2e"]
 markers = [
   "no_setup: mark that test shouldn't use default setups",

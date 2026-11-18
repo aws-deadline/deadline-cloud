@@ -90,39 +90,44 @@ def revise(
     """
     prompt = _REVISE_PROMPT.format(goal=goal, transcript=transcript_text(run_dir / "events.jsonl"))
 
-    subj.checkout(base_ref)  # edit from a clean baseline
-    try:
-        proc = subprocess.run(
-            [
-                claude_bin,
-                "-p",
-                prompt,
-                "--permission-mode",
-                "bypassPermissions",
-                "--max-turns",
-                str(max_turns),
-                "--allowedTools",
-                "Read",
-                "Edit",
-                "Write",
-                "Grep",
-                "Glob",
-            ],
-            cwd=str(subj.root),
-            capture_output=True,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=timeout_s,
-        )
-    except OSError as e:
-        raise ReviseError(f"could not launch {claude_bin}: {e}") from e
-    except subprocess.TimeoutExpired as e:
-        raise ReviseError(f"reviser agent exceeded {timeout_s}s wall-clock timeout") from e
-    if proc.returncode != 0:
-        raise ReviseError(f"reviser agent exited {proc.returncode}: {proc.stderr.strip()[:200]}")
+    # Edit in a throwaway worktree at base_ref: the agent writes with
+    # bypassPermissions, so keep it away from the operator's checkout, branch, and
+    # uncommitted work.
+    with subj.scratch_worktree(base_ref) as scratch:
+        try:
+            proc = subprocess.run(
+                [
+                    claude_bin,
+                    "-p",
+                    prompt,
+                    "--permission-mode",
+                    "bypassPermissions",
+                    "--max-turns",
+                    str(max_turns),
+                    "--allowedTools",
+                    "Read",
+                    "Edit",
+                    "Write",
+                    "Grep",
+                    "Glob",
+                ],
+                cwd=str(scratch.root),
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+                timeout=timeout_s,
+            )
+        except OSError as e:
+            raise ReviseError(f"could not launch {claude_bin}: {e}") from e
+        except subprocess.TimeoutExpired as e:
+            raise ReviseError(f"reviser agent exceeded {timeout_s}s wall-clock timeout") from e
+        if proc.returncode != 0:
+            raise ReviseError(
+                f"reviser agent exited {proc.returncode}: {proc.stderr.strip()[:200]}"
+            )
 
-    if not subj.capture_diff().strip():
-        raise ReviseError("reviser agent made no edits to the subject.")
+        if not scratch.capture_diff().strip():
+            raise ReviseError("reviser agent made no edits to the subject.")
 
-    ref = f"eval-revise-{run_dir.parent.parent.name}"
-    return subj.commit_scratch(ref, "agent-evals: proposed improvement from eval transcript")
+        ref = f"eval-revise-{run_dir.parent.parent.name}"
+        return scratch.commit_scratch(ref, "agent-evals: proposed improvement from eval transcript")

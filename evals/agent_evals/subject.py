@@ -13,15 +13,19 @@ Two ready-made subjects cover the common cases:
     the `deadline` the agent drives IS this checkout.
   - corpus_subject(markdown): any fetched material (an AWS docs page, a blog post,
     a web-search result) seeded into a throwaway git repo so it can be diffed and
-    revised like everything else.
+    revised like everything else. The agent runs this material with full Bash on
+    the operator's machine, so only seed material you trust (see harness.py).
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
 
 BASE_REF = "eval-base"
 
@@ -72,18 +76,37 @@ class Subject:
             )
 
     def checkout(self, ref: str) -> None:
-        """Put the checkout on `ref`, discarding working-tree edits first."""
+        """Make the owned paths match `ref`, leaving HEAD and everything outside the
+        pathspec alone. A whole-tree switch would swap out the runner's own source
+        and trip over unrelated uncommitted work mid-batch."""
         self.reset_clean()
-        self._git_checked("checkout", "-q", ref)
+        self._restore(ref)
 
     def reset_clean(self) -> None:
-        """Discard uncommitted edits under the owned paths so one variant never
-        bleeds into the next. Scoped to diff_pathspec -- NOT a whole-tree
-        `git reset --hard` -- so an operator's uncommitted work outside the owned
-        paths is never destroyed. `checkout HEAD` reverts tracked (staged and
-        worktree) edits; `clean -fd` removes untracked files; both scoped."""
-        self._git("checkout", "HEAD", "--", self.diff_pathspec)
-        self._git("clean", "-fd", self.diff_pathspec)
+        """Return the owned paths to HEAD so one variant never bleeds into the next.
+        Scoped to diff_pathspec so work outside the owned paths is never touched.
+        `restore` reverts index and worktree (removing files HEAD lacks); `clean -fd`
+        removes untracked files."""
+        self._restore("HEAD")
+        self._git_checked("clean", "-fdq", "--", self.diff_pathspec)
+
+    def _restore(self, ref: str) -> None:
+        self._git_checked(
+            "restore", f"--source={ref}", "--staged", "--worktree", "--", self.diff_pathspec
+        )
+
+    @contextmanager
+    def scratch_worktree(self, ref: str) -> Iterator["Subject"]:
+        """A throwaway detached worktree at `ref`, as a Subject with the same
+        pathspec. Lets an editing agent work and commit without touching the
+        operator's checkout, branch, or uncommitted work."""
+        path = Path(tempfile.mkdtemp(prefix="eval-worktree-"))
+        self._git_checked("worktree", "add", "-q", "--detach", str(path), ref)
+        try:
+            yield Subject(root=path, diff_pathspec=self.diff_pathspec)
+        finally:
+            self._git("worktree", "remove", "--force", str(path))
+            shutil.rmtree(path, ignore_errors=True)
 
     def capture_diff(self) -> str:
         """Uncommitted edits to the owned paths (including new files) as a unified

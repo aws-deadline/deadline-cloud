@@ -239,3 +239,98 @@ def test_revise_missing_binary_raises_revise_error(tmp_path) -> None:
         reviser.revise(
             subj, run_dir, goal="g", base_ref=BASE_REF, claude_bin="definitely-not-real-xyz"
         )
+
+
+def _detached_corpus(tmp_path):
+    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
+    sha = subj._git_checked("rev-parse", "HEAD").stdout.strip()
+    subj._git_checked("checkout", "-q", "--detach", sha)
+    return subj, sha
+
+
+def test_base_ref_pinned_to_sha_on_detached_head(tmp_path) -> None:
+    subj, sha = _detached_corpus(tmp_path)
+    assert runner._resolve_base_ref(subj, None) == sha
+    assert runner._resolve_base_ref(subj, "mainline") == "mainline"
+
+
+def _agg(pass_rate, turns, n=3):
+    return {"pass_rate": pass_rate, "median_turns": turns, "median_cost_usd": 0.0, "n": n}
+
+
+def test_ab_verdict_pass_rate_decides() -> None:
+    assert runner._ab_verdict(_agg(0.3, 5), _agg(0.6, 9)) == "improved"
+    assert runner._ab_verdict(_agg(0.6, 9), _agg(0.3, 5)) == "regressed"
+
+
+def test_ab_verdict_turns_tiebreak_needs_passes_and_k_above_one() -> None:
+    assert runner._ab_verdict(_agg(1.0, 10), _agg(1.0, 6)) == "improved"
+    # Failing faster is not an improvement.
+    assert runner._ab_verdict(_agg(0.0, 10), _agg(0.0, 6)) == "no_change"
+    # One run per variant is noise.
+    assert runner._ab_verdict(_agg(1.0, 10, n=1), _agg(1.0, 6, n=1)) == "no_change"
+
+
+def test_fill_placeholders_leaves_other_braces() -> None:
+    text = 'farm {farm_id}; OpenJD {{Task.File.run}}; json {"a": 1}; {unknown}'
+    out = runner._fill_placeholders(text, {"farm_id": "farm-x"})
+    assert out == 'farm farm-x; OpenJD {{Task.File.run}}; json {"a": 1}; {unknown}'
+
+
+def test_agent_env_exports_region(monkeypatch) -> None:
+    monkeypatch.setenv("KEEP_ME", "1")
+    env = runner._agent_env({"farm_id": "f", "queue_id": "q", "region": "eu-west-1"})
+    assert env["AWS_REGION"] == env["AWS_DEFAULT_REGION"] == "eu-west-1"
+    assert env["KEEP_ME"] == "1"
+    assert runner._agent_env({"farm_id": "f", "queue_id": "q", "region": ""}) is None
+    assert runner._agent_env(None) is None
+
+
+def _capture_judge_prompt(monkeypatch, answer):
+    seen = {}
+
+    def _run(cmd, *a, **k):
+        seen["prompt"] = cmd[cmd.index("-p") + 1]
+        return subprocess.CompletedProcess(cmd, 0, '{"passed": false, "reasoning": "r"}', "")
+
+    monkeypatch.setattr(judge.subprocess, "run", _run)
+    judge.judge_answer("rubric", "task", answer)
+    return seen["prompt"]
+
+
+def test_judge_wraps_answer_in_unpredictable_markers(monkeypatch) -> None:
+    first = _capture_judge_prompt(monkeypatch, "my answer")
+    second = _capture_judge_prompt(monkeypatch, "my answer")
+    marker = first.split("<answer-", 1)[1].split(">", 1)[0]
+    assert f"<answer-{marker}>\nmy answer\n</answer-{marker}>" in first
+    assert f"<answer-{marker}>" not in second  # nonce differs per call
+
+
+def test_judge_truncates_long_answer(monkeypatch) -> None:
+    prompt = _capture_judge_prompt(monkeypatch, "x" * (judge.MAX_ANSWER_CHARS + 500))
+    assert "[answer truncated]" in prompt
+    assert "x" * (judge.MAX_ANSWER_CHARS + 1) not in prompt
+
+
+def test_revise_leaves_operator_checkout_untouched(tmp_path, monkeypatch) -> None:
+    subj = corpus_subject("# Guide\noriginal\n", tmp_path / "corpus")
+    (subj.root / CORPUS_DOC).write_text("# Guide\noperator wip\n")  # uncommitted
+    run_dir = tmp_path / "out" / "case" / "run-1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "events.jsonl").write_text("")
+    real_run = subprocess.run
+
+    def _fake_agent(cmd, *a, **k):
+        if cmd[0] == "claude":
+            doc = Path(k["cwd"]) / CORPUS_DOC
+            doc.write_text(doc.read_text() + "added step\n")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr(reviser.subprocess, "run", _fake_agent)
+    ref = reviser.revise(subj, run_dir, goal="g", base_ref=BASE_REF)
+
+    assert "added step" in subj.diff_refs(BASE_REF, ref)
+    assert (subj.root / CORPUS_DOC).read_text() == "# Guide\noperator wip\n"
+    head = subj._git_checked("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    assert head == BASE_REF
