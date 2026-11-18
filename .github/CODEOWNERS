@@ -2,3 +2,13 @@
 * @aws-deadline/sync-team-aws-deadline-cloud-github-developers
 
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Allow automated approvals for dependency requirement updates.
+/requirements-attributions.txt
+/requirements-docs.txt
+/requirements-installer.txt
+/requirements-integ-testing.txt
+/requirements-release.txt
+/requirements-testing.txt
+/requirements-ui-testing.txt
+/scripts/attributions/requirements.txt
