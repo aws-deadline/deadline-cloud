@@ -9,6 +9,8 @@ INSTRUCTIONS = """
 
 This server provides tools for interacting with AWS Deadline Cloud render farm management service.
 
+If you can also run shell commands, run `deadline --guide` for the CLI workflow guide: writing a job bundle, submit, wait, download output, and diagnosing failed jobs.
+
 ## Debugging Failed Jobs Workflow
 
 When debugging failed Deadline Cloud jobs, follow this sequence:
