@@ -1,3 +1,12 @@
+## 0.60.12 (2026-11-17)
+
+### Features
+* When you browse local bundles in the bundle browser (Deadline Cloud monitor → File → Submit Job Bundle, or `deadline bundle gui-submit --browse`), a folder picker now lets you pick a different folder for that dialog only. Your configured default bundle directory stays the same. The picker no longer creates a folder when you type a path that doesn't exist. It opens at the nearest existing parent folder instead. (#1407)
+
+### Bug Fixes
+* The `--parameter` option for `deadline bundle submit` and `deadline bundle gui-submit` now accepts inline JSON (including multi-line JSON) and JSON/YAML files, as documented. Previously only `Name=Value` worked. If you pass the same parameter more than once, the last value wins. Null values now give a clear error. (#1423)
+* Fixed the Blender example job bundle, which failed with a bash "unexpected EOF" error before Blender started because a quote was missing in its run script. (#1428)
+* Updated the bundled AWS Deadline Cloud service model to match botocore 1.44.4. Python 3.9 users, who can't get new botocore releases, now have the latest Deadline API definitions, including recent `CreateWorker` changes. (#1436)
 ## 0.60.11 (2026-10-26)
 
 ### Features

@@ -47,7 +47,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           echo "📊 Generating baseline API snapshot from base branch: $BASE_REF"
-          hatch run docs:generate-api-snapshot /tmp/baseline_api_snapshot.json "$BASE_REF"
+          hatch run docs:generate-api-snapshot /tmp/baseline_api_snapshot.json "origin/$BASE_REF"
 
       - name: Validate API snapshot against baseline
         env:

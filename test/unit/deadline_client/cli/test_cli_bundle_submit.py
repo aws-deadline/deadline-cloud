@@ -13,6 +13,7 @@ from unittest.mock import ANY, patch, call, MagicMock
 import boto3  # type: ignore[import]
 from click.testing import CliRunner
 import pytest
+import yaml
 
 import deadline.client.ui
 from deadline.client import config
@@ -43,6 +44,70 @@ def mock_job_bundle_submitter() -> Generator[MagicMock, None, None]:
         sys.modules, {"deadline.client.ui.job_bundle_submitter": mock_job_bundle_submitter}
     ):
         yield mock_job_bundle_submitter
+
+
+@pytest.fixture(
+    params=[
+        "key_value",
+        "inline_json",
+        "inline_json_multiline",
+        "json_file",
+        "yaml_file",
+        "yml_file",
+        "mixed",
+        "file_last",
+        "inline_json_with_whitespace",
+        "file_with_whitespace",
+    ]
+)
+def job_parameter_args(request, tmp_path):
+    parameters = {"sceneFile": "  /path/to/scene=file  ", "priority": 90}
+    json_file = tmp_path / "parameters.json"
+    json_file.write_text(json.dumps(parameters), encoding="utf8")
+    yaml_file = tmp_path / "parameters.yaml"
+    yaml_file.write_text(yaml.safe_dump(parameters), encoding="utf8")
+    yml_file = tmp_path / "parameters.yml"
+    yml_file.write_text(yaml.safe_dump(parameters), encoding="utf8")
+
+    if request.param == "key_value":
+        parameters["priority"] = "90"
+        args = ["-p", f"sceneFile={parameters['sceneFile']}", "-p", "priority=90"]
+    elif request.param == "inline_json":
+        args = ["-p", json.dumps(parameters)]
+    elif request.param == "inline_json_multiline":
+        args = ["-p", json.dumps(parameters, indent=2)]
+    elif request.param == "json_file":
+        args = ["-p", f"file://{json_file}"]
+    elif request.param == "yaml_file":
+        args = ["-p", f"file://{yaml_file}"]
+    elif request.param == "yml_file":
+        args = ["-p", f"file://{yml_file}"]
+    elif request.param == "inline_json_with_whitespace":
+        args = ["-p", f"  {json.dumps(parameters)}  "]
+    elif request.param == "file_with_whitespace":
+        args = ["-p", f"  file://{json_file}  "]
+    elif request.param == "mixed":
+        parameters["priority"] = "90"
+        args = [
+            "-p",
+            "sceneFile=earlier",
+            "-p",
+            f"file://{yaml_file}",
+            "-p",
+            '{"priority": 42}',
+            "--parameter",
+            "priority=90",
+        ]
+    else:
+        args = [
+            "-p",
+            json.dumps({"sceneFile": "earlier", "priority": 42}),
+            "-p",
+            "priority=1",
+            "-p",
+            f"file://{json_file}",
+        ]
+    return args, parameters
 
 
 def test_cli_bundle_submit_simple_json_template(
@@ -409,7 +474,7 @@ def test_cli_bundle_asset_load_method(
 
 
 def test_cli_bundle_job_parameter_from_cli(
-    fresh_deadline_config, deadline_mock, temp_job_bundle_dir
+    fresh_deadline_config, deadline_mock, temp_job_bundle_dir, job_parameter_args
 ):
     """
     Verify that job parameters specified at the CLI are passed to the CreateJob call
@@ -420,6 +485,7 @@ def test_cli_bundle_job_parameter_from_cli(
 
     deadline_mock.create_job.return_value = MOCK_CREATE_JOB_RESPONSE
     deadline_mock.get_job.return_value = MOCK_GET_JOB_RESPONSE
+    parameter_args, parameters = job_parameter_args
 
     runner = CliRunner()
     result = runner.invoke(
@@ -432,10 +498,7 @@ def test_cli_bundle_job_parameter_from_cli(
             MOCK_FARM_ID,
             "--queue-id",
             MOCK_QUEUE_ID,
-            "--parameter",
-            "sceneFile=/path/to/scenefile",
-            "--parameter",
-            "priority=90",
+            *parameter_args,
             "--priority",
             "45",
             "--submitter-name",
@@ -449,7 +512,7 @@ def test_cli_bundle_job_parameter_from_cli(
         template=ANY,
         templateType="JSON",
         parameters={
-            "sceneFile": {"string": "/path/to/scenefile"},
+            "sceneFile": {"string": parameters["sceneFile"]},
             "priority": {"int": "90"},
         },
         priority=45,
@@ -466,8 +529,9 @@ def test_cli_bundle_job_parameter_from_cli(
     assert result.exit_code == 0, result.output
 
 
+@pytest.mark.parametrize("parameter", ["sceneFile=", '{"sceneFile": ""}'])
 def test_cli_bundle_empty_job_parameter_from_cli(
-    fresh_deadline_config, deadline_mock, temp_job_bundle_dir
+    fresh_deadline_config, deadline_mock, temp_job_bundle_dir, parameter
 ):
     """
     Verify that an empty job parameter specified at the CLI are passed to the CreateJob call
@@ -491,7 +555,7 @@ def test_cli_bundle_empty_job_parameter_from_cli(
             "--queue-id",
             MOCK_QUEUE_ID,
             "--parameter",
-            "sceneFile=",
+            parameter,
         ],
     )
 
@@ -562,7 +626,7 @@ def test_cli_bundle_invalid_job_parameter(
     fresh_deadline_config, deadline_mock, temp_job_bundle_dir
 ):
     """
-    Verify that a badly formatted parameter value (without "Key=Value") throws an error
+    Verify that a malformed parameter argument raises a usage error.
     """
     # Write a JSON template
     with open(os.path.join(temp_job_bundle_dir, "template.json"), "w", encoding="utf8") as f:
@@ -622,6 +686,57 @@ def test_cli_bundle_invalid_job_parameter_name(
 
     assert "Parameter names must be alphanumeric Open Job Description identifiers." in result.output
     assert result.exit_code == 2
+
+
+@pytest.mark.parametrize("command", ["submit", "gui-submit"])
+@pytest.mark.parametrize(
+    "parameter, file_contents, error",
+    [
+        ("sceneFile", None, 'Parameters must be provided in the format "ParamName=Value"'),
+        ("=value", None, 'Parameters must be provided in the format "ParamName=Value"'),
+        ('{"Param*Name": "value"}', None, "Invalid parameter name: Param*Name"),
+        ('{"": "value"}', None, "Invalid parameter name:"),
+        ('{"sceneFile": invalid}', None, "not formatted correctly"),
+        (
+            '["sceneFile", "value"]',
+            None,
+            'Parameters must be provided in the format "ParamName=Value"',
+        ),
+        ('{"sceneFile": null}', None, "Parameter sceneFile has no value."),
+        ("file://parameters.json", '{"sceneFile": null}', "Parameter sceneFile has no value."),
+        ("file://parameters.yaml", "sceneFile:", "Parameter sceneFile has no value."),
+        ("file://parameters.yaml", "sceneFile: null", "Parameter sceneFile has no value."),
+        ("file://parameters.yaml", "123: value", "Invalid parameter name: 123"),
+        ("file://parameters.yaml", "- value", "should contain a dictionary"),
+        ("file://parameters.yaml", "key: [", "formatted incorrectly"),
+        ("file://parameters.json", '{"key": invalid}', "formatted incorrectly"),
+        ("file://missing.yaml", None, "does not exist"),
+    ],
+)
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_cli_bundle_rejects_invalid_parameter_formats(
+    _mock_context,
+    fresh_deadline_config,
+    deadline_mock,
+    mock_job_bundle_submitter,
+    tmp_path,
+    command,
+    parameter,
+    file_contents,
+    error,
+):
+    if parameter.startswith("file://"):
+        file_path = tmp_path / parameter[len("file://") :]
+        if file_contents is not None:
+            file_path.write_text(file_contents, encoding="utf8")
+        parameter = f"file://{file_path}"
+
+    result = CliRunner().invoke(main, ["bundle", command, "unused-bundle", "-p", parameter])
+
+    assert result.exit_code == 2, result.output
+    assert error in result.output
+    deadline_mock.create_job.assert_not_called()
+    mock_job_bundle_submitter.show_job_bundle_submitter.assert_not_called()
 
 
 def test_cli_bundle_accept_upload_confirmation(
@@ -736,6 +851,27 @@ def test_cli_bundle_reject_upload_confirmation(
 
         mock_upload_assets.assert_not_called()
         assert result.exit_code == 1
+
+
+@patch.object(deadline.client.ui, "gui_context_for_cli")
+def test_gui_submit_job_parameters(
+    _mock_context,
+    fresh_deadline_config,
+    deadline_mock,
+    mock_job_bundle_submitter,
+    job_parameter_args,
+):
+    parameter_args, parameters = job_parameter_args
+
+    result = CliRunner().invoke(main, ["bundle", "gui-submit", "--browse", *parameter_args])
+
+    assert result.exit_code == 0, result.output
+    mock_job_bundle_submitter.show_job_bundle_submitter.assert_called_once()
+    job_parameters = mock_job_bundle_submitter.show_job_bundle_submitter.call_args.kwargs[
+        "job_parameters"
+    ]
+    assert len(job_parameters) == len(parameters)
+    assert {parameter["name"]: parameter["value"] for parameter in job_parameters} == parameters
 
 
 @patch.object(deadline.client.ui, "gui_context_for_cli")
