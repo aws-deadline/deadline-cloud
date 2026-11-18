@@ -1,28 +1,26 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Propose improvements to a subject from a run where the agent struggled.
+"""Propose an improvement to a subject from a run where the agent struggled.
 
-Given a struggling run's transcript and a Subject (the repo source, repo docs, or
-a seeded corpus), drive an isolated agent to edit the subject so the NEXT agent
-succeeds more reliably, and commit the edits to a scratch git ref. Re-running the
-eval with --revised-ref <scratch ref> then A/B-proves whether the edit helped, and
-the diff is the PR-ready proposal.
+An agent edits the subject from the run's transcript and the edit is committed to
+a scratch ref; `runner run --revised-ref <ref>` then measures whether it helped.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
+import secrets
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
-from .subject import Subject
+from .harness import HarnessError, run_agent
+from .subject import Subject, SubjectError
 
-
-# Bounds for the reviser agent. It drives a full edit session, so it needs both a
-# turn ceiling and a wall-clock ceiling -- otherwise a runaway or hung session has
-# no limit at all.
 DEFAULT_MAX_TURNS = 40
 DEFAULT_TIMEOUT_S = 1200
+_TRANSCRIPT_MAX_PARTS = 60
+_REVISER_TOOLS = ["Read", "Edit", "Write", "Grep", "Glob"]
 
 
 class ReviseError(RuntimeError):
@@ -52,10 +50,10 @@ done, STOP -- do not run tests or git.
 """
 
 
-def transcript_text(events_path: Path, max_parts: int = 60) -> str:
-    """A compact transcript of assistant text + tool calls, for the revise prompt."""
+def _transcript_text(events_path: Path) -> str:
+    """Assistant text and tool calls from a run's events, compacted for the prompt."""
     parts = []
-    for line in events_path.read_text().splitlines():
+    for line in events_path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             ev = json.loads(line)
         except json.JSONDecodeError:
@@ -69,7 +67,12 @@ def transcript_text(events_path: Path, max_parts: int = 60) -> str:
                 inp = blk.get("input", {})
                 detail = inp.get("command") or inp.get("file_path") or json.dumps(inp)[:200]
                 parts.append(f"TOOL[{blk.get('name')}]: {str(detail)[:300]}")
-    return "\n".join(parts[:max_parts])
+    return "\n".join(parts[:_TRANSCRIPT_MAX_PARTS])
+
+
+def _new_scratch_ref() -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"eval-revise-{stamp}-{secrets.token_hex(3)}"
 
 
 def revise(
@@ -78,56 +81,43 @@ def revise(
     *,
     goal: str,
     base_ref: str,
+    ref: Optional[str] = None,
     claude_bin: str = "claude",
     max_turns: int = DEFAULT_MAX_TURNS,
     timeout_s: int = DEFAULT_TIMEOUT_S,
 ) -> str:
-    """Edit the subject from a struggling run's transcript; commit to a scratch ref.
+    """Edit the subject from `run_dir`'s transcript and commit to scratch branch `ref`
+    (default: a new unique name). Returns the ref.
 
-    Returns the scratch ref name. Raises ReviseError if the agent can't be launched,
-    exceeds `timeout_s`, or made no edits -- a candidate identical to baseline would
-    make any measured delta pure noise.
+    Raises ReviseError if `ref` is unusable, the agent fails, or it makes no edits.
     """
-    prompt = _REVISE_PROMPT.format(goal=goal, transcript=transcript_text(run_dir / "events.jsonl"))
+    ref = ref or _new_scratch_ref()
+    # Fail before the paid run, not after it.
+    if subj._git("check-ref-format", "--branch", ref).returncode != 0:
+        raise ReviseError(f"invalid branch name: {ref!r}")
+    if subj._git("rev-parse", "--verify", "--quiet", f"refs/heads/{ref}").returncode == 0:
+        raise ReviseError(f"branch {ref!r} already exists")
 
-    # Edit in a throwaway worktree at base_ref: the agent writes with
-    # bypassPermissions, so keep it away from the operator's checkout, branch, and
-    # uncommitted work.
-    with subj.scratch_worktree(base_ref) as scratch:
-        try:
-            proc = subprocess.run(
-                [
-                    claude_bin,
-                    "-p",
+    prompt = _REVISE_PROMPT.format(goal=goal, transcript=_transcript_text(run_dir / "events.jsonl"))
+    try:
+        with subj.scratch_worktree(base_ref) as scratch:
+            try:
+                result = run_agent(
                     prompt,
-                    "--permission-mode",
-                    "bypassPermissions",
-                    "--max-turns",
-                    str(max_turns),
-                    "--allowedTools",
-                    "Read",
-                    "Edit",
-                    "Write",
-                    "Grep",
-                    "Glob",
-                ],
-                cwd=str(scratch.root),
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=timeout_s,
+                    scratch.root,
+                    _REVISER_TOOLS,
+                    max_turns=max_turns,
+                    claude_bin=claude_bin,
+                    timeout_s=timeout_s,
+                )
+            except HarnessError as e:
+                raise ReviseError(f"reviser agent: {e}") from e
+            if not result.success:
+                raise ReviseError(f"reviser agent failed: {result.subtype}")
+            if not scratch.capture_diff().strip():
+                raise ReviseError("reviser agent made no edits to the subject.")
+            return scratch.commit_scratch(
+                ref, "agent-evals: proposed improvement from eval transcript"
             )
-        except OSError as e:
-            raise ReviseError(f"could not launch {claude_bin}: {e}") from e
-        except subprocess.TimeoutExpired as e:
-            raise ReviseError(f"reviser agent exceeded {timeout_s}s wall-clock timeout") from e
-        if proc.returncode != 0:
-            raise ReviseError(
-                f"reviser agent exited {proc.returncode}: {proc.stderr.strip()[:200]}"
-            )
-
-        if not scratch.capture_diff().strip():
-            raise ReviseError("reviser agent made no edits to the subject.")
-
-        ref = f"eval-revise-{run_dir.parent.parent.name}"
-        return scratch.commit_scratch(ref, "agent-evals: proposed improvement from eval transcript")
+    except SubjectError as e:
+        raise ReviseError(str(e)) from e

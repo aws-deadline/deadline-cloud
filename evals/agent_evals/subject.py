@@ -1,20 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""The subject under test: the material an eval A/B-compares and improves.
+"""The subject under test: a git checkout plus the pathspec an A/B owns.
 
-A Subject is any git checkout whose revisions can be A/B-tested: baseline = the
-subject at one ref, candidate = the subject at another (usually an agent's edits
-committed to a scratch ref). The diff between them, scoped to the paths the
-subject owns, is the PR-ready proposed improvement.
-
-Two ready-made subjects cover the common cases:
-  - repo_subject(): this deadline-cloud checkout itself -- A/B changes to the CLI
-    source or the repo docs. Requires an editable install (`pip install -e .`) so
-    the `deadline` the agent drives IS this checkout.
-  - corpus_subject(markdown): any fetched material (an AWS docs page, a blog post,
-    a web-search result) seeded into a throwaway git repo so it can be diffed and
-    revised like everything else. The agent runs this material with full Bash on
-    the operator's machine, so only seed material you trust (see harness.py).
+Baseline and candidate are the owned paths at two refs; their diff is the
+proposed change.
+  - repo_subject(): this checkout (CLI source or repo docs). Needs `pip install -e .`
+    so the agent's `deadline` is this checkout.
+  - corpus_subject(markdown): fetched material seeded into a throwaway repo, for
+    revising with reviser.revise().
 """
 
 from __future__ import annotations
@@ -25,12 +18,23 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 BASE_REF = "eval-base"
-
-# The doc filename used when seeding fetched material into a corpus.
 CORPUS_DOC = "source.md"
+
+# Scratch commits must not depend on, or run, the operator's git identity,
+# hooks, or signing setup.
+_SCRATCH_COMMIT = (
+    "-c",
+    "user.name=agent-evals",
+    "-c",
+    "user.email=agent-evals@amazon.com",
+    "commit",
+    "-q",
+    "--no-verify",
+    "--no-gpg-sign",
+)
 
 
 class SubjectError(RuntimeError):
@@ -39,18 +43,19 @@ class SubjectError(RuntimeError):
 
 @dataclass
 class Subject:
-    """A git checkout + the pathspec its evals own (scopes diffs and cleanup)."""
-
     root: Path
-    diff_pathspec: str = "."
+    pathspec: str = "."
 
     def _git(self, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(["git", "-C", str(self.root), *args], capture_output=True, text=True)
+        return subprocess.run(
+            ["git", "-C", str(self.root), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
 
     def _git_checked(self, *args: str) -> subprocess.CompletedProcess:
-        """Like _git, but raises on failure. Used where a silent git failure would
-        corrupt the experiment -- e.g. a checkout that never happened leaves the
-        'revised' variant running baseline source and reporting a bogus no-delta."""
         proc = self._git(*args)
         if proc.returncode != 0:
             raise SubjectError(
@@ -58,102 +63,91 @@ class Subject:
             )
         return proc
 
-    def assert_clean(self) -> None:
-        """Refuse to operate on a checkout with uncommitted work under the owned paths.
+    def resolve(self, ref: str) -> str:
+        """The commit SHA for `ref`."""
+        return self._git_checked(
+            "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"
+        ).stdout.strip()
 
-        checkout()/reset_clean() discard working-tree changes under the pathspec by
-        design (one variant must not bleed into the next) -- but the operator's own
-        uncommitted work must never be what gets discarded. Callers invoke this once
-        before the first destructive operation; a dirty tree is the operator's to
-        stash or commit, not ours to delete.
-        """
-        status = self._git_checked("status", "--porcelain", "--", self.diff_pathspec).stdout.strip()
+    def assert_clean(self) -> None:
+        """Raise if the owned paths have uncommitted changes, which checkout() would discard."""
+        status = self._git_checked("status", "--porcelain", "--", self.pathspec).stdout.strip()
         if status:
             raise SubjectError(
-                f"the checkout at {self.root} has uncommitted changes under "
-                f"'{self.diff_pathspec}':\n{status[:500]}\n"
-                "Commit or stash them first -- running evals would discard them."
+                f"{self.root} has uncommitted changes under '{self.pathspec}':\n"
+                f"{status[:500]}\nCommit or stash them first."
             )
 
     def checkout(self, ref: str) -> None:
-        """Make the owned paths match `ref`, leaving HEAD and everything outside the
-        pathspec alone. A whole-tree switch would swap out the runner's own source
-        and trip over unrelated uncommitted work mid-batch."""
+        """Make the owned paths match `ref`, leaving HEAD and other paths alone."""
         self.reset_clean()
         self._restore(ref)
 
     def reset_clean(self) -> None:
-        """Return the owned paths to HEAD so one variant never bleeds into the next.
-        Scoped to diff_pathspec so work outside the owned paths is never touched.
-        `restore` reverts index and worktree (removing files HEAD lacks); `clean -fd`
-        removes untracked files."""
+        """Return the owned paths to HEAD, removing untracked files under them."""
         self._restore("HEAD")
-        self._git_checked("clean", "-fdq", "--", self.diff_pathspec)
+        self._git_checked("clean", "-fdq", "--", self.pathspec)
 
     def _restore(self, ref: str) -> None:
         self._git_checked(
-            "restore", f"--source={ref}", "--staged", "--worktree", "--", self.diff_pathspec
+            "restore", f"--source={ref}", "--staged", "--worktree", "--", self.pathspec
         )
+
+    def owned_files(self) -> dict:
+        """{relative_path: content} for the owned files as currently checked out."""
+        listing = self._git_checked("ls-files", "-z", "--", self.pathspec).stdout
+        files = {}
+        for rel in filter(None, listing.split("\0")):
+            path = self.root / rel
+            if path.is_file():
+                files[rel] = path.read_text(encoding="utf-8", errors="replace")
+        return files
+
+    def capture_diff(self) -> str:
+        """Uncommitted edits to the owned paths, new files included."""
+        self._git("add", "-N", "--", self.pathspec)
+        return self._git("diff", "--", self.pathspec).stdout
+
+    def diff_refs(self, base: str, revised: str) -> str:
+        return self._git_checked("diff", f"{base}..{revised}", "--", self.pathspec).stdout
+
+    def commit_scratch(self, ref: str, message: str) -> str:
+        """Commit only the owned paths to a new branch `ref` and return it."""
+        self._git_checked("checkout", "-q", "-b", ref)
+        self._git_checked("add", "--", self.pathspec)
+        self._git_checked(*_SCRATCH_COMMIT, "-m", message)
+        return ref
 
     @contextmanager
     def scratch_worktree(self, ref: str) -> Iterator["Subject"]:
-        """A throwaway detached worktree at `ref`, as a Subject with the same
-        pathspec. Lets an editing agent work and commit without touching the
-        operator's checkout, branch, or uncommitted work."""
+        """A throwaway detached worktree at `ref`, so an editing agent never touches
+        the operator's checkout."""
         path = Path(tempfile.mkdtemp(prefix="eval-worktree-"))
         self._git_checked("worktree", "add", "-q", "--detach", str(path), ref)
         try:
-            yield Subject(root=path, diff_pathspec=self.diff_pathspec)
+            yield Subject(root=path, pathspec=self.pathspec)
         finally:
             self._git("worktree", "remove", "--force", str(path))
             shutil.rmtree(path, ignore_errors=True)
 
-    def capture_diff(self) -> str:
-        """Uncommitted edits to the owned paths (including new files) as a unified
-        diff -- the candidate's proposed change."""
-        self._git("add", "-N", self.diff_pathspec)
-        return self._git("diff", "--", self.diff_pathspec).stdout
-
-    def diff_refs(self, base: str, revised: str) -> str:
-        """The committed change a candidate ref is testing, as a unified diff."""
-        return self._git_checked("diff", f"{base}..{revised}", "--", self.diff_pathspec).stdout
-
-    def commit_scratch(self, ref: str, message: str) -> str:
-        """Commit ONLY the owned paths to a fresh branch `ref` (recreated if it
-        exists) and return the ref. Scoped so stray edits elsewhere never land in a
-        proposal."""
-        self._git_checked("checkout", "-B", ref)
-        self._git_checked("add", self.diff_pathspec)
-        self._git_checked("commit", "-m", message)
-        return ref
-
 
 def repo_subject(pathspec: str = "src") -> Subject:
-    """This deadline-cloud checkout as the subject (default: the CLI source).
-
-    Pass pathspec=":(glob)docs/**/*.md" to A/B the repo docs instead.
-    """
-    root = Path(__file__).resolve().parents[2]
-    return Subject(root=root, diff_pathspec=pathspec)
+    """This checkout as the subject. Use ":(glob)docs/**/*.md" for the repo docs."""
+    return Subject(root=Path(__file__).resolve().parents[2], pathspec=pathspec)
 
 
-def corpus_subject(markdown: str, dest: "Path | None" = None) -> Subject:
-    """Seed fetched material (docs page, blog post, search result) into a git repo
-    so it can be A/B-tested and revised. Returns the ready Subject on BASE_REF."""
+def corpus_subject(markdown: str, dest: Optional[Path] = None) -> Subject:
+    """Seed fetched material into a git repo on BASE_REF."""
     root = Path(dest) if dest else Path(tempfile.mkdtemp(prefix="eval-corpus-"))
     root.mkdir(parents=True, exist_ok=True)
     if any(root.iterdir()) and not (root / ".git").exists():
-        raise RuntimeError(f"{root} is non-empty and not a git repo; refusing to seed over it.")
+        raise SubjectError(f"{root} is non-empty and not a git repo; refusing to seed over it.")
 
-    subj = Subject(root=root, diff_pathspec=":(glob)**/*.md")
+    subj = Subject(root=root, pathspec=":(glob)**/*.md")
     if not (root / ".git").exists():
-        subj._git("init", "-q")
-        # Local identity so the commit works without global git config.
-        subj._git("config", "user.email", "agent-evals@amazon.com")
-        subj._git("config", "user.name", "agent-evals")
-
-    subj._git("checkout", "-q", "-B", BASE_REF)
-    (root / CORPUS_DOC).write_text(markdown)
-    subj._git("add", CORPUS_DOC)
-    subj._git("commit", "-q", "-m", "seed corpus from fetched material")
+        subj._git_checked("init", "-q")
+    subj._git_checked("checkout", "-q", "-B", BASE_REF)
+    (root / CORPUS_DOC).write_text(markdown, encoding="utf-8")
+    subj._git_checked("add", CORPUS_DOC)
+    subj._git_checked(*_SCRATCH_COMMIT, "-m", "seed corpus from fetched material")
     return subj

@@ -1,63 +1,112 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Judge verdict parsing + runner aggregation (no live model calls)."""
+"""Judge parsing, runner logic, and reviser flow (no real agent calls)."""
 
 from __future__ import annotations
 
+import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from agent_evals import judge, reviser, runner
+from agent_evals.harness import RunResult
+from agent_evals.subject import BASE_REF, CORPUS_DOC, corpus_subject
 
-from agent_evals import judge, reviser, runner  # noqa: E402
-from agent_evals.subject import BASE_REF, CORPUS_DOC, corpus_subject  # noqa: E402
-
-
-def test_extract_verdict_plain_json() -> None:
-    v = judge._extract_verdict('{"passed": true, "reasoning": "meets the rubric"}')
-    assert v.passed is True and "rubric" in v.reasoning
+_REAL_RUN = subprocess.run
+_DIFF = "diff --git a b\n"
 
 
-def test_extract_verdict_tolerates_code_fence() -> None:
-    v = judge._extract_verdict('```json\n{"passed": false, "reasoning": "missing"}\n```')
-    assert v.passed is False
+def _fake_claude(monkeypatch, handler) -> None:
+    """Route `claude` launches to `handler(cmd, kwargs)`; everything else (git) runs."""
+
+    def _run(cmd, *args, **kwargs):
+        if Path(cmd[0]).name == "claude":
+            return handler(cmd, kwargs)
+        return _REAL_RUN(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", _run)
 
 
-def test_extract_verdict_rejects_no_json() -> None:
+# --- judge -------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "reply, passed",
+    [
+        ('{"passed": true, "reasoning": "ok"}', True),
+        ('```json\n{"passed": false, "reasoning": "no"}\n```', False),
+        ('{"passed": "false", "reasoning": "no"}', False),
+        ('{"passed": "true", "reasoning": "ok"}', True),
+    ],
+    ids=["json", "code_fence", "string_false", "string_true"],
+)
+def test_extract_verdict(reply, passed) -> None:
+    assert judge._extract_verdict(reply).passed is passed
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["I think it passes.", '{"reasoning": "no verdict"}', '{"passed": "maybe"}'],
+    ids=["no_json", "no_passed_key", "ambiguous"],
+)
+def test_extract_verdict_rejects(reply) -> None:
     with pytest.raises(judge.JudgeError):
-        judge._extract_verdict("I think it passes.")
-
-
-def test_extract_verdict_requires_passed_key() -> None:
-    with pytest.raises(judge.JudgeError):
-        judge._extract_verdict('{"reasoning": "no verdict"}')
-
-
-def test_extract_verdict_string_false_is_fail() -> None:
-    # bool("false") is True in Python — the coercion must handle string forms safely.
-    v = judge._extract_verdict('{"passed": "false", "reasoning": "did not meet rubric"}')
-    assert v.passed is False
-
-
-def test_extract_verdict_string_true_is_pass() -> None:
-    v = judge._extract_verdict('{"passed": "true", "reasoning": "ok"}')
-    assert v.passed is True
-
-
-def test_extract_verdict_ambiguous_value_raises() -> None:
-    with pytest.raises(judge.JudgeError, match="ambiguous"):
-        judge._extract_verdict('{"passed": "maybe", "reasoning": "unsure"}')
+        judge._extract_verdict(reply)
 
 
 def test_empty_answer_fails_without_model_call() -> None:
-    v = judge.judge_answer("rubric", "prompt", "   ")
-    assert v.passed is False
+    assert judge.judge_answer("rubric", "prompt", "   ").passed is False
 
 
-def test_aggregate_medians_and_pass_rate() -> None:
+def _judge_call(monkeypatch, answer: str) -> dict:
+    seen: dict = {}
+
+    def _handler(cmd, kwargs):
+        seen.update(prompt=cmd[cmd.index("-p") + 1], cmd=cmd, cwd=kwargs["cwd"])
+        return subprocess.CompletedProcess(cmd, 0, '{"passed": false, "reasoning": "r"}', "")
+
+    _fake_claude(monkeypatch, _handler)
+    judge.judge_answer("rubric", "task", answer)
+    return seen
+
+
+def test_judge_is_toolless_in_an_empty_dir(monkeypatch) -> None:
+    seen = _judge_call(monkeypatch, "my answer")
+    assert seen["cmd"][seen["cmd"].index("--tools") + 1] == ""
+    assert Path(seen["cwd"]) != Path.cwd()
+
+
+def test_judge_wraps_answer_in_unpredictable_markers(monkeypatch) -> None:
+    first = _judge_call(monkeypatch, "my answer")["prompt"]
+    second = _judge_call(monkeypatch, "my answer")["prompt"]
+    marker = first.split("<answer-", 1)[1].split(">", 1)[0]
+    assert f"<answer-{marker}>\nmy answer\n</answer-{marker}>" in first
+    assert f"<answer-{marker}>" not in second
+
+
+def test_judge_truncates_long_answer(monkeypatch) -> None:
+    prompt = _judge_call(monkeypatch, "x" * (judge.MAX_ANSWER_CHARS + 500))["prompt"]
+    assert "[answer truncated]" in prompt
+    assert "x" * (judge.MAX_ANSWER_CHARS + 1) not in prompt
+
+
+def test_judge_timeout_raises_judge_error(monkeypatch) -> None:
+    def _handler(cmd, kwargs):
+        raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+    _fake_claude(monkeypatch, _handler)
+    with pytest.raises(judge.JudgeError, match="timeout"):
+        judge.judge_answer("rubric", "prompt", "an answer", timeout_s=1)
+
+
+# --- runner: scoring ------------------------------------------------------------
+
+
+def test_aggregate() -> None:
     runs = [
         {"passed": True, "num_turns": 4, "total_cost_usd": 0.10},
         {"passed": False, "num_turns": 10, "total_cost_usd": 0.30},
@@ -68,207 +117,72 @@ def test_aggregate_medians_and_pass_rate() -> None:
     assert agg["median_turns"] == 6.0
     assert agg["median_cost_usd"] == pytest.approx(0.20)
     assert agg["n"] == 3
-
-
-def test_aggregate_empty() -> None:
-    assert runner._aggregate([]) == {
-        "pass_rate": 0.0,
-        "median_turns": 0.0,
-        "median_cost_usd": 0.0,
-        "n": 0,
-    }
-
-
-def test_proposal_emitted_when_improved_and_none_regressed() -> None:
-    summaries = [{"verdict": "improved"}, {"verdict": "no_change"}]
-    assert runner._should_emit_proposal(summaries, "diff --git a b\n") is True
-
-
-def test_proposal_suppressed_on_mixed_verdicts() -> None:
-    # The patch is the whole base..revised diff -- a change that regressed ANY
-    # eval must never be surfaced as PR-ready, even if it improved another.
-    summaries = [{"verdict": "improved"}, {"verdict": "regressed"}]
-    assert runner._should_emit_proposal(summaries, "diff --git a b\n") is False
-
-
-def test_proposal_suppressed_without_improvement() -> None:
-    summaries = [{"verdict": "no_change"}, {"verdict": "no_change"}]
-    assert runner._should_emit_proposal(summaries, "diff --git a b\n") is False
-
-
-def test_proposal_suppressed_on_empty_diff() -> None:
-    assert runner._should_emit_proposal([{"verdict": "improved"}], "  \n") is False
-
-
-def test_source_diff_found_past_skipped_case() -> None:
-    # A skipped real_aws case carries no source_diff. Picking summaries[0] blindly
-    # would yield "" and silently suppress a proposal a later case earned.
-    summaries = [
-        {"case_id": "real_aws", "skipped": "requires --allow-real-aws"},
-        {"case_id": "docs", "verdict": "improved", "source_diff": "diff --git a b\n"},
-    ]
-    diff = next((s["source_diff"] for s in summaries if s.get("source_diff")), "")
-    assert diff == "diff --git a b\n"
-    assert runner._should_emit_proposal(summaries, diff) is True
-
-
-def test_subject_files_reflects_checked_out_ref(tmp_path) -> None:
-    # The seeded files must track the CURRENT ref, so baseline and revised runs get
-    # different content -- otherwise a docs A/B compares identical sandboxes.
-    subj = corpus_subject("# Guide\nbaseline text\n", tmp_path / "corpus")
-    base_files = runner._subject_files(subj)
-    assert base_files[CORPUS_DOC] == "# Guide\nbaseline text\n"
-
-    (subj.root / CORPUS_DOC).write_text("# Guide\nrevised text\n")
-    revised_ref = subj.commit_scratch("revised", "revise")
-    subj.checkout(revised_ref)
-    assert runner._subject_files(subj)[CORPUS_DOC] == "# Guide\nrevised text\n"
-
-
-def test_subject_files_scoped_to_pathspec(tmp_path) -> None:
-    # corpus_subject owns *.md; a non-markdown file must not be seeded.
-    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
-    (subj.root / "notes.txt").write_text("not markdown")
-    subj._git("add", "-A")
-    subj._git("commit", "-q", "-m", "add non-md")
-    files = runner._subject_files(subj)
-    assert CORPUS_DOC in files
-    assert "notes.txt" not in files
-
-
-def test_safe_write_creates_nested_dirs(tmp_path) -> None:
-    # A material/subject key with a path separator must create parent dirs, not
-    # raise FileNotFoundError.
-    runner._safe_write(tmp_path / "materials", "docs/guide.md", "content")
-    assert (tmp_path / "materials" / "docs" / "guide.md").read_text() == "content"
-
-
-def test_safe_write_rejects_parent_traversal(tmp_path) -> None:
-    with pytest.raises(ValueError, match="unsafe"):
-        runner._safe_write(tmp_path / "materials", "../escape.md", "x")
-
-
-def test_safe_write_rejects_absolute_path(tmp_path) -> None:
-    with pytest.raises(ValueError, match="unsafe"):
-        runner._safe_write(tmp_path / "materials", "/etc/evil", "x")
-
-
-def test_real_aws_context_requires_env(monkeypatch) -> None:
-    monkeypatch.delenv(runner.ENV_FARM_ID, raising=False)
-    monkeypatch.delenv(runner.ENV_QUEUE_ID, raising=False)
-    with pytest.raises(runner.RealAwsConfigError, match="FARM_ID"):
-        runner._real_aws_context()
-
-
-def test_real_aws_context_reads_env(monkeypatch) -> None:
-    monkeypatch.setenv(runner.ENV_FARM_ID, "farm-x")
-    monkeypatch.setenv(runner.ENV_QUEUE_ID, "queue-y")
-    monkeypatch.setenv(runner.ENV_REGION, "eu-central-1")
-    ctx = runner._real_aws_context()
-    assert ctx == {"farm_id": "farm-x", "queue_id": "queue-y", "region": "eu-central-1"}
-
-
-def test_real_aws_skipped_without_optin(monkeypatch) -> None:
-    monkeypatch.setenv(runner.ENV_FARM_ID, "farm-x")
-    monkeypatch.setenv(runner.ENV_QUEUE_ID, "queue-y")
-    reason = runner._real_aws_skip_reason(allow_real_aws=False)
-    assert reason and "allow-real-aws" in reason
-
-
-def test_real_aws_skip_reason_flags_missing_env(monkeypatch) -> None:
-    monkeypatch.delenv(runner.ENV_FARM_ID, raising=False)
-    monkeypatch.delenv(runner.ENV_QUEUE_ID, raising=False)
-    reason = runner._real_aws_skip_reason(allow_real_aws=True)
-    assert reason and "FARM_ID" in reason
-
-
-def test_provenance_survives_binary_launcher(tmp_path, monkeypatch) -> None:
-    # A native launcher (deadline.exe on Windows) isn't decodable UTF-8. Reading it
-    # raises UnicodeDecodeError (a ValueError, NOT an OSError) -- that must not abort
-    # the whole run before any eval executes.
-    launcher = tmp_path / "deadline"
-    launcher.write_bytes(b"\x7fELF\x02\x01\x01\x00\xff\xfe\xfd")
-    monkeypatch.setattr(runner.shutil, "which", lambda _: str(launcher))
-    monkeypatch.setattr(
-        runner.subprocess,
-        "run",
-        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout="1.2.3", stderr=""),
-    )
-    line = runner._deadline_provenance()
-    assert "1.2.3" in line and "EDITABLE" not in line
-
-
-def test_judge_timeout_raises_judge_error(monkeypatch) -> None:
-    # A hung judge must fail its own run, not hang the batch -- the harness timeout
-    # can't cover the judge call.
-    def _timeout(*a, **k):
-        raise subprocess.TimeoutExpired(cmd="claude", timeout=k.get("timeout", 0))
-
-    monkeypatch.setattr(judge.subprocess, "run", _timeout)
-    with pytest.raises(judge.JudgeError, match="timeout"):
-        judge.judge_answer("rubric", "prompt", "an answer", timeout_s=1)
-
-
-def test_revise_timeout_raises_revise_error(tmp_path, monkeypatch) -> None:
-    # The reviser drives a full edit session; a hung one must fail loudly instead of
-    # blocking with no ceiling.
-    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
-    run_dir = tmp_path / "out" / "case" / "run-1"
-    run_dir.mkdir(parents=True)
-    (run_dir / "events.jsonl").write_text("")
-
-    real_run = subprocess.run
-
-    def _timeout(cmd, *a, **k):
-        # Only the agent launch times out; git calls must still work.
-        if "claude" in cmd[0]:
-            raise subprocess.TimeoutExpired(cmd=cmd[0], timeout=k.get("timeout", 0))
-        return real_run(cmd, *a, **k)
-
-    monkeypatch.setattr(reviser.subprocess, "run", _timeout)
-    with pytest.raises(reviser.ReviseError, match="timeout"):
-        reviser.revise(subj, run_dir, goal="g", base_ref=BASE_REF, timeout_s=1)
-
-
-def test_revise_missing_binary_raises_revise_error(tmp_path) -> None:
-    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
-    run_dir = tmp_path / "out" / "case" / "run-1"
-    run_dir.mkdir(parents=True)
-    (run_dir / "events.jsonl").write_text("")
-    with pytest.raises(reviser.ReviseError, match="could not launch"):
-        reviser.revise(
-            subj, run_dir, goal="g", base_ref=BASE_REF, claude_bin="definitely-not-real-xyz"
-        )
-
-
-def _detached_corpus(tmp_path):
-    subj = corpus_subject("# Guide\n", tmp_path / "corpus")
-    sha = subj._git_checked("rev-parse", "HEAD").stdout.strip()
-    subj._git_checked("checkout", "-q", "--detach", sha)
-    return subj, sha
-
-
-def test_base_ref_pinned_to_sha_on_detached_head(tmp_path) -> None:
-    subj, sha = _detached_corpus(tmp_path)
-    assert runner._resolve_base_ref(subj, None) == sha
-    assert runner._resolve_base_ref(subj, "mainline") == "mainline"
+    assert runner._aggregate([])["n"] == 0
 
 
 def _agg(pass_rate, turns, n=3):
     return {"pass_rate": pass_rate, "median_turns": turns, "median_cost_usd": 0.0, "n": n}
 
 
-def test_ab_verdict_pass_rate_decides() -> None:
-    assert runner._ab_verdict(_agg(0.3, 5), _agg(0.6, 9)) == "improved"
-    assert runner._ab_verdict(_agg(0.6, 9), _agg(0.3, 5)) == "regressed"
+@pytest.mark.parametrize(
+    "b, c, verdict",
+    [
+        (_agg(0.3, 5), _agg(0.6, 9), "improved"),
+        (_agg(0.6, 9), _agg(0.3, 5), "regressed"),
+        (_agg(1.0, 10), _agg(1.0, 6), "improved"),
+        (_agg(0.0, 10), _agg(0.0, 6), "no_change"),
+        (_agg(1.0, 10, n=1), _agg(1.0, 6, n=1), "no_change"),
+    ],
+    ids=["pass_up", "pass_down", "fewer_turns", "fails_faster", "turns_at_k1"],
+)
+def test_ab_verdict(b, c, verdict) -> None:
+    assert runner._ab_verdict(b, c) == verdict
 
 
-def test_ab_verdict_turns_tiebreak_needs_passes_and_k_above_one() -> None:
-    assert runner._ab_verdict(_agg(1.0, 10), _agg(1.0, 6)) == "improved"
-    # Failing faster is not an improvement.
-    assert runner._ab_verdict(_agg(0.0, 10), _agg(0.0, 6)) == "no_change"
-    # One run per variant is noise.
-    assert runner._ab_verdict(_agg(1.0, 10, n=1), _agg(1.0, 6, n=1)) == "no_change"
+def _summary(verdict, k=3):
+    agg = _agg(1.0, 1, n=k)
+    return {
+        "verdict": verdict,
+        "variants": {"baseline": {"aggregate": agg}, "revised": {"aggregate": agg}},
+    }
+
+
+@pytest.mark.parametrize(
+    "summaries, diff, emit",
+    [
+        ([_summary("improved"), _summary("no_change")], _DIFF, True),
+        ([_summary("improved"), _summary("regressed")], _DIFF, False),
+        ([_summary("no_change")], _DIFF, False),
+        ([_summary("improved")], "  \n", False),
+        ([_summary("improved", k=1)], _DIFF, False),
+        ([{"skipped": "x"}, _summary("improved")], _DIFF, True),
+    ],
+    ids=["improved", "any_regression", "no_improvement", "empty_diff", "k1", "with_skipped"],
+)
+def test_should_emit_proposal(summaries, diff, emit) -> None:
+    assert runner._should_emit_proposal(summaries, diff) is emit
+
+
+def test_proposal_diff_skips_cases_without_one() -> None:
+    summaries = [{"case_id": "aws", "skipped": "x"}, {"case_id": "docs", "source_diff": _DIFF}]
+    assert runner._proposal_diff(summaries) == _DIFF
+
+
+# --- runner: inputs and environment ------------------------------------------------
+
+
+def test_safe_write_creates_nested_dirs(tmp_path) -> None:
+    runner._safe_write(tmp_path / "materials", "docs/guide.md", "content")
+    assert (tmp_path / "materials" / "docs" / "guide.md").read_text() == "content"
+
+
+_UNSAFE = ["../escape.md", "/etc/evil"] + (["C:evil", "C:/evil"] if sys.platform == "win32" else [])
+
+
+@pytest.mark.parametrize("rel", _UNSAFE)
+def test_safe_write_rejects_escapes(tmp_path, rel) -> None:
+    with pytest.raises(ValueError, match="unsafe"):
+        runner._safe_write(tmp_path / "materials", rel, "x")
 
 
 def test_fill_placeholders_leaves_other_braces() -> None:
@@ -279,58 +193,184 @@ def test_fill_placeholders_leaves_other_braces() -> None:
 
 def test_agent_env_exports_region(monkeypatch) -> None:
     monkeypatch.setenv("KEEP_ME", "1")
-    env = runner._agent_env({"farm_id": "f", "queue_id": "q", "region": "eu-west-1"})
+    env = runner._agent_env({"region": "eu-west-1"})
     assert env["AWS_REGION"] == env["AWS_DEFAULT_REGION"] == "eu-west-1"
     assert env["KEEP_ME"] == "1"
-    assert runner._agent_env({"farm_id": "f", "queue_id": "q", "region": ""}) is None
+    assert runner._agent_env({"region": ""}) is None
     assert runner._agent_env(None) is None
 
 
-def _capture_judge_prompt(monkeypatch, answer):
-    seen = {}
-
-    def _run(cmd, *a, **k):
-        seen["prompt"] = cmd[cmd.index("-p") + 1]
-        return subprocess.CompletedProcess(cmd, 0, '{"passed": false, "reasoning": "r"}', "")
-
-    monkeypatch.setattr(judge.subprocess, "run", _run)
-    judge.judge_answer("rubric", "task", answer)
-    return seen["prompt"]
+@pytest.fixture
+def aws_env(monkeypatch):
+    monkeypatch.setenv(runner.ENV_FARM_ID, "farm-x")
+    monkeypatch.setenv(runner.ENV_QUEUE_ID, "queue-y")
+    monkeypatch.setenv(runner.ENV_REGION, "eu-central-1")
+    monkeypatch.setattr(runner, "_aws_authenticated", lambda: True)
+    return monkeypatch
 
 
-def test_judge_wraps_answer_in_unpredictable_markers(monkeypatch) -> None:
-    first = _capture_judge_prompt(monkeypatch, "my answer")
-    second = _capture_judge_prompt(monkeypatch, "my answer")
-    marker = first.split("<answer-", 1)[1].split(">", 1)[0]
-    assert f"<answer-{marker}>\nmy answer\n</answer-{marker}>" in first
-    assert f"<answer-{marker}>" not in second  # nonce differs per call
+def test_real_aws_setup_ready(aws_env) -> None:
+    ctx, skip = runner._real_aws_setup(allow_real_aws=True)
+    assert skip is None
+    assert ctx == {"farm_id": "farm-x", "queue_id": "queue-y", "region": "eu-central-1"}
 
 
-def test_judge_truncates_long_answer(monkeypatch) -> None:
-    prompt = _capture_judge_prompt(monkeypatch, "x" * (judge.MAX_ANSWER_CHARS + 500))
-    assert "[answer truncated]" in prompt
-    assert "x" * (judge.MAX_ANSWER_CHARS + 1) not in prompt
+def test_real_aws_setup_needs_opt_in(aws_env) -> None:
+    assert "allow-real-aws" in runner._real_aws_setup(allow_real_aws=False)[1]
 
 
-def test_revise_leaves_operator_checkout_untouched(tmp_path, monkeypatch) -> None:
-    subj = corpus_subject("# Guide\noriginal\n", tmp_path / "corpus")
-    (subj.root / CORPUS_DOC).write_text("# Guide\noperator wip\n")  # uncommitted
-    run_dir = tmp_path / "out" / "case" / "run-1"
-    run_dir.mkdir(parents=True)
-    (run_dir / "events.jsonl").write_text("")
-    real_run = subprocess.run
+def test_real_aws_setup_needs_env(aws_env) -> None:
+    aws_env.delenv(runner.ENV_FARM_ID)
+    assert runner.ENV_FARM_ID in runner._real_aws_setup(allow_real_aws=True)[1]
 
-    def _fake_agent(cmd, *a, **k):
-        if cmd[0] == "claude":
-            doc = Path(k["cwd"]) / CORPUS_DOC
-            doc.write_text(doc.read_text() + "added step\n")
-            return subprocess.CompletedProcess(cmd, 0, "", "")
-        return real_run(cmd, *a, **k)
 
-    monkeypatch.setattr(reviser.subprocess, "run", _fake_agent)
-    ref = reviser.revise(subj, run_dir, goal="g", base_ref=BASE_REF)
+def test_real_aws_setup_needs_auth(aws_env) -> None:
+    aws_env.setattr(runner, "_aws_authenticated", lambda: False)
+    assert "auth" in runner._real_aws_setup(allow_real_aws=True)[1]
 
-    assert "added step" in subj.diff_refs(BASE_REF, ref)
-    assert (subj.root / CORPUS_DOC).read_text() == "# Guide\noperator wip\n"
-    head = subj._git_checked("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-    assert head == BASE_REF
+
+@pytest.mark.parametrize(
+    "cases",
+    [{"id": "x"}, [{"id": "has space"}], [{"id": "a/b"}], [{}]],
+    ids=["not_list", "space", "slash", "missing"],
+)
+def test_load_cases_rejects(tmp_path, cases) -> None:
+    path = tmp_path / "eval.json"
+    path.write_text(json.dumps(cases))
+    with pytest.raises(ValueError):
+        runner._load_cases(str(path))
+
+
+def test_provenance_survives_binary_launcher(tmp_path, monkeypatch) -> None:
+    launcher = tmp_path / "deadline"
+    launcher.write_bytes(b"\x7fELF\x02\x01\x01\x00\xff\xfe\xfd")
+    calls = []
+
+    def _run(cmd, **kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="1.2.3", stderr="")
+
+    monkeypatch.setattr(runner.shutil, "which", lambda _: str(launcher))
+    monkeypatch.setattr(runner.subprocess, "run", _run)
+    assert runner._deadline_provenance() == f"deadline: 1.2.3 at {launcher}"
+    assert calls == [[str(launcher), "--version"]]  # never reached pip
+
+
+# --- runner: run flow ---------------------------------------------------------------
+
+
+_CASE = {"id": "c", "prompt": "p", "rubric": "r"}
+
+
+def test_failed_agent_run_is_not_judged(tmp_path, monkeypatch) -> None:
+    def _no_judge(*a, **k):
+        raise AssertionError("judge called on a failed run")
+
+    failed = RunResult(success=False, subtype="error_max_turns", final_text="ok")
+    monkeypatch.setattr(runner, "run_agent", lambda *a, **k: failed)
+    monkeypatch.setattr(runner.judge, "judge_answer", _no_judge)
+    record = runner._run_case(_CASE, tmp_path / "run-1", None)
+    assert record["passed"] is False and "error_max_turns" in record["detail"]
+    assert json.loads((tmp_path / "run-1" / "result.json").read_text())["passed"] is False
+
+
+def test_summary_written_when_a_case_raises(tmp_path, monkeypatch) -> None:
+    eval_file = tmp_path / "e.json"
+    eval_file.write_text(json.dumps([{**_CASE, "id": "ok"}, {**_CASE, "id": "boom"}]))
+    record = {"passed": True, "num_turns": 1, "total_cost_usd": 0.0}
+
+    def _run_case(case, *a):
+        if case["id"] == "boom":
+            raise RuntimeError("boom")
+        return record
+
+    monkeypatch.setattr(runner, "OUTPUT_ROOT", tmp_path / "out")
+    monkeypatch.setattr(runner, "_run_case", _run_case)
+    monkeypatch.setattr(runner, "_deadline_provenance", lambda: "deadline: test")
+    args = argparse.Namespace(
+        eval_file=str(eval_file),
+        k=1,
+        model=None,
+        revised_ref=None,
+        base_ref=None,
+        pathspec="src",
+        seed_subject=False,
+        allow_real_aws=False,
+    )
+    with pytest.raises(RuntimeError, match="boom"):
+        runner._cmd_run(args)
+    (summary,) = (tmp_path / "out" / "e").glob("*/summary.json")
+    assert [s["case_id"] for s in json.loads(summary.read_text())] == ["ok"]
+
+
+# --- reviser --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def run_dir(tmp_path) -> Path:
+    path = tmp_path / "out" / "case" / "baseline" / "run-1"
+    path.mkdir(parents=True)
+    (path / "events.jsonl").write_text("")
+    return path
+
+
+@pytest.fixture
+def corpus(tmp_path):
+    return corpus_subject("# Guide\noriginal\n", tmp_path / "corpus")
+
+
+def _agent_result(cmd, is_error=False):
+    event = {"type": "result", "subtype": "success", "is_error": is_error, "result": "done"}
+    return subprocess.CompletedProcess(cmd, 0, json.dumps(event) + "\n", "")
+
+
+def _timeout(cmd, kwargs):
+    raise subprocess.TimeoutExpired(cmd, 1)
+
+
+def test_revise_commits_without_touching_operator_checkout(corpus, run_dir, monkeypatch) -> None:
+    (corpus.root / CORPUS_DOC).write_text("# Guide\noperator wip\n")
+
+    def _edit(cmd, kwargs):
+        doc = Path(kwargs["cwd"]) / CORPUS_DOC
+        doc.write_text(doc.read_text() + "added step\n")
+        return _agent_result(cmd)
+
+    _fake_claude(monkeypatch, _edit)
+    ref = reviser.revise(corpus, run_dir, goal="g", base_ref=BASE_REF)
+
+    assert ref.startswith("eval-revise-")
+    assert "added step" in corpus.diff_refs(BASE_REF, ref)
+    assert (corpus.root / CORPUS_DOC).read_text() == "# Guide\noperator wip\n"
+    assert corpus._git_checked("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == BASE_REF
+
+
+@pytest.mark.parametrize("ref, match", [("has space", "invalid"), (BASE_REF, "exists")])
+def test_revise_rejects_unusable_ref_before_running(
+    corpus, run_dir, monkeypatch, ref, match
+) -> None:
+    _fake_claude(monkeypatch, lambda cmd, kwargs: pytest.fail("agent launched"))
+    with pytest.raises(reviser.ReviseError, match=match):
+        reviser.revise(corpus, run_dir, goal="g", base_ref=BASE_REF, ref=ref)
+
+
+@pytest.mark.parametrize(
+    "handler, match",
+    [
+        (lambda cmd, kwargs: _agent_result(cmd), "no edits"),
+        (lambda cmd, kwargs: _agent_result(cmd, is_error=True), "failed"),
+        (_timeout, "timeout"),
+    ],
+    ids=["no_edits", "agent_error", "timeout"],
+)
+def test_revise_errors(corpus, run_dir, monkeypatch, handler, match) -> None:
+    _fake_claude(monkeypatch, handler)
+    with pytest.raises(reviser.ReviseError, match=match):
+        reviser.revise(corpus, run_dir, goal="g", base_ref=BASE_REF, timeout_s=1)
+
+
+def test_revise_missing_binary(corpus, run_dir) -> None:
+    with pytest.raises(reviser.ReviseError, match="could not launch"):
+        reviser.revise(
+            corpus, run_dir, goal="g", base_ref=BASE_REF, claude_bin="definitely-not-real-xyz"
+        )

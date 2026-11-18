@@ -1,29 +1,21 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Grade an agent's answer against a natural-language rubric (LLM-as-judge).
-
-The judge is a SCORER, not an agent: a headless, tool-less, single-turn model call.
-It sees only the rubric, the task prompt, and the agent's final answer, so its
-verdict is reproducible from the run artifact alone. The rubric being a plain
-string is what makes new eval domains code-free: describing what "success" means
-is the only per-eval authoring step.
-"""
+"""Grade an agent's answer against a plain-language rubric with a tool-less model call."""
 
 from __future__ import annotations
 
 import json
 import secrets
-import subprocess
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
+from .harness import HarnessError, claude_cmd, run_claude
 
-# Wall-clock ceiling for one judge call. --max-turns bounds model turns, but a hung
-# network/auth interaction has no turn cost, and the judge runs once per run in the
-# batch -- so without this a single stuck judge would hang the whole eval.
 DEFAULT_TIMEOUT_S = 300
 
-# Bounds the graded answer so a very long one can't crowd out the instructions.
+# Keeps a long answer from crowding out the instructions.
 MAX_ANSWER_CHARS = 20_000
 
 
@@ -76,11 +68,7 @@ def judge_answer(
     claude_bin: str = "claude",
     timeout_s: int = DEFAULT_TIMEOUT_S,
 ) -> Verdict:
-    """Grade `answer` against `rubric` with a headless, tool-less model call.
-
-    Raises JudgeError if the judge binary can't be launched, the call exceeds
-    `timeout_s`, or the reply carries no usable verdict.
-    """
+    """Grade `answer` against `rubric`. Raises JudgeError when no verdict results."""
     if not (answer or "").strip():
         return Verdict(passed=False, reasoning="agent produced no final answer")
 
@@ -91,61 +79,31 @@ def judge_answer(
     full_prompt = _JUDGE_PROMPT.format(
         rubric=rubric, prompt=prompt or "(none)", answer=answer, nonce=secrets.token_hex(8)
     )
-    cmd = [
-        claude_bin,
-        "-p",
+    cmd = claude_cmd(
         full_prompt,
-        "--output-format",
-        "json",
-        "--permission-mode",
-        "bypassPermissions",
-        # The judge must answer from the given text alone, so all tools are denied.
-        # A denied tool attempt still consumes a turn, so leave headroom for the
-        # model to recover and answer instead of dying on error_max_turns.
-        "--max-turns",
-        "5",
-        "--disallowedTools",
-        "Bash",
-        "Read",
-        "Write",
-        "Edit",
-        "Grep",
-        "Glob",
-        "WebFetch",
-        "WebSearch",
-        "Agent",
-        "TodoWrite",
-        "NotebookEdit",
-    ]
-    if model:
-        cmd += ["--model", model]
+        tools=[],
+        max_turns=1,
+        output_format="json",
+        model=model,
+        claude_bin=claude_bin,
+    )
+    # An empty cwd, so the judge loads no project instructions.
+    with tempfile.TemporaryDirectory(prefix="eval-judge-") as cwd:
+        try:
+            proc = run_claude(cmd, Path(cwd), timeout_s)
+        except HarnessError as e:
+            raise JudgeError(str(e)) from e
 
-    try:
-        # stdin=DEVNULL: with -p the CLI still waits on stdin and can exit non-zero
-        # on a closed pipe.
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=timeout_s
-        )
-    except OSError as e:
-        raise JudgeError(f"could not launch {claude_bin}: {e}") from e
-    except subprocess.TimeoutExpired as e:
-        raise JudgeError(f"judge call exceeded {timeout_s}s wall-clock timeout") from e
-
-    # --output-format json wraps the reply in an envelope whose `result` field is
-    # the text we asked for.
     reply = proc.stdout
     try:
         envelope = json.loads(proc.stdout)
         if isinstance(envelope, dict) and isinstance(envelope.get("result"), str):
             reply = envelope["result"]
     except json.JSONDecodeError:
-        # stdout wasn't the JSON envelope (e.g. plain-text or truncated output);
-        # fall through and try to grade the raw stdout instead.
         pass
 
-    # Parse the verdict from stdout FIRST: the CLI sometimes exits non-zero after
-    # emitting a valid result (e.g. a model-availability warning). Only surface the
-    # exit code when stdout carried nothing gradable.
+    # The CLI can exit non-zero after a valid result (e.g. a model warning), so
+    # parse first and report the exit code only when there's no verdict.
     try:
         return _extract_verdict(reply)
     except JudgeError:
@@ -158,8 +116,7 @@ def judge_answer(
 
 
 def _extract_verdict(text: str) -> Verdict:
-    """Pull the JSON verdict out of the judge's reply, tolerating code fences or
-    stray prose around it (scan first '{' to last '}')."""
+    """The JSON verdict in the reply, tolerating fences or prose around it."""
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1 or end < start:
@@ -174,12 +131,7 @@ def _extract_verdict(text: str) -> Verdict:
 
 
 def _coerce_passed(value: object) -> bool:
-    """Safely coerce the judge's 'passed' field to a Python bool.
-
-    The prompt asks for a JSON boolean, but models sometimes emit strings. Plain
-    bool("false") is True in Python, which would silently flip a FAIL to a PASS --
-    so we handle known string forms explicitly and reject anything ambiguous.
-    """
+    """bool("false") is True, so map known strings and reject the rest."""
     if isinstance(value, bool):
         return value
     if isinstance(value, str):

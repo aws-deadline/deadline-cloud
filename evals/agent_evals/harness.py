@@ -1,16 +1,10 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-"""Run Claude Code headless against a goal and capture telemetry.
+"""Run Claude Code headless and capture telemetry from its stream-json events.
 
-The tested agent runs as a separate subprocess (`claude -p` with stream-json
-output) in a temp working directory. The JSON event stream carries both
-per-tool-call events and a final result event with token/cost telemetry, so no
-extra instrumentation is needed.
-
-Trust boundary: the working directory is a convention, NOT a sandbox. The agent
-runs with bypassPermissions and the operator's user, filesystem, and AWS
-credentials, so eval files, materials, and seeded subjects are trusted input.
-Run untrusted (fetched) material only inside a container or VM.
+The working directory is not a sandbox: the agent runs with bypassPermissions as
+the operator, with their filesystem and AWS credentials. Treat eval files and
+materials as trusted input.
 """
 
 from __future__ import annotations
@@ -21,28 +15,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-# Wall-clock ceiling for a single agent run. --max-turns bounds model turns, but a
-# hung network/auth interaction has no turn cost, so without this one stuck run
-# could block the whole batch indefinitely.
+# --max-turns doesn't bound a hung network or auth call.
 DEFAULT_TIMEOUT_S = 1200
 
 
 class HarnessError(RuntimeError):
-    """Raised when the agent subprocess cannot be launched or times out."""
+    """Raised when the claude subprocess cannot be launched or times out."""
 
 
 @dataclass
 class RunResult:
-    """One headless agent run: outcome + telemetry, plus the raw event log."""
+    """One headless agent run: outcome, telemetry, and the raw event log."""
 
-    success: bool  # did the CLI complete without error
-    subtype: Optional[str]  # result subtype, e.g. "success" / "error_max_turns"
+    success: bool
+    subtype: Optional[str]  # e.g. "success", "error_max_turns"
     tool_calls: list = field(default_factory=list)
     num_turns: int = 0
     total_cost_usd: float = 0.0
     duration_ms: int = 0
-    final_text: str = ""  # the agent's final response text
-    workdir: Optional[Path] = None
+    final_text: str = ""
     raw_events: list = field(default_factory=list)
 
     @property
@@ -50,7 +41,7 @@ class RunResult:
         return len(self.tool_calls)
 
     def telemetry_dict(self) -> dict:
-        """Serializable telemetry (excludes the bulky raw event log)."""
+        """Serializable telemetry, without the raw event log."""
         return {
             "success": self.success,
             "subtype": self.subtype,
@@ -63,10 +54,69 @@ class RunResult:
         }
 
 
+def claude_cmd(
+    prompt: str,
+    *,
+    tools: list,
+    max_turns: int,
+    output_format: str = "stream-json",
+    model: Optional[str] = None,
+    claude_bin: str = "claude",
+) -> list:
+    """A headless `claude -p` command limited to exactly `tools` (none if empty).
+
+    `--tools` limits the tool set; `--allowedTools` would only pre-approve tools,
+    which bypassPermissions already does. No MCP servers, so the operator's config
+    can't add tools.
+    """
+    cmd = [
+        claude_bin,
+        "-p",
+        prompt,
+        "--output-format",
+        output_format,
+        "--permission-mode",
+        "bypassPermissions",
+        "--max-turns",
+        str(max_turns),
+        "--tools",
+        ",".join(tools),
+        "--strict-mcp-config",
+    ]
+    if output_format == "stream-json":
+        cmd.append("--verbose")  # required for per-event output
+    if model:
+        cmd += ["--model", model]
+    return cmd
+
+
+def run_claude(
+    cmd: list, cwd: Path, timeout_s: int, env: Optional[dict] = None
+) -> subprocess.CompletedProcess:
+    """Run a claude command, raising HarnessError on launch failure or timeout."""
+    try:
+        return subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            # With -p the CLI still reads stdin and can fail on a closed pipe.
+            stdin=subprocess.DEVNULL,
+            timeout=timeout_s,
+            env=env,
+        )
+    except OSError as e:
+        raise HarnessError(f"could not launch {cmd[0]}: {e}") from e
+    except subprocess.TimeoutExpired as e:
+        raise HarnessError(f"{cmd[0]} exceeded {timeout_s}s wall-clock timeout") from e
+
+
 def run_agent(
     prompt: str,
     workdir: Path,
-    allowed_tools: list,
+    tools: list,
     *,
     max_turns: int = 20,
     model: Optional[str] = None,
@@ -74,63 +124,21 @@ def run_agent(
     timeout_s: int = DEFAULT_TIMEOUT_S,
     env: Optional[dict] = None,
 ) -> RunResult:
-    """Run Claude Code headless in `workdir`, restricted to `allowed_tools`.
-
-    Raises HarnessError if the agent binary can't be launched or the run exceeds
-    `timeout_s`, so one bad run surfaces a clear error rather than aborting the
-    batch with a raw traceback or hanging forever.
-    """
-    cmd = [
-        claude_bin,
-        "-p",
-        prompt,
-        "--output-format",
-        "stream-json",
-        "--verbose",  # required for stream-json event detail
-        "--permission-mode",
-        "bypassPermissions",
-        "--max-turns",
-        str(max_turns),
-    ]
-    if allowed_tools:
-        cmd += ["--allowedTools", *allowed_tools]
-    if model:
-        cmd += ["--model", model]
-
-    # stdin=DEVNULL: with -p the CLI still waits on stdin and can exit non-zero on a
-    # closed pipe; DEVNULL makes the call cleanly non-interactive.
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(workdir),
-            capture_output=True,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=timeout_s,
-            env=env,
-        )
-    except OSError as e:
-        raise HarnessError(f"could not launch {claude_bin}: {e}") from e
-    except subprocess.TimeoutExpired as e:
-        raise HarnessError(f"agent run exceeded {timeout_s}s wall-clock timeout") from e
-
+    """Run Claude Code headless in `workdir` with only `tools` available."""
+    cmd = claude_cmd(prompt, tools=tools, max_turns=max_turns, model=model, claude_bin=claude_bin)
+    proc = run_claude(cmd, workdir, timeout_s, env)
     events = []
     for line in proc.stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
         try:
             events.append(json.loads(line))
         except json.JSONDecodeError:
-            continue  # non-JSON lines (rare) are ignored
+            continue
+    return _parse_events(events, proc.returncode)
 
-    return _parse_events(events, proc.returncode, workdir)
 
-
-def _parse_events(events: list, returncode: int, workdir: Path) -> RunResult:
+def _parse_events(events: list, returncode: int) -> RunResult:
     tool_calls = []
     final = None
-
     for ev in events:
         if ev.get("type") == "assistant":
             for blk in ev.get("message", {}).get("content", []):
@@ -140,23 +148,18 @@ def _parse_events(events: list, returncode: int, workdir: Path) -> RunResult:
             final = ev
 
     if final is None:
-        # CLI died before emitting a result event.
         return RunResult(
-            success=False,
-            subtype="no_result_event",
-            tool_calls=tool_calls,
-            workdir=workdir,
-            raw_events=events,
+            success=False, subtype="no_result_event", tool_calls=tool_calls, raw_events=events
         )
 
+    result = final.get("result")
     return RunResult(
-        success=(not final.get("is_error", False)) and returncode == 0,
+        success=not final.get("is_error", False) and returncode == 0,
         subtype=final.get("subtype"),
         tool_calls=tool_calls,
         num_turns=final.get("num_turns", 0),
         total_cost_usd=final.get("total_cost_usd", 0.0),
         duration_ms=final.get("duration_ms", 0),
-        final_text=final.get("result", "") if isinstance(final.get("result"), str) else "",
-        workdir=workdir,
+        final_text=result if isinstance(result, str) else "",
         raw_events=events,
     )
