@@ -259,6 +259,11 @@ class TestParseMultiFormatParameters:
                 id="inline_json_string",
             ),
             pytest.param(
+                [json.dumps({"key1": "value1", "key2": {"nested": "value"}}, indent=2)],
+                {"key1": "value1", "key2": {"nested": "value"}},
+                id="inline_json_multiline",
+            ),
+            pytest.param(
                 ['{"key1": "value1"}', '{"key2": "value2"}'],
                 {"key1": "value1", "key2": "value2"},
                 id="multiple_inline_json_objects",

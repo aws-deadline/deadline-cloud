@@ -82,14 +82,35 @@ def cli_bundle():
 _openjd_identifier_regex = r"(?-m:^[A-Za-z_][A-Za-z0-9_]*\Z)"
 
 
+def _validate_json_or_yaml_parameters(parameter: str) -> list[dict[str, Any]]:
+    """Parse and validate job parameters supplied as inline JSON or a JSON/YAML file."""
+    parameters = _parse_multi_format_parameters([parameter])
+    for name, value in parameters.items():
+        if not isinstance(name, str) or not re.match(_openjd_identifier_regex, name):
+            raise click.BadParameter(
+                f"Parameter names must be alphanumeric Open Job Description identifiers. Invalid parameter name: {name}"
+            )
+        if value is None:
+            raise click.BadParameter(f"Parameter {name} has no value.")
+
+    return [{"name": name, "value": value} for name, value in parameters.items()]
+
+
 def validate_parameters(ctx, param, value):
     """
-    Validate provided --parameter values, ensuring that they are in the format "ParamName=Value", and convert them to a dict with the
-    following format:
+    Parse --parameter values from key-value pairs, inline JSON, or JSON/YAML files.
+    Validate Open Job Description identifiers and reject null values, returning
+    the merged parameters as:
         [{"name": "<name>", "value": "<value>"}, ...]
+
+    Later values for the same parameter name take precedence.
     """
     parameters_split = []
     for parameter in value:
+        if parameter.lstrip().startswith(("file://", "{")):
+            parameters_split.extend(_validate_json_or_yaml_parameters(parameter))
+            continue
+
         regex_match = re.match("([^=]+)=(.*)", parameter)
         if not regex_match:
             raise click.BadParameter(
@@ -103,7 +124,8 @@ def validate_parameters(ctx, param, value):
 
         parameters_split.append({"name": regex_match[1], "value": regex_match[2]})
 
-    return parameters_split
+    parameters_by_name = {parameter["name"]: parameter for parameter in parameters_split}
+    return list(parameters_by_name.values())
 
 
 def _validate_submitter_info(ctx, param, values):

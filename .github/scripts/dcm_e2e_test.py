@@ -27,6 +27,15 @@ OPEN_LINK_LABELS = os.environ.get("OPEN_LINK_LABELS", "Open Link,Open link,Open"
 
 SCREENSHOT_DIR = os.environ.get("SCREENSHOT_DIR", "/tmp")
 
+# Delay between synthesized keystrokes. Typing at full speed under Xvfb
+# intermittently corrupts characters, and IdC then rejects the password.
+KEYSTROKE_DELAY = float(os.environ.get("KEYSTROKE_DELAY", "0.05"))
+
+# sign_in() results
+SIGNED_IN = "signed_in"
+FORBIDDEN = "403"
+REJECTED = "credentials_rejected"
+
 
 def run(cmd, check=True, timeout=180):
     print(f"$ {' '.join(cmd)}", flush=True)
@@ -140,6 +149,26 @@ def is_on_403_page(br):
         return False
 
 
+def credentials_rejected(br):
+    """True if IdC shows "We couldn't verify your sign-in credentials"."""
+    return br.locator("static_text[name*='verify your sign-in credentials']").exists()
+
+
+def close_signin_tabs(br):
+    """Close leftover IdC tabs so the next attempt doesn't match their fields or
+    error text. The prewarmed about:blank tab keeps the window open."""
+    close = br.locator("tab[name='Amazon Web Services'] > button[name='Close tab']")
+    for _ in range(5):
+        try:
+            if not close.exists():
+                return
+            close.first().press()
+            time.sleep(1)
+        except Exception as e:
+            print(f"close_signin_tabs: {e}", flush=True)
+            return
+
+
 def click_open_link(br):
     """Click the browser's 'Open this link in Deadline Cloud monitor?' dialog."""
     for label in OPEN_LINK_LABELS:
@@ -168,12 +197,17 @@ def _type_into(locator, text):
     through the OS, which works everywhere as long as the field has focus."""
     locator.focus()
     time.sleep(0.3)
-    xa11y.input_sim().type_text(text)
+    sim = xa11y.input_sim()
+    for ch in text:
+        sim.type_text(ch)
+        time.sleep(KEYSTROKE_DELAY)
 
 
 def sign_in():
-    """Drive the IdC sign-in flow. Returns True on success, False if the IdC
-    /platform/authorize page returned 403 (caller should restart the login)."""
+    """Drive the IdC sign-in flow. Returns SIGNED_IN, or FORBIDDEN / REJECTED
+    when the caller should restart the login: FORBIDDEN if the IdC
+    /platform/authorize page returned 403, REJECTED if IdC rejected the typed
+    credentials."""
     br = browser()
     # Dismiss any first-run welcome screens (Edge and Firefox)
     for _ in range(6):
@@ -206,7 +240,7 @@ def sign_in():
         if not dismissed:
             break
     if is_on_403_page(br):
-        return False
+        return FORBIDDEN
     user = br.locator("text_field[name='Username']")
     user.wait_visible(timeout=120)
     _type_into(user, USERNAME)
@@ -216,20 +250,26 @@ def sign_in():
     _type_into(pw, PASSWORD)
     br.locator("button[name='Sign in']").press()
     # Optional IdC 'Allow' consent screen
-    try:
-        br.locator("button[name='Allow']").wait_visible(timeout=10)
-        br.locator("button[name='Allow']").press()
-    except xa11y.TimeoutError:
-        pass
+    allow = br.locator("button[name='Allow']")
+    end = time.time() + 10
+    while time.time() < end:
+        if credentials_rejected(br):
+            return REJECTED
+        if allow.exists():
+            allow.press()
+            break
+        time.sleep(1)
     # Wait for Open-Link dialog (Linux Firefox). On macOS Safari + some browsers,
     # the deadline-cloud-monitor:// scheme is auto-dispatched without prompt.
     end = time.time() + 60
     while time.time() < end:
+        if credentials_rejected(br):
+            return REJECTED
         if click_open_link(br):
-            return True
+            return SIGNED_IN
         time.sleep(1)
     print("No Open Link dialog appeared (browser may have auto-dispatched the scheme)", flush=True)
-    return True
+    return SIGNED_IN
 
 
 def main():
@@ -241,19 +281,22 @@ def main():
         print(f"auth login attempt {attempt}/{max_attempts} pid={cli.pid}", flush=True)
         try:
             time.sleep(10)
-            if sign_in():
+            result = sign_in()
+            if result == SIGNED_IN:
                 cli.wait(timeout=180)
                 if cli.returncode:
                     fail(f"auth login failed: {cli.returncode}")
                 break
-            screenshot(f"403_attempt_{attempt}")
-            print(f"attempt {attempt}: IdC returned 403, restarting login", flush=True)
+            screenshot(f"{result}_attempt_{attempt}")
+            print(f"attempt {attempt}: {result}, restarting login", flush=True)
+            if result == REJECTED:
+                close_signin_tabs(browser())
         finally:
             if cli.poll() is None:
                 cli.kill()
         time.sleep(5)
     else:
-        fail(f"IdC /platform/authorize returned 403 on all {max_attempts} attempts")
+        fail(f"sign-in did not succeed in {max_attempts} attempts (last: {result})")
 
     run(["deadline", "auth", "status"])
     run(["deadline", "farm", "list"])
