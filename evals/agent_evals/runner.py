@@ -147,7 +147,9 @@ def _safe_write(base: Path, rel: str, content: str) -> None:
     """Write content to base/rel, creating parent dirs. Rejects absolute paths and
     '..' segments so a material/subject key can never write outside the sandbox."""
     rel_path = Path(rel)
-    if rel_path.is_absolute() or ".." in rel_path.parts:
+    # `anchor`, not is_absolute(): on Windows "/etc/x" and "C:x" aren't absolute
+    # but still escape `base` when joined.
+    if rel_path.anchor or ".." in rel_path.parts:
         raise ValueError(f"unsafe sandbox path: {rel!r}")
     dest = base / rel_path
     dest.parent.mkdir(parents=True, exist_ok=True)
