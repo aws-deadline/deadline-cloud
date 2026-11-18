@@ -100,7 +100,7 @@ def judge_answer(
         if isinstance(envelope, dict) and isinstance(envelope.get("result"), str):
             reply = envelope["result"]
     except json.JSONDecodeError:
-        pass
+        pass  # not the JSON envelope; grade the raw stdout
 
     # The CLI can exit non-zero after a valid result (e.g. a model warning), so
     # parse first and report the exit code only when there's no verdict.

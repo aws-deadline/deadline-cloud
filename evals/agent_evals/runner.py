@@ -189,7 +189,7 @@ def _deadline_provenance() -> str:
             if line.lower().startswith("editable project location"):
                 editable = f" [EDITABLE -> {line.split(':', 1)[1].strip()}]"
     except (OSError, subprocess.TimeoutExpired, IndexError, ValueError):
-        pass
+        pass  # diagnostic only; report without the editable target
     return f"deadline: {version} at {path}{editable}"
 
 
