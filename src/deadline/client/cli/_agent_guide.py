@@ -33,8 +33,8 @@ workflows and defaults that help pages don't.
   wait on stdin.
 - Pass `--profile`, `--farm-id`, `--queue-id`, and `--job-id` explicitly.
   Omitted values fall back to the defaults in `~/.deadline/config`, which may
-  point at someone else's farm. `defaults.aws_profile_name` there overrides
-  the AWS_PROFILE environment variable.
+  point at someone else's farm. If `defaults.aws_profile_name` there names a
+  profile, it overrides the AWS_PROFILE environment variable.
 - `deadline config set` changes that shared file for the user. Prefer flags.
 - Commands with `--output` print JSON automatically when stdout isn't a
   terminal. `deadline bundle submit` always prints text, never JSON, and the
@@ -131,8 +131,9 @@ optionally `parameter_values.yaml` and `asset_references.yaml`.
 - Always pass the parsed job ID. Submit records `defaults.job_id` only when you
   passed none of `--profile`, `--farm-id`, `--queue-id`, `--region`, or
   `--storage-profile-id`, so the default can point at an older job.
-- `job wait` exit codes: 0 succeeded, 1 timed out, 2 failed, 3 canceled,
-  4 suspended, 5 not compatible.
+- `job wait` exit codes: 0 succeeded, 1 timed out, 2 failed or the wait itself
+  errored (the JSON then has an `error` key), 3 canceled, 4 suspended or
+  archived, 5 not compatible.
 - `job download-output` writes to the output paths recorded when the job was
   submitted (remapped by storage profile), NOT the current directory. Existing
   files get a " (1)" copy unless you pass `--conflict-resolution skip` or
