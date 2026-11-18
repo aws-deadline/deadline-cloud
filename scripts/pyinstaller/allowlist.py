@@ -82,7 +82,9 @@ ALLOWLIST = {
         "_internal/libcrypto-*.dll",
         "_internal/libssl.*.dylib",
         "_internal/libcrypto.*.dylib",
-        # libffi
+        # libffi. On Linux the runtime ships libffi.so.6, which AL2023, RHEL 9 and
+        # Ubuntu 22.04+ do not provide, so it is bundled like the Windows/macOS builds.
+        "_internal/libffi.so.*",
         "_internal/libffi-*.dll",
         "_internal/libffi.*.dylib",
         # awscrt's native extension on Linux/macOS. The .so globs generated for a
