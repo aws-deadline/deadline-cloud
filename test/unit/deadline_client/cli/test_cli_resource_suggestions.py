@@ -6,6 +6,7 @@ Tests for CLI resource ID error suggestions.
 
 import os
 
+import pytest
 from botocore.exceptions import ClientError
 from click.testing import CliRunner
 
@@ -627,3 +628,68 @@ def test_queue_paramdefs_wrong_queue_suggests_queues(fresh_deadline_config, dead
     assert "Failed to get Queue Parameter Definitions from Deadline" in result.output
     assert f"Available queues in farm {MOCK_FARM_ID}" in result.output
     assert MOCK_QUEUE_ID in result.output
+
+
+_ACCESS_DENIED = {"Error": {"Code": "AccessDeniedException", "Message": "Not authorized"}}
+_OTHER_FARM_ID = "farm-anotherid1234567890123456"
+# Farms reached only through a queue/fleet membership are listed without a displayName.
+_MEMBERSHIP_ONLY_FARM = {"farmId": MOCK_FARM_ID}
+_DESCRIBABLE_FARM = {"farmId": _OTHER_FARM_ID, "displayName": "Another Farm"}
+
+
+def test_farm_get_membership_only_farm_shows_no_hint(fresh_deadline_config, deadline_mock):
+    """The farm ID is valid but can't be described, so nothing is suggested."""
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    deadline_mock.get_farm.side_effect = ClientError(_ACCESS_DENIED, "GetFarm")
+    deadline_mock.list_farms.return_value = {"farms": [_MEMBERSHIP_ONLY_FARM, _DESCRIBABLE_FARM]}
+
+    result = CliRunner().invoke(main, ["farm", "get"])
+
+    assert result.exit_code != 0
+    assert "AccessDeniedException" in result.output
+    assert "Available farms" not in result.output
+    assert "missing List permissions" not in result.output
+
+
+def test_farm_get_wrong_farm_suggests_only_describable_farms(fresh_deadline_config, deadline_mock):
+    """Membership-only farms aren't suggested, since GetFarm is denied for them."""
+    config.set_setting("defaults.farm_id", "farm-wrongid12345678901234567890")
+    deadline_mock.get_farm.side_effect = ClientError(_ACCESS_DENIED, "GetFarm")
+    deadline_mock.list_farms.return_value = {"farms": [_MEMBERSHIP_ONLY_FARM, _DESCRIBABLE_FARM]}
+
+    result = CliRunner().invoke(main, ["farm", "get"])
+
+    assert result.exit_code != 0
+    assert "Available farms:" in result.output
+    assert f"{_OTHER_FARM_ID}  Another Farm" in result.output
+    assert MOCK_FARM_ID not in result.output
+
+
+@pytest.mark.parametrize(
+    "args, denied_operation, list_method, list_key",
+    [
+        (["fleet", "get", "--fleet-id", MOCK_FLEET_ID], "GetFleet", "list_fleets", "fleets"),
+        (["queue", "get", "--queue-id", MOCK_QUEUE_ID], "GetQueue", "list_queues", "queues"),
+    ],
+)
+def test_get_in_membership_only_farm_shows_no_farm_hint(
+    fresh_deadline_config, deadline_mock, args, denied_operation, list_method, list_key
+):
+    """
+    A queue-only user running fleet commands (or fleet-only running queue commands) sees
+    nothing in the farm, but the farm ID is valid: don't call it incorrect or blame permissions.
+    """
+    config.set_setting("defaults.farm_id", MOCK_FARM_ID)
+    getattr(deadline_mock, f"get_{denied_operation[3:].lower()}").side_effect = ClientError(
+        _ACCESS_DENIED, denied_operation
+    )
+    getattr(deadline_mock, list_method).return_value = {list_key: []}
+    deadline_mock.list_farms.return_value = {"farms": [_MEMBERSHIP_ONLY_FARM, _DESCRIBABLE_FARM]}
+
+    result = CliRunner().invoke(main, args)
+
+    assert result.exit_code != 0
+    assert "AccessDeniedException" in result.output
+    assert "may be incorrect" not in result.output
+    assert "Available farms" not in result.output
+    assert "missing List permissions" not in result.output

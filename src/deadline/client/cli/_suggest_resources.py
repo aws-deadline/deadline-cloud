@@ -115,9 +115,18 @@ def _suggest_resources_on_client_error(
 
     operation_name = getattr(exc, "operation_name", "") or ""
 
+    # Farms reached only through a queue/fleet membership have no displayName and can't be
+    # described. If farm_id is one, it's valid, so there's no other farm to suggest.
+    farm_id_is_membership_only = False
+
     # Build fetcher functions that capture the config and resource IDs
     def list_farms():
-        return api.list_farms(config=config)
+        nonlocal farm_id_is_membership_only
+        farms = api.list_farms(config=config)["farms"]
+        if any(farm["farmId"] == farm_id and "displayName" not in farm for farm in farms):
+            farm_id_is_membership_only = True
+            return {"farms": []}
+        return {"farms": [farm for farm in farms if "displayName" in farm]}
 
     def list_queues():
         return api.list_queues(farmId=farm_id, config=config)
@@ -260,7 +269,7 @@ def _suggest_resources_on_client_error(
         )
 
     # If we couldn't list resources, add a hint about permissions
-    if list_failed and not suggestions:
+    if list_failed and not suggestions and not farm_id_is_membership_only:
         suggestions = [
             "\nCould not list available resources to suggest alternatives.",
             "This may indicate your IAM policy is missing List permissions.",
