@@ -375,8 +375,8 @@ When a dependency needs different version constraints across Python versions, pr
 environment markers over dropping a Python version. We already do this — for example:
 
 ```toml
-"boto3 >= 1.42.89; python_version >= '3.9'",
-"boto3 >= 1.36.8; python_version < '3.9'",
+"boto3 >= 1.43.111; python_version >= '3.10'",
+"boto3 >= 1.42.89; python_version < '3.10'",
 ```
 
 #### Why we don't drop versions on Python EOL alone

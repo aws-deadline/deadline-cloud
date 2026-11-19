@@ -34,7 +34,10 @@ classifiers = [
 # Applications that consume this library should be the ones that are more strictly
 # limiting dependencies if they want/need to.
 dependencies = [
-  "boto3 >= 1.42.89",
+  # 1.43.111 adds deadline:ListMemberships. botocore no longer releases for Python 3.9,
+  # which gets the API from the bundled service model (_bundled_service_models.py).
+  "boto3 >= 1.43.111; python_version >= '3.10'",
+  "boto3 >= 1.42.89; python_version < '3.10'",
   # click 8.3.3 (CVE-2026-7246 fix) requires Python >= 3.10; keep the best
   # available for 3.9 (not exploitable here — click.edit() is unused).
   "click >= 8.3.3; python_version >= '3.10'",
@@ -66,7 +69,8 @@ mcp = [
 # compiled wheel, and this library is imported from embedded application Pythons
 # where such profiles aren't used.
 console = [
-  "botocore[crt] >= 1.42.89",
+  "botocore[crt] >= 1.43.111; python_version >= '3.10'",
+  "botocore[crt] >= 1.42.89; python_version < '3.10'",
 ]
 
 [project.scripts]
