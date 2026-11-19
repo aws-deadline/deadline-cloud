@@ -115,8 +115,8 @@ def _suggest_resources_on_client_error(
 
     operation_name = getattr(exc, "operation_name", "") or ""
 
-    # Farms reached only through a queue/fleet membership have no displayName and can't be
-    # described. If farm_id is one, it's valid, so there's no other farm to suggest.
+    # Membership-only farms (reached through a queue/fleet grant) have no displayName and
+    # can't be described. If farm_id is one of them, the ID is correct, so skip farm hints.
     farm_id_is_membership_only = False
 
     # Build fetcher functions that capture the config and resource IDs
