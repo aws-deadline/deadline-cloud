@@ -12,6 +12,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from deadline.client import api
 from deadline.client.api import _list_apis
@@ -1199,3 +1200,69 @@ def test_list_farms_monitor_creds_no_session_region_fails_open(fresh_deadline_co
 
     # Every CMK farm survives despite being "cross-region" -- we failed open.
     assert {f["region"] for f in result["farms"]} == set(regions)
+
+
+def _queue_membership(farm_id):
+    return {"queue": {"farmId": farm_id, "queueId": "queue-1", "membershipLevel": "VIEWER"}}
+
+
+def _fleet_membership(farm_id):
+    return {"fleet": {"farmId": farm_id, "fleetId": "fleet-1", "membershipLevel": "VIEWER"}}
+
+
+def test_list_farms_with_client_adds_farms_from_memberships():
+    """Farms reached only via queue/fleet memberships are added with just ID and region."""
+    client = _client_returning([_make_farm("farm-owned", "Owned")])
+    client.list_memberships.side_effect = [
+        {
+            "memberships": [_queue_membership("farm-owned"), _queue_membership("farm-q")],
+            "nextToken": "t",
+        },
+        {"memberships": [_fleet_membership("farm-f"), _queue_membership("farm-q")]},
+    ]
+
+    farms = _list_apis._list_farms_with_client("us-west-2", client, principalId="user-1")
+
+    assert farms == [
+        {**_make_farm("farm-owned", "Owned"), "region": "us-west-2"},
+        {"farmId": "farm-q", "region": "us-west-2"},
+        {"farmId": "farm-f", "region": "us-west-2"},
+    ]
+    # Called for the caller's own principal only; the identity store comes from the session.
+    assert client.list_memberships.call_args_list[0].kwargs == {
+        "principalId": "user-1",
+        "resourceTypes": ["QUEUE", "FLEET"],
+    }
+    assert client.list_memberships.call_args_list[1].kwargs["nextToken"] == "t"
+
+
+def test_list_farms_with_client_skips_memberships_without_principal():
+    """IAM (non-monitor) profiles have no principalId, so ListMemberships isn't called."""
+    client = _client_returning([_make_farm("farm-a")])
+
+    farms = _list_apis._list_farms_with_client("us-west-2", client)
+
+    assert [f["farmId"] for f in farms] == ["farm-a"]
+    client.list_memberships.assert_not_called()
+
+
+def test_list_farms_with_client_memberships_error_falls_back_to_list_farms():
+    """A failing ListMemberships (e.g. AccessDenied) leaves the ListFarms result intact."""
+    client = _client_returning([_make_farm("farm-a")])
+    client.list_memberships.side_effect = ClientError(
+        {"Error": {"Code": "AccessDeniedException", "Message": "denied"}}, "ListMemberships"
+    )
+
+    farms = _list_apis._list_farms_with_client("us-west-2", client, principalId="user-1")
+
+    assert [f["farmId"] for f in farms] == ["farm-a"]
+
+
+def test_list_farms_with_client_old_botocore_falls_back_to_list_farms():
+    """A botocore without ListMemberships leaves the ListFarms result intact."""
+    client = _client_returning([_make_farm("farm-a")])
+    del client.list_memberships
+
+    farms = _list_apis._list_farms_with_client("us-west-2", client, principalId="user-1")
+
+    assert [f["farmId"] for f in farms] == ["farm-a"]
