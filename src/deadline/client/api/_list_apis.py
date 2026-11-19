@@ -121,7 +121,8 @@ def _list_farms_with_client(
     # Add farms reached only via queue/fleet membership (ListFarms omits them). Omitting
     # identityStoreId lets the service use the monitor session's store and its region.
     principal_id = call_kwargs.get("principalId")
-    if principal_id and hasattr(deadline, "list_memberships"):  # older botocore lacks it
+    # The hasattr check is defense in depth against an older botocore than pyproject.toml requires.
+    if principal_id and hasattr(deadline, "list_memberships"):
         try:
             memberships = _call_paginated_deadline_list_api(
                 deadline.list_memberships,
