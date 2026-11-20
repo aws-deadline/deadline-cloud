@@ -46,6 +46,15 @@ def _get_default_log_level() -> str:
     return _CLI_DEFAULT_LOG_LEVEL
 
 
+_GUIDE_HINT = "AI agents and scripts: run `deadline --guide` for workflows and pitfalls."
+
+
+def _format_guide_hint(formatter: click.HelpFormatter) -> None:
+    # Agents often jump straight to a subcommand's help, so every page carries the pointer.
+    formatter.write_paragraph()
+    formatter.write_text(_GUIDE_HINT)
+
+
 class ContextTrackingCommand(click.Command):
     """
     Adds the current CLI command name to User Agent headers in boto requests.
@@ -60,6 +69,10 @@ class ContextTrackingCommand(click.Command):
             super().format_help_text(ctx, formatter)
         finally:
             self.help = original_help
+
+    def format_epilog(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        super().format_epilog(ctx, formatter)
+        _format_guide_hint(formatter)
 
     def invoke(self, ctx: click.Context):
         # This is a global variable used to modify User Agent header in the default boto config
@@ -90,9 +103,30 @@ class ContextTrackingGroup(click.Group):
         finally:
             self.help = original_help
 
+    def format_epilog(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        super().format_epilog(ctx, formatter)
+        _format_guide_hint(formatter)
+
+
+def _print_guide(ctx: click.Context, param: click.Parameter, value: bool) -> None:
+    if not value or ctx.resilient_parsing:
+        return
+    from ._agent_guide import AGENT_GUIDE
+
+    click.echo(AGENT_GUIDE)
+    ctx.exit()
+
 
 @click.group(cls=ContextTrackingGroup, context_settings=CONTEXT_SETTINGS)
 @click.version_option(version=version, prog_name="deadline")
+@click.option(
+    "--guide",
+    is_flag=True,
+    is_eager=True,
+    expose_value=False,
+    callback=_print_guide,
+    help="Print a workflow guide for AI agents and scripts, then exit.",
+)
 @click.option(
     "--log-level",
     type=click.Choice(_DEADLINE_LOG_LEVELS, case_sensitive=False),

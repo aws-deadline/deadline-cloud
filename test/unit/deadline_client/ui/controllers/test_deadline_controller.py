@@ -175,6 +175,22 @@ class TestDeadlineUIController:
         assert tuple(appended[0][0]) == ("(ap-southeast-2) My Farm", "farm-x", "ap-southeast-2")
 
     @patch("deadline.client.ui.controllers._deadline_controller._iter_farms_by_region")
+    def test_refresh_farms_label_falls_back_to_farm_id(self, mock_iter, qtbot):
+        """Farms discovered via a queue/fleet membership have no displayName; show the ID."""
+        controller = DeadlineUIController.getInstance()
+        mock_iter.side_effect = lambda config=None: iter(
+            [("us-west-2", [{"farmId": "farm-x", "region": "us-west-2"}], None)]
+        )
+
+        appended = []
+        controller.farms_appended.connect(lambda x: appended.append(x), _QueuedConnection)
+
+        controller.refresh_farms()
+        qtbot.waitUntil(lambda: len(appended) >= 1, timeout=2000)
+
+        assert tuple(appended[0][0]) == ("(us-west-2) farm-x", "farm-x", "us-west-2")
+
+    @patch("deadline.client.ui.controllers._deadline_controller._iter_farms_by_region")
     def test_refresh_farms_failing_region_is_non_blocking(self, mock_iter, qtbot):
         """A failing region emits a warning; surviving regions' farms still append."""
         controller = DeadlineUIController.getInstance()

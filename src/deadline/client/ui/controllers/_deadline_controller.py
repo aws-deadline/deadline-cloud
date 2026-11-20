@@ -293,7 +293,9 @@ class DeadlineUIController(QObject):
         for item in farms or []:
             farm_id = item["farmId"]
             self._farm_regions[farm_id] = region
-            farm_options.append((_farm_label(item["displayName"], region), farm_id, region))
+            # Farms found only via a queue/fleet membership have no displayName.
+            display_name = item.get("displayName", farm_id)
+            farm_options.append((_farm_label(display_name, region), farm_id, region))
 
         farm_options.sort(key=lambda option: (option[0].casefold(), option[1]))
         # Append this region's farms; the combo box adds them without resetting selection.
