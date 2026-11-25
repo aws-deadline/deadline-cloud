@@ -38,7 +38,8 @@ def farm_list(region, **args):
     """
     Lists the available Deadline Cloud farms. If the AWS profile is created
     from a Deadline Cloud monitor login, it will list only the farms you have
-    permission to access.
+    permission to access, including farms you can access only through a queue
+    or fleet. Those farms are listed by farm ID only.
 
     Without --region, farms are listed across all Deadline Cloud regions and
     each farm's region is shown. With --region, only that region is listed.

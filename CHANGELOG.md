@@ -1,12 +1,14 @@
-## 0.60.12 (2026-11-17)
+## 0.60.12 (2026-11-19)
 
 ### Features
-* When you browse local bundles in the bundle browser (Deadline Cloud monitor → File → Submit Job Bundle, or `deadline bundle gui-submit --browse`), a folder picker now lets you pick a different folder for that dialog only. Your configured default bundle directory stays the same. The picker no longer creates a folder when you type a path that doesn't exist. It opens at the nearest existing parent folder instead. (#1407)
+* Deadline Cloud monitor users who are members of only a queue or fleet (directly or through a group) now see those farms in `deadline farm list`, the farm dropdown in the config GUI and submitters, and farm auto-select. Previously these users saw no farms. (#1444)
+* Run `deadline --guide` to print a workflow guide for AI agents and scripts. It covers how commands chain together (submit → wait → collect output, diagnosing a failed job), how to write a job bundle, and which defaults can do the wrong thing when no one is at the terminal. Each `--help` page now points to the guide. (#1424)
+* When you browse local bundles in the bundle browser (Deadline Cloud monitor → File → Submit Job Bundle, or `deadline bundle gui-submit --browse`), you can now pick a different folder for that dialog only. Your configured default bundle directory doesn't change. If you type a path that doesn't exist, the picker no longer creates it and opens at the nearest existing parent folder instead. (#1407)
 
 ### Bug Fixes
 * The `--parameter` option for `deadline bundle submit` and `deadline bundle gui-submit` now accepts inline JSON (including multi-line JSON) and JSON/YAML files, as documented. Previously only `Name=Value` worked. If you pass the same parameter more than once, the last value wins. Null values now give a clear error. (#1423)
-* Fixed the Blender example job bundle, which failed with a bash "unexpected EOF" error before Blender started because a quote was missing in its run script. (#1428)
-* Updated the bundled AWS Deadline Cloud service model to match botocore 1.44.4. Python 3.9 users, who can't get new botocore releases, now have the latest Deadline API definitions, including recent `CreateWorker` changes. (#1436)
+* Fixed the Blender example job bundle, which failed with a bash "unexpected EOF" error before Blender started because its run script was missing a quote. (#1428)
+* Updated the bundled Deadline Cloud service model to match botocore 1.44.4, so Python 3.9 users get the latest API definitions. (#1436)
 ## 0.60.11 (2026-10-26)
 
 ### Features

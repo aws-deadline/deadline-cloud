@@ -8,6 +8,8 @@ import os
 from configparser import ConfigParser
 from typing import Iterator, List, Optional, Tuple
 
+from botocore.exceptions import ClientError
+
 from ._session import (
     AwsCredentialsSource,
     get_boto3_client,
@@ -114,7 +116,30 @@ def _list_farms_with_client(
     """
     result = _call_paginated_deadline_list_api(deadline.list_farms, "farms", **call_kwargs)
     # Tag a shallow copy of each farm so we don't mutate dicts owned by the caller/SDK.
-    return [{**farm, "region": region} for farm in result["farms"]]
+    farms = [{**farm, "region": region} for farm in result["farms"]]
+
+    # Add farms reached only via queue/fleet membership (ListFarms omits them). Omitting
+    # identityStoreId lets the service use the monitor session's store and its region.
+    principal_id = call_kwargs.get("principalId")
+    # The hasattr check is defense in depth against an older botocore than pyproject.toml requires.
+    if principal_id and hasattr(deadline, "list_memberships"):
+        try:
+            memberships = _call_paginated_deadline_list_api(
+                deadline.list_memberships,
+                "memberships",
+                principalId=principal_id,
+                resourceTypes=["QUEUE", "FLEET"],
+            )["memberships"]
+        except ClientError as exc:
+            logger.debug("deadline:ListMemberships unavailable, skipping: %s", exc)
+            memberships = []
+        known_farm_ids = {farm["farmId"] for farm in farms}
+        for membership in memberships:
+            resource = membership.get("queue") or membership.get("fleet")
+            if resource and resource["farmId"] not in known_farm_ids:
+                known_farm_ids.add(resource["farmId"])
+                farms.append({"farmId": resource["farmId"], "region": region})
+    return farms
 
 
 def _list_farms_for_region(
@@ -244,6 +269,10 @@ def list_farms(config=None, region=None, **kwargs):
     Calls the [deadline:ListFarms] API, paginating to return all farms. Each farm dict is
     annotated with an additive ``region`` key.
 
+    For Deadline Cloud monitor profiles, farms the user can access only through a queue or
+    fleet membership are found with [deadline:ListMemberships] and included as
+    ``{"farmId": ..., "region": ...}`` with no other keys.
+
     When ``region`` is given, only that region is queried. When ``None``, ListFarms is
     fanned out across regions via :func:`_iter_farms_by_region` (which owns the region-set
     decision, including the ``AWS_ENDPOINT_URL_DEADLINE`` single-region short-circuit) and
@@ -255,6 +284,7 @@ def list_farms(config=None, region=None, **kwargs):
     silently returned).
 
     [deadline:ListFarms]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListFarms.html
+    [deadline:ListMemberships]: https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_ListMemberships.html
     """
     if region is not None:
         return {"farms": _list_farms_for_region(region, config=config, **kwargs)}
