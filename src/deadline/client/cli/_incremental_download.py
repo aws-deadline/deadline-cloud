@@ -3,7 +3,7 @@ from __future__ import annotations
 
 __all__ = ["CategorizedJobIds", "_incremental_output_download"]
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta, timezone
 import difflib
 import errno
@@ -20,6 +20,7 @@ import textwrap
 import concurrent.futures
 
 from .. import api
+from ..exceptions import DeadlineOperationError
 import boto3
 from botocore.client import BaseClient  # type: ignore[import]
 from botocore.exceptions import ClientError  # type: ignore[import]
@@ -768,6 +769,143 @@ def _retrieve_session_actions_for_session(
             output_session["sessionActions"] = session_action_list
 
 
+_TASK_RUN_STATUSES_FINISHED_WITHOUT_OUTPUT = frozenset(
+    {"FAILED", "CANCELED", "SUSPENDED", "NOT_COMPATIBLE"}
+)
+
+
+def _task_run_disposition(run_status: Optional[str]) -> str:
+    """Returns what to do with a taskRun session action given its task's runStatus.
+
+    "download" when the task succeeded, "skip" when it finished without succeeding, and "hold"
+    when it has not finished or its status is unknown.
+    """
+    if run_status == "SUCCEEDED":
+        return "download"
+    if run_status in _TASK_RUN_STATUSES_FINISHED_WITHOUT_OUTPUT:
+        return "skip"
+    return "hold"
+
+
+@dataclass
+class _TaskRunHolds:
+    """What _hold_sessions_with_unfinished_tasks removed from job_sessions."""
+
+    held_session_count: int = 0
+    # job_id -> earliest endedAt among the job's held sessions
+    held_session_ended_timestamps: dict[str, datetime] = field(default_factory=dict)
+    # Jobs with a task whose run status could not be read. Nothing forces such a job to be
+    # looked at again, so the caller retries it like a failed download.
+    unreadable_status_job_ids: set[str] = field(default_factory=set)
+    # job_id -> task IDs not known to have SUCCEEDED
+    not_succeeded_task_ids: dict[str, set[str]] = field(default_factory=dict)
+
+
+def _hold_sessions_with_unfinished_tasks(
+    deadline_client: BaseClient,
+    farm_id: str,
+    queue_id: str,
+    job_sessions: dict[str, list],
+) -> _TaskRunHolds:
+    """Removes from job_sessions every session that has a taskRun action whose task has not
+    finished, since a session action can succeed before its task does. Whole sessions are
+    held because the checkpoint stores one completed index per session. Actions whose task
+    finished without succeeding are dropped. Actions that name no task can't be checked and
+    are downloaded as before.
+    """
+    # _groups imports this module, so a module-level import would be circular.
+    from ._groups._batch_get import batch_get
+
+    result = _TaskRunHolds()
+    task_refs = {
+        (job_id, task_run["stepId"], task_run["taskId"])
+        for job_id, session_list in job_sessions.items()
+        for session in session_list
+        for session_action in session.get("sessionActions", [])
+        if (task_run := session_action["definition"]["taskRun"]).get("taskId")
+    }
+    if not task_refs:
+        return result
+
+    missing_permission = DeadlineOperationError(
+        "sync-output needs the deadline:GetTask permission to check that tasks have"
+        " finished before downloading their output. Add it to the credentials used for"
+        " this queue and run again."
+    )
+    # Tasks that come back with an error are absent here, so they hold their session.
+    try:
+        tasks, task_errors = batch_get(
+            deadline=deadline_client,
+            operation="batch_get_task",
+            identifiers=[
+                {
+                    "farmId": farm_id,
+                    "queueId": queue_id,
+                    "jobId": job_id,
+                    "stepId": step_id,
+                    "taskId": task_id,
+                }
+                for job_id, step_id, task_id in sorted(task_refs)
+            ],
+            key_fn=lambda item: (item["jobId"], item["taskId"]),
+            items_field="tasks",
+            id_fields=("farmId", "queueId", "jobId", "stepId", "taskId"),
+        )
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "AccessDeniedException":
+            raise missing_permission from e
+        raise
+
+    # Retrying wouldn't help without the permission, and every job would hit the retry cap.
+    if any(error.get("code") == "AccessDeniedException" for error in task_errors):
+        raise missing_permission
+
+    for job_id, _, task_id in task_refs:
+        task = tasks.get((job_id, task_id))
+        if task is None or task.get("runStatus") != "SUCCEEDED":
+            result.not_succeeded_task_ids.setdefault(job_id, set()).add(task_id)
+
+    for job_id in list(job_sessions):
+        kept_sessions = []
+        for session in job_sessions[job_id]:
+            session_actions = session.get("sessionActions", [])
+            dispositions = []
+            for sa in session_actions:
+                task_id = sa["definition"]["taskRun"].get("taskId")
+                if not task_id:
+                    dispositions.append("download")
+                elif (job_id, task_id) not in tasks:
+                    result.unreadable_status_job_ids.add(job_id)
+                    dispositions.append("hold")
+                else:
+                    dispositions.append(
+                        _task_run_disposition(tasks[(job_id, task_id)].get("runStatus"))
+                    )
+            if "hold" in dispositions:
+                result.held_session_count += 1
+                if "endedAt" in session:
+                    held = result.held_session_ended_timestamps
+                    held[job_id] = min(held.get(job_id, session["endedAt"]), session["endedAt"])
+                continue
+            if "skip" in dispositions:
+                session_actions = [
+                    sa
+                    for sa, disposition in zip(session_actions, dispositions)
+                    if disposition == "download"
+                ]
+                if session_actions:
+                    session["sessionActions"] = session_actions
+                else:
+                    del session["sessionActions"]
+            kept_sessions.append(session)
+        if kept_sessions:
+            job_sessions[job_id] = kept_sessions
+        else:
+            del job_sessions[job_id]
+
+    return result
+
+
 def _get_job_sessions(
     boto3_session: boto3.Session,
     boto3_session_for_s3: boto3.Session,
@@ -779,15 +917,17 @@ def _get_job_sessions(
     download_candidate_jobs: dict[str, dict[str, Any]],
     print_function_callback: Callable[[Any], None] = lambda msg: None,
     region: Optional[str] = None,
-) -> tuple[dict[str, list], dict[str, set[str]], dict[str, set[str]]]:
+) -> tuple[dict[str, list], dict[str, set[str]], dict[str, set[str]], _TaskRunHolds]:
     """
     This function gets all the job sessions and session actions from the completed, added, and updated jobs.
     It uses the checkpoint's session_completed_indexes to filter out older session actions that are already downloaded.
+    Sessions with a task that has not finished are left out; see _hold_sessions_with_unfinished_tasks.
 
-    Returns a tuple of (job_sessions, farm_failed_task_ids, succeeded_task_ids), where
+    Returns a tuple of (job_sessions, farm_failed_task_ids, succeeded_task_ids, holds), where
     farm_failed_task_ids maps job_id -> set of task IDs that FAILED on the farm (produced no
-    output to download), and succeeded_task_ids maps job_id -> set of task IDs that SUCCEEDED
-    (used to clear stale farm_failed entries written by a prior run).
+    output to download), succeeded_task_ids maps job_id -> set of task IDs that SUCCEEDED
+    (used to clear stale farm_failed entries written by a prior run), and holds describes the
+    sessions left out because a task had not finished.
 
     Args:
         boto3_session: The boto3.Session for accessing AWS.
@@ -934,7 +1074,25 @@ def _get_job_sessions(
         for future in concurrent.futures.as_completed(futures):
             future.result()
 
+    holds = _hold_sessions_with_unfinished_tasks(deadline, farm_id, queue["queueId"], job_sessions)
+    # A SUCCEEDED session action does not mean its task succeeded, so it must not clear a
+    # farm_failed entry for a task that is still running or has since failed.
+    for job_id, task_ids in holds.not_succeeded_task_ids.items():
+        if job_id in succeeded_task_ids:
+            succeeded_task_ids[job_id] -= task_ids
+            if not succeeded_task_ids[job_id]:
+                del succeeded_task_ids[job_id]
+
     retrieval_duration = datetime.now(tz=timezone.utc) - start_time
+    if holds.held_session_count:
+        fmt.line(
+            f"{_plural(holds.held_session_count, 'session')} held until their tasks finish",
+        )
+    for job_id in sorted(holds.unreadable_status_job_ids):
+        fmt.warning(
+            f"{_job_label(job_id, download_candidate_jobs)}: could not read the status of"
+            " some tasks, will retry the job next run"
+        )
 
     start_time = datetime.now(tz=timezone.utc)
 
@@ -975,7 +1133,7 @@ def _get_job_sessions(
             if not farm_failed_task_ids[job_id]:
                 del farm_failed_task_ids[job_id]
 
-    return job_sessions, farm_failed_task_ids, succeeded_task_ids
+    return job_sessions, farm_failed_task_ids, succeeded_task_ids, holds
 
 
 def _get_storage_profiles(
@@ -1173,6 +1331,7 @@ def _update_checkpoint_jobs_list(
     download_candidate_jobs: dict[str, dict[str, Any]],
     categorized_job_ids: CategorizedJobIds,
     job_sessions: dict[str, list],
+    held_session_ended_timestamps: Optional[dict[str, datetime]] = None,
 ):
     """
     Update the jobs list in the checkpoint object.
@@ -1184,6 +1343,9 @@ def _update_checkpoint_jobs_list(
         categorized_job_ids: The categorized job ids as returned by _categorize_jobs_in_checkpoint().
         job_sessions: Contains each job's sessions and session actions, structured as job_sessions[job_id][session_index]["sessionActions"][session_action_index].
                       See the function _get_job_sessions for more details.
+        held_session_ended_timestamps: {job_id: earliest endedAt of its held sessions}. A job's
+            saved session_ended_timestamp is kept at or below it so the next run lists those
+            sessions again.
     """
     updated_jobs: list[IncrementalDownloadJob] = []
 
@@ -1209,6 +1371,10 @@ def _update_checkpoint_jobs_list(
                         max_session_ended_timestamp, session["endedAt"]
                     )
         job_session_ended_timestamps[job_id] = max_session_ended_timestamp
+    for job_id, held_ended_timestamp in (held_session_ended_timestamps or {}).items():
+        saved_timestamp = job_session_ended_timestamps.get(job_id)
+        if saved_timestamp is not None and saved_timestamp > held_ended_timestamp:
+            job_session_ended_timestamps[job_id] = held_ended_timestamp
 
     # Produce the session_completed_indexes for all the job ids. Start
     # with the values from the previous checkpoint, then overwrite
@@ -1459,7 +1625,12 @@ def _incremental_output_download(
 
     # All the completed, added, and updated jobs might have downloads available. Retrieve the sessions for these jobs.
     start_t = time.perf_counter_ns()
-    job_sessions, farm_failed_task_ids, succeeded_task_ids = _get_job_sessions(
+    (
+        job_sessions,
+        farm_failed_task_ids,
+        succeeded_task_ids,
+        holds,
+    ) = _get_job_sessions(
         boto3_session,
         boto3_session_for_s3,
         farm_id,
@@ -1492,13 +1663,20 @@ def _incremental_output_download(
     # Use the information collected so far to update the jobs list in checkpoint
     start_t = time.perf_counter_ns()
     _update_checkpoint_jobs_list(
-        checkpoint, download_candidate_jobs, categorized_job_ids, job_sessions
+        checkpoint,
+        download_candidate_jobs,
+        categorized_job_ids,
+        job_sessions,
+        holds.held_session_ended_timestamps,
     )
     durations._update_checkpoint_jobs_list = time.perf_counter_ns() - start_t
 
     fmt.section("Download")
     start_t = time.perf_counter_ns()
     unmapped_paths: dict[str, list[str]] = {}
+    # Jobs with an output manifest S3 reported as not found or forbidden. They are retried
+    # like failed downloads, so one bad manifest doesn't fail the run.
+    missing_manifest_job_ids: set[str] = set()
     # The callback is suppressed because this helper's only output is a thread count and a
     # raw timedelta; the equivalent step line is emitted below in this command's own format.
     downloaded_manifests: list[tuple[datetime, BaseAssetManifest]] = (
@@ -1510,13 +1688,22 @@ def _incremental_output_download(
             unmapped_paths,
             boto3_session_for_s3,
             lambda msg: None,
+            output_missing_manifest_job_ids=missing_manifest_job_ids,
         )
     )
     durations._download_all_manifests_with_absolute_paths = time.perf_counter_ns() - start_t
     if downloaded_manifests:
         fmt.line(
-            _plural(len(downloaded_manifests), "asset manifest"),
+            _plural(
+                sum(1 for manifest in downloaded_manifests if manifest is not None),
+                "asset manifest",
+            ),
             durations._download_all_manifests_with_absolute_paths / 1_000_000_000,
+        )
+    for job_id in sorted(missing_manifest_job_ids):
+        fmt.warning(
+            f"{_job_label(job_id, download_candidate_jobs)}: an output manifest was not found"
+            " or access was denied, will retry the job next run"
         )
 
     # Print warning messages about all the output paths that will not be downloaded due to lack of path mapping.
@@ -2044,6 +2231,36 @@ def _incremental_output_download(
                 "error_code": any_error["error_code"] if any_error else None,
                 "error_message": any_error["error_message"] if any_error else None,
             }
+
+    # These jobs are retried like failed downloads: dropped from the checkpoint and tracked.
+    retry_job_errors = {
+        job_id: ("UNKNOWN", "the status of some tasks could not be read")
+        for job_id in holds.unreadable_status_job_ids
+    }
+    retry_job_errors.update(
+        {
+            job_id: (
+                "PATH_NOT_FOUND",
+                "an output manifest was not found or access to it was denied",
+            )
+            for job_id in missing_manifest_job_ids
+        }
+    )
+    for job_id, (error_code, error_message) in retry_job_errors.items():
+        retry_result = job_download_results.setdefault(
+            job_id,
+            {
+                "total_files": 0,
+                "downloaded_files": 0,
+                "downloaded_bytes": 0,
+                "failed_files": 0,
+                "error_code": None,
+                "error_message": None,
+            },
+        )
+        if retry_result["error_code"] is None:
+            retry_result["error_code"] = error_code
+            retry_result["error_message"] = error_message
 
     # Remove failed jobs from checkpoint so they're treated as new (added) next run.
     # Track them in the failed jobs file so they're retried even after the timestamp advances.
