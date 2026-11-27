@@ -346,7 +346,11 @@ def manifest_download(
         queueId=queue_id,
     )
     # Queue's Job Attachment settings.
-    queue_s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+    # Pass only the fields used, so fields added to the queue settings later are ignored.
+    queue_s3_settings = JobAttachmentS3Settings(
+        s3BucketName=queue["jobAttachmentSettings"]["s3BucketName"],
+        rootPrefix=queue["jobAttachmentSettings"]["rootPrefix"],
+    )
 
     # assume queue role - session permissions, scoped to the same farm region as above.
     queue_role_session: boto3.Session = _get_queue_user_boto3_session(
@@ -440,8 +444,10 @@ def manifest_upload(
             farmId=farm_id,
             queueId=queue_id,
         )
+        # Pass only the fields used, so fields added to the queue settings later are ignored.
         queue_ja_settings: JobAttachmentS3Settings = JobAttachmentS3Settings(
-            **queue["jobAttachmentSettings"]
+            s3BucketName=queue["jobAttachmentSettings"]["s3BucketName"],
+            rootPrefix=queue["jobAttachmentSettings"]["rootPrefix"],
         )
         bucket_name = queue_ja_settings.s3BucketName
         cas_path = queue_ja_settings.rootPrefix

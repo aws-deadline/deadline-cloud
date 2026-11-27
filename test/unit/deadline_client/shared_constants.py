@@ -105,3 +105,15 @@ MOCK_CREATE_JOB_RESPONSE = {"jobId": MOCK_JOB_ID}
 MOCK_STATUS_MESSAGE = "Testing123"
 
 MOCK_GET_JOB_RESPONSE = {"state": "READY", "lifecycleStatusMessage": MOCK_STATUS_MESSAGE}
+
+
+def with_new_job_attachment_settings_field(queue_response: dict) -> dict:
+    """Return a copy of a GetQueue response whose job attachment settings include a field
+    this client doesn't know about. The service may add fields to these settings later."""
+    return {
+        **queue_response,
+        "jobAttachmentSettings": {
+            **queue_response["jobAttachmentSettings"],
+            "someNewField": {"nested": [1]},
+        },
+    }

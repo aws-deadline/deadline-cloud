@@ -18,6 +18,7 @@ import time
 from deadline.client import api, config
 from deadline.job_attachments.exceptions import MisconfiguredInputsError
 from deadline.job_attachments.models import (
+    JobAttachmentS3Settings,
     AssetRootGroup,
     AssetUploadGroup,
     Attachments,
@@ -40,6 +41,7 @@ from ..shared_constants import (
     MOCK_QUEUE_ID,
     MOCK_JOB_ID,
     MOCK_STATUS_MESSAGE,
+    with_new_job_attachment_settings_field,
 )
 
 MOCK_GET_QUEUE_RESPONSE = {
@@ -500,13 +502,22 @@ def test_create_job_from_job_bundle_error_duplicate_parameters(
             )
 
 
+@pytest.mark.parametrize(
+    "queue_response",
+    [
+        pytest.param(MOCK_GET_QUEUE_RESPONSE, id="known-fields"),
+        pytest.param(
+            with_new_job_attachment_settings_field(MOCK_GET_QUEUE_RESPONSE), id="new-field"
+        ),
+    ],
+)
 def test_create_job_from_job_bundle_job_attachments(
-    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir
+    fresh_deadline_config, temp_job_bundle_dir, temp_assets_dir, queue_response
 ):
     """
     Test a job bundle with asset references.
     """
-    with patch_calls_for_create_job_from_job_bundle() as mock:
+    with patch_calls_for_create_job_from_job_bundle(get_queue_return=queue_response) as mock:
         mock.get_boto3_client().get_storage_profile_for_queue.return_value = (
             MOCK_GET_STORAGE_PROFILE_FOR_QUEUE_RESPONSE
         )
@@ -571,6 +582,10 @@ def test_create_job_from_job_bundle_job_attachments(
             hashing_progress_callback=fake_hashing_callback,
             hash_cache_dir=config.config_file.get_cache_directory(),
             telemetry_callback=api._submit_job_bundle.hashing_telemetry_callback,
+        )
+        asset_manager = mock.hash_attachments.call_args.kwargs["asset_manager"]
+        assert asset_manager.job_attachment_settings == JobAttachmentS3Settings(
+            s3BucketName=MOCK_BUCKET_NAME, rootPrefix="AWS Deadline Cloud"
         )
         mock.get_boto3_client().create_job.assert_called_once_with(
             farmId=MOCK_FARM_ID,

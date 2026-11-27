@@ -709,7 +709,11 @@ def _download_job_output(
     # When --match-paths-by JOB is set, filter against the job paths.
     # Otherwise, filtering happens later against workstation paths.
     job_output_downloader = OutputDownloader(
-        s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
+        # Pass only the fields used, so fields added to the queue settings later are ignored.
+        s3_settings=JobAttachmentS3Settings(
+            s3BucketName=queue["jobAttachmentSettings"]["s3BucketName"],
+            rootPrefix=queue["jobAttachmentSettings"]["rootPrefix"],
+        ),
         farm_id=farm_id,
         queue_id=queue_id,
         job_id=job_id,
@@ -755,7 +759,11 @@ def _download_job_output(
         if rules:
             # Fetch manifests directly (same S3 data OutputDownloader uses internally)
             manifests_by_root = get_output_manifests_by_asset_root(
-                s3_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
+                # Pass only the fields used, so fields added to the queue settings later are ignored.
+                s3_settings=JobAttachmentS3Settings(
+                    s3BucketName=queue["jobAttachmentSettings"]["s3BucketName"],
+                    rootPrefix=queue["jobAttachmentSettings"]["rootPrefix"],
+                ),
                 farm_id=farm_id,
                 queue_id=queue_id,
                 job_id=job_id,
@@ -1223,7 +1231,11 @@ def _download_job_input(
         queue_display_name=queue["displayName"],
     )
 
-    s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+    # Pass only the fields used, so fields added to the queue settings later are ignored.
+    s3_settings = JobAttachmentS3Settings(
+        s3BucketName=queue["jobAttachmentSettings"]["s3BucketName"],
+        rootPrefix=queue["jobAttachmentSettings"]["rootPrefix"],
+    )
 
     # When match_paths_by is JOB, apply filters before root mapping (against submission paths).
     job_input_downloader = InputDownloader(
