@@ -52,6 +52,7 @@ from ..shared_constants import (
     MOCK_SESSION_ACTION_ID,
     MOCK_STEP_ID,
     MOCK_TASK_ID,
+    with_new_job_attachment_settings_field,
 )
 
 MOCK_JOBS_LIST = [
@@ -295,8 +296,17 @@ estimatedTimeRemaining: N/A
         assert result.exit_code == 0
 
 
+@pytest.mark.parametrize(
+    "queue_response",
+    [
+        pytest.param(MOCK_GET_QUEUE_RESPONSE, id="known-fields"),
+        pytest.param(
+            with_new_job_attachment_settings_field(MOCK_GET_QUEUE_RESPONSE), id="new-field"
+        ),
+    ],
+)
 def test_cli_job_download_output_stdout_with_only_required_input(
-    fresh_deadline_config, tmp_path: Path
+    fresh_deadline_config, tmp_path: Path, queue_response
 ):
     """
     Tests whether the output messages printed to stdout match expected messages
@@ -342,7 +352,7 @@ def test_cli_job_download_output_stdout_with_only_required_input(
 
         mock_host_path_format = PathFormat.get_host_path_format()
 
-        boto3_client_mock().get_queue.side_effect = [MOCK_GET_QUEUE_RESPONSE]
+        boto3_client_mock().get_queue.side_effect = [queue_response]
         boto3_client_mock().get_job.return_value = {
             "name": "Mock Job",
             "attachments": {
@@ -2017,7 +2027,9 @@ class TestJobDownloadInput:
             },
         }
 
-    def _setup_mocks(self, boto3_mock, input_downloader_mock, paths_by_root=None):
+    def _setup_mocks(
+        self, boto3_mock, input_downloader_mock, paths_by_root=None, queue_response=None
+    ):
         mock_download = MagicMock()
         mock_download.return_value = DownloadSummaryStatistics(
             total_time=5, processed_files=2, processed_bytes=512
@@ -2026,10 +2038,19 @@ class TestJobDownloadInput:
         if paths_by_root is None:
             paths_by_root = {self.MOCK_ROOT_PATH: self.MOCK_FILES_LIST}
         input_downloader_mock.return_value.get_paths_by_root.return_value = paths_by_root
-        boto3_mock().get_queue.return_value = MOCK_GET_QUEUE_RESPONSE
+        boto3_mock().get_queue.return_value = queue_response or MOCK_GET_QUEUE_RESPONSE
         boto3_mock().get_job.return_value = self._make_job_response()
 
-    def test_download_input_basic(self, fresh_deadline_config):
+    @pytest.mark.parametrize(
+        "queue_response",
+        [
+            pytest.param(MOCK_GET_QUEUE_RESPONSE, id="known-fields"),
+            pytest.param(
+                with_new_job_attachment_settings_field(MOCK_GET_QUEUE_RESPONSE), id="new-field"
+            ),
+        ],
+    )
+    def test_download_input_basic(self, fresh_deadline_config, queue_response):
         """Basic download-input with auto-accept."""
         config.set_setting("defaults.farm_id", MOCK_FARM_ID)
         config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
@@ -2041,7 +2062,7 @@ class TestJobDownloadInput:
             patch.object(job_group, "_get_conflicting_filenames", return_value=[]),
             patch.object(api, "get_queue_user_boto3_session"),
         ):
-            self._setup_mocks(boto3_mock, mock_downloader)
+            self._setup_mocks(boto3_mock, mock_downloader, queue_response=queue_response)
 
             runner = CliRunner()
             result = runner.invoke(
@@ -2049,10 +2070,13 @@ class TestJobDownloadInput:
                 ["job", "download-input", "--job-id", MOCK_JOB_ID],
             )
 
-            assert result.exit_code == 0
+            assert result.exit_code == 0, result.output
             assert "Downloading input for Job" in result.output
             assert "Download Summary:" in result.output
             mock_downloader.return_value.download.assert_called_once()
+            assert mock_downloader.call_args.kwargs["s3_settings"] == JobAttachmentS3Settings(
+                **MOCK_GET_QUEUE_RESPONSE["jobAttachmentSettings"]  # type: ignore
+            )
 
     def test_download_input_no_attachments(self, fresh_deadline_config):
         """download-input with a job that has no attachments."""

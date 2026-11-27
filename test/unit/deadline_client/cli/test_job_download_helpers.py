@@ -18,8 +18,10 @@ from click.testing import CliRunner
 from deadline.client import api, config
 from deadline.client.cli import main
 from deadline.client.cli._groups import job_group
+from deadline.client.cli._groups import _job_download_helpers
 from deadline.client.cli._groups._job_download_helpers import (
     ResolvedStorageProfiles,
+    _download_mapped_manifests,
     _resolve_conflict_resolution,
     _resolve_storage_profiles,
     _transform_manifests_to_absolute_paths,
@@ -28,12 +30,15 @@ from deadline.job_attachments._path_mapping import _generate_path_mapping_rules
 from deadline.job_attachments.models import (
     FileSystemLocation,
     FileSystemLocationType,
+    JobAttachmentS3Settings,
     PathFormat,
     PathMappingRule,
     StorageProfile,
     StorageProfileOperatingSystemFamily,
 )
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
+
+from ..shared_constants import with_new_job_attachment_settings_field
 
 
 MOCK_FARM_ID = "farm-0123456789abcdefabcdefabcdefabcd"
@@ -367,6 +372,38 @@ MOCK_GET_QUEUE_RESPONSE = {
         "rootPrefix": "AWS Deadline Cloud",
     },
 }
+
+
+# ─── _download_mapped_manifests ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "queue_response",
+    [
+        pytest.param(MOCK_GET_QUEUE_RESPONSE, id="known-fields"),
+        pytest.param(
+            with_new_job_attachment_settings_field(MOCK_GET_QUEUE_RESPONSE), id="new-field"
+        ),
+    ],
+)
+def test_download_mapped_manifests_uses_queue_bucket_and_prefix(
+    fresh_deadline_config: str, queue_response: dict[str, Any]
+) -> None:
+    expected_settings = JobAttachmentS3Settings(
+        s3BucketName="deadline-job-attachments-mock-bucket", rootPrefix="AWS Deadline Cloud"
+    )
+    with patch.object(_job_download_helpers, "download_files_from_manifests") as mock_download:
+        _download_mapped_manifests(
+            mapped_manifests={},
+            queue=queue_response,
+            queue_role_session=MagicMock(),
+            conflict_resolution_setting="SKIP",
+            is_json_format=True,
+        )
+
+    mock_download.assert_called_once()
+    assert mock_download.call_args.kwargs["s3_bucket"] == expected_settings.s3BucketName
+    assert mock_download.call_args.kwargs["cas_prefix"] == expected_settings.full_cas_prefix()
 
 
 # ─── _resolve_conflict_resolution ────────────────────────────────────────────

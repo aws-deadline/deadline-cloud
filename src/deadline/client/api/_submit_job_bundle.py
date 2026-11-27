@@ -1165,7 +1165,11 @@ def create_job_from_job_bundle(
         asset_manager = S3AssetManager(
             farm_id=farm_id,
             queue_id=queue_id,
-            job_attachment_settings=JobAttachmentS3Settings(**queue["jobAttachmentSettings"]),
+            # Pass only the fields used, so fields added to the queue settings later are ignored.
+            job_attachment_settings=JobAttachmentS3Settings(
+                s3BucketName=queue["jobAttachmentSettings"]["s3BucketName"],
+                rootPrefix=queue["jobAttachmentSettings"]["rootPrefix"],
+            ),
             session=queue_role_session,
             s3_max_pool_connections=s3_max_pool_connections,
             small_file_threshold_multiplier=small_file_threshold_multiplier,

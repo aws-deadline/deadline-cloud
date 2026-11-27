@@ -24,11 +24,14 @@ from deadline.client.cli._groups import job_group
 from deadline.job_attachments.models import (
     FileSystemLocation,
     FileSystemLocationType,
+    JobAttachmentS3Settings,
     PathFormat,
     StorageProfile,
     StorageProfileOperatingSystemFamily,
 )
 from deadline.job_attachments.progress_tracker import DownloadSummaryStatistics
+
+from ..shared_constants import with_new_job_attachment_settings_field
 
 MOCK_FARM_ID = "farm-0123456789abcdefabcdefabcdefabcd"
 MOCK_QUEUE_ID = "queue-0123456789abcdefabcdefabcdefabcd"
@@ -109,9 +112,10 @@ def _make_download_mocks(
     mock_output_downloader: MagicMock,
     job_response: dict[str, Any],
     root_paths: dict[str, list[str]],
+    queue_response: dict[str, Any] = MOCK_GET_QUEUE_RESPONSE,
 ) -> None:
     """Wire up the common mocks for a download-output test."""
-    boto3_client_mock().get_queue.return_value = MOCK_GET_QUEUE_RESPONSE
+    boto3_client_mock().get_queue.return_value = queue_response
     boto3_client_mock().get_job.return_value = job_response
 
     mock_download = MagicMock()
@@ -125,7 +129,18 @@ def _make_download_mocks(
 # ─── Case 1: Both profiles exist, locations match → automatic mapping ────────
 
 
-def test_case1_both_profiles_match_auto_mapping(fresh_deadline_config: str) -> None:
+@pytest.mark.parametrize(
+    "queue_response",
+    [
+        pytest.param(MOCK_GET_QUEUE_RESPONSE, id="known-fields"),
+        pytest.param(
+            with_new_job_attachment_settings_field(MOCK_GET_QUEUE_RESPONSE), id="new-field"
+        ),
+    ],
+)
+def test_case1_both_profiles_match_auto_mapping(
+    fresh_deadline_config: str, queue_response: dict[str, Any]
+) -> None:
     """Both profiles exist with matching location names → absolute-path mapping via manifests."""
     config.set_setting("defaults.farm_id", MOCK_FARM_ID)
     config.set_setting("defaults.queue_id", MOCK_QUEUE_ID)
@@ -156,6 +171,7 @@ def test_case1_both_profiles_match_auto_mapping(fresh_deadline_config: str) -> N
                 root_path_format=PathFormat.WINDOWS,
             ),
             {root: ["output.exr"]},
+            queue_response,
         )
 
         runner = CliRunner()
@@ -169,6 +185,9 @@ def test_case1_both_profiles_match_auto_mapping(fresh_deadline_config: str) -> N
         # With the new absolute-path approach, we call get_output_manifests_by_asset_root
         # instead of set_root_path
         mock_get_manifests.assert_called_once()
+        assert mock_get_manifests.call_args.kwargs["s3_settings"] == JobAttachmentS3Settings(
+            s3BucketName="deadline-job-attachments-mock-bucket", rootPrefix="AWS Deadline Cloud"
+        )
 
 
 # ─── Case 2: Both profiles exist, locations don't match → no mapping ─────────

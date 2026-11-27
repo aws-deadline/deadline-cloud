@@ -270,7 +270,11 @@ def _download_mapped_manifests(
     if file_conflict_resolution is None:
         return None
 
-    s3_settings = JobAttachmentS3Settings(**queue["jobAttachmentSettings"])
+    # Pass only the fields used, so fields added to the queue settings later are ignored.
+    s3_settings = JobAttachmentS3Settings(
+        s3BucketName=queue["jobAttachmentSettings"]["s3BucketName"],
+        rootPrefix=queue["jobAttachmentSettings"]["rootPrefix"],
+    )
     sigint_handler = SigIntHandler()
 
     with _modified_logging_level(logging.getLogger("urllib3"), logging.ERROR):
