@@ -198,7 +198,7 @@ known-first-party = ["deadline"]
 # XML, HTML, and terminal reports.
 [tool.pytest.ini_options]
 xfail_strict = true
-pythonpath = ["test"]
+pythonpath = ["test", "evals"]
 
 addopts = [
   "--durations=5",
@@ -208,8 +208,8 @@ addopts = [
   "--cov-report=term-missing",
   "--numprocesses=auto",
 ]
-testpaths = ["test/unit", "test/cli_e2e"]
-looponfailroots = ["src", "test/unit", "test/cli_e2e"]
+testpaths = ["test/unit", "test/cli_e2e", "evals/tests"]
+looponfailroots = ["src", "test/unit", "test/cli_e2e", "evals"]
 markers = [
   "no_setup: mark that test shouldn't use default setups",
   "integ: tests that run against AWS resources",

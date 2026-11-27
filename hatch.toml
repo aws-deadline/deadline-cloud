@@ -9,7 +9,7 @@ pre-install-commands = ["pip install -r requirements-testing.txt"]
 
 [envs.default.scripts]
 sync = "pip install -r requirements-testing.txt"
-test = "pytest --cov-config pyproject.toml {args:test/unit test/cli_e2e}"
+test = "pytest --cov-config pyproject.toml {args:test/unit test/cli_e2e evals/tests}"
 test_docker = "./scripts/run_sudo_tests.sh --build"
 test_installer = "pytest --no-cov {args:test/installer} -vvv"
 test_build_installer = "pytest --no-cov {args:test/build_installer}"

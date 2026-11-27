@@ -1,0 +1,9 @@
+[
+  {
+    "id": "deadline_via_aws_cli",
+    "prompt": "Using only `aws deadline help` (do not call any AWS APIs), explain how you would list the farms in an account and then the queues in one farm with the AWS CLI. Name the exact subcommands and required parameters.",
+    "tools": ["Bash"],
+    "rubric": "The answer names `aws deadline list-farms` and `aws deadline list-queues` and states that list-queues requires --farm-id.",
+    "max_turns": 10
+  }
+]
