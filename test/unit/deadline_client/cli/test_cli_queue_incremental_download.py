@@ -1498,6 +1498,7 @@ def test_incremental_output_download_unmapped_paths_without_storage_profile(
         output_unmapped_paths,
         boto3_session_for_s3,
         print_function_callback=lambda msg: None,
+        **kwargs,
     ):
         output_unmapped_paths[MOCK_JOB_ID] = ["/etc/cron.d/evil"]
         return []
@@ -1616,6 +1617,7 @@ def test_incremental_output_download_manifest_mismatch_still_downloads(
         output_unmapped_paths,
         boto3_session_for_s3,
         print_function_callback=lambda msg: None,
+        **kwargs,
     ):
         return downloaded_manifests  # length 1
 
@@ -1773,6 +1775,7 @@ def test_incremental_output_download_fallback_failure_marks_run_failed(
         output_unmapped_paths,
         boto3_session_for_s3,
         print_function_callback=lambda msg: None,
+        **kwargs,
     ):
         return downloaded_manifests
 
@@ -1956,6 +1959,7 @@ def test_incremental_output_download_per_task_error_isolation(
         output_unmapped_paths,
         boto3_session_for_s3,
         print_function_callback=lambda msg: None,
+        **kwargs,
     ):
         return downloaded_manifests
 

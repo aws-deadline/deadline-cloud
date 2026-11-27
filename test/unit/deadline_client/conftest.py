@@ -132,6 +132,12 @@ def deadline_mock() -> Generator[MagicMock, None, None]:
         }
         deadline_magicmock.list_sessions.return_value = {"sessions": []}
         deadline_magicmock.list_session_actions.return_value = {"sessionActions": []}
+        # Every requested task reports SUCCEEDED. A test that needs other statuses assigns
+        # its own side_effect.
+        deadline_magicmock.batch_get_task.side_effect = lambda identifiers: {
+            "tasks": [{**ident, "runStatus": "SUCCEEDED"} for ident in identifiers],
+            "errors": [],
+        }
         deadline_magicmock.assume_queue_role_for_user.return_value = {
             "credentials": {
                 "accessKeyId": "ACCESSKEY",
